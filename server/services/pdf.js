@@ -329,7 +329,7 @@ function renderInvoiceHtml({ invoice, issuer, client }) {
         ${qrSvgStr ? `
         <div class="qr-card">
           ${qrSvgStr}
-          <div style="font-size:7.2pt;color:#64748b;margin-top:3px">رمز التحقق الإلكتروني المعتمد (ZATCA QR)</div>
+          <div style="font-size:7.2pt;color:#64748b;margin-top:3px">رمز التحقق الإلكتروني (${invoice.zatca_phase === 'PHASE2' ? 'ZATCA Phase 2' : 'ZATCA Phase 1'})</div>
         </div>` : ''}
 
         ${issuer.bank_iban || issuer.bank_name ? `

@@ -99,6 +99,9 @@ export async function render(view, ctx) {
   if (!state.issuer_id || !activeIssuers.some((i) => i.id === state.issuer_id)) state.issuer_id = activeIssuers[0].id;
 
   const issuerOf = () => activeIssuers.find((i) => i.id === state.issuer_id) || activeIssuers[0];
+  if (!state.zatca_phase) {
+    state.zatca_phase = issuerOf().zatca_phase || 'PHASE1';
+  }
   const defaultRate = () => Number(issuerOf().default_tax_rate || 15);
   if (state.lines[0].tax_rate === undefined) state.lines[0].tax_rate = defaultRate();
 
@@ -183,11 +186,18 @@ export async function render(view, ctx) {
               ${raw(can('clients.write') ? `<button class="btn" id="new-client" type="button" title="عميل جديد">${icon.userPlus({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}عميل جديد</button>` : '')}
             </div>
           </div>
-          <div class="field" style="max-width:150px"><label>نوع الفاتورة</label>
+          <div class="field" style="max-width:140px"><label>نوع الفاتورة</label>
             <select id="invoice_type">
               <option value="STANDARD" ${raw(state.invoice_type === 'STANDARD' ? 'selected' : '')}>ضريبية</option>
               <option value="SIMPLIFIED" ${raw(state.invoice_type === 'SIMPLIFIED' ? 'selected' : '')}>مبسطة</option>
             </select>
+          </div>
+          <div class="field" style="max-width:240px"><label>مرحلة الباركود (ZATCA QR)</label>
+            <select id="zatca_phase">
+              <option value="PHASE1" ${raw(state.zatca_phase === 'PHASE1' ? 'selected' : '')}>المرحلة الأولى (5 حقول أساسية)</option>
+              <option value="PHASE2" ${raw(state.zatca_phase === 'PHASE2' ? 'selected' : '')}>المرحلة الثانية (مشفّر وموقّع)</option>
+            </select>
+            <span class="hint" id="phase-hint">${state.zatca_phase === 'PHASE2' ? 'يتضمن الهاش والتوقيع الرقمي وسلسلة الفواتير' : 'يتضمن الحقول الخمسة الأساسية فقط'}</span>
           </div>
         </div>
         <div class="row mt">
@@ -268,11 +278,21 @@ export async function render(view, ctx) {
   function bind() {
     $('#issuer', view).addEventListener('change', (e) => {
       state.issuer_id = e.target.value;
+      const newIss = activeIssuers.find((i) => i.id === state.issuer_id);
+      if (newIss) state.zatca_phase = newIss.zatca_phase || 'PHASE1';
       saveDraft(state);
       draw();
     });
     $('#client', view).addEventListener('change', (e) => { state.client_id = e.target.value; saveDraft(state); });
     $('#invoice_type', view).addEventListener('change', (e) => { state.invoice_type = e.target.value; saveDraft(state); });
+    $('#zatca_phase', view)?.addEventListener('change', (e) => {
+      state.zatca_phase = e.target.value;
+      saveDraft(state);
+      const hint = $('#phase-hint', view);
+      if (hint) {
+        hint.textContent = state.zatca_phase === 'PHASE2' ? 'يتضمن الهاش والتوقيع الرقمي وسلسلة الفواتير' : 'يتضمن الحقول الخمسة الأساسية فقط';
+      }
+    });
     $('#issue_date', view).addEventListener('change', (e) => { state.issue_date = e.target.value; saveDraft(state); });
     $('#issue_time', view).addEventListener('change', (e) => { state.issue_time = e.target.value; saveDraft(state); });
     $('#payment_method', view).addEventListener('change', (e) => { state.payment_method = e.target.value; saveDraft(state); });
@@ -436,6 +456,7 @@ export async function render(view, ctx) {
         issue_date: state.issue_date,
         issue_time: state.issue_time,
         invoice_type: state.invoice_type,
+        zatca_phase: state.zatca_phase,
         payment_method: state.payment_method,
         invoice_number: state.invoice_number || undefined,
         discount_percent: state.header_discount_percent || undefined,

@@ -99,7 +99,9 @@ export async function render(view, ctx) {
     }
     return state.data.items.map((i) => `<tr>
       <td><a class="mono" href="#/invoice-view/${esc(i.id)}"><b>${esc(i.invoice_number)}</b></a>
-        ${i.batch_id ? '<span class="badge blue tiny">دفعة</span>' : ''}</td>
+        ${i.batch_id ? '<span class="badge blue tiny">دفعة</span>' : ''}
+        <span class="badge ${i.zatca_phase === 'PHASE2' ? 'teal' : 'gray'} tiny" title="${i.zatca_phase === 'PHASE2' ? 'باركود المرحلة الثانية' : 'باركود المرحلة الأولى'}">${i.zatca_phase === 'PHASE2' ? 'م2' : 'م1'}</span>
+      </td>
       <td class="nowrap tiny">${esc(dateAr(i.issue_date))}<div class="muted mono">${esc(i.issue_time)}</div></td>
       <td>${esc(i.client_name)}<div class="tiny muted mono">${esc(i.client_code)}</div></td>
       <td class="tiny">${esc(i.issuer_name)}</td>

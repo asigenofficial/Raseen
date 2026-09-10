@@ -159,6 +159,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   invoice_number        TEXT NOT NULL,
   sequence_no           INTEGER NOT NULL DEFAULT 1,       -- ICV داخل سلسلة المنشأة
   invoice_type          TEXT NOT NULL DEFAULT 'STANDARD', -- STANDARD | SIMPLIFIED
+  zatca_phase           TEXT NOT NULL DEFAULT 'PHASE1',   -- PHASE1 | PHASE2
   uuid                  TEXT NOT NULL,
   issue_date            TEXT NOT NULL,
   issue_time            TEXT NOT NULL DEFAULT '12:00:00',

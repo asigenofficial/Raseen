@@ -278,9 +278,9 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
         <div>عن ${esc(sellerName)}: ................................</div>
       </div>` : ''}
       <div class="tiny muted c">
-        ${invoice.signature_mode && invoice.signature_mode !== 'NONE'
-      ? `مستند موقّع إلكترونياً — بصمة الفاتورة: <span class="ltr">${esc(String(invoice.invoice_hash).slice(0, 32))}…</span>`
-      : 'فاتورة إلكترونية — المرحلة الأولى (رمز QR بالحقول الأساسية)'}
+        ${invoice.zatca_phase === 'PHASE2' || (invoice.signature_mode && invoice.signature_mode !== 'NONE')
+      ? `فاتورة إلكترونية معتمدة — المرحلة الثانية (الربط والتكامل المشفر) — بصمة الفاتورة: <span class="ltr">${esc(String(invoice.invoice_hash).slice(0, 32))}…</span>`
+      : 'فاتورة إلكترونية — المرحلة الأولى (رمز QR بالحقول الخمسة الأساسية)'}
       </div>
     </footer>
   </div>`;

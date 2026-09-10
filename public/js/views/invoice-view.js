@@ -282,7 +282,11 @@ export async function render(view, ctx) {
     view.innerHTML = html`
       <div class="page-head">
         <div class="titles">
-          <h1>فاتورة ${invoice.invoice_number} ${raw(statusBadge(invoice.status, invoice.status_label))}</h1>
+          <h1>فاتورة ${invoice.invoice_number} ${raw(statusBadge(invoice.status, invoice.status_label))}
+            <span class="badge ${invoice.zatca_phase === 'PHASE2' ? 'teal' : 'blue'}" style="font-size:.78rem;vertical-align:middle">
+              ${invoice.zatca_phase === 'PHASE2' ? 'مرحلة 2' : 'مرحلة 1'}
+            </span>
+          </h1>
           <p>${issuer.name_ar} — ${client.name} — ${dateAr(invoice.issue_date)} ${invoice.issue_time}</p>
         </div>
         <div class="page-actions">
@@ -391,11 +395,17 @@ export async function render(view, ctx) {
           </div>
 
           <div class="card">
-            <h3>رمز الاستجابة السريعة</h3>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.6rem">
+              <h3 style="margin:0">رمز الاستجابة السريعة (QR)</h3>
+              <span class="badge ${invoice.zatca_phase === 'PHASE2' ? 'teal' : 'blue'}">
+                ${invoice.zatca_phase === 'PHASE2' ? 'المرحلة الثانية (مشفّر)' : 'المرحلة الأولى (أساسي)'}
+              </span>
+            </div>
             <div class="qr-box">${raw(qrSvg(invoice.qr_payload, { scale: 5 }))}</div>
-            <p class="tiny muted text-center mb0">
-              يحتوي على اسم البائع، الرقم الضريبي، الطابع الزمني، الإجمالي، والضريبة
-              ${invoice.signature_mode !== 'NONE' ? '، إضافة إلى البصمة والتوقيع والمفتاح العام' : ''}.
+            <p class="tiny muted text-center mb0 mt">
+              ${invoice.zatca_phase === 'PHASE2'
+                ? 'باركود معتمد للمرحلة الثانية: يتضمن الحقول الأساسية الخمسة + هاش الفاتورة والتوقيع الرقمي والمفتاح العام وسلسلة PIH.'
+                : 'باركود معتمد للمرحلة الأولى: يتضمن الحقول الإلزامية الخمسة (اسم المورد، الرقم الضريبي، التاريخ والوقت، الإجمالي، والضريبة).'}
             </p>
           </div>
 

@@ -243,6 +243,32 @@ async function main() {
   ok(r.body.data.ok, 'التحقق من سلسلة الفواتير سليم', JSON.stringify(r.body.data.problems || []));
   eq(r.body.data.invoices_checked, 2, 'عدد الفواتير المتحقق منها');
 
+  // تحديد مرحلة الباركود على مستوى الفاتورة صراحة (Phase 1 vs Phase 2)
+  const invoicesSvc = require('../server/services/invoices');
+  const einCustomP2 = invoicesSvc.buildEinvoice({
+    inv: { issue_date: '2026-09-11', issue_time: '12:00:00', grand_total: 11500, tax_amount: 1500, zatca_phase: 'PHASE2' },
+    issuer: issuerP1,
+    client,
+    lines: [{ tax_rate: 15, taxable: 10000, tax_amount: 1500, total_line: 11500 }],
+    sequenceNo: 1,
+    pih: zatca.GENESIS_PIH,
+    phase: 'PHASE2',
+  });
+  const tagsCustomP2 = new Map(zatca.parseQrPayload(einCustomP2.qrPayload).map((t) => [t.tag, t.text]));
+  ok(tagsCustomP2.has(6), 'باركود الفاتورة المحددة م2 يحتوي Tag 6');
+
+  const einCustomP1 = invoicesSvc.buildEinvoice({
+    inv: { issue_date: '2026-09-11', issue_time: '12:00:00', grand_total: 11500, tax_amount: 1500, zatca_phase: 'PHASE1' },
+    issuer: issuerP2,
+    client,
+    lines: [{ tax_rate: 15, taxable: 10000, tax_amount: 1500, total_line: 11500 }],
+    sequenceNo: 1,
+    pih: zatca.GENESIS_PIH,
+    phase: 'PHASE1',
+  });
+  const tagsCustomP1 = new Map(zatca.parseQrPayload(einCustomP1.qrPayload).map((t) => [t.tag, t.text]));
+  ok(!tagsCustomP1.has(6), 'باركود الفاتورة المحددة م1 بدون Tag 6');
+
   // ------------------------------------------------------------- سندات القبض
   section('سندات القبض والسداد الجزئي');
   r = await api('POST', '/api/vouchers/for-invoice', {

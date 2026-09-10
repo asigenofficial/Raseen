@@ -30,6 +30,7 @@ const MIGRATIONS = [
   ['invoices', 'cheque_date', 'TEXT'],
   ['invoices', 'cheque_no', "TEXT NOT NULL DEFAULT ''"],
   ['invoices', 'prices_include_tax', 'INTEGER NOT NULL DEFAULT 0'],
+  ['invoices', 'zatca_phase', "TEXT NOT NULL DEFAULT 'PHASE1'"],
   ['issuers', 'print_settings', "TEXT NOT NULL DEFAULT '{}'"],
 ];
 

@@ -139,7 +139,7 @@ function displayLines(lines) {
 /**
  * توليد مواد الفاتورة الإلكترونية: XML، الهاش، التوقيع، حمولة QR.
  */
-function buildEinvoice({ inv, issuer, client, lines, sequenceNo, pih }) {
+function buildEinvoice({ inv, issuer, client, lines, sequenceNo, pih, phase }) {
   const taxRate = lines.length ? lines[0].tax_rate : issuer.default_tax_rate;
   const dispInv = displayInvoice(inv, taxRate);
   const xml = zatca.buildUblXml(dispInv, issuer, client, displayLines(lines), {
@@ -160,8 +160,15 @@ function buildEinvoice({ inv, issuer, client, lines, sequenceNo, pih }) {
 
   let signature = '';
   let signatureMode = 'NONE';
-  if (issuer.zatca_phase === 'PHASE2') {
-    const material = issuersSvc.signingMaterial(issuer.id);
+  const effectivePhase = phase || inv.zatca_phase || issuer.zatca_phase || 'PHASE1';
+  if (effectivePhase === 'PHASE2') {
+    let material = issuersSvc.signingMaterial(issuer.id);
+    if (!material || !material.privateKeyPem) {
+      try {
+        issuersSvc.generateSigningKey(issuer.id, 'system');
+        material = issuersSvc.signingMaterial(issuer.id);
+      } catch {}
+    }
     if (material && material.privateKeyPem) {
       signature = zatca.signHash(material.privateKeyPem, hash);
       signatureMode = material.hasProduction && material.certificatePem ? 'PRODUCTION' : 'LOCAL';
@@ -176,7 +183,7 @@ function buildEinvoice({ inv, issuer, client, lines, sequenceNo, pih }) {
     }
   }
 
-  return { xml, hash, signature, signatureMode, qrPayload: zatca.buildQrPayload(qrFields) };
+  return { xml, hash, signature, signatureMode, qrPayload: zatca.buildQrPayload(qrFields), zatcaPhase: effectivePhase };
 }
 
 // ------------------------------------------------------------- الترحيل
@@ -296,6 +303,7 @@ function create(payload, ctx = {}) {
   }
 
   const invoiceType = V.oneOf(payload.invoice_type, 'نوع الفاتورة', ['STANDARD', 'SIMPLIFIED'], 'STANDARD');
+  const zatcaPhase = V.oneOf(payload.zatca_phase, 'مرحلة باركود الفاتورة', ['PHASE1', 'PHASE2'], issuer.zatca_phase || 'PHASE1');
   const paymentMethod = V.oneOf(payload.payment_method, 'طريقة الدفع', ['CASH', 'CARD', 'TRANSFER', 'CREDIT', 'CHEQUE'], 'CREDIT');
   const notes = V.str(payload.notes, 'الملاحظات', { max: 2000 });
   const manualNumber = V.str(payload.invoice_number, 'رقم الفاتورة', { max: 40 });
@@ -345,6 +353,7 @@ function create(payload, ctx = {}) {
       invoice_number: invoiceNumber,
       sequence_no: sequenceNo,
       invoice_type: invoiceType,
+      zatca_phase: zatcaPhase,
       uuid: uuid(),
       issue_date: issueDate,
       issue_time: issueTime,
@@ -378,7 +387,7 @@ function create(payload, ctx = {}) {
       updated_at: now,
     };
 
-    const ein = buildEinvoice({ inv, issuer, client, lines: totals.lines, sequenceNo, pih });
+    const ein = buildEinvoice({ inv, issuer, client, lines: totals.lines, sequenceNo, pih, phase: zatcaPhase });
     inv.qr_payload = ein.qrPayload;
     inv.invoice_hash = ein.hash;
     inv.previous_invoice_hash = pih;
@@ -386,13 +395,13 @@ function create(payload, ctx = {}) {
     inv.signature_mode = ein.signatureMode;
 
     db.run(
-      `INSERT INTO invoices (id, issuer_id, client_id, invoice_number, sequence_no, invoice_type, uuid, issue_date,
+      `INSERT INTO invoices (id, issuer_id, client_id, invoice_number, sequence_no, invoice_type, zatca_phase, uuid, issue_date,
           issue_time, issue_datetime, currency, subtotal, discount_amount, taxable_amount, tax_amount, grand_total,
           paid_amount, remaining_amount, status, payment_method, due_date, cheque_date, cheque_no, prices_include_tax,
           batch_id, seller_name, seller_tax_number, seller_cr,
           seller_address, buyer_name, buyer_tax_number, buyer_cr, buyer_address, qr_payload, invoice_hash,
           previous_invoice_hash, signature, signature_mode, notes, created_by, created_at, updated_at)
-       VALUES (:id, :issuer_id, :client_id, :invoice_number, :sequence_no, :invoice_type, :uuid, :issue_date,
+       VALUES (:id, :issuer_id, :client_id, :invoice_number, :sequence_no, :invoice_type, :zatca_phase, :uuid, :issue_date,
           :issue_time, :issue_datetime, :currency, :subtotal, :discount_amount, :taxable_amount, :tax_amount, :grand_total,
           :paid_amount, :remaining_amount, :status, :payment_method, :due_date, :cheque_date, :cheque_no, :prices_include_tax,
           :batch_id, :seller_name, :seller_tax_number, :seller_cr,
@@ -467,6 +476,7 @@ function mapInvoice(row, extra = {}) {
     invoice_number: row.invoice_number,
     sequence_no: row.sequence_no,
     invoice_type: row.invoice_type,
+    zatca_phase: row.zatca_phase || 'PHASE1',
     uuid: row.uuid,
     issue_date: row.issue_date,
     issue_time: row.issue_time,
