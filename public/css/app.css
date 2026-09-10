@@ -8,7 +8,7 @@
   --brand: #06b6d4;
   --brand-dark: #0891b2;
   --brand-light: rgba(6, 182, 212, 0.14);
-  --brand-glow: 0 0 24px rgba(6, 182, 212, 0.28);
+  --brand-glow: none;
   --accent: #38bdf8;
 
   /* نيون وحالات النظام (Harmonious Status Glows) */
@@ -110,12 +110,7 @@ a:hover { color: #7dd3fc; text-decoration: none; }
   width: 82px; height: 82px; margin: 0 auto 1.2rem; border-radius: 24px;
   background: linear-gradient(135deg, var(--brand), #0284c7);
   color: #fff; font-size: 2.6rem; font-weight: 800; display: grid; place-items: center;
-  box-shadow: 0 0 35px rgba(6, 182, 212, 0.45);
-  animation: pulse-glow 2s infinite ease-in-out;
-}
-@keyframes pulse-glow {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 35px rgba(6, 182, 212, 0.45); }
-  50% { transform: scale(1.04); box-shadow: 0 0 50px rgba(6, 182, 212, 0.65); }
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 .boot-text { color: var(--muted); font-size: .95rem; font-weight: 500; }
 
@@ -143,7 +138,7 @@ a:hover { color: #7dd3fc; text-decoration: none; }
   width: 40px; height: 40px; border-radius: 12px; flex: none;
   background: linear-gradient(135deg, var(--brand), #0284c7);
   color: #fff; font-weight: 800; font-size: 1.35rem; display: grid; place-items: center;
-  box-shadow: 0 4px 18px rgba(6, 182, 212, 0.35);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 .sidebar-title { font-weight: 800; font-size: 1.1rem; color: #fff; letter-spacing: -0.01em; }
 .sidebar-sub { font-size: .72rem; color: var(--muted); font-weight: 500; }
@@ -184,11 +179,10 @@ a:hover { color: #7dd3fc; text-decoration: none; }
   transform: translateX(-1px) scale(0.99);
 }
 .nav-item.active {
-  background: linear-gradient(90deg, rgba(6, 182, 212, 0.22), rgba(6, 182, 212, 0.06));
+  background: linear-gradient(90deg, rgba(6, 182, 212, 0.16), rgba(6, 182, 212, 0.04));
   color: #38bdf8;
   border-color: rgba(56, 189, 248, 0.35);
   font-weight: 700;
-  box-shadow: 0 4px 18px rgba(6, 182, 212, 0.18);
 }
 .nav-item.active::after {
   content: '';
@@ -198,7 +192,6 @@ a:hover { color: #7dd3fc; text-decoration: none; }
   width: 3.5px;
   border-radius: 999px;
   background: var(--brand);
-  box-shadow: 0 0 12px var(--brand);
 }
 .nav-item .ico {
   width: 20px; display: flex; align-items: center; justify-content: center;
@@ -266,7 +259,7 @@ a:hover { color: #7dd3fc; text-decoration: none; }
   width: 32px; height: 32px; border-radius: 50%;
   background: linear-gradient(135deg, var(--brand), #0284c7);
   color: #fff; display: grid; place-items: center; font-weight: 800; font-size: .84rem;
-  flex: none; box-shadow: 0 2px 8px rgba(6, 182, 212, 0.35);
+  flex: none; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
 }
 .user-meta { line-height: 1.2; text-align: start; }
 .user-meta b { font-size: .84rem; display: block; color: #fff; }
@@ -294,7 +287,6 @@ a:hover { color: #7dd3fc; text-decoration: none; }
   inset-inline-start: 0;
   width: 0%;
   background: linear-gradient(90deg, var(--brand), #38bdf8, #818cf8);
-  box-shadow: 0 0 14px rgba(56, 189, 248, 0.85);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .route-progress.active::before {
@@ -545,11 +537,11 @@ select option { background: #131929; color: #fff; }
   background: linear-gradient(135deg, var(--brand-dark), #0284c7);
   border-color: rgba(56, 189, 248, 0.35);
   color: #fff;
-  box-shadow: 0 4px 16px rgba(6, 182, 212, 0.3);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 .btn-primary:hover {
   background: linear-gradient(135deg, var(--brand), #0369a1);
-  box-shadow: 0 6px 22px rgba(6, 182, 212, 0.45);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
 .btn-danger {
@@ -701,7 +693,7 @@ table.tbl input, table.tbl select { padding: .32rem .45rem; font-size: .83rem; }
   width: 72px; height: 72px; border-radius: 20px; margin: 0 auto 1rem;
   background: linear-gradient(135deg, var(--brand), #0284c7); color: #fff;
   display: grid; place-items: center; font-size: 2.2rem; font-weight: 800;
-  box-shadow: 0 6px 28px rgba(6, 182, 212, 0.4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
 .login-card h1 { text-align: center; font-size: 1.45rem; margin-bottom: .25rem; color: #fff; }
 .login-card .sub { text-align: center; color: var(--muted); font-size: .88rem; margin-bottom: 1.4rem; }
