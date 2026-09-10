@@ -55,7 +55,7 @@ function renderLogin(message) {
   app.innerHTML = html`
     <div class="login-wrap">
       <form class="login-card" id="login-form" autocomplete="on">
-        <div class="login-logo">R</div>
+        <img class="login-logo" src="/img/logo.svg" alt="Raseen" width="72" height="72" />
         <h1>Raseen</h1>
         <div class="sub">نظام إصدار الفواتير وسندات القبض والمحاسبة</div>
         ${raw(message ? `<div class="alert alert-danger">${esc(message)}</div>` : '')}
@@ -127,7 +127,7 @@ function renderShell() {
       <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-head">
-          <div class="sidebar-logo">R</div>
+          <img class="sidebar-logo" src="/img/logo.svg" alt="Raseen" width="40" height="40" />
           <div>
             <div class="sidebar-title">Raseen</div>
             <div class="sidebar-sub">الفواتير والمحاسبة</div>
