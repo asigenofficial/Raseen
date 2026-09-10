@@ -184,15 +184,6 @@ a:hover { color: #7dd3fc; text-decoration: none; }
   border-color: rgba(56, 189, 248, 0.35);
   font-weight: 700;
 }
-.nav-item.active::after {
-  content: '';
-  position: absolute;
-  inset-block: 7px;
-  inset-inline-start: 0;
-  width: 3.5px;
-  border-radius: 999px;
-  background: var(--brand);
-}
 .nav-item .ico {
   width: 20px; display: flex; align-items: center; justify-content: center;
   font-size: 1rem; flex: none; color: inherit; opacity: .88;
