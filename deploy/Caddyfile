@@ -1,0 +1,25 @@
+# ==============================================================================
+#  Raseen — إعدادات Caddy Server للإنتاج مع شهادات SSL مؤتمتة تلقائياً
+# ==============================================================================
+
+zsystem.yourdomain.com {
+    # ضغط البيانات تلقائياً
+    encode zstd gzip
+
+    # ترويسات الأمان
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    }
+
+    # توجيه الطلبات إلى تطبيق Raseen
+    reverse_proxy 127.0.0.1:4711 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+    }
+}

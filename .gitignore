@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# User explicitly requested ignoring .agents
+.agents/
+
+# SQLite Database and local state
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/secret.key
+data/backups/
+data/print-preview/
+
+# Environment / Keys
+.env
+.env.local
+*.key
+
+# Logs & temp
+*.log
+npm-debug.log*
+.e2e-profile/
+
+# OS files
+.DS_Store
+Thumbs.db

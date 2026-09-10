@@ -1,0 +1,27 @@
+[Unit]
+Description=Raseen - Multi-Issuer Invoicing & Accounting Engine
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/z-system
+ExecStart=/usr/bin/node --no-warnings server/index.js
+Restart=always
+RestartSec=5
+
+# متغيرات البيئة
+Environment=NODE_ENV=production
+Environment=PORT=4711
+Environment=ZS_HOST=127.0.0.1
+Environment=ZS_DATA_DIR=/var/www/z-system/data
+
+# حدود الأمان
+LimitNOFILE=65535
+PrivateTmp=true
+ProtectSystem=full
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

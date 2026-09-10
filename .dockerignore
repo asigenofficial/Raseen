@@ -1,0 +1,9 @@
+.git
+.gitignore
+.dockerignore
+node_modules
+tests/
+.e2e-profile/
+data/backups/
+data/print-preview/
+*.log

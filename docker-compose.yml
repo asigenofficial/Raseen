@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  z-system:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: z-system-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-4711}:4711"
+    environment:
+      - NODE_ENV=production
+      - ZS_HOST=0.0.0.0
+      - PORT=4711
+      - ZS_DATA_DIR=/app/data
+      - ZS_ADMIN_USER=${ZS_ADMIN_USER:-admin}
+      - ZS_ADMIN_PASS=${ZS_ADMIN_PASS:-Admin@12345}
+      - ZS_SESSION_TTL=${ZS_SESSION_TTL:-12}
+      - ZS_BULK_MAX=${ZS_BULK_MAX:-2000}
+    volumes:
+      # تخزين دائم لملف قاعدة البيانات data/zsystem.db ومفتاح التشفير
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4711/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

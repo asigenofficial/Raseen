@@ -1,0 +1,20 @@
+/* ==========================================================================
+   Raseen — أنماط الطباعة المباشرة (Ctrl+P) لصفحة عرض المستند.
+   الطباعة الرسمية (A4 / حراري 80mm) تُنفَّذ عبر إطار مستقل يحمل أنماطه الخاصة
+   في js/print/templates.js — هذا الملف احتياطي لطباعة الصفحة الحالية.
+   ========================================================================== */
+@page { size: A4; margin: 12mm; }
+
+body { background: #fff !important; }
+
+.sidebar, .topbar, .page-actions, .toast-root, .pager,
+.no-print, .btn, .tabs, .modal-backdrop { display: none !important; }
+
+.main { margin: 0 !important; }
+.content { padding: 0 !important; }
+.card { box-shadow: none !important; border: 1px solid #cbd5e1 !important; break-inside: avoid; }
+
+table.tbl thead th { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+table.tbl { font-size: 11pt; }
+
+a[href]::after { content: ""; }
