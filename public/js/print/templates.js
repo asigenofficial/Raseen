@@ -96,12 +96,30 @@ export const INVOICE_TEMPLATES = [
     paper: 'A4',
   },
   {
+    id: 'corporate',
+    name: 'المؤسسي الحديث (Clean Corporate)',
+    desc: 'تصميم مؤسسي عالي التناسق ببطاقات تفصيلية وشريط محاسبي متزن للشركات الكبرى والمؤسسات.',
+    badge: 'مؤسسي متقدم',
+    category: 'a4',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>',
+    paper: 'A4',
+  },
+  {
     id: 'thermal',
     name: 'الإيصال الحراري (Thermal POS 80mm)',
     desc: 'قياس 80 مم لطابعات الفواتير النقدية السريعة ونقاط البيع مع باركود وQR متوافقين.',
     badge: 'كاشير 80mm',
     category: 'pos',
     icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><line x1="8" x2="16" y1="8" y2="8"/><line x1="8" x2="16" y1="12" y2="12"/><line x1="8" x2="12" y1="16" y2="16"/></svg>',
+    paper: '80mm',
+  },
+  {
+    id: 'pos_detailed',
+    name: 'الإيصال الحراري التفصيلي (Detailed POS 80mm)',
+    desc: 'إيصال 80 مم موسع يعرض كود الصنف، نسبة الضريبة، وتفاصيل الحسم مع بصمة هيئة الزكاة.',
+    badge: 'كاشير تفصيلي',
+    category: 'pos',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="8" x2="16" y1="10" y2="10"/><line x1="8" x2="16" y1="14" y2="14"/><line x1="8" x2="12" y1="18" y2="18"/></svg>',
     paper: '80mm',
   },
 ];
@@ -493,6 +511,46 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
       color: #fff;
       border: 1.5px solid #0f172a;
     }
+
+    /* القالب المؤسسي الحديث (Corporate) */
+    .page[data-tpl="corporate"] {
+      padding: 9mm 11mm;
+      background: #ffffff;
+    }
+    .page[data-tpl="corporate"] .head {
+      border-bottom: 3px solid ${brandColor};
+      padding-bottom: 5mm;
+    }
+    .page[data-tpl="corporate"] .parties {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 2mm;
+      padding: 2.5mm;
+      gap: 4mm;
+    }
+    .page[data-tpl="corporate"] .party {
+      border: 0;
+      background: transparent;
+    }
+    .page[data-tpl="corporate"] .party-h {
+      background: transparent;
+      border-bottom: 1.5px solid ${brandColor};
+      color: ${brandDark};
+      font-size: 8.8pt;
+      font-weight: 800;
+      padding: 0 0 1.2mm;
+    }
+    .page[data-tpl="corporate"] table.items th {
+      background: ${brandDark};
+      color: #ffffff;
+      border: 1px solid ${brandDark};
+      font-weight: 700;
+    }
+    .page[data-tpl="corporate"] table.totals tr.grand td {
+      background: ${brandColor};
+      color: #ffffff;
+      border-radius: 1.5mm;
+    }
     ${printCfg.custom_css || ''}
   `;
 
@@ -509,15 +567,20 @@ export function invoicePreviewDoc({ invoice, issuer, client, copies = 1, printSe
   const tplStyle = (printSettings && printSettings.template_style)
     || (issuer.print_settings && issuer.print_settings.template_style)
     || 'standard';
-  if (tplStyle === 'thermal') {
-    return invoiceThermal({ invoice, issuer, client });
+  if (tplStyle === 'thermal' || tplStyle === 'pos_detailed') {
+    return invoiceThermal({ invoice, issuer, client, printSettings, qrSettings });
   }
   return invoiceA4({ invoice, issuer, client, copies, printSettings, qrSettings, autoPrint: false });
 }
 
 // ------------------------------------------------- فاتورة حرارية 80mm
-export function invoiceThermal({ invoice, issuer, client }) {
-  const qrCfg = typeof issuer.qr_settings === 'string' ? JSON.parse(issuer.qr_settings || '{}') : (issuer.qr_settings || {});
+export function invoiceThermal({ invoice, issuer, client, printSettings = null, qrSettings = null }) {
+  const rawQr = qrSettings || issuer.qr_settings;
+  const qrCfg = typeof rawQr === 'string' ? JSON.parse(rawQr || '{}') : (rawQr || {});
+  const rawPrint = printSettings || issuer.print_settings;
+  const printCfg = typeof rawPrint === 'string' ? JSON.parse(rawPrint || '{}') : (rawPrint || {});
+  const isDetailed = printCfg.template_style === 'pos_detailed';
+
   const showQr = qrCfg.show_thermal !== false;
   const qrScale = qrCfg.thermal_scale || (qrCfg.size === 'large' ? 4 : qrCfg.size === 'small' ? 2 : 3);
   const qr = showQr ? qrSvg(invoice.qr_payload, { scale: qrScale, margin: 1 }) : '';
@@ -530,14 +593,14 @@ export function invoiceThermal({ invoice, issuer, client }) {
   const buyerTax = invoice.buyer_tax_number || client.tax_number;
 
   const lines = invoice.lines.map((l) => `<tr>
-      <td colspan="3" class="nm">${esc(l.item_name)}</td></tr>
+      <td colspan="3" class="nm">${esc(l.item_name)}${isDetailed && l.item_code ? ` <span class="muted ltr tiny">(${esc(l.item_code)})</span>` : ''}</td></tr>
     <tr class="dt">
       <td>${num(l.quantity)} × ${money(l.unit_price)}${l.discount ? ` − ${money(l.discount)}` : ''}</td>
       <td class="c">${num(l.tax_rate)}%</td>
       <td class="e"><b>${money(l.total_line)}</b></td>
     </tr>`).join('');
 
-  const html = `<div class="receipt">
+  const html = `<div class="receipt ${isDetailed ? 'detailed' : ''}">
     ${issuer.logo_data ? `<img class="logo" src="${esc(issuer.logo_data)}" alt="" />` : ''}
     <div class="co">${esc(sellerName)}</div>
     ${issuer.name_en ? `<div class="tiny ltr">${esc(issuer.name_en)}</div>` : ''}
@@ -547,11 +610,12 @@ export function invoiceThermal({ invoice, issuer, client }) {
     <div class="hr"></div>
     <div class="ttl">${invoice.invoice_type === 'SIMPLIFIED' ? 'فاتورة ضريبية مبسطة' : 'فاتورة ضريبية'}</div>
     <table class="head-t">
-      <tr><td>رقم الفاتورة</td><td class="e ltr">${esc(invoice.invoice_number)}</td></tr>
+      <tr><td>رقم الفاتورة</td><td class="e ltr"><b>${esc(invoice.invoice_number)}</b></td></tr>
       <tr><td>التاريخ</td><td class="e ltr">${esc(invoice.issue_date)} ${esc(invoice.issue_time)}</td></tr>
       <tr><td>العميل</td><td class="e">${esc(buyerName)}</td></tr>
       ${buyerTax ? `<tr><td>ر.ض العميل</td><td class="e ltr">${esc(buyerTax)}</td></tr>` : ''}
       <tr><td>الدفع</td><td class="e">${esc(invoice.payment_label || '')}</td></tr>
+      ${isDetailed ? `<tr><td>مرحلة الزكاة</td><td class="e">${invoice.zatca_phase === 'PHASE2' ? 'المرحلة 2 (مشفرة)' : 'المرحلة 1 (أساسية)'}</td></tr>` : ''}
     </table>
     <div class="hr"></div>
     <table class="items">${lines}</table>
@@ -566,7 +630,7 @@ export function invoiceThermal({ invoice, issuer, client }) {
     </table>
     ${showQr ? `<div class="qr">${qr}</div>` : ''}
     <div class="tiny c">${esc(issuer.footer_notes || 'شكراً لزيارتكم')}</div>
-    <div class="tiny c muted">${esc(invoice.uuid.slice(0, 18))}</div>
+    <div class="tiny c muted ltr">${esc(invoice.uuid ? invoice.uuid.slice(0, 24) : '')}</div>
   </div>`;
 
   const css = `

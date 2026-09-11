@@ -866,7 +866,7 @@ tr.row-open > td { background: rgba(251, 191, 36, 0.08) !important; font-weight:
 
 .tpl-gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 1.1rem;
   margin-bottom: 1.6rem;
 }
@@ -876,22 +876,22 @@ tr.row-open > td { background: rgba(251, 191, 36, 0.08) !important; font-weight:
   -webkit-backdrop-filter: var(--glass-blur);
   border: 2px solid var(--line);
   border-radius: var(--radius);
-  padding: 1.1rem 1.2rem;
+  padding: 1rem 1.1rem;
   cursor: pointer;
-  transition: all .2s ease;
+  transition: all .2s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
 .tpl-card:hover {
-  border-color: var(--brand);
+  border-color: rgba(6, 182, 212, 0.5);
   transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
 }
 .tpl-card.active {
   border-color: var(--brand);
-  background: rgba(6, 182, 212, 0.1);
+  background: rgba(6, 182, 212, 0.08);
   box-shadow: none;
 }
 .tpl-card-head {
@@ -901,32 +901,31 @@ tr.row-open > td { background: rgba(251, 191, 36, 0.08) !important; font-weight:
   margin-bottom: .6rem;
 }
 .tpl-card-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--line);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #38bdf8;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s ease;
 }
 .tpl-card:hover .tpl-card-icon {
   background: rgba(6, 182, 212, 0.12);
   border-color: rgba(6, 182, 212, 0.3);
   color: #38bdf8;
-  transform: translateY(-1px);
 }
 .tpl-card.active .tpl-card-icon {
-  background: rgba(6, 182, 212, 0.22);
-  border-color: rgba(6, 182, 212, 0.55);
+  background: rgba(6, 182, 212, 0.2);
+  border-color: rgba(6, 182, 212, 0.5);
   color: #38bdf8;
   box-shadow: none;
 }
 .tpl-card-icon svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   display: block;
 }
 .tpl-card-badge {
@@ -942,16 +941,189 @@ tr.row-open > td { background: rgba(251, 191, 36, 0.08) !important; font-weight:
   color: #fff;
 }
 .tpl-card-title {
-  font-size: .98rem;
+  font-size: .95rem;
   font-weight: 700;
-  margin-bottom: .3rem;
+  margin-bottom: .25rem;
   color: #fff;
 }
 .tpl-card-desc {
-  font-size: .8rem;
+  font-size: .78rem;
   color: var(--muted);
-  line-height: 1.45;
-  margin: 0;
+  line-height: 1.4;
+  margin: 0 0 .6rem;
+}
+
+/* الرسوم الهيكلية المصغرة لكل نمط قالب */
+.tpl-wireframe {
+  width: 100%;
+  height: 70px;
+  background: #ffffff;
+  border-radius: 5px;
+  padding: 6px 8px;
+  margin-bottom: .6rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  position: relative;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+}
+.tpl-wf-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #0d9488;
+  padding-bottom: 3px;
+}
+.tpl-wf-logo {
+  width: 15px;
+  height: 9px;
+  background: #0d9488;
+  border-radius: 2px;
+}
+.tpl-wf-title {
+  width: 32px;
+  height: 5px;
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+.tpl-wf-parties {
+  display: flex;
+  gap: 4px;
+  margin: 2px 0;
+}
+.tpl-wf-party {
+  flex: 1;
+  height: 10px;
+  background: #f1f5f9;
+  border-radius: 2px;
+  border: 1px solid #e2e8f0;
+}
+.tpl-wf-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tpl-wf-line {
+  height: 3px;
+  background: #e2e8f0;
+  border-radius: 1px;
+}
+.tpl-wf-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-top: 1px;
+}
+.tpl-wf-qr {
+  width: 11px;
+  height: 11px;
+  background: #0f172a;
+  border-radius: 1px;
+}
+.tpl-wf-tot {
+  width: 24px;
+  height: 5px;
+  background: #0d9488;
+  border-radius: 2px;
+}
+
+/* تخصيص أنماط الهياكل المصغرة */
+.tpl-wireframe[data-style="modern"] .tpl-wf-head {
+  background: #eff6ff;
+  border-bottom: 2px solid #2563eb;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+.tpl-wireframe[data-style="modern"] .tpl-wf-logo { background: #2563eb; }
+.tpl-wireframe[data-style="modern"] .tpl-wf-tot { background: #2563eb; }
+
+.tpl-wireframe[data-style="executive"] {
+  border-top: 3px solid #b45309;
+}
+.tpl-wireframe[data-style="executive"] .tpl-wf-head { border-bottom: 1.5px solid #d97706; }
+.tpl-wireframe[data-style="executive"] .tpl-wf-logo { background: #b45309; }
+.tpl-wireframe[data-style="executive"] .tpl-wf-tot { background: #d97706; }
+
+.tpl-wireframe[data-style="classic"] {
+  border: 2px double #334155;
+}
+.tpl-wireframe[data-style="classic"] .tpl-wf-head { border-bottom: 1.5px solid #334155; }
+.tpl-wireframe[data-style="classic"] .tpl-wf-logo { background: #334155; }
+.tpl-wireframe[data-style="classic"] .tpl-wf-tot { background: #334155; }
+
+.tpl-wireframe[data-style="minimal"] .tpl-wf-head { border-bottom: 1px solid #e2e8f0; }
+.tpl-wireframe[data-style="minimal"] .tpl-wf-party { border: 0; background: transparent; border-bottom: 1px solid #e2e8f0; border-radius: 0; }
+.tpl-wireframe[data-style="minimal"] .tpl-wf-logo { background: #64748b; }
+.tpl-wireframe[data-style="minimal"] .tpl-wf-tot { background: #94a3b8; }
+
+.tpl-wireframe[data-style="grid"] .tpl-wf-head { border: 1px solid #475569; padding: 2px; }
+.tpl-wireframe[data-style="grid"] .tpl-wf-party { border: 1px solid #475569; border-radius: 0; }
+.tpl-wireframe[data-style="grid"] .tpl-wf-line { border-bottom: 1px solid #94a3b8; background: transparent; border-radius: 0; }
+.tpl-wireframe[data-style="grid"] .tpl-wf-logo { background: #475569; }
+.tpl-wireframe[data-style="grid"] .tpl-wf-tot { background: #1e293b; }
+
+.tpl-wireframe[data-style="corporate"] .tpl-wf-head { border-bottom: 2.5px solid #06b6d4; }
+.tpl-wireframe[data-style="corporate"] .tpl-wf-parties { background: #f8fafc; padding: 2px; border-radius: 2px; border: 1px solid #e2e8f0; }
+.tpl-wireframe[data-style="corporate"] .tpl-wf-party { border: 0; background: transparent; }
+.tpl-wireframe[data-style="corporate"] .tpl-wf-logo { background: #0891b2; }
+.tpl-wireframe[data-style="corporate"] .tpl-wf-tot { background: #06b6d4; }
+
+.tpl-wireframe[data-style="compact"] { padding: 4px 6px; }
+.tpl-wireframe[data-style="compact"] .tpl-wf-lines { gap: 1px; }
+
+.tpl-wireframe[data-style="thermal"], .tpl-wireframe[data-style="pos_detailed"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f172a;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.tpl-wf-receipt {
+  width: 44px;
+  height: 60px;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+  border-radius: 2px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+}
+.tpl-wf-receipt-co { width: 22px; height: 3px; background: #0f172a; margin: 0 auto 2px; border-radius: 1px; }
+.tpl-wf-receipt-lines { display: flex; flex-direction: column; gap: 2px; }
+.tpl-wf-receipt-line { height: 2px; background: #cbd5e1; border-radius: 1px; }
+.tpl-wf-receipt-qr { width: 13px; height: 13px; background: #0f172a; margin: 0 auto; border-radius: 1px; }
+
+/* مفتاح تبديل مرحلة الزكاة في شريط المعاينة */
+.tpl-phase-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.tpl-phase-btn {
+  border: none;
+  background: transparent;
+  padding: .3rem .65rem;
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .15s ease;
+  white-space: nowrap;
+}
+.tpl-phase-btn:hover {
+  color: #fff;
+}
+.tpl-phase-btn.active {
+  background: var(--brand);
+  color: #fff;
 }
 
 .tpl-studio {
