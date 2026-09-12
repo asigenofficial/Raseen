@@ -319,6 +319,10 @@ export async function render(view, ctx) {
         </div>
         <div class="page-actions">
           ${raw(can('vouchers.create') ? `<button class="btn btn-primary" id="new-v" type="button">${icon.plus({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}سند قبض جديد</button>` : '')}
+          <button class="btn btn-primary" id="btn-pdf-vouchers" type="button">
+            ${raw(icon.pdf({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}
+            تحميل قائمة PDF
+          </button>
           <button class="btn" id="exp-xls" type="button">${raw(icon.fileSpreadsheet({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}تصدير Excel</button>
           <button class="btn" id="exp-csv" type="button">${raw(icon.fileText({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}CSV</button>
         </div>
@@ -441,6 +445,76 @@ export async function render(view, ctx) {
       v.payment_label, v.reference_no, v.total_amount, v.allocated_total, v.unallocated, v.status_label]);
     $('#exp-csv', view).addEventListener('click', () => exportCsv('سندات-القبض', headers, rows()));
     $('#exp-xls', view).addEventListener('click', () => exportExcel('سندات-القبض', 'سندات القبض', headers, rows()));
+
+    const getVouchersDocHtml = () => {
+      const now = new Date();
+      return `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>تقرير سندات القبض</title>
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          * { box-sizing: border-box; }
+          body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; color: #0f172a; background: #fff; }
+          .header { border-bottom: 2.5px solid #0d9488; padding-bottom: 4mm; margin-bottom: 4mm; display: flex; justify-content: space-between; align-items: center; }
+          h1 { margin: 0 0 1mm; font-size: 15pt; color: #0f766e; }
+          .sub { color: #64748b; font-size: 8.5pt; }
+          table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-top: 2mm; }
+          th { background: #0d9488; color: #fff; border: 1px solid #0f766e; padding: 2.2mm 1.5mm; font-weight: 700; text-align: right; }
+          th.e { text-align: left; }
+          td { border: 1px solid #cbd5e1; padding: 1.8mm 1.5mm; color: #1e293b; }
+          tr:nth-child(even) td { background: #f8fafc; }
+          tfoot td { background: #f1f5f9; font-weight: 700; border-top: 2px solid #0d9488; }
+          .e { text-align: left; font-variant-numeric: tabular-nums; direction: ltr; }
+          .footer { margin-top: 5mm; display: flex; justify-content: space-between; font-size: 8pt; color: #64748b; }
+        </style></head><body>
+        <div class="header">
+          <div>
+            <h1>تقرير قائمة سندات القبض</h1>
+            <div class="sub">إجمالي السندات: ${num(state.data.total_count)} سند — بمبلغ إجمالي: ${money(state.data.totals.total_amount)} ر.س</div>
+          </div>
+          <div style="font-size:8pt;color:#64748b;text-align:left;direction:ltr">
+            <div><b>Raseen System</b></div>
+            <div>${now.toLocaleDateString('ar-SA')}</div>
+          </div>
+        </div>
+        <table>
+          <thead><tr>${headers.map((h, i) => `<th class="${i >= 6 && i <= 8 ? 'e' : ''}">${esc(h)}</th>`).join('')}</tr></thead>
+          <tbody>${state.data.items.map((v) => `<tr>
+            <td class="e"><b>${esc(v.voucher_number)}</b></td>
+            <td>${esc(v.voucher_date)}</td>
+            <td>${esc(v.client_name)}</td>
+            <td>${esc(v.issuer_name)}</td>
+            <td>${esc(v.payment_label)}</td>
+            <td>${esc(v.reference_no || '—')}</td>
+            <td class="e">${money(v.total_amount)}</td>
+            <td class="e">${money(v.allocated_total)}</td>
+            <td class="e">${money(v.unallocated)}</td>
+            <td>${esc(v.status_label)}</td>
+          </tr>`).join('')}</tbody>
+          <tfoot><tr>
+            <td colspan="6">الإجمالي</td>
+            <td class="e">${money(state.data.totals.total_amount)}</td>
+            <td class="e">${money(state.data.totals.allocated_total || 0)}</td>
+            <td class="e">${money(state.data.totals.unallocated_total || 0)}</td>
+            <td></td>
+          </tr></tfoot>
+        </table>
+        <div class="footer">
+          <span>نظام رصين للفوترة والمحاسبة — تقرير رسمي A4 PDF</span>
+          <span style="direction:ltr">Page 1</span>
+        </div>
+        </body></html>`;
+    };
+
+    $('#btn-pdf-vouchers', view).addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      try {
+        const docHtml = getVouchersDocHtml();
+        await downloadPdfFromHtml(docHtml, 'قائمة-سندات-القبض.pdf');
+      } catch (err) {
+        toastErr(err.message || 'تعذر تحميل ملف PDF');
+      } finally {
+        e.target.disabled = false;
+      }
+    });
   };
 
   await load();

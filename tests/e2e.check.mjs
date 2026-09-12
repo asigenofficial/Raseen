@@ -273,18 +273,6 @@ try {
     const cards = document.querySelectorAll('.tpl-card').length;
     const svgs = document.querySelectorAll('.tpl-card-icon svg').length;
     const hasEmoji = /[\\u{1F300}-\\u{1F6FF}\\u{2600}-\\u{26FF}]/u.test(document.querySelector('.tpl-gallery')?.innerHTML || '');
-    
-    // تصفية الحراري
-    document.querySelector('.tpl-filter-btn[data-filter="pos"]')?.click();
-    const posCount = document.querySelectorAll('.tpl-card').length;
-
-    // تصفية A4
-    document.querySelector('.tpl-filter-btn[data-filter="a4"]')?.click();
-    const a4Count = document.querySelectorAll('.tpl-card').length;
-
-    // استعادة الكل
-    document.querySelector('.tpl-filter-btn[data-filter="all"]')?.click();
-    const allCount = document.querySelectorAll('.tpl-card').length;
 
     // اختيار القالب العصري
     document.querySelector('.tpl-card[data-style="modern"]')?.click();
@@ -313,21 +301,18 @@ try {
     const iframeValid = iframeSrc.length > 500 && iframeSrc.includes('<!DOCTYPE html>');
 
     return {
-      cards, svgs, hasEmoji, posCount, a4Count, allCount,
+      cards, svgs, hasEmoji,
       modernActive, colVisible, qrVisible, advVisible, brandVisible,
       presetCards, iframeValid,
     };
   })()`);
 
-  ok(tplAudit.cards === 8, `استوديو القوالب: عرض 8 قوالب معتمدة (${tplAudit.cards})`);
+  ok(tplAudit.cards === 8, `استوديو القوالب: عرض 8 قوالب معتمدة A4 (${tplAudit.cards})`);
   ok(tplAudit.svgs === 8, `استوديو القوالب: 8 أيقونات SVG فيكتور نظيفة (${tplAudit.svgs})`);
   ok(!tplAudit.hasEmoji, 'استوديو القوالب: خالٍ تماماً من الإيموجيات');
-  ok(tplAudit.posCount === 1, `تصفية الكاشير الحراري: قالب واحد (${tplAudit.posCount})`);
-  ok(tplAudit.a4Count === 7, `تصفية A4 الضريبية: 7 قوالب (${tplAudit.a4Count})`);
-  ok(tplAudit.allCount === 8, `تصفية الكل: 8 قوالب (${tplAudit.allCount})`);
   ok(tplAudit.modernActive, 'اختيار القالب وتفعيله ديناميكياً يعمل');
   ok(tplAudit.colVisible && tplAudit.qrVisible && tplAudit.advVisible && tplAudit.brandVisible, 'تبديل جميع تبويبات الاستوديو الـ 5 يعمل بسلاسة');
-  ok(tplAudit.presetCards === 6, `نافذة النماذج الجاهزة تحتوي 6 نماذج أعمال (${tplAudit.presetCards})`);
+  ok(tplAudit.presetCards === 8, `نافذة النماذج الجاهزة تحتوي 8 نماذج أعمال (${tplAudit.presetCards})`);
   ok(tplAudit.iframeValid, 'إطار المعاينة الحية (Live Preview iframe) يحدّث تلقائياً');
 
   // --------------------------------------------------- فحص محرّر الفواتير والعمليات الحسابية

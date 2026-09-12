@@ -104,24 +104,6 @@ export const INVOICE_TEMPLATES = [
     icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>',
     paper: 'A4',
   },
-  {
-    id: 'thermal',
-    name: 'الإيصال الحراري (Thermal POS 80mm)',
-    desc: 'قياس 80 مم لطابعات الفواتير النقدية السريعة ونقاط البيع مع باركود وQR متوافقين.',
-    badge: 'كاشير 80mm',
-    category: 'pos',
-    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><line x1="8" x2="16" y1="8" y2="8"/><line x1="8" x2="16" y1="12" y2="12"/><line x1="8" x2="12" y1="16" y2="16"/></svg>',
-    paper: '80mm',
-  },
-  {
-    id: 'pos_detailed',
-    name: 'الإيصال الحراري التفصيلي (Detailed POS 80mm)',
-    desc: 'إيصال 80 مم موسع يعرض كود الصنف، نسبة الضريبة، وتفاصيل الحسم مع بصمة هيئة الزكاة.',
-    badge: 'كاشير تفصيلي',
-    category: 'pos',
-    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="8" x2="16" y1="10" y2="10"/><line x1="8" x2="16" y1="14" y2="14"/><line x1="8" x2="12" y1="18" y2="18"/></svg>',
-    paper: '80mm',
-  },
 ];
 
 // ------------------------------------------------------------- فاتورة A4

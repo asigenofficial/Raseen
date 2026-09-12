@@ -73,7 +73,7 @@ const PERMISSIONS = [
   'audit.view', 'users.manage', 'settings.write',
 ];
 
-const ROLE_PERMISSIONS = {
+const DEFAULT_ROLE_PERMISSIONS = {
   ADMIN: PERMISSIONS.slice(),
   ACCOUNTANT: [
     'issuers.view', 'clients.view', 'clients.write', 'items.view', 'items.write',
@@ -84,13 +84,148 @@ const ROLE_PERMISSIONS = {
   VIEWER: ['issuers.view', 'clients.view', 'items.view', 'invoices.view', 'vouchers.view', 'reports.view', 'ledger.view'],
 };
 
-const ROLE_LABELS = {
+const DEFAULT_ROLE_LABELS = {
   ADMIN: 'مدير النظام',
   ACCOUNTANT: 'محاسب',
   VIEWER: 'مستعرض',
 };
 
-/** أسماء عربية للصلاحيات (تُستخدم في شاشة المستخدمين). */
+function getRolePermissions() {
+  const row = db.get("SELECT value FROM meta WHERE key = 'role_permissions'");
+  if (row && row.value) {
+    try {
+      const parsed = JSON.parse(row.value);
+      return {
+        ...DEFAULT_ROLE_PERMISSIONS,
+        ...parsed,
+      };
+    } catch { }
+  }
+  return { ...DEFAULT_ROLE_PERMISSIONS };
+}
+
+function getRoleLabels() {
+  const row = db.get("SELECT value FROM meta WHERE key = 'role_labels'");
+  if (row && row.value) {
+    try {
+      return { ...DEFAULT_ROLE_LABELS, ...JSON.parse(row.value) };
+    } catch { }
+  }
+  return { ...DEFAULT_ROLE_LABELS };
+}
+
+function listRoles() {
+  const rolePerms = getRolePermissions();
+  const roleLabels = getRoleLabels();
+  const userCounts = db.all('SELECT role, COUNT(*) AS count FROM users GROUP BY role');
+  const countMap = Object.fromEntries(userCounts.map((r) => [r.role, r.count]));
+
+  return Object.keys(roleLabels).map((key) => ({
+    id: key,
+    label: roleLabels[key] || key,
+    permissions: rolePerms[key] || [],
+    user_count: countMap[key] || 0,
+    is_default: Boolean(DEFAULT_ROLE_PERMISSIONS[key]),
+  }));
+}
+
+function updateRolePermissions(role, permissions, actor) {
+  const key = String(role || '').trim().toUpperCase();
+  const labels = getRoleLabels();
+  if (!labels[key] && !DEFAULT_ROLE_PERMISSIONS[key]) {
+    throw V.bad('الدور غير موجود في النظام');
+  }
+  const current = getRolePermissions();
+  const valid = Array.from(new Set(V.arr(permissions, 'الصلاحيات').filter((p) => PERMISSIONS.includes(p))));
+
+  // حماية: مدير النظام يجب أن يملك صلاحية إدارة المستخدمين دائماً لمنع قفل النظام
+  if (key === 'ADMIN' && !valid.includes('users.manage')) {
+    valid.push('users.manage');
+  }
+
+  current[key] = valid;
+  db.run("INSERT INTO meta (key, value) VALUES ('role_permissions', :v) ON CONFLICT(key) DO UPDATE SET value = :v", {
+    v: JSON.stringify(current),
+  });
+
+  db.audit({
+    user: actor,
+    action: 'ROLE_UPDATE',
+    entityType: 'role',
+    entityId: key,
+    details: { role: key, permissions_count: valid.length },
+  });
+  return listRoles();
+}
+
+function resetRolePermissions(role, actor) {
+  const key = String(role || '').trim().toUpperCase();
+  const current = getRolePermissions();
+  if (DEFAULT_ROLE_PERMISSIONS[key]) {
+    current[key] = DEFAULT_ROLE_PERMISSIONS[key].slice();
+  }
+  db.run("INSERT INTO meta (key, value) VALUES ('role_permissions', :v) ON CONFLICT(key) DO UPDATE SET value = :v", {
+    v: JSON.stringify(current),
+  });
+
+  db.audit({
+    user: actor,
+    action: 'ROLE_RESET',
+    entityType: 'role',
+    entityId: key,
+    details: { role: key },
+  });
+  return listRoles();
+}
+
+function saveCustomRole(roleKey, label, permissions, actor) {
+  const key = String(roleKey || '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+  if (!key || key.length < 2) throw V.bad('رمز الدور يجب أن يتكون من حرفين إنجليزيين على الأقل');
+  const roleName = V.str(label, 'اسم الدور', { required: true, max: 60 });
+
+  const labels = getRoleLabels();
+  labels[key] = roleName;
+  db.run("INSERT INTO meta (key, value) VALUES ('role_labels', :v) ON CONFLICT(key) DO UPDATE SET value = :v", {
+    v: JSON.stringify(labels),
+  });
+
+  updateRolePermissions(key, permissions, actor);
+  return listRoles();
+}
+
+function deleteCustomRole(roleKey, actor) {
+  const key = String(roleKey || '').trim().toUpperCase();
+  if (DEFAULT_ROLE_PERMISSIONS[key]) {
+    throw V.bad('لا يمكن حذف الأدوار القياسية للنظام');
+  }
+  const usersWithRole = db.pluck('SELECT COUNT(*) AS c FROM users WHERE role = :r', { r: key });
+  if (usersWithRole > 0) {
+    throw V.conflict(`لا يمكن حذف هذا الدور لوجود ${usersWithRole} مستخدم مسندين إليه حالياً. قم بتغيير أدوارهم أولاً`);
+  }
+
+  const labels = getRoleLabels();
+  delete labels[key];
+  db.run("INSERT INTO meta (key, value) VALUES ('role_labels', :v) ON CONFLICT(key) DO UPDATE SET value = :v", {
+    v: JSON.stringify(labels),
+  });
+
+  const perms = getRolePermissions();
+  delete perms[key];
+  db.run("INSERT INTO meta (key, value) VALUES ('role_permissions', :v) ON CONFLICT(key) DO UPDATE SET value = :v", {
+    v: JSON.stringify(perms),
+  });
+
+  db.audit({
+    user: actor,
+    action: 'ROLE_DELETE',
+    entityType: 'role',
+    entityId: key,
+    details: { role: key },
+  });
+  return listRoles();
+}
+
+/** أسماء عربية للصلاحيات (تُستخدم في شاشات الإدارة). */
 const PERMISSION_LABELS = {
   'issuers.view': 'عرض الشركات المصدرة',
   'issuers.write': 'إضافة وتعديل الشركات المصدرة',
@@ -115,21 +250,44 @@ const PERMISSION_LABELS = {
 };
 
 function effectivePermissions(user) {
-  const base = ROLE_PERMISSIONS[user.role] || [];
-  let extra = [];
-  try { extra = JSON.parse(user.permissions || '[]'); } catch { extra = []; }
-  return Array.from(new Set([...base, ...extra.filter((p) => PERMISSIONS.includes(p))]));
+  const rolePerms = getRolePermissions();
+  const base = rolePerms[user.role] || [];
+  if (!user.permissions) return base;
+  try {
+    const parsed = JSON.parse(user.permissions);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.mode === 'custom') {
+      const list = Array.isArray(parsed.list) ? parsed.list : [];
+      return list.filter((p) => PERMISSIONS.includes(p));
+    }
+    if (Array.isArray(parsed)) {
+      return Array.from(new Set([...base, ...parsed.filter((p) => PERMISSIONS.includes(p))]));
+    }
+  } catch { }
+  return base;
 }
 
 function publicUser(user) {
   if (!user) return null;
+  const labels = getRoleLabels();
+  let isCustom = false;
+  let customList = [];
+  try {
+    const parsed = JSON.parse(user.permissions || '[]');
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.mode === 'custom') {
+      isCustom = true;
+      customList = Array.isArray(parsed.list) ? parsed.list : [];
+    }
+  } catch { }
+
   return {
     id: user.id,
     username: user.username,
     full_name: user.full_name,
     role: user.role,
-    role_label: ROLE_LABELS[user.role] || user.role,
+    role_label: labels[user.role] || user.role,
     is_active: !!user.is_active,
+    is_custom_permissions: isCustom,
+    custom_permissions: customList,
     permissions: effectivePermissions(user),
     last_login_at: user.last_login_at,
     created_at: user.created_at,
@@ -226,8 +384,17 @@ function createUser(payload, actor) {
   }
   if (findByUsername(username)) throw V.conflict('اسم المستخدم مستخدم مسبقاً');
   const password = V.str(payload.password, 'كلمة المرور', { required: true, max: 200, min: 8 });
-  const role = V.oneOf(payload.role, 'الدور', ['ADMIN', 'ACCOUNTANT', 'VIEWER'], 'ACCOUNTANT');
-  const perms = V.arr(payload.permissions, 'الصلاحيات').filter((p) => PERMISSIONS.includes(p));
+  const allowedRoles = Object.keys(getRoleLabels());
+  const role = V.oneOf(payload.role, 'الدور', allowedRoles, 'ACCOUNTANT');
+  const validPerms = V.arr(payload.permissions, 'الصلاحيات').filter((p) => PERMISSIONS.includes(p));
+  let perms;
+  if (payload.custom_mode === true) {
+    perms = JSON.stringify({ mode: 'custom', list: validPerms });
+  } else if (payload.custom_mode === false) {
+    perms = JSON.stringify([]);
+  } else {
+    perms = JSON.stringify(validPerms);
+  }
   const { salt, hash } = hashPassword(password);
   const id = uuid();
   db.run(
@@ -240,7 +407,7 @@ function createUser(payload, actor) {
       hash,
       salt,
       role,
-      perms: JSON.stringify(perms),
+      perms,
       active: V.bool(payload.is_active, true) ? 1 : 0,
       created_at: db.nowIso(),
     },
@@ -252,12 +419,21 @@ function createUser(payload, actor) {
 function updateUser(id, payload, actor) {
   const user = db.get('SELECT * FROM users WHERE id = :id', { id });
   if (!user) throw V.notFound('المستخدم غير موجود');
-  const role = payload.role === undefined ? user.role : V.oneOf(payload.role, 'الدور', ['ADMIN', 'ACCOUNTANT', 'VIEWER'], user.role);
+  const allowedRoles = Object.keys(getRoleLabels());
+  const role = payload.role === undefined ? user.role : V.oneOf(payload.role, 'الدور', allowedRoles, user.role);
   const fullName = payload.full_name === undefined ? user.full_name : V.str(payload.full_name, 'الاسم الكامل', { max: 120 });
   const isActive = payload.is_active === undefined ? !!user.is_active : V.bool(payload.is_active, true);
-  const perms = payload.permissions === undefined
-    ? user.permissions
-    : JSON.stringify(V.arr(payload.permissions, 'الصلاحيات').filter((p) => PERMISSIONS.includes(p)));
+  let perms = user.permissions;
+  if (payload.permissions !== undefined || payload.custom_mode !== undefined) {
+    const validPerms = V.arr(payload.permissions !== undefined ? payload.permissions : [], 'الصلاحيات').filter((p) => PERMISSIONS.includes(p));
+    if (payload.custom_mode === true) {
+      perms = JSON.stringify({ mode: 'custom', list: validPerms });
+    } else if (payload.custom_mode === false) {
+      perms = JSON.stringify([]);
+    } else {
+      perms = JSON.stringify(validPerms);
+    }
+  }
 
   // منع تعطيل آخر مدير نظام
   if ((!isActive || role !== 'ADMIN') && user.role === 'ADMIN') {
@@ -309,9 +485,29 @@ function changeOwnPassword(user, currentPassword, newPassword) {
 }
 
 module.exports = {
-  PERMISSIONS, ROLE_PERMISSIONS, ROLE_LABELS, PERMISSION_LABELS,
+  PERMISSIONS,
+  DEFAULT_ROLE_PERMISSIONS,
+  DEFAULT_ROLE_LABELS,
+  PERMISSION_LABELS,
+  getRolePermissions,
+  getRoleLabels,
+  listRoles,
+  updateRolePermissions,
+  resetRolePermissions,
+  saveCustomRole,
+  deleteCustomRole,
   ensureBootstrapAdmin, login, logout, userForToken, purgeExpiredSessions,
   can, requirePermission, publicUser, effectivePermissions,
   listUsers, createUser, updateUser, deleteUser, changeOwnPassword,
   _resetRateLimits: () => loginAttempts.clear(),
 };
+
+Object.defineProperty(module.exports, 'ROLE_PERMISSIONS', {
+  get: getRolePermissions,
+  enumerable: true,
+});
+
+Object.defineProperty(module.exports, 'ROLE_LABELS', {
+  get: getRoleLabels,
+  enumerable: true,
+});

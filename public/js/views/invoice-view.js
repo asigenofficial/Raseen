@@ -8,7 +8,7 @@ import {
   html, raw, esc, money, num, dateAr, dateTimeAr, qrSvg, printDoc, toastOk, toastErr,
   $, modal, formValues, confirmDialog, copyText, download, statusBadge, today, icon,
 } from '../core/util.js';
-import { invoiceA4, invoiceThermal, tafqeet } from '../print/templates.js';
+import { invoiceA4, tafqeet, INVOICE_TEMPLATES } from '../print/templates.js';
 
 async function loadContext(invoiceId) {
   const invoice = await api.get(`/api/invoices/${invoiceId}`);
@@ -91,10 +91,10 @@ export async function fetchInvoicePdfBlob(invoiceId, docHtml) {
   return await res.blob();
 }
 
-export async function downloadInvoicePdf({ invoice, issuer, client }) {
+export async function downloadInvoicePdf({ invoice, issuer, client, printSettings = null }) {
   try {
     toastOk('جارٍ تجهيز ملف PDF الفاتورة...');
-    const docHtml = invoiceA4({ invoice, issuer, client });
+    const docHtml = invoiceA4({ invoice, issuer, client, printSettings });
     const blob = await fetchInvoicePdfBlob(invoice.id, docHtml);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -112,10 +112,10 @@ export async function downloadInvoicePdf({ invoice, issuer, client }) {
   }
 }
 
-export async function shareInvoicePdfFile({ invoice, issuer, client, text }) {
+export async function shareInvoicePdfFile({ invoice, issuer, client, text, printSettings = null }) {
   try {
     toastOk('جارٍ تجهيز ملف PDF للمشاركة...');
-    const docHtml = invoiceA4({ invoice, issuer, client });
+    const docHtml = invoiceA4({ invoice, issuer, client, printSettings });
     const blob = await fetchInvoicePdfBlob(invoice.id, docHtml);
     if (blob) {
       const filename = `فاتورة_${invoice.invoice_number}.pdf`;
@@ -137,12 +137,12 @@ export async function shareInvoicePdfFile({ invoice, issuer, client, text }) {
   }
 
   // Fallback: download file directly to user device
-  await downloadInvoicePdf({ invoice, issuer, client });
+  await downloadInvoicePdf({ invoice, issuer, client, printSettings });
   toastOk('تم تنزيل ملف PDF الفاتورة، يمكنك إرساله ومشاركته الآن مباشرة');
   return false;
 }
 
-export function openDownloadModal({ invoice, issuer, client }) {
+export function openDownloadModal({ invoice, issuer, client, printSettings = null }) {
   const m = modal({
     title: `تحميل الفاتورة: ${invoice.invoice_number}`,
     slim: true,
@@ -193,17 +193,17 @@ export function openDownloadModal({ invoice, issuer, client }) {
 
   $('#dl-pdf-file-opt', m.el).addEventListener('click', async () => {
     m.close();
-    await downloadInvoicePdf({ invoice, issuer, client });
+    await downloadInvoicePdf({ invoice, issuer, client, printSettings });
   });
 
   $('#dl-print-opt', m.el).addEventListener('click', () => {
     m.close();
-    printDoc(invoiceA4({ invoice, issuer, client }));
+    printDoc(invoiceA4({ invoice, issuer, client, printSettings }));
   });
 
   $('#dl-html-opt', m.el).addEventListener('click', () => {
     m.close();
-    const doc = invoiceA4({ invoice, issuer, client });
+    const doc = invoiceA4({ invoice, issuer, client, printSettings });
     download(`فاتورة_${invoice.invoice_number}.html`, doc, 'text/html;charset=utf-8');
     toastOk('تم تحميل مستند الفاتورة');
   });
@@ -216,37 +216,30 @@ export function openDownloadModal({ invoice, issuer, client }) {
   });
 }
 
-export function openShareModal({ invoice, issuer, client }) {
+export function openShareModal({ invoice, issuer, client, printSettings = null }) {
   const m = modal({
     title: `مشاركة الفاتورة: ${invoice.invoice_number}`,
     slim: true,
     body: html`
-      <!-- بيانات العميل والمبلغ -->
-      <div style="background:var(--bg-subtle, rgba(255,255,255,0.04));border:1px solid var(--line, #334155);padding:.85rem 1rem;margin-bottom:1.1rem;border-radius:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
-        <div>
-          <div style="font-size:.78rem;color:var(--muted)">العميل المستلم:</div>
-          <b style="font-size:.98rem">${esc(client.name)}</b>
-        </div>
-        <div style="text-align:left">
-          <div style="font-size:.78rem;color:var(--muted)">الإجمالي المستحق:</div>
-          <b class="num" style="font-size:1.2rem;color:var(--accent, #0ea5e9)">${money(invoice.grand_total)} <small style="font-size:.75rem">ر.س</small></b>
-        </div>
-      </div>
-
-      <!-- قسم مشاركة وتحميل ملف PDF الفعلي -->
-      <div style="background:linear-gradient(135deg, rgba(13,148,136,0.18), rgba(99,102,241,0.18));border:1px solid rgba(13,148,136,0.35);border-radius:12px;padding:1.4rem 1rem;text-align:center">
-        <div style="font-size:1.05rem;font-weight:bold;color:var(--accent,#2dd4bf);margin-bottom:5px;display:flex;align-items:center;justify-content:center;gap:8px">
-          ${raw(icon.pdf({ size: 24 }))}
-          مشاركة ملف الفاتورة PDF (وليس مجرد رابط)
-        </div>
-        <div style="font-size:.82rem;color:var(--muted);margin-bottom:1.25rem">
-          مشاركة أو تنزيل ملف PDF الفعلي مباشرة لإرساله للعميل عبر تطبيقات التواصل
+      <div style="display:flex;flex-direction:column;gap:1rem">
+        <div class="alert alert-info" style="font-size:.85rem;line-height:1.6">
+          يمكنك إرسال الفاتورة للعميل عبر <b>واتساب</b> أو مشاركة <b>ملف PDF المعتمد</b> مباشرة عبر التطبيقات المثبتة بجهازك:
         </div>
 
-        <div style="display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap">
-          <button class="btn btn-primary" id="btn-share-pdf-direct" type="button" style="display:flex;align-items:center;gap:8px;font-weight:bold;padding:.75rem 1.4rem;border-radius:8px;font-size:.95rem">
+        <div class="field">
+          <label style="font-weight:600;font-size:.85rem">رقم هاتف العميل (واتساب):</label>
+          <input type="text" id="share-phone-input" class="ltr" value="${client.phone || ''}" placeholder="05xxxxxxxx أو 9665xxxxxxxx" style="font-size:1rem;letter-spacing:1px;font-weight:bold" />
+          <span class="tiny muted" style="margin-top:2px">يتم التنسيق تلقائياً للمفتاح الدولي السعودي (+966)</span>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:.6rem;margin-top:.2rem">
+          <button class="btn btn-primary" id="btn-send-whatsapp" type="button" style="display:flex;align-items:center;gap:8px;font-weight:bold;background:#25D366;border-color:#25D366;color:#fff;padding:.75rem 1.4rem;border-radius:8px;font-size:.95rem">
+            ${raw(icon.whatsapp({ size: 18 }))}
+            إرسال الفاتورة عبر واتساب (WhatsApp Web / App)
+          </button>
+          <button class="btn" id="btn-share-pdf-direct" type="button" style="display:flex;align-items:center;gap:8px;font-weight:bold;padding:.75rem 1.4rem;border-radius:8px;font-size:.95rem;background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.2)">
             ${raw(icon.share({ size: 18 }))}
-            مشاركة ملف PDF عبر التطبيقات
+            مشاركة ملف PDF عبر تطبيقات النظام
           </button>
           <button class="btn" id="btn-dl-pdf-direct" type="button" style="display:flex;align-items:center;gap:8px;font-weight:bold;padding:.75rem 1.4rem;border-radius:8px;font-size:.95rem;background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.2)">
             ${raw(icon.download({ size: 18 }))}
@@ -276,8 +269,24 @@ export async function render(view, ctx) {
     return undefined;
   }
 
+  let activeViewMode = 'template'; // 'template' | 'items'
+  let zoomLevel = 82;
+  let selectedTplStyle = null;
+
   const draw = async () => {
     const { invoice, issuer, client } = await loadContext(invoiceId);
+    const issuerPrintCfg = (typeof issuer.print_settings === 'string'
+      ? JSON.parse(issuer.print_settings || '{}')
+      : (issuer.print_settings || {})) || {};
+
+    if (!selectedTplStyle) {
+      selectedTplStyle = issuerPrintCfg.template_style || 'standard';
+    }
+
+    const getPrintSettings = () => ({
+      ...issuerPrintCfg,
+      template_style: selectedTplStyle,
+    });
 
     view.innerHTML = html`
       <div class="page-head">
@@ -311,36 +320,83 @@ export async function render(view, ctx) {
 
       ${raw(invoice.status === 'CANCELLED' ? '<div class="alert alert-danger">هذه الفاتورة ملغاة — تم عكس قيدها في كشف حساب العميل، ورقمها وبصمتها محفوظان في السلسلة.</div>' : '')}
 
-      <div class="grid" style="grid-template-columns:minmax(0,2.4fr) minmax(260px,1fr)">
+      <div class="grid" style="grid-template-columns:minmax(0,2.4fr) minmax(280px,1fr);align-items:start;gap:1.2rem">
         <div>
-          <div class="card pad0">
-            <div class="card-head"><h3>بنود الفاتورة</h3><div class="spacer"></div>
-              <span class="tiny muted">${invoice.lines.length} بند</span></div>
-            <div class="table-wrap">
-              <table class="tbl compact">
-                <thead><tr><th>#</th><th>الصنف</th><th>الوحدة</th><th class="text-end">الكمية</th>
-                  <th class="text-end">السعر</th><th class="text-end">الخصم</th><th class="text-end">قبل الضريبة</th>
-                  <th class="text-center">الضريبة</th><th class="text-end">قيمة الضريبة</th><th class="text-end">الإجمالي</th></tr></thead>
-                <tbody>
-                  ${invoice.lines.map((l, i) => raw(`<tr>
-                    <td class="tiny">${i + 1}</td>
-                    <td><b>${esc(l.item_name)}</b>${l.item_code ? `<div class="tiny muted mono">${esc(l.item_code)}</div>` : ''}</td>
-                    <td class="tiny">${esc(l.unit)}</td>
-                    <td class="text-end num">${num(l.quantity)}</td>
-                    <td class="text-end num">${money(l.unit_price)}</td>
-                    <td class="text-end num">${money(l.discount)}</td>
-                    <td class="text-end num">${money(l.taxable)}</td>
-                    <td class="text-center tiny num">${num(l.tax_rate)}%</td>
-                    <td class="text-end num">${money(l.tax_amount)}</td>
-                    <td class="text-end num"><b>${money(l.total_line)}</b></td>
-                  </tr>`))}
-                </tbody>
-              </table>
+          <!-- شريط أدوات الفاتورة والقالب -->
+          <div class="card" style="padding:.65rem .85rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem;background:rgba(15,23,42,0.7);border-color:var(--line-strong)">
+            <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+              <div class="tab-pill-group" style="display:flex;gap:3px;background:rgba(0,0,0,0.3);padding:3px;border-radius:8px">
+                <button type="button" class="btn btn-sm ${activeViewMode === 'template' ? 'btn-primary' : ''}" id="tab-btn-template" style="padding:.35rem .75rem;border-radius:6px;font-size:.82rem">
+                  ${raw(icon.fileText({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}
+                  معاينة الفاتورة بالقالب 📄
+                </button>
+                <button type="button" class="btn btn-sm ${activeViewMode === 'items' ? 'btn-primary' : ''}" id="tab-btn-items" style="padding:.35rem .75rem;border-radius:6px;font-size:.82rem">
+                  ${raw(icon.fileSpreadsheet({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}
+                  جدول البنود والبيانات 📋 (${invoice.lines.length})
+                </button>
+              </div>
+
+              <div id="tpl-select-wrap" style="display:${activeViewMode === 'template' ? 'flex' : 'none'};align-items:center;gap:6px">
+                <span style="font-size:.8rem;color:var(--text-muted);font-weight:600">القالب:</span>
+                <select id="sel-invoice-tpl" class="input input-sm" style="padding:.28rem .6rem;font-size:.82rem;border-radius:6px;background:var(--bg-card);color:var(--text);border-color:var(--line-strong)">
+                  ${INVOICE_TEMPLATES.map((t) => `<option value="${t.id}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+
+            <div id="tpl-zoom-wrap" style="display:${activeViewMode === 'template' ? 'flex' : 'none'};align-items:center;gap:.5rem">
+              <div class="tpl-zoom-controls">
+                <button type="button" class="tpl-zoom-btn" id="inv-zoom-out" title="تصغير">−</button>
+                <span class="tpl-zoom-val" id="inv-zoom-text">${zoomLevel}%</span>
+                <button type="button" class="tpl-zoom-btn" id="inv-zoom-in" title="تكبير">+</button>
+                <button type="button" class="tpl-zoom-btn" id="inv-zoom-fit" title="ملاءمة العرض" style="border-inline-start:1px solid var(--line-strong);font-size:.75rem">العرض</button>
+              </div>
+              <button class="btn btn-sm" id="btn-fullscreen-inv" title="معاينة ملء الشاشة" type="button" style="padding:.3rem .55rem">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- شاشة عرض الفاتورة بالقالب الرسمي المعتمد -->
+          <div id="pane-template-preview" style="display:${activeViewMode === 'template' ? 'block' : 'none'}">
+            <div class="tpl-paper-wrapper" id="inv-paper-wrapper" style="border-radius:10px;border:1px solid var(--line-strong);min-height:850px;max-height:1050px">
+              <div class="tpl-paper-frame" id="inv-paper-frame" style="transform: scale(${zoomLevel / 100})">
+                <iframe id="inv-iframe" class="tpl-iframe" title="معاينة الفاتورة بالقالب"></iframe>
+              </div>
+            </div>
+          </div>
+
+          <!-- شاشة عرض جدول البنود والبيانات الفنية -->
+          <div id="pane-items-details" style="display:${activeViewMode === 'items' ? 'block' : 'none'}">
+            <div class="card pad0">
+              <div class="card-head"><h3>بنود الفاتورة</h3><div class="spacer"></div>
+                <span class="tiny muted">${invoice.lines.length} بند</span></div>
+              <div class="table-wrap">
+                <table class="tbl compact">
+                  <thead><tr><th>#</th><th>الصنف</th><th>الوحدة</th><th class="text-end">الكمية</th>
+                    <th class="text-end">السعر</th><th class="text-end">الخصم</th><th class="text-end">قبل الضريبة</th>
+                    <th class="text-center">الضريبة</th><th class="text-end">قيمة الضريبة</th><th class="text-end">الإجمالي</th></tr></thead>
+                  <tbody>
+                    ${invoice.lines.map((l, i) => raw(`<tr>
+                      <td class="tiny">${i + 1}</td>
+                      <td><b>${esc(l.item_name)}</b>${l.item_code ? `<div class="tiny muted mono">${esc(l.item_code)}</div>` : ''}</td>
+                      <td class="tiny">${esc(l.unit)}</td>
+                      <td class="text-end num">${num(l.quantity)}</td>
+                      <td class="text-end num">${money(l.unit_price)}</td>
+                      <td class="text-end num">${money(l.discount)}</td>
+                      <td class="text-end num">${money(l.taxable)}</td>
+                      <td class="text-center tiny num">${num(l.tax_rate)}%</td>
+                      <td class="text-end num">${money(l.tax_amount)}</td>
+                      <td class="text-end num"><b>${money(l.total_line)}</b></td>
+                    </tr>`))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
           ${raw(invoice.allocations && invoice.allocations.length ? `
-            <div class="card pad0">
+            <div class="card pad0 mt">
               <div class="card-head"><h3>سندات القبض المرتبطة</h3></div>
               <div class="table-wrap"><table class="tbl compact">
                 <thead><tr><th>رقم السند</th><th>التاريخ</th><th>طريقة السداد</th><th class="text-end">المبلغ المخصص</th><th></th></tr></thead>
@@ -354,7 +410,7 @@ export async function render(view, ctx) {
               </table></div>
             </div>` : '')}
 
-          <div class="card">
+          <div class="card mt">
             <h3>بيانات الفاتورة الإلكترونية</h3>
             <dl class="kv">
               <dt>المعرّف الفريد (UUID)</dt><dd class="mono tiny">${invoice.uuid}</dd>
@@ -426,22 +482,125 @@ export async function render(view, ctx) {
         </div>
       </div>`;
 
+    function updateInvoicePreview() {
+      const iframe = $('#inv-iframe', view);
+      if (!iframe) return;
+      const docHtml = invoiceA4({
+        invoice,
+        issuer,
+        client,
+        printSettings: getPrintSettings(),
+        autoPrint: false,
+      });
+      iframe.srcdoc = docHtml;
+    }
+
+    function fitZoom() {
+      const wrapper = $('#inv-paper-wrapper', view);
+      if (wrapper && wrapper.clientWidth > 100) {
+        const availableW = wrapper.clientWidth - 28;
+        const targetW = 794;
+        const calculatedScale = Math.min(1.15, Math.max(0.45, Math.round((availableW / targetW) * 94) / 100));
+        zoomLevel = Math.round(calculatedScale * 100);
+        const zText = $('#inv-zoom-text', view);
+        if (zText) zText.textContent = `${zoomLevel}%`;
+        const frame = $('#inv-paper-frame', view);
+        if (frame) frame.style.transform = `scale(${zoomLevel / 100})`;
+      }
+    }
+
+    // تبديل نمط القالب المعروض
+    $('#sel-invoice-tpl', view)?.addEventListener('change', (e) => {
+      selectedTplStyle = e.target.value;
+      updateInvoicePreview();
+    });
+
+    // أدوات التكبير والتصغير والملاءمة
+    $('#inv-zoom-in', view)?.addEventListener('click', () => {
+      zoomLevel = Math.min(150, zoomLevel + 10);
+      const zText = $('#inv-zoom-text', view);
+      if (zText) zText.textContent = `${zoomLevel}%`;
+      const frame = $('#inv-paper-frame', view);
+      if (frame) frame.style.transform = `scale(${zoomLevel / 100})`;
+    });
+
+    $('#inv-zoom-out', view)?.addEventListener('click', () => {
+      zoomLevel = Math.max(40, zoomLevel - 10);
+      const zText = $('#inv-zoom-text', view);
+      if (zText) zText.textContent = `${zoomLevel}%`;
+      const frame = $('#inv-paper-frame', view);
+      if (frame) frame.style.transform = `scale(${zoomLevel / 100})`;
+    });
+
+    $('#inv-zoom-fit', view)?.addEventListener('click', () => fitZoom());
+
+    // فتح المعاينة في شاشة كاملة
+    $('#btn-fullscreen-inv', view)?.addEventListener('click', () => {
+      const docHtml = invoiceA4({
+        invoice,
+        issuer,
+        client,
+        printSettings: getPrintSettings(),
+        autoPrint: false,
+      });
+      const m = modal({
+        title: `معاينة الفاتورة: ${invoice.invoice_number}`,
+        wide: true,
+        body: html`<iframe style="width:100%;height:82vh;border:none;background:#fff;border-radius:4px" srcdoc="${esc(docHtml)}"></iframe>`,
+        footer: `<button class="btn btn-primary" id="fs-print-inv" type="button">${raw(icon.printer({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}طباعة الفاتورة</button>
+                 <button class="btn" data-close type="button">إلغاء</button>`,
+      });
+      $('#fs-print-inv', m.el).addEventListener('click', () => printDoc(docHtml));
+    });
+
+    // تبديل نمط العرض بين القالب والبيانات الفنية
+    $('#tab-btn-template', view)?.addEventListener('click', () => {
+      activeViewMode = 'template';
+      const panePreview = $('#pane-template-preview', view);
+      const paneItems = $('#pane-items-details', view);
+      const selWrap = $('#tpl-select-wrap', view);
+      const zoomWrap = $('#tpl-zoom-wrap', view);
+      if (panePreview) panePreview.style.display = 'block';
+      if (paneItems) paneItems.style.display = 'none';
+      if (selWrap) selWrap.style.display = 'flex';
+      if (zoomWrap) zoomWrap.style.display = 'flex';
+      $('#tab-btn-template', view)?.classList.add('btn-primary');
+      $('#tab-btn-items', view)?.classList.remove('btn-primary');
+      setTimeout(fitZoom, 50);
+    });
+
+    $('#tab-btn-items', view)?.addEventListener('click', () => {
+      activeViewMode = 'items';
+      const panePreview = $('#pane-template-preview', view);
+      const paneItems = $('#pane-items-details', view);
+      const selWrap = $('#tpl-select-wrap', view);
+      const zoomWrap = $('#tpl-zoom-wrap', view);
+      if (panePreview) panePreview.style.display = 'none';
+      if (paneItems) paneItems.style.display = 'block';
+      if (selWrap) selWrap.style.display = 'none';
+      if (zoomWrap) zoomWrap.style.display = 'none';
+      $('#tab-btn-template', view)?.classList.remove('btn-primary');
+      $('#tab-btn-items', view)?.classList.add('btn-primary');
+    });
+
     $('#download-invoice', view).addEventListener('click', async (e) => {
       e.target.disabled = true;
       try {
-        await downloadInvoicePdf({ invoice, issuer, client });
+        await downloadInvoicePdf({ invoice, issuer, client, printSettings: getPrintSettings() });
       } finally {
         e.target.disabled = false;
       }
     });
+
     $('#share-invoice', view).addEventListener('click', async (e) => {
       e.target.disabled = true;
       try {
-        await shareInvoicePdfFile({ invoice, issuer, client });
+        await shareInvoicePdfFile({ invoice, issuer, client, printSettings: getPrintSettings() });
       } finally {
         e.target.disabled = false;
       }
     });
+
     $('#print-more', view).addEventListener('click', () => {
       const pm = modal({
         title: 'خيارات الطباعة الورقية',
@@ -449,16 +608,21 @@ export async function render(view, ctx) {
         body: html`
           <div style="display:flex;flex-direction:column;gap:.5rem">
             <button class="btn btn-primary" id="pm-a4" type="button">${raw(icon.printer({ size: 16, style: 'vertical-align:text-bottom;margin-left:6px' }))}طباعة A4 قياسي</button>
-            <button class="btn" id="pm-80" type="button">${raw(icon.receipt({ size: 16, style: 'vertical-align:text-bottom;margin-left:6px' }))}طباعة حرارية 80mm</button>
-            <button class="btn" id="pm-copies" type="button">${raw(icon.copy({ size: 16, style: 'vertical-align:text-bottom;margin-left:6px' }))}طباعة نسختين (أصل + صورة)</button>
+            <button class="btn" id="pm-copies" type="button">${raw(icon.copy({ size: 16, style: 'vertical-align:text-bottom;margin-left:6px' }))}طباعة نسختين A4 (أصل + صورة)</button>
           </div>
         `,
         footer: '<button class="btn" data-close type="button">إلغاء</button>',
       });
-      $('#pm-a4', pm.el).addEventListener('click', () => { pm.close(); printDoc(invoiceA4({ invoice, issuer, client })); });
-      $('#pm-80', pm.el).addEventListener('click', () => { pm.close(); printDoc(invoiceThermal({ invoice, issuer, client })); });
-      $('#pm-copies', pm.el).addEventListener('click', () => { pm.close(); printDoc(invoiceA4({ invoice, issuer, client, copies: 2 })); });
+      $('#pm-a4', pm.el).addEventListener('click', () => {
+        pm.close();
+        printDoc(invoiceA4({ invoice, issuer, client, printSettings: getPrintSettings() }));
+      });
+      $('#pm-copies', pm.el).addEventListener('click', () => {
+        pm.close();
+        printDoc(invoiceA4({ invoice, issuer, client, copies: 2, printSettings: getPrintSettings() }));
+      });
     });
+
     $('#view-xml', view).addEventListener('click', async () => {
       const xml = await api.text(`/api/invoices/${invoice.id}/xml`);
       modal({
@@ -490,6 +654,11 @@ export async function render(view, ctx) {
         } catch { /* تنبيه تلقائي */ }
       });
     }
+
+    // إقلاع المعاينة الحية وملاءمة العرض
+    updateInvoicePreview();
+    setTimeout(fitZoom, 80);
+    window.addEventListener('resize', fitZoom);
   };
 
   await draw();

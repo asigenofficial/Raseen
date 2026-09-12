@@ -292,14 +292,8 @@ function create(payload, ctx = {}) {
   if (issueDate !== today && ctx.can && !ctx.can('invoices.backdate')) {
     throw V.forbidden('لا تملك صلاحية إصدار فاتورة بتاريخ غير تاريخ اليوم');
   }
-  if (payload.issue_time && payload.issue_time !== currentTime && ctx.can && !ctx.can('invoices.backdate')) {
-    const diffSec = Math.abs(
-      (parseInt(issueTime.slice(0, 2), 10) * 3600 + parseInt(issueTime.slice(3, 5), 10) * 60 + parseInt(issueTime.slice(6, 8), 10)) -
-      (parseInt(currentTime.slice(0, 2), 10) * 3600 + parseInt(currentTime.slice(3, 5), 10) * 60 + parseInt(currentTime.slice(6, 8), 10)),
-    );
-    if (diffSec > 120) {
-      throw V.forbidden('لا تملك صلاحية تحديد وقت مخصص للفاتورة');
-    }
+  if (payload.issue_time && ctx.can && !ctx.can('invoices.backdate')) {
+    throw V.forbidden('لا تملك صلاحية تحديد وقت مخصص للفاتورة');
   }
 
   const invoiceType = V.oneOf(payload.invoice_type, 'نوع الفاتورة', ['STANDARD', 'SIMPLIFIED'], 'STANDARD');

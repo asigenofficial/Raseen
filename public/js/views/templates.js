@@ -4,7 +4,7 @@
 import { api } from '../core/api.js';
 import { store, can } from '../core/store.js';
 import {
-  html, raw, esc, money, printDoc, download, modal, toastOk, toastErr, $, $$,
+  html, raw, esc, printDoc, download, modal, toastOk, toastErr, $, $$,
 } from '../core/util.js';
 import {
   invoiceA4, invoiceThermal, invoicePreviewDoc, INVOICE_TEMPLATES,
@@ -295,8 +295,8 @@ export async function render(view) {
   };
 
   let activeFilter = 'all'; // all | a4 | pos
-  let activeTab = 'branding';
-  let zoomLevel = 88;
+  let activeTab = 'templates';
+  let zoomLevel = 62;
   let activeZatcaPhase = activeIssuer.zatca_phase || 'PHASE1';
   let invoiceState = 'normal'; // normal | cancelled | draft
   let selectedInvoiceId = 'mock';
@@ -348,79 +348,72 @@ export async function render(view) {
         </div>
       </div>
 
-      <!-- الخطوة 1: اختيار نمط وتصميم الفاتورة -->
-      <div class="tpl-section-title" style="display:flex; align-items:center; justify-content:space-between;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span class="tpl-section-badge">١</span>
-          <span style="font-weight:800; font-size:1.05rem; color:#fff;">اختر نمط وتصميم الفاتورة المناسب لنشاطك</span>
-        </div>
-        <span class="tiny muted">إجمالي القوالب المتاحة: ${INVOICE_TEMPLATES.length} قوالب احترافية</span>
-      </div>
-
-      <!-- أزرار التصفية السريعة للقوالب -->
-      <div class="tpl-filters">
-        <button type="button" class="tpl-filter-btn ${activeFilter === 'all' ? 'active' : ''}" data-filter="all">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom; margin-inline-end:6px;"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>جميع القوالب (${INVOICE_TEMPLATES.length})
-        </button>
-        <button type="button" class="tpl-filter-btn ${activeFilter === 'a4' ? 'active' : ''}" data-filter="a4">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom; margin-inline-end:6px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/></svg>فواتير ضريبية A4 (${INVOICE_TEMPLATES.filter((t) => t.category === 'a4' || t.paper === 'A4').length})
-        </button>
-        <button type="button" class="tpl-filter-btn ${activeFilter === 'pos' ? 'active' : ''}" data-filter="pos">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom; margin-inline-end:6px;"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><line x1="8" x2="16" y1="8" y2="8"/><line x1="8" x2="16" y1="12" y2="12"/><line x1="8" x2="12" y1="16" y2="16"/></svg>إيصالات الكاشير الحرارية 80mm (${INVOICE_TEMPLATES.filter((t) => t.category === 'pos' || t.paper === '80mm').length})
-        </button>
-      </div>
-
-      <!-- معرض القوالب المنظم مع الهياكل المصغرة -->
-      <div class="tpl-gallery">
-        ${raw(filteredTemplates.map((tpl) => `
-          <div class="tpl-card ${tpl.id === printCfg.template_style ? 'active' : ''}" data-style="${esc(tpl.id)}">
-            <div>
-              <div class="tpl-card-head">
-                <span class="tpl-card-icon">${raw(tpl.icon)}</span>
-                <span class="tpl-card-badge">${esc(tpl.badge || tpl.paper)}</span>
-              </div>
-              ${renderWireframe(tpl.id)}
-              <div class="tpl-card-title">${esc(tpl.name)}</div>
-              <p class="tpl-card-desc">${esc(tpl.desc)}</p>
-            </div>
-            <div style="margin-top:.6rem; padding-top:.6rem; border-top:1px solid var(--line); display:flex; justify-content:space-between; align-items:center;">
-              <span class="tiny muted">${tpl.paper === '80mm' ? 'بكرة إيصال 80mm' : 'صفحة A4 قياسية'}</span>
-              <span class="badge ${tpl.id === printCfg.template_style ? 'green' : 'gray'}" style="font-size:.72rem;">
-                ${tpl.id === printCfg.template_style ? raw('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom; margin-inline-end:4px;"><polyline points="20 6 9 17 4 12"/></svg>القالب المعتمد') : 'تحديد القالب'}
+      <div class="tpl-studio">
+        <!-- لوحة التحكم والتخصيص الموحدة (تشمل القوالب المدمجة وجميع أدوات التخصيص) -->
+        <div class="tpl-controls">
+          <!-- شريط علوي يوضح القالب المعتمد الحالي مع إمكانية التبديل بنقرة واحدة -->
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:.35rem .75rem; background:rgba(255,255,255,0.02); border-bottom:1px solid var(--line); flex-wrap:wrap; gap:.3rem;">
+            <div style="display:flex; align-items:center; gap:.4rem;">
+              <span class="badge blue" style="font-size:.7rem; padding:.1rem .4rem;">ورق A4</span>
+              <span style="font-size:.78rem; color:#fff; font-weight:700;">
+                القالب المعتمد: ${(INVOICE_TEMPLATES.find((t) => t.id === printCfg.template_style) || {}).name?.split('(')[0]?.trim() || 'الرسمي المعتمد'}
               </span>
             </div>
+            <button type="button" class="btn btn-sm ${activeTab === 'templates' ? 'btn-primary' : ''}" id="btn-toggle-templates-tab" style="font-size:.72rem; padding:.15rem .45rem;">
+              ${activeTab === 'templates' ? 'إخفاء القوالب' : 'تغيير نمط القالب (اختياري) ▾'}
+            </button>
           </div>
-        `).join(''))}
-      </div>
 
-      <!-- الخطوة 2: لوحة التخصيص والمعاينة المباشرة -->
-      <div class="tpl-section-title">
-        <span class="tpl-section-badge">٢</span>
-        <span style="font-weight:800; font-size:1.05rem; color:#fff;">استوديو التخصيص الدقيق والمعاينة الحية اللحظية</span>
-      </div>
-
-      <div class="tpl-studio">
-        <!-- لوحة التحكم والتخصيص على اليمين -->
-        <div class="tpl-controls">
           <div class="tpl-tabs">
+            <button class="tpl-tab-btn ${activeTab === 'templates' ? 'active' : ''}" data-tab="templates" type="button">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>أنماط القوالب
+            </button>
             <button class="tpl-tab-btn ${activeTab === 'branding' ? 'active' : ''}" data-tab="branding" type="button">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>الهوية والألوان
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>الهوية والألوان
             </button>
             <button class="tpl-tab-btn ${activeTab === 'columns' ? 'active' : ''}" data-tab="columns" type="button">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>أعمدة الجدول
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>أعمدة الجدول
             </button>
             <button class="tpl-tab-btn ${activeTab === 'qr' ? 'active' : ''}" data-tab="qr" type="button">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>الـ QR والفوترة
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>الـ QR والفوترة
             </button>
             <button class="tpl-tab-btn ${activeTab === 'footer' ? 'active' : ''}" data-tab="footer" type="button">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 19.5v-15A2.5 2.5 0 0 0 17.5 2H6.5A2.5 2.5 0 0 0 4 4.5v15A2.5 2.5 0 0 0 6.5 22h11a2.5 2.5 0 0 0 2.5-2.5Z"/><path d="m8 10 2 2 4-4"/></svg>التذييل والبنك
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 19.5v-15A2.5 2.5 0 0 0 17.5 2H6.5A2.5 2.5 0 0 0 4 4.5v15A2.5 2.5 0 0 0 6.5 22h11a2.5 2.5 0 0 0 2.5-2.5Z"/><path d="m8 10 2 2 4-4"/></svg>التذييل والبنك
             </button>
             <button class="tpl-tab-btn ${activeTab === 'advanced' ? 'active' : ''}" data-tab="advanced" type="button">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>حزم القوالب و CSS
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>حزم القوالب و CSS
             </button>
           </div>
 
           <div class="tpl-tab-pane">
+            <!-- تبويب أنماط القوالب المدمجة (اختياري) -->
+            <div id="tab-pane-templates" style="${activeTab === 'templates' ? '' : 'display:none'}">
+              <div class="flex" style="align-items:center; justify-content:space-between; margin-bottom:.6rem;">
+                <div>
+                  <b style="font-size:.82rem; color:#fff; display:block;">اختر نمط وتصميم قالب الفاتورة (A4)</b>
+                  <span class="tiny muted" style="font-size:.71rem;">جميع القوالب معتمدة رسمياً ومجهزة للطباعة والتصدير بصيغة PDF.</span>
+                </div>
+                <span class="badge gray tiny" style="font-size:.7rem; padding:.05rem .35rem;">${filteredTemplates.length} قوالب</span>
+              </div>
+
+              <div class="tpl-gallery tpl-compact-grid">
+                ${raw(filteredTemplates.map((tpl) => `
+                  <div class="tpl-card tpl-card-mini ${tpl.id === printCfg.template_style ? 'active' : ''}" data-style="${esc(tpl.id)}" title="${esc(tpl.desc)}">
+                    <div class="tpl-card-icon tpl-mini-icon">
+                      ${raw(tpl.icon)}
+                    </div>
+                    <div class="tpl-mini-info">
+                      <div class="tpl-mini-title">${esc(tpl.name.split('(')[0].trim())}</div>
+                      <div class="tpl-mini-meta">
+                        <span class="tpl-mini-badge ${tpl.paper === '80mm' ? 'amber' : 'blue'}">${tpl.paper}</span>
+                        <span class="tiny muted">${esc(tpl.badge || '')}</span>
+                      </div>
+                    </div>
+                    <div class="tpl-mini-check">✓</div>
+                  </div>
+                `).join(''))}
+              </div>
+            </div>
             <!-- تبويب الهوية والألوان -->
             <div id="tab-pane-branding" style="${activeTab === 'branding' ? '' : 'display:none'}">
               <div class="field">
@@ -633,33 +626,10 @@ export async function render(view) {
         <div class="tpl-preview-pane">
           <div class="tpl-preview-toolbar">
             <div class="tpl-preview-info">
-              <span class="badge ${printCfg.template_style === 'thermal' || printCfg.template_style === 'pos_detailed' ? 'amber' : 'green'}" style="font-weight:700;">
-                ${printCfg.template_style === 'thermal' || printCfg.template_style === 'pos_detailed' ? 'بكرة حرارية 80mm' : 'ورق A4 (210×297mm)'}
-              </span>
-              <span class="muted tiny">|</span>
-              <span class="muted tiny">البيانات:</span>
-              <select id="sel-invoice-source" style="padding:.25rem .5rem; font-size:.82rem; border-radius:6px; background:var(--field-bg); color:#fff; border:1px solid var(--line-strong); max-width:170px;">
-                <option value="mock"${selectedInvoiceId === 'mock' ? ' selected' : ''}>نموذج تجريبي متكامل</option>
-                ${raw(recentInvoices.map((inv) => `<option value="${esc(inv.id)}"${inv.id === selectedInvoiceId ? ' selected' : ''}>فاتورة #${esc(inv.invoice_number)} (${money(inv.grand_total)} ${esc(inv.currency || 'ر.س')})</option>`).join(''))}
-              </select>
-            </div>
-
-            <!-- مفتاح التبديل المباشر لمرحلة الزكاة -->
-            <div class="flex gap" style="align-items:center;">
-              <span class="tiny muted" title="معاينة الفاتورة والباركود في نمط المرحلة الأولى أو المرحلة الثانية">المرحلة:</span>
-              <div class="tpl-phase-toggle" id="phase-toggle">
-                <button type="button" class="tpl-phase-btn ${activeZatcaPhase === 'PHASE1' ? 'active' : ''}" data-phase="PHASE1" title="معاينة رمز QR بالحقول الخمسة الأساسية">المرحلة ١</button>
-                <button type="button" class="tpl-phase-btn ${activeZatcaPhase === 'PHASE2' ? 'active' : ''}" data-phase="PHASE2" title="معاينة رمز QR المشفر وبصمة الفاتورة الإلكترونية">المرحلة ٢ (مشفرة)</button>
-              </div>
+              <span class="badge green" style="font-weight:700;">ورق A4 ضريبي (210×297mm)</span>
             </div>
 
             <div class="tpl-preview-actions">
-              <select id="sel-invoice-state" style="padding:.25rem .45rem; font-size:.78rem; border-radius:6px; background:var(--field-bg); color:#fff; border:1px solid var(--line-strong);">
-                <option value="normal"${invoiceState === 'normal' ? ' selected' : ''}>معتمدة رسمية</option>
-                <option value="cancelled"${invoiceState === 'cancelled' ? ' selected' : ''}>ملغاة بختم مائي</option>
-                <option value="draft"${invoiceState === 'draft' ? ' selected' : ''}>مسودة أولية</option>
-              </select>
-
               <div class="tpl-zoom-controls">
                 <button type="button" class="tpl-zoom-btn" id="zoom-out" title="تصغير المعاينة">−</button>
                 <span class="tpl-zoom-val" id="zoom-text">${zoomLevel}%</span>
@@ -674,7 +644,7 @@ export async function render(view) {
           </div>
 
           <div class="tpl-paper-wrapper" id="paper-wrapper">
-            <div class="tpl-paper-frame ${printCfg.template_style === 'thermal' || printCfg.template_style === 'pos_detailed' ? 'thermal' : ''}" id="paper-frame" style="transform: scale(${zoomLevel / 100});">
+            <div class="tpl-paper-frame" id="paper-frame" style="transform: scale(${zoomLevel / 100});">
               <iframe id="preview-iframe" class="tpl-iframe" title="معاينة حية لقالب الفاتورة"></iframe>
             </div>
           </div>
@@ -956,7 +926,7 @@ export async function render(view) {
     });
 
     // تبديل فلتر القوالب (all | a4 | pos)
-    $$('.tpl-filter-btn', view).forEach((btn) => {
+    $$('.tpl-filter-btn, .tpl-filter-pill', view).forEach((btn) => {
       btn.addEventListener('click', () => {
         activeFilter = btn.dataset.filter;
         renderView();
@@ -972,16 +942,37 @@ export async function render(view) {
       });
     });
 
+    // زر التبديل السريع بين القوالب والتخصيص
+    const toggleTplBtn = $('#btn-toggle-templates-tab', view);
+    if (toggleTplBtn) {
+      toggleTplBtn.addEventListener('click', () => {
+        activeTab = activeTab === 'templates' ? 'branding' : 'templates';
+        $$('.tpl-tab-btn', view).forEach((b) => {
+          b.classList.toggle('active', b.dataset.tab === activeTab);
+        });
+        ['templates', 'branding', 'columns', 'qr', 'footer', 'advanced'].forEach((tabName) => {
+          const pane = $(`#tab-pane-${tabName}`, view);
+          if (pane) pane.style.display = tabName === activeTab ? '' : 'none';
+        });
+        toggleTplBtn.textContent = activeTab === 'templates' ? 'إخفاء القوالب' : 'تغيير نمط القالب (اختياري) ▾';
+        toggleTplBtn.classList.toggle('btn-primary', activeTab === 'templates');
+      });
+    }
+
     // تبديل تبويبات أدوات التحكم
     $$('.tpl-tab-btn', view).forEach((btn) => {
       btn.addEventListener('click', () => {
         activeTab = btn.dataset.tab;
         $$('.tpl-tab-btn', view).forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
-        ['branding', 'columns', 'qr', 'footer', 'advanced'].forEach((tabName) => {
+        ['templates', 'branding', 'columns', 'qr', 'footer', 'advanced'].forEach((tabName) => {
           const pane = $(`#tab-pane-${tabName}`, view);
           if (pane) pane.style.display = tabName === activeTab ? '' : 'none';
         });
+        if (toggleTplBtn) {
+          toggleTplBtn.textContent = activeTab === 'templates' ? 'إخفاء القوالب' : 'تغيير نمط القالب (اختياري) ▾';
+          toggleTplBtn.classList.toggle('btn-primary', activeTab === 'templates');
+        }
       });
     });
 
@@ -1177,6 +1168,22 @@ export async function render(view) {
       updateLivePreview();
     });
 
+    // دالة الملاءمة التلقائية للمعاينة بدون أي اقتصاص
+    function fitZoom() {
+      const wrapper = $('#paper-wrapper', view);
+      const isThermal = printCfg.template_style === 'thermal' || printCfg.template_style === 'pos_detailed';
+      if (wrapper && wrapper.clientWidth > 100) {
+        const availableW = wrapper.clientWidth - 28;
+        const targetW = isThermal ? 302 : 794;
+        const calculatedScale = Math.min(1.15, Math.max(0.45, Math.round((availableW / targetW) * 94) / 100));
+        zoomLevel = Math.round(calculatedScale * 100);
+        const zText = $('#zoom-text', view);
+        const pFrame = $('#paper-frame', view);
+        if (zText) zText.textContent = `${zoomLevel}%`;
+        if (pFrame) pFrame.style.transform = `scale(${calculatedScale})`;
+      }
+    }
+
     // أزرار التكبير والتصغير والملاءمة
     $('#zoom-in', view)?.addEventListener('click', () => {
       zoomLevel = Math.min(130, zoomLevel + 10);
@@ -1184,22 +1191,15 @@ export async function render(view) {
       $('#paper-frame', view).style.transform = `scale(${zoomLevel / 100})`;
     });
     $('#zoom-out', view)?.addEventListener('click', () => {
-      zoomLevel = Math.max(50, zoomLevel - 10);
+      zoomLevel = Math.max(45, zoomLevel - 10);
       $('#zoom-text', view).textContent = `${zoomLevel}%`;
       $('#paper-frame', view).style.transform = `scale(${zoomLevel / 100})`;
     });
-    $('#zoom-fit', view)?.addEventListener('click', () => {
-      const wrapper = $('#paper-wrapper', view);
-      const isThermal = printCfg.template_style === 'thermal' || printCfg.template_style === 'pos_detailed';
-      if (wrapper) {
-        const availableW = wrapper.clientWidth - 40;
-        const targetW = isThermal ? 302 : 794; // approx pixels for 80mm vs 210mm
-        const calculatedScale = Math.min(1.2, Math.max(0.5, Math.round((availableW / targetW) * 90) / 100));
-        zoomLevel = Math.round(calculatedScale * 100);
-        $('#zoom-text', view).textContent = `${zoomLevel}%`;
-        $('#paper-frame', view).style.transform = `scale(${calculatedScale})`;
-      }
-    });
+    $('#zoom-fit', view)?.addEventListener('click', fitZoom);
+
+    // ملاءمة تلقائية عند الفتح وتغيير حجم النافذة
+    setTimeout(fitZoom, 60);
+    window.addEventListener('resize', fitZoom);
 
     // تجربة الطباعة الحية
     $('#btn-print-test', view)?.addEventListener('click', () => {

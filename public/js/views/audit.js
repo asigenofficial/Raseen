@@ -4,7 +4,7 @@
 import { api, qs } from '../core/api.js';
 import {
   html, raw, esc, num, dateTimeAr, monthStart, today,
-  $, delegate, debounce, exportCsv, exportExcel, modal, icon,
+  $, delegate, debounce, exportCsv, exportExcel, modal, icon, downloadPdfFromHtml, toastErr,
 } from '../core/util.js';
 
 const PAGE = 100;
@@ -77,6 +77,10 @@ export async function render(view) {
           <p>كل عملية إصدار أو تعديل أو إلغاء أو حذف مسجَّلة باسم المستخدم ووقتها — ${num(state.data.total_count)} سجل.</p>
         </div>
         <div class="page-actions">
+          <button class="btn btn-primary" id="btn-pdf-audit" type="button">
+            ${raw(icon.pdf({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}
+            تحميل تقرير PDF
+          </button>
           <button class="btn" id="exp-xls" type="button">${raw(icon.fileSpreadsheet({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}تصدير Excel</button>
           <button class="btn" id="exp-csv" type="button">${raw(icon.fileText({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}CSV</button>
         </div>
@@ -167,6 +171,64 @@ export async function render(view) {
       r.entity_type, r.entity_id, describe(r.details), r.ip]);
     $('#exp-csv', view).addEventListener('click', () => exportCsv('سجل-العمليات', headers, rows()));
     $('#exp-xls', view).addEventListener('click', () => exportExcel('سجل-العمليات', 'سجل العمليات', headers, rows()));
+
+    const getAuditDocHtml = () => {
+      const now = new Date();
+      return `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>سجل العمليات والتدقيق</title>
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          * { box-sizing: border-box; }
+          body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; color: #0f172a; background: #fff; }
+          .header { border-bottom: 2.5px solid #0d9488; padding-bottom: 4mm; margin-bottom: 4mm; display: flex; justify-content: space-between; align-items: center; }
+          h1 { margin: 0 0 1mm; font-size: 15pt; color: #0f766e; }
+          .sub { color: #64748b; font-size: 8.5pt; }
+          table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-top: 2mm; }
+          th { background: #0d9488; color: #fff; border: 1px solid #0f766e; padding: 2.2mm 1.5mm; font-weight: 700; text-align: right; }
+          td { border: 1px solid #cbd5e1; padding: 1.8mm 1.5mm; color: #1e293b; }
+          tr:nth-child(even) td { background: #f8fafc; }
+          .mono { font-family: monospace; font-size: 7.5pt; direction: ltr; text-align: left; }
+          .footer { margin-top: 5mm; display: flex; justify-content: space-between; font-size: 8pt; color: #64748b; }
+        </style></head><body>
+        <div class="header">
+          <div>
+            <h1>تقرير سجل العمليات والتدقيق (Audit Trail)</h1>
+            <div class="sub">إجمالي السجلات: ${num(state.data.total_count)} عملية مسجلة</div>
+          </div>
+          <div style="font-size:8pt;color:#64748b;text-align:left;direction:ltr">
+            <div><b>Raseen Audit System</b></div>
+            <div>${now.toLocaleDateString('ar-SA')} - ${now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</div>
+          </div>
+        </div>
+        <table>
+          <thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+          <tbody>${state.data.items.map((r) => `<tr>
+            <td style="white-space:nowrap" class="mono">${esc(dateTimeAr(r.created_at))}</td>
+            <td><b>${esc(r.user_name)}</b></td>
+            <td>${esc(ACTION_LABELS[r.action] || r.action)}</td>
+            <td class="mono">${esc(r.entity_type)}</td>
+            <td class="mono">${esc(r.entity_id ? r.entity_id.slice(0, 10) : '—')}</td>
+            <td style="font-size:7.5pt;max-width:320px">${esc(describe(r.details))}</td>
+            <td class="mono">${esc(r.ip || '—')}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+        <div class="footer">
+          <span>نظام رصين — سجل تدقيق رقابي معتمد</span>
+          <span style="direction:ltr">Page 1</span>
+        </div>
+        </body></html>`;
+    };
+
+    $('#btn-pdf-audit', view).addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      try {
+        const docHtml = getAuditDocHtml();
+        await downloadPdfFromHtml(docHtml, 'سجل-العمليات.pdf');
+      } catch (err) {
+        toastErr(err.message || 'تعذر تحميل ملف PDF');
+      } finally {
+        e.target.disabled = false;
+      }
+    });
   };
 
   await load();

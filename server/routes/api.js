@@ -145,6 +145,28 @@ router.post('/api/users', (ctx) => { need(ctx, 'users.manage'); return { ok: tru
 router.put('/api/users/:id', (ctx) => { need(ctx, 'users.manage'); return { ok: true, data: auth.updateUser(ctx.params.id, ctx.body, actorOf(ctx)) }; });
 router.delete('/api/users/:id', (ctx) => { need(ctx, 'users.manage'); return { ok: true, data: auth.deleteUser(ctx.params.id, actorOf(ctx)) }; });
 
+// ------------------------------------------------------------------ إدارة الأدوار والصلاحيات
+router.get('/api/roles', (ctx) => { need(ctx, 'users.manage'); return { ok: true, data: auth.listRoles() }; });
+router.put('/api/roles/:role', (ctx) => {
+  need(ctx, 'users.manage');
+  const roles = auth.updateRolePermissions(ctx.params.role, ctx.body.permissions, actorOf(ctx));
+  const role = roles.find((r) => r.id === String(ctx.params.role || '').trim().toUpperCase());
+  return { ok: true, data: role || roles };
+});
+router.post('/api/roles/:role/reset', (ctx) => {
+  need(ctx, 'users.manage');
+  const roles = auth.resetRolePermissions(ctx.params.role, actorOf(ctx));
+  const role = roles.find((r) => r.id === String(ctx.params.role || '').trim().toUpperCase());
+  return { ok: true, data: role || roles };
+});
+router.post('/api/roles', (ctx) => {
+  need(ctx, 'users.manage');
+  const roles = auth.saveCustomRole(ctx.body.key, ctx.body.label, ctx.body.permissions, actorOf(ctx));
+  const role = roles.find((r) => r.id === String(ctx.body.key || '').trim().toUpperCase());
+  return { ok: true, data: role || roles };
+});
+router.delete('/api/roles/:role', (ctx) => { need(ctx, 'users.manage'); return { ok: true, data: auth.deleteCustomRole(ctx.params.role, actorOf(ctx)) }; });
+
 // ------------------------------------------------------------------ الشركات المصدرة
 router.get('/api/issuers', (ctx) => {
   need(ctx, 'issuers.view');

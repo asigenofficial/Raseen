@@ -525,6 +525,50 @@ async function main() {
 
   cookie = adminCookie;
 
+  // فحص إدارة الأدوار وتحديد الصلاحيات المخصصة (Roles & Permissions API)
+  r = await api('GET', '/api/roles', null, { expectStatus: 200 });
+  ok(Array.isArray(r.body.data) && r.body.data.length >= 3, 'قائمة الأدوار المتاحة');
+  const accountantRole = r.body.data.find((x) => x.id === 'ACCOUNTANT');
+  ok(accountantRole && accountantRole.permissions.includes('invoices.create'), 'دور المحاسب يحتوي صلاحياته');
+
+  // تعديل صلاحيات دور المستعرض لمنحه صلاحية إنشاء فواتير وتجربتها
+  r = await api('PUT', '/api/roles/VIEWER', { permissions: ['issuers.view', 'clients.view', 'invoices.view', 'invoices.create'] }, { expectStatus: 200 });
+  ok(r.body.data.permissions.includes('invoices.create'), 'تم تحديث صلاحيات دور المستعرض بنجاح');
+
+  // إنشاء دور مخصص جديد (كاشير)
+  r = await api('POST', '/api/roles', {
+    key: 'CASHIER',
+    label: 'كاشير نقاط البيع',
+    permissions: ['invoices.view', 'invoices.create', 'vouchers.create'],
+  }, { expectStatus: 200 });
+  eq(r.body.data.id, 'CASHIER', 'تمت إضافة الدور المخصص بنجاح');
+
+  // إنشاء مستخدم مسند للدور المخصص الجديد
+  r = await api('POST', '/api/users', {
+    username: 'cashier_user',
+    password: 'Cashier@12345',
+    role: 'CASHIER',
+    full_name: 'موظف كاشير',
+  }, { expectStatus: 200 });
+  eq(r.body.data.role, 'CASHIER', 'المستخدم مسند للدور المخصص');
+  eq(r.body.data.role_label, 'كاشير نقاط البيع', 'المسمى العربي للدور المخصص يظهر بشكل صحيح');
+
+  // محاولة حذف الدور المخصص أثناء ارتباط مستخدمين به تفشل
+  r = await api('DELETE', '/api/roles/CASHIER');
+  eq(r.status, 409, 'منع حذف دور مخصص مسند إليه مستخدمون');
+
+  // استعادة الصلاحيات الافتراضية لدور المستعرض
+  r = await api('POST', '/api/roles/VIEWER/reset', null, { expectStatus: 200 });
+  ok(!r.body.data.permissions.includes('invoices.create'), 'استعادة الصلاحيات الافتراضية بنجاح');
+
+  // تحديث دور المستخدم ثم حذف الدور المخصص
+  const cashierUser = (await api('GET', '/api/users')).body.data.find((u) => u.username === 'cashier_user');
+  await api('PUT', `/api/users/${cashierUser.id}`, { role: 'ACCOUNTANT' }, { expectStatus: 200 });
+  r = await api('DELETE', '/api/roles/CASHIER', null, { expectStatus: 200 });
+  ok(!r.body.data.some((ro) => ro.id === 'CASHIER'), 'حذف الدور المخصص بعد فك ارتباط المستخدمين');
+
+  cookie = adminCookie;
+
   // ------------------------------------------------------------- الإلغاء والحذف
   section('الإلغاء والحذف والقيود وسلامة السلسلة (M1 & M7)');
   r = await api('POST', `/api/invoices/${inv1.id}/cancel`, { reason: 'اختبار' });

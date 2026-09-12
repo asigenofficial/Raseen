@@ -6,9 +6,9 @@ import { store, loadClients, can, getFilterState, setFilterState, clearFilterSta
 import {
   html, raw, esc, money, num, dateAr, statusBadge, monthStart, today, toastOk,
   $, delegate, debounce, exportCsv, exportExcel, parseSpreadsheetText, printDoc, modal, toastErr, formValues,
-  icon,
+  icon, downloadPdfFromHtml,
 } from '../core/util.js';
-import { invoiceA4, invoiceThermal } from '../print/templates.js';
+import { invoiceA4 } from '../print/templates.js';
 import { downloadInvoicePdf, shareInvoicePdfFile } from './invoice-view.js';
 
 const PAGE = 50;
@@ -136,11 +136,12 @@ export async function render(view, ctx) {
         </div>
         <div class="page-actions">
           ${raw(can('invoices.create') ? `<a class="btn btn-primary" href="#/invoice">${icon.plus({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}فاتورة جديدة</a>` : '')}
+          <button class="btn btn-primary" id="btn-pdf-list" type="button">${raw(icon.pdf({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}تحميل قائمة PDF</button>
+          <button class="btn" id="print-list" type="button">${raw(icon.printer({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}طباعة القائمة</button>
           ${raw(can('invoices.create') ? `<button class="btn" id="import-excel-btn" type="button">${icon.upload({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}استيراد Excel</button>` : '')}
           <a class="btn" href="/api/invoices/template?format=xls" target="_blank" download="invoices_template.xls">${raw(icon.download({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}نموذج Excel</a>
           <button class="btn" id="exp-xls" type="button">${raw(icon.fileSpreadsheet({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}تصدير Excel</button>
           <button class="btn" id="exp-csv" type="button">${raw(icon.fileText({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}CSV</button>
-          <button class="btn" id="print-list" type="button">${raw(icon.printer({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}طباعة القائمة</button>
         </div>
       </div>
 
@@ -256,20 +257,73 @@ export async function render(view, ctx) {
     $('#exp-xls', view).addEventListener('click', () => exportExcel('الفواتير', 'قائمة الفواتير', headers, rows(),
       { footer: ['الإجمالي', '', '', '', '', '', '', '', money(t.tax), money(t.grand_total), money(t.paid), money(t.remaining), ''] }));
 
-    $('#print-list', view).addEventListener('click', () => {
-      const body = `<div style="padding:8mm;font-family:Tahoma">
-        <h2 style="text-align:center">قائمة الفواتير</h2>
-        <table style="width:100%;border-collapse:collapse;font-size:9pt">
-          <thead><tr>${headers.map((h) => `<th style="border:1px solid #94a3b8;background:#0d9488;color:#fff;padding:3px">${esc(h)}</th>`).join('')}</tr></thead>
-          <tbody>${state.data.items.map((i) => `<tr>${[i.invoice_number, i.issue_date, i.issue_time, i.client_name,
-    i.client_code, i.issuer_name, i.payment_label, money(i.taxable_amount), money(i.tax_amount), money(i.grand_total),
-    money(i.paid_amount), money(i.remaining_amount), i.status_label]
-    .map((c) => `<td style="border:1px solid #cbd5e1;padding:2px">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+    const getInvoiceListDocHtml = () => {
+      return `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>تقرير قائمة الفواتير</title>
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          * { box-sizing: border-box; }
+          body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; color: #0f172a; background: #fff; }
+          .header { border-bottom: 2px solid #0d9488; padding-bottom: 4mm; margin-bottom: 4mm; display: flex; justify-content: space-between; align-items: center; }
+          h2 { margin: 0; font-size: 15pt; color: #0f766e; }
+          .sub { color: #64748b; font-size: 8.5pt; }
+          table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-top: 3mm; }
+          th { background: #0d9488; color: #fff; border: 1px solid #0f766e; padding: 2.2mm 1.5mm; font-weight: 700; text-align: right; }
+          th.e { text-align: left; }
+          td { border: 1px solid #cbd5e1; padding: 1.8mm 1.5mm; }
+          tr:nth-child(even) td { background: #f8fafc; }
+          tfoot td { background: #f1f5f9; font-weight: 700; border-top: 2px solid #0d9488; }
+          .e { text-align: left; font-variant-numeric: tabular-nums; direction: ltr; }
+          .footer { margin-top: 5mm; display: flex; justify-content: space-between; font-size: 8pt; color: #64748b; }
+        </style></head><body>
+        <div class="header">
+          <div>
+            <h2>تقرير قائمة الفواتير</h2>
+            <div class="sub">إجمالي النتائج: ${num(state.data.total_count)} فاتورة</div>
+          </div>
+          <div style="font-size:8pt;color:#64748b;text-align:left;direction:ltr">
+            <div><b>Raseen System</b></div>
+            <div>${new Date().toLocaleDateString('ar-SA')}</div>
+          </div>
+        </div>
+        <table>
+          <thead><tr>${headers.map((h, i) => `<th class="${i >= 7 && i <= 11 ? 'e' : ''}">${esc(h)}</th>`).join('')}</tr></thead>
+          <tbody>${state.data.items.map((i) => `<tr>${[
+            i.invoice_number, i.issue_date, i.issue_time, i.client_name,
+            i.client_code, i.issuer_name, i.payment_label, money(i.taxable_amount), money(i.tax_amount), money(i.grand_total),
+            money(i.paid_amount), money(i.remaining_amount), i.status_label
+          ].map((c, idx) => `<td class="${idx >= 7 && idx <= 11 ? 'e' : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+          <tfoot><tr>
+            <td colspan="7">الإجمالي</td>
+            <td class="e">${money(t.taxable_amount || (t.grand_total - t.tax))}</td>
+            <td class="e">${money(t.tax)}</td>
+            <td class="e">${money(t.grand_total)}</td>
+            <td class="e">${money(t.paid)}</td>
+            <td class="e">${money(t.remaining)}</td>
+            <td></td>
+          </tr></tfoot>
         </table>
-        <p style="font-size:9pt">الإجمالي: ${money(t.grand_total)} — المسدد: ${money(t.paid)} — المتبقي: ${money(t.remaining)}</p>
-      </div>`;
-      printDoc(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>قائمة الفواتير</title>
-        <style>@page{size:A4 landscape;margin:8mm}body{margin:0}</style></head><body>${body}</body></html>`);
+        <div class="footer">
+          <span>نظام رصين للفوترة والمحاسبة — تقرير رسمي A4 PDF</span>
+          <span style="direction:ltr">Page 1</span>
+        </div>
+        </body></html>`;
+    };
+
+    $('#btn-pdf-list', view).addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      try {
+        const docHtml = getInvoiceListDocHtml();
+        await downloadPdfFromHtml(docHtml, 'قائمة-الفواتير.pdf');
+      } catch (err) {
+        toastErr(err.message || 'تعذر تحميل ملف PDF');
+      } finally {
+        e.target.disabled = false;
+      }
+    });
+
+    $('#print-list', view).addEventListener('click', () => {
+      const docHtml = getInvoiceListDocHtml();
+      printDoc(docHtml);
     });
 
     const openImportModal = () => {
@@ -493,8 +547,19 @@ export async function render(view, ctx) {
         } finally {
           btn.disabled = false;
         }
-      } else if (btn.dataset.act === 'print') await printOne(id, 'a4');
-      else if (btn.dataset.act === 'thermal') await printOne(id, 'thermal');
+      } else if (btn.dataset.act === 'print' || btn.dataset.act === 'thermal') {
+        btn.disabled = true;
+        try {
+          const invoice = await api.get(`/api/invoices/${id}`);
+          const [issuer, client] = await Promise.all([
+            api.get(`/api/issuers/${invoice.issuer_id}`),
+            api.get(`/api/clients/${invoice.client_id}`),
+          ]);
+          printDoc(invoiceA4({ invoice, issuer, client }));
+        } finally {
+          btn.disabled = false;
+        }
+      }
       else if (btn.dataset.act === 'pay') {
         const invoice = await api.get(`/api/invoices/${id}`);
         const m = modal({
