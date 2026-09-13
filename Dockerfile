@@ -24,8 +24,8 @@ RUN mkdir -p /app/data && chown -R node:node /app
 # التبديل إلى مستخدم غير جذري لتعزيز الأمان
 USER node
 
-# مجلد التخزين الدائم لقاعدة بيانات SQLite ومفتاح التشفير
-VOLUME ["/app/data"]
+# ملاحظة: تم إزالة تعليمة VOLUME لأن منصات مثل Railway لا تدعمها في Dockerfile.
+# يمكن إضافة قرص تخزين دائم (Railway Volume) من لوحة التحكم مع مسار: /app/data
 
 # المنفذ
 EXPOSE 4711
