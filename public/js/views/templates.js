@@ -9,6 +9,7 @@ import {
 import {
   invoiceA4, invoiceThermal, invoicePreviewDoc, INVOICE_TEMPLATES,
 } from '../print/templates.js';
+import { PRESET_LOGOS } from '../print/logos.js';
 
 const PALETTES = [
   { name: 'سماوي رسين الحديث', color: '#06b6d4', dark: '#0891b2', light: '#ecfeff' },
@@ -25,6 +26,17 @@ const PALETTES = [
 
 const PRESET_TEMPLATES = [
   {
+    id: 'preset-trade',
+    title: 'التجارة والتوريدات العامة (الرسمي المعتمد)',
+    style: 'standard',
+    color: '#059669',
+    dark: '#047857',
+    light: '#ecfdf5',
+    font: 'Segoe UI',
+    badge: 'رسمي معتمد',
+    desc: 'قالب أخضر زمردي رسمي متطابق 100% مع متطلبات هيئة الزكاة والضريبة.',
+  },
+  {
     id: 'preset-tech',
     title: 'شركات البرمجيات والحلول الرقمية',
     style: 'modern',
@@ -34,6 +46,17 @@ const PRESET_TEMPLATES = [
     font: 'Cairo',
     badge: 'تقني عصري',
     desc: 'تصميم سماوي تقني عصري ببطاقات ناعمة وترويسة ملونة تعكس الابتكار.',
+  },
+  {
+    id: 'preset-classic',
+    title: 'الكلاسيكي المحاسبي والتجاري',
+    style: 'classic',
+    color: '#334155',
+    dark: '#1e293b',
+    light: '#f8fafc',
+    font: 'Cairo',
+    badge: 'محاسبي رصين',
+    desc: 'تصميم تجاري رصين بإطار محاسبي وشبكة قيود وجداول متكاملة.',
   },
   {
     id: 'preset-corporate',
@@ -58,17 +81,6 @@ const PRESET_TEMPLATES = [
     desc: 'تصميم ذهبي تنفيذي برأسية ملكية عريضة وهوية رفيعة للمحاماة والاستشارات.',
   },
   {
-    id: 'preset-trade',
-    title: 'التجارة والتوريدات العامة (معتمد)',
-    style: 'standard',
-    color: '#059669',
-    dark: '#047857',
-    light: '#ecfdf5',
-    font: 'Segoe UI',
-    badge: 'رسمي معتمد',
-    desc: 'قالب أخضر زمردي رسمي متطابق 100% مع متطلبات هيئة الزكاة والضريبة.',
-  },
-  {
     id: 'preset-contracting',
     title: 'المقاولات والإنشاءات الهندسية',
     style: 'grid',
@@ -81,7 +93,7 @@ const PRESET_TEMPLATES = [
   },
   {
     id: 'preset-medical',
-    title: 'المراكز الطبية والمختبرات والصيدليات',
+    title: 'الخدمات الطبية والاستشارات الاقتصادية',
     style: 'minimal',
     color: '#0d9488',
     dark: '#0f766e',
@@ -91,26 +103,48 @@ const PRESET_TEMPLATES = [
     desc: 'تصميم فائق النعومة بمساحات بيضاء مريحة وبدون حواف داكنة لطباعة اقتصادية.',
   },
   {
-    id: 'preset-pos',
-    title: 'كاشير نقاط البيع ومحلات التجزئة',
-    style: 'thermal',
-    color: '#0f172a',
-    dark: '#020617',
-    light: '#f8fafc',
+    id: 'preset-rawasi',
+    title: 'الاتصالات والتجزئة (رواسي ينبع)',
+    style: 'rawasi',
+    color: '#1e3a8a',
+    dark: '#172554',
+    light: '#eff6ff',
     font: 'Cairo',
-    badge: 'كاشير 80mm',
-    desc: 'إيصال حراري 80 مم سريع ونقي مع باركود ورمز QR متوافق مع هيئة الزكاة.',
+    badge: 'اتصالات وتجزئة',
+    desc: 'تصميم أزرق كحلي برأسية ملونة وتفاصيل الأجهزة الذكية والسيريال والبيع الآجل.',
   },
   {
-    id: 'preset-pos-detailed',
-    title: 'نقاط البيع الموسعة والمتاجر المركزية',
-    style: 'pos_detailed',
-    color: '#0f172a',
-    dark: '#020617',
-    light: '#f8fafc',
+    id: 'preset-ledger',
+    title: 'سجل المقاولات والحديد (الزهراني والمجد)',
+    style: 'ledger',
+    color: '#111827',
+    dark: '#030712',
+    light: '#f9fafb',
     font: 'Cairo',
-    badge: 'كاشير تفصيلي 80mm',
-    desc: 'إيصال حراري تفصيلي يعرض أكواد الأصناف ونسب الضرائب وبصمة الربط المشفر.',
+    badge: 'حديد ومقاولات',
+    desc: 'إطار فحمي داكن قوي مخصص لمبيعات حديد التسليح والمستودعات وتواريخ الاستحقاق.',
+  },
+  {
+    id: 'preset-logistics',
+    title: 'النقل والخدمات اللوجستية (أوتاد البدر)',
+    style: 'logistics',
+    color: '#0f766e',
+    dark: '#134e4a',
+    light: '#f0fdfa',
+    font: 'Cairo',
+    badge: 'نقل ولوجستي',
+    desc: 'تصميم تيل أنيق يبرز بوالص الشحن ووجهات التسليم والشاحنات وبيانات التوريد.',
+  },
+  {
+    id: 'preset-detailed-address',
+    title: 'العنوان الوطني المفصل (رواد الاتحاد)',
+    style: 'detailed_address',
+    color: '#15803d',
+    dark: '#166534',
+    light: '#f0fdf4',
+    font: 'Cairo',
+    badge: 'عنوان وطني مفصل',
+    desc: 'تصميم أخضر يبرز خلايا العنوان الوطني السداسي الكامل ومجموع الكميات.',
   },
 ];
 
@@ -301,9 +335,11 @@ export async function render(view) {
   let invoiceState = 'normal'; // normal | cancelled | draft
   let selectedInvoiceId = 'mock';
   let currentInvoice = buildMockInvoice(activeIssuer, activeZatcaPhase);
+  let deletedTemplateIds = new Set(JSON.parse(localStorage.getItem('deleted_invoice_templates') || '[]'));
 
   function renderView() {
     const filteredTemplates = INVOICE_TEMPLATES.filter((tpl) => {
+      if (deletedTemplateIds.has(tpl.id)) return false;
       if (activeFilter === 'all') return true;
       if (activeFilter === 'a4') return tpl.category === 'a4' || tpl.paper === 'A4';
       if (activeFilter === 'pos') return tpl.category === 'pos' || tpl.paper === '80mm';
@@ -331,13 +367,9 @@ export async function render(view) {
           <button class="btn" id="btn-presets" title="عرض نماذج قوالب مصممة مسبقاً لمختلف الأنشطة" type="button">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom; margin-inline-end:6px;"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>نماذج جاهزة
           </button>
-          <button class="btn" id="btn-download-json" title="تنزيل حزمة القالب بصيغة JSON" type="button">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom; margin-inline-end:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>تحميل القالب
-          </button>
-          <button class="btn" id="btn-upload-json" title="رفع واستيراد ملف قالب JSON" type="button">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom; margin-inline-end:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>رفع قالب
-          </button>
-          <input type="file" id="file-template-upload" accept=".json,application/json" style="display:none;" />
+          <a class="btn" id="btn-dl-active-excel" href="/api/invoices/template?style=${esc(printCfg.template_style || 'standard')}&format=xlsx" target="_blank" download="invoice_template_${esc(printCfg.template_style || 'standard')}.xlsx" title="تنزيل ملف قالب Excel المعتمد (.xlsx)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom; margin-inline-end:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>تنزيل قالب Excel (.xlsx)
+          </a>
           <button class="btn" id="btn-reset" title="استعادة الضبط القياسي المعتمد" type="button">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom; margin-inline-end:6px;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>استعادة الافتراضي
           </button>
@@ -381,7 +413,7 @@ export async function render(view) {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 19.5v-15A2.5 2.5 0 0 0 17.5 2H6.5A2.5 2.5 0 0 0 4 4.5v15A2.5 2.5 0 0 0 6.5 22h11a2.5 2.5 0 0 0 2.5-2.5Z"/><path d="m8 10 2 2 4-4"/></svg>التذييل والبنك
             </button>
             <button class="tpl-tab-btn ${activeTab === 'advanced' ? 'active' : ''}" data-tab="advanced" type="button">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>حزم القوالب و CSS
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>تخصيص CSS
             </button>
           </div>
 
@@ -393,7 +425,10 @@ export async function render(view) {
                   <b style="font-size:.82rem; color:#fff; display:block;">اختر نمط وتصميم قالب الفاتورة (A4)</b>
                   <span class="tiny muted" style="font-size:.71rem;">جميع القوالب معتمدة رسمياً ومجهزة للطباعة والتصدير بصيغة PDF.</span>
                 </div>
-                <span class="badge gray tiny" style="font-size:.7rem; padding:.05rem .35rem;">${filteredTemplates.length} قوالب</span>
+                <div class="flex gap-sm" style="align-items:center;">
+                  <span class="badge gray tiny" style="font-size:.7rem; padding:.05rem .35rem;">${filteredTemplates.length} قوالب</span>
+                  ${raw(deletedTemplateIds.size > 0 ? `<button type="button" id="btn-restore-templates" class="btn btn-sm" style="font-size:.68rem; padding:2px 6px; color:#38bdf8; border-color:rgba(56,189,248,0.3); background:rgba(56,189,248,0.08);" title="استعادة القوالب التي تم حذفها">استعادة (${deletedTemplateIds.size})</button>` : '')}
+                </div>
               </div>
 
               <div class="tpl-gallery tpl-compact-grid">
@@ -408,6 +443,20 @@ export async function render(view) {
                         <span class="tpl-mini-badge ${tpl.paper === '80mm' ? 'amber' : 'blue'}">${tpl.paper}</span>
                         <span class="tiny muted">${esc(tpl.badge || '')}</span>
                       </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:4px; margin-inline-start:auto; z-index:2;">
+                      <a class="badge green tiny" href="/api/invoices/template?style=${esc(tpl.id)}&format=xlsx" target="_blank" download="invoice_template_${esc(tpl.id)}.xlsx" title="تنزيل قالب Excel المعتمد (.xlsx)" onclick="event.stopPropagation()" style="text-decoration:none; display:inline-flex; align-items:center; gap:3px; padding:2px 7px; font-size:11px; border-radius:4px;">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                        Excel ⤓
+                      </a>
+                      <button type="button" class="btn-delete-tpl" data-tpl-id="${esc(tpl.id)}" data-tpl-name="${esc(tpl.name.split('(')[0].trim())}" title="حذف هذا القالب من القائمة" onclick="event.stopPropagation()" style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); color:#f87171; padding:2px 5px; cursor:pointer; display:inline-flex; align-items:center; border-radius:4px; font-size:11px; transition:all .15s;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="3 6 5 6 21 6"></polyline>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                          <line x1="10" y1="11" x2="10" y2="17"></line>
+                          <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                      </button>
                     </div>
                     <div class="tpl-mini-check">✓</div>
                   </div>
@@ -448,57 +497,99 @@ export async function render(view) {
                     <option value="Almarai"${printCfg.font_family === 'Almarai' ? ' selected' : ''}>Almarai (مريح للمستندات المالية)</option>
                     <option value="Tajawal"${printCfg.font_family === 'Tajawal' ? ' selected' : ''}>Tajawal (هندسي رشيق)</option>
                     <option value="Segoe UI"${printCfg.font_family === 'Segoe UI' ? ' selected' : ''}>Segoe UI (قياسي ويندوز)</option>
-                    <option value="Tahoma"${printCfg.font_family === 'Tahoma' ? ' selected' : ''}>Tahoma (رسمي كلاسيكي)</option>
-                    <option value="Noto Naskh Arabic"${printCfg.font_family === 'Noto Naskh Arabic' ? ' selected' : ''}>Noto Naskh (نسخ عربي أصيل)</option>
-                    <option value="Arial"${printCfg.font_family === 'Arial' ? ' selected' : ''}>Arial</option>
+                    <option value="Tahoma"${printCfg.font_family === 'Tahoma' ? ' selected' : ''}>Tahoma (رسمي تقليدي)</option>
                   </select>
                 </div>
                 <div class="field">
                   <label>حجم الخط العام</label>
                   <select id="ctrl-font-size">
-                    <option value="compact"${printCfg.font_size === 'compact' ? ' selected' : ''}>مدمج (Compact 8pt)</option>
-                    <option value="normal"${printCfg.font_size === 'normal' || !printCfg.font_size ? ' selected' : ''}>قياسي (Standard 8.4pt)</option>
-                    <option value="large"${printCfg.font_size === 'large' ? ' selected' : ''}>مريح / كبير (Large 9.2pt)</option>
+                    <option value="compact"${printCfg.font_size === 'compact' ? ' selected' : ''}>مكثف ومدمج (Compact 8pt)</option>
+                    <option value="normal"${!printCfg.font_size || printCfg.font_size === 'normal' ? ' selected' : ''}>قياسي متوازن (Normal 8.4pt)</option>
+                    <option value="large"${printCfg.font_size === 'large' ? ' selected' : ''}>مريح وكبير (Large 9.2pt)</option>
                   </select>
                 </div>
               </div>
 
               <div class="row mt">
                 <div class="field">
-                  <label>موضع الشعار في الرأسية</label>
+                  <label>موضع شعار المنشأة</label>
                   <select id="ctrl-logo-pos">
-                    <option value="right"${printCfg.logo_position === 'right' || !printCfg.logo_position ? ' selected' : ''}>يمين (الافتراضي الرسمي)</option>
-                    <option value="left"${printCfg.logo_position === 'left' ? ' selected' : ''}>يسار</option>
-                    <option value="none"${printCfg.logo_position === 'none' ? ' selected' : ''}>إخفاء الشعار</option>
+                    <option value="right"${!printCfg.logo_position || printCfg.logo_position === 'right' ? ' selected' : ''}>يمين (الأعلى بجانب الاسم)</option>
+                    <option value="left"${printCfg.logo_position === 'left' ? ' selected' : ''}>يسار (بجانب بيانات الفاتورة)</option>
+                    <option value="center"${printCfg.logo_position === 'center' ? ' selected' : ''}>في المنتصف (رأسية مركزية)</option>
+                    <option value="none"${printCfg.logo_position === 'none' ? ' selected' : ''}>بدون شعار</option>
                   </select>
                 </div>
                 <div class="field">
-                  <label>حجم الشعار</label>
+                  <label>أبعاد الشعار</label>
                   <select id="ctrl-logo-size">
                     <option value="small"${printCfg.logo_size === 'small' ? ' selected' : ''}>صغير (20mm)</option>
-                    <option value="medium"${printCfg.logo_size === 'medium' || !printCfg.logo_size ? ' selected' : ''}>متوسط (28mm)</option>
+                    <option value="medium"${!printCfg.logo_size || printCfg.logo_size === 'medium' ? ' selected' : ''}>متوسط (26mm)</option>
                     <option value="large"${printCfg.logo_size === 'large' ? ' selected' : ''}>كبير (38mm)</option>
                   </select>
                 </div>
               </div>
 
-              ${raw(activeIssuer.has_logo ? '' : '<div class="alert alert-info mt tiny mb0">لم يتم رفع شعار رسمي للمنشأة؛ يتم استخدام الاسم والشعار الرمزي تلقائياً. يمكنك رفع الشعار بدقة عالية من شاشة «الشركات المصدرة».</div>')}
+              <!-- بطاقة شعار المنشأة والقوالب -->
+              <div class="card mt" style="background:rgba(255,255,255,0.03); border:1px solid var(--line); border-radius:8px; padding:.9rem; margin-bottom:0;">
+                <div class="flex" style="justify-content:space-between; align-items:center; margin-bottom:.6rem;">
+                  <label style="font-weight:800; font-size:.88rem; margin:0; display:flex; align-items:center; gap:6px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary);"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                    شعار المنشأة والقوالب
+                  </label>
+                  <span class="badge ${activeIssuer.logo_data ? 'green' : 'gray'}" id="badge-logo-status" style="font-size:.72rem;">
+                    ${activeIssuer.logo_data ? 'شعار معتمد نشط' : 'بديل الشعار التلقائي'}
+                  </span>
+                </div>
+
+                <div class="flex gap" style="align-items:center; margin-bottom:.8rem;">
+                  <div id="logo-preview-box" style="width:72px; height:58px; border-radius:6px; border:1px solid var(--line); background:#fff; display:grid; place-items:center; overflow:hidden; flex-shrink:0; padding:3px; box-shadow:0 2px 6px rgba(0,0,0,0.15);">
+                    ${raw(activeIssuer.logo_data
+                      ? `<img src="${esc(activeIssuer.logo_data)}" alt="شعار" style="max-width:100%; max-height:100%; object-fit:contain;" />`
+                      : `<div style="font-size:.68rem; color:#64748b; text-align:center; font-weight:700; line-height:1.2;">بديل<br>الشعار</div>`)}
+                  </div>
+                  <div style="flex:1;">
+                    <div class="flex gap-sm" style="flex-wrap:wrap;">
+                      <label class="btn btn-sm btn-primary" style="cursor:pointer; margin:0; display:inline-flex; align-items:center; gap:5px;">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                        رفع شعار جديد ⤒
+                        <input type="file" id="file-logo-input" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;" />
+                      </label>
+                      ${raw(activeIssuer.logo_data ? '<button type="button" class="btn btn-sm btn-danger" id="btn-remove-logo" style="margin:0;">إزالة الشعار</button>' : '')}
+                    </div>
+                    <div class="tiny muted" style="margin-top:4px; line-height:1.3;">يدعم SVG, PNG, JPG بدقة عالية وتنسيق شفاف.</div>
+                  </div>
+                </div>
+
+                <!-- نماذج شعارات جاهزة بنقرة واحدة -->
+                <div style="border-top:1px solid rgba(255,255,255,0.07); padding-top:.6rem;">
+                  <div class="tiny muted mb-sm" style="font-weight:700;">أو اختر شعاراً رسمياً جاهزاً للقالب:</div>
+                  <div class="grid grid-3" style="gap:5px;">
+                    ${raw(PRESET_LOGOS.map((pl) => `
+                      <button type="button" class="btn btn-sm btn-apply-logo-preset" data-logo-id="${pl.id}" style="padding:4px 6px; font-size:.72rem; text-align:start; display:flex; align-items:center; gap:5px; background:rgba(255,255,255,0.02); border:1px solid var(--line);" title="${esc(pl.name)}">
+                        <span style="display:inline-block; width:9px; height:9px; border-radius:50%; background:${pl.color}; flex-shrink:0;"></span>
+                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(pl.name)}</span>
+                      </button>
+                    `).join(''))}
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <!-- تبويب أعمدة الجدول -->
+            <!-- تبويب أعمدة الجدول والبنود -->
             <div id="tab-pane-columns" style="${activeTab === 'columns' ? '' : 'display:none'}">
-              <p class="tiny muted mb">تحكّم بظهور أو إخفاء حقول وأعمدة جدول البنود وفق طبيعة نشاطك التجاري:</p>
+              <p class="tiny muted mb">حدد الأعمدة التي ترغب في إظهارها في جدول بنود الفاتورة:</p>
               <div class="tpl-switches">
                 <div class="tpl-switch-item">
-                  <label for="col-item-code">إظهار كود / باركود الصنف في الجدول</label>
+                  <label for="col-item-code">إظهار كود / باركود الصنف تحت الاسم</label>
                   <input type="checkbox" id="col-item-code" ${printCfg.show_item_code !== false ? 'checked' : ''} />
                 </div>
                 <div class="tpl-switch-item">
-                  <label for="col-unit">إظهار عمود وحدة القياس (حبة، متر، خدمة، كيس...)</label>
+                  <label for="col-unit">إظهار عمود وحدة القياس (حبة، كجم، خدمة...)</label>
                   <input type="checkbox" id="col-unit" ${printCfg.show_unit !== false ? 'checked' : ''} />
                 </div>
                 <div class="tpl-switch-item">
-                  <label for="col-discount">إظهار عمود الخصم التجاري الممنوح</label>
+                  <label for="col-discount">إظهار عمود الخصم الممنوح للبند</label>
                   <input type="checkbox" id="col-discount" ${printCfg.show_discount !== false ? 'checked' : ''} />
                 </div>
                 <div class="tpl-switch-item">
@@ -582,41 +673,12 @@ export async function render(view) {
               </div>
             </div>
 
-            <!-- تبويب حزم القوالب و CSS متقدم -->
+            <!-- تبويب تخصيص أنماط CSS المتقدمة -->
             <div id="tab-pane-advanced" style="${activeTab === 'advanced' ? '' : 'display:none'}">
-              <div class="stack">
-                <div class="card" style="background:rgba(255,255,255,0.02); border:1px solid var(--line); padding:.9rem;">
-                  <h4 style="margin:0 0 .4rem; display:flex; align-items:center; gap:8px;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--brand);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                    تصدير وتحميل حزمة القالب
-                  </h4>
-                  <p class="tiny muted" style="margin-bottom:.8rem;">تنزيل ملف إعدادات القالب بالكامل مع الألوان والأبعاد والأعمدة لحفظه كنسخة احتياطية أو نقله لمنشأة أخرى:</p>
-                  <div class="flex gap">
-                    <button class="btn btn-sm" id="btn-tab-export-json" type="button">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom; margin-inline-end:5px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>تنزيل حزمة JSON
-                    </button>
-                    <button class="btn btn-sm" id="btn-tab-export-html" type="button">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom; margin-inline-end:5px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/></svg>تنزيل صفحة HTML مستقلة
-                    </button>
-                  </div>
-                </div>
-
-                <div class="card" style="background:rgba(255,255,255,0.02); border:1px solid var(--line); padding:.9rem;">
-                  <h4 style="margin:0 0 .4rem; display:flex; align-items:center; gap:8px;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--brand);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-                    رفع واستيراد قالب جاهز
-                  </h4>
-                  <p class="tiny muted" style="margin-bottom:.8rem;">اختر ملف قالب بصيغة JSON تم تصديره سابقاً ليتم تطبيقه فوراً على المنشأة:</p>
-                  <button class="btn btn-sm btn-primary" id="btn-tab-import-json" type="button">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom; margin-inline-end:5px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>اختيار ملف القالب (.json)
-                  </button>
-                </div>
-
-                <div class="field mt">
-                  <label>تخصيص أنماط CSS إضافية (Custom CSS Overrides)</label>
-                  <textarea id="ctrl-custom-css" class="mono tiny" placeholder=".page { /* قواعد CSS مخصصة */ }" style="min-height:90px;">${esc(printCfg.custom_css || '')}</textarea>
-                  <span class="hint">للمصممين: يمكنك كتابة أي استثناءات CSS وسيتم تضمينها مباشرة في رأس مستند الطباعة.</span>
-                </div>
+              <div class="field">
+                <label style="font-weight:700;">تخصيص أنماط CSS إضافية (Custom CSS Overrides)</label>
+                <textarea id="ctrl-custom-css" class="mono tiny" placeholder=".page { /* قواعد CSS مخصصة */ }" style="min-height:120px;">${esc(printCfg.custom_css || '')}</textarea>
+                <span class="hint">للمصممين والمطورين: يمكنك كتابة أي استثناءات CSS وسيتم تضمينها مباشرة في رأس مستند الطباعة.</span>
               </div>
             </div>
           </div>
@@ -681,50 +743,6 @@ export async function render(view) {
     });
 
     iframe.srcdoc = docHtml;
-  }
-
-  // تصدير القالب كحزمة JSON
-  function exportTemplateAsJson() {
-    const currentTpl = INVOICE_TEMPLATES.find((t) => t.id === printCfg.template_style) || { name: 'قالب الفاتورة' };
-    const payload = {
-      zsystem_template_version: '2.0',
-      exported_at: new Date().toISOString(),
-      template_name: currentTpl.name,
-      template_style: printCfg.template_style,
-      issuer_name: activeIssuer.name_ar,
-      issuer_code: activeIssuer.code,
-      zatca_phase: activeZatcaPhase,
-      print_settings: { ...printCfg },
-      qr_settings: { ...qrCfg },
-    };
-    const jsonStr = JSON.stringify(payload, null, 2);
-    const safeName = (currentTpl.name || 'template').replace(/[^\w\u0600-\u06FF]+/g, '_');
-    const dateStr = new Date().toISOString().slice(0, 10);
-    download(`zsystem_template_${safeName}_${dateStr}.json`, jsonStr, 'application/json;charset=utf-8');
-    toastOk('تم تصدير وتحميل ملف حزمة القالب بنجاح.');
-  }
-
-  // تصدير مستند HTML مستقل
-  function exportStandaloneHtml() {
-    let invStatus = currentInvoice.status;
-    if (invoiceState === 'cancelled') invStatus = 'CANCELLED';
-    else if (invoiceState === 'draft') invStatus = 'DRAFT';
-
-    const invToRender = {
-      ...currentInvoice,
-      status: invStatus,
-      zatca_phase: activeZatcaPhase,
-      signature_mode: activeZatcaPhase === 'PHASE2' ? 'LOCAL' : 'NONE',
-    };
-
-    const isThermal = printCfg.template_style === 'thermal' || printCfg.template_style === 'pos_detailed';
-    const htmlDoc = isThermal
-      ? invoiceThermal({ invoice: invToRender, issuer: activeIssuer, client: mockClient, printSettings: printCfg, qrSettings: qrCfg })
-      : invoiceA4({ invoice: invToRender, issuer: activeIssuer, client: mockClient, printSettings: printCfg, qrSettings: qrCfg, autoPrint: false });
-
-    const code = activeIssuer.code || 'export';
-    download(`invoice_template_${code}_${printCfg.template_style}.html`, htmlDoc, 'text/html;charset=utf-8');
-    toastOk('تم تحميل مستند HTML المستقل بدقة كاملة.');
   }
 
   // نافذة المعاينة في ملء الشاشة
@@ -873,57 +891,9 @@ export async function render(view) {
       }
     });
 
-    // أزرار التحميل والرفع والنماذج الجاهزة
+    // أزرار النماذج الجاهزة وملء الشاشة
     $('#btn-presets', view)?.addEventListener('click', openPresetsModal);
-    $('#btn-download-json', view)?.addEventListener('click', exportTemplateAsJson);
-    $('#btn-tab-export-json', view)?.addEventListener('click', exportTemplateAsJson);
-    $('#btn-tab-export-html', view)?.addEventListener('click', exportStandaloneHtml);
     $('#btn-fullscreen', view)?.addEventListener('click', openFullscreenPreview);
-
-    const fileInput = $('#file-template-upload', view);
-    const uploadTrigger = () => fileInput?.click();
-    $('#btn-upload-json', view)?.addEventListener('click', uploadTrigger);
-    $('#btn-tab-import-json', view)?.addEventListener('click', uploadTrigger);
-
-    // معالجة رفع ملف القالب
-    fileInput?.addEventListener('change', async (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        const importedPrint = data.print_settings || data;
-        const importedQr = data.qr_settings || {};
-
-        if (!importedPrint || typeof importedPrint !== 'object') {
-          throw new Error('الملف لا يحتوي على كائن إعدادات قالب صالح');
-        }
-
-        printCfg = {
-          ...printCfg,
-          ...importedPrint,
-          copies: Math.max(1, parseInt(importedPrint.copies, 10) || 1),
-        };
-
-        if (importedQr && typeof importedQr === 'object') {
-          qrCfg = {
-            ...qrCfg,
-            ...importedQr,
-          };
-        }
-
-        if (data.zatca_phase) {
-          activeZatcaPhase = data.zatca_phase;
-        }
-
-        renderView();
-        toastOk(`تم رفع واستيراد القالب «${data.template_name || file.name}» بدقة كاملة!`);
-      } catch (err) {
-        toastErr('تعذر استيراد القالب: ' + err.message);
-      } finally {
-        e.target.value = '';
-      }
-    });
 
     // تبديل فلتر القوالب (all | a4 | pos)
     $$('.tpl-filter-btn, .tpl-filter-pill', view).forEach((btn) => {
@@ -940,6 +910,43 @@ export async function render(view) {
         printCfg.template_style = styleId;
         renderView();
       });
+    });
+
+    // حذف قالب من المعرض
+    $$('.btn-delete-tpl', view).forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const tplId = btn.dataset.tplId;
+        const tplName = btn.dataset.tplName || tplId;
+        if (!confirm(`هل أنت متأكد من رغبتك في حذف قالب «${tplName}»؟`)) return;
+        try {
+          await api.delete(`/api/invoices/templates/${tplId}`).catch(() => {});
+        } catch { /* التراجع السلس */ }
+        deletedTemplateIds.add(tplId);
+        try {
+          localStorage.setItem('deleted_invoice_templates', JSON.stringify([...deletedTemplateIds]));
+        } catch {}
+        if (printCfg.template_style === tplId) {
+          const remaining = INVOICE_TEMPLATES.find((t) => !deletedTemplateIds.has(t.id));
+          if (remaining) printCfg.template_style = remaining.id;
+        }
+        renderView();
+        toastOk(`تم حذف قالب «${tplName}» بنجاح.`);
+      });
+    });
+
+    // استعادة القوالب المحذوفة
+    $('#btn-restore-templates', view)?.addEventListener('click', async () => {
+      if (!confirm('هل ترغب في استعادة جميع القوالب المحذوفة؟')) return;
+      try {
+        await api.post('/api/invoices/templates/reset').catch(() => {});
+      } catch { /* ignore */ }
+      deletedTemplateIds.clear();
+      try {
+        localStorage.removeItem('deleted_invoice_templates');
+      } catch {}
+      renderView();
+      toastOk('تمت استعادة كافة القوالب بنجاح.');
     });
 
     // زر التبديل السريع بين القوالب والتخصيص
@@ -1052,6 +1059,63 @@ export async function render(view) {
     $('#ctrl-logo-size', view)?.addEventListener('change', (e) => {
       printCfg.logo_size = e.target.value;
       updateLivePreview();
+    });
+
+    // رفع شعار المنشأة الجديد
+    $('#file-logo-input', view)?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (file.size > 4 * 1024 * 1024) {
+        toastErr('حجم ملف الشعار يتجاوز الحد الأقصى (4 ميجابايت).');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result;
+        try {
+          await api.put(`/api/issuers/${activeIssuer.id}`, { logo_data: dataUrl });
+          activeIssuer.logo_data = dataUrl;
+          activeIssuer.has_logo = true;
+          renderView();
+          toastOk('تم رفع وحفظ شعار المنشأة وتحديث القالب بنجاح!');
+        } catch (err) {
+          toastErr('فشل حفظ الشعار: ' + err.message);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // إزالة الشعار
+    $('#btn-remove-logo', view)?.addEventListener('click', async () => {
+      if (!confirm('هل ترغب في إزالة الشعار واستخدام البديل البصري التلقائي؟')) return;
+      try {
+        await api.put(`/api/issuers/${activeIssuer.id}`, { logo_data: '' });
+        activeIssuer.logo_data = '';
+        activeIssuer.has_logo = false;
+        renderView();
+        toastOk('تمت إزالة الشعار وتفعيل البديل البصري المعتمد.');
+      } catch (err) {
+        toastErr('فشل إزالة الشعار: ' + err.message);
+      }
+    });
+
+    // تطبيق شعار جاهز من المعرض
+    $$('.btn-apply-logo-preset', view).forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const logoId = btn.dataset.logoId;
+        const preset = PRESET_LOGOS.find((p) => p.id === logoId);
+        if (preset) {
+          try {
+            await api.put(`/api/issuers/${activeIssuer.id}`, { logo_data: preset.dataUrl });
+            activeIssuer.logo_data = preset.dataUrl;
+            activeIssuer.has_logo = true;
+            renderView();
+            toastOk(`تم تطبيق شعار «${preset.name}» على المنشأة والقالب بنجاح!`);
+          } catch (err) {
+            toastErr('فشل تطبيق الشعار: ' + err.message);
+          }
+        }
+      });
     });
 
     // خيارات أعمدة الجدول

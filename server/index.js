@@ -121,6 +121,7 @@ async function handleApi(req, res, url) {
   };
 
   const result = await matched.route.handler(ctx);
+  if (res.writableEnded) return;
   if (rawResponse) {
     sendText(res, 200, rawResponse.body, rawResponse.contentType, rawResponse.headers || {});
     return;

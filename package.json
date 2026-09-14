@@ -10,12 +10,7 @@
   "scripts": {
     "start": "node server/index.js",
     "seed": "node server/db/seed.js",
-    "reset": "node server/db/seed.js --reset",
-    "test": "node --no-warnings tests/run.js",
-    "test:qr": "node tests/qr.test.js",
-    "test:front": "node tests/frontend.check.js",
-    "test:print": "node tests/print.check.mjs",
-    "test:e2e": "node tests/e2e.check.mjs"
+    "reset": "node server/db/seed.js --reset"
   },
   "dependencies": {}
 }

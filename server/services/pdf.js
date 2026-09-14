@@ -204,7 +204,7 @@ function renderInvoiceHtml({ invoice, issuer, client }) {
     .header-box { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; border-bottom: 2.5px solid #0d9488; padding-bottom: 12px; margin-bottom: 12px; }
     .seller-brand { display: flex; gap: 12px; align-items: flex-start; }
     .seller-logo { max-width: 32mm; max-height: 24mm; object-fit: contain; }
-    .seller-logo-fallback { width: 26mm; height: 22mm; background: #0d9488; color: #fff; border-radius: 6px; display: grid; place-items: center; font-size: 15pt; font-weight: 800; }
+    .seller-logo-fallback { width: 26mm; height: 22mm; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; }
     .seller-title { font-size: 13.5pt; font-weight: 800; color: #0f172a; margin-bottom: 2px; }
     .seller-title-en { font-size: 8.5pt; color: #64748b; margin-bottom: 4px; }
     .seller-meta { font-size: 8pt; color: #475569; line-height: 1.5; }
@@ -257,7 +257,7 @@ function renderInvoiceHtml({ invoice, issuer, client }) {
       <div class="seller-brand">
         ${issuer.logo_data
       ? `<img class="seller-logo" src="${esc(issuer.logo_data)}" alt="Logo" />`
-      : `<div class="seller-logo-fallback">${esc((sellerName || 'Z').slice(0, 2))}</div>`}
+      : `<div class="seller-logo-fallback"><svg viewBox="0 0 110 88" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" style="display:block;max-height:100%;max-width:100%;"><rect x="2" y="2" width="106" height="84" rx="8" fill="#0d948815" stroke="#0d9488" stroke-width="1.6" stroke-dasharray="3.5 2.5"/><g transform="translate(55, 32)" stroke="#0f766e" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="-18" y="-13" width="36" height="26" rx="4.5" /><circle cx="-6" cy="-3" r="3.2" fill="#0f766e" /><path d="M-15 9 L-5 -2 L4 6 L10 0 L15 9" /></g><text x="55" y="65" text-anchor="middle" font-family="'Cairo', 'Segoe UI', sans-serif" font-size="8.8" font-weight="700" fill="#0f766e">شعار المنشأة</text><text x="55" y="76" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="6.5" font-weight="600" fill="#64748b">LOGO AREA</text></svg></div>`}
         <div>
           <div class="seller-title">${esc(sellerName)}</div>
           ${issuer.name_en ? `<div class="seller-title-en ltr">${esc(issuer.name_en)}</div>` : ''}

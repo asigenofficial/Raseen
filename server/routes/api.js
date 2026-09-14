@@ -177,6 +177,36 @@ router.get('/api/issuers/:id', (ctx) => { need(ctx, 'issuers.view'); return { ok
 router.put('/api/issuers/:id', (ctx) => { need(ctx, 'issuers.write'); return { ok: true, data: issuers.update(ctx.params.id, ctx.body, actorOf(ctx)) }; });
 router.delete('/api/issuers/:id', (ctx) => { need(ctx, 'issuers.write'); return { ok: true, data: issuers.remove(ctx.params.id, actorOf(ctx)) }; });
 
+router.get('/api/issuers/:id/logo', (ctx) => {
+  try {
+    const row = issuers.getRaw(ctx.params.id);
+    if (!row || !row.logo_data) {
+      ctx.raw({ body: 'No logo', contentType: 'text/plain; charset=utf-8' });
+      return;
+    }
+    const match = row.logo_data.match(/^data:([^;,]+)(;base64)?,(.*)$/);
+    if (!match) {
+      ctx.raw({
+        body: row.logo_data,
+        contentType: 'image/svg+xml; charset=utf-8',
+        headers: { 'Cache-Control': 'public, max-age=3600' },
+      });
+      return;
+    }
+    const contentType = match[1];
+    const isBase64 = !!match[2];
+    const rawData = match[3];
+    const body = isBase64 ? Buffer.from(rawData, 'base64') : Buffer.from(decodeURIComponent(rawData), 'utf8');
+    ctx.raw({
+      body,
+      contentType,
+      headers: { 'Cache-Control': 'public, max-age=3600' },
+    });
+  } catch {
+    ctx.raw({ body: 'Not found', contentType: 'text/plain; charset=utf-8' });
+  }
+});
+
 router.get('/api/issuers/:id/credentials', (ctx) => { need(ctx, 'issuers.view'); return { ok: true, data: issuers.getCredentials(ctx.params.id) }; });
 router.put('/api/issuers/:id/credentials', (ctx) => { need(ctx, 'settings.write'); return { ok: true, data: issuers.saveCredentials(ctx.params.id, ctx.body, actorOf(ctx)) }; });
 router.post('/api/issuers/:id/generate-key', (ctx) => { need(ctx, 'settings.write'); return { ok: true, data: issuers.generateSigningKey(ctx.params.id, actorOf(ctx)) }; });
@@ -240,16 +270,43 @@ router.get('/api/invoices/open', (ctx) => {
 });
 router.get('/api/invoices', (ctx) => { need(ctx, 'invoices.view'); return { ok: true, data: invoices.search(ctx.query) }; });
 router.post('/api/invoices', (ctx) => { need(ctx, 'invoices.create'); return { ok: true, data: invoices.create(ctx.body, invCtx(ctx)) }; });
+router.get('/api/invoices/templates', (ctx) => {
+  need(ctx, 'invoices.view');
+  const tpls = db.all('SELECT id, name_ar, name_en, description, badge, category, color_hex, file_path FROM excel_templates WHERE is_active = 1 ORDER BY rowid');
+  return { ok: true, data: tpls };
+});
+router.delete('/api/invoices/templates/:id', (ctx) => {
+  need(ctx, 'issuers.write');
+  const id = String(ctx.params.id || '').trim();
+  if (!id) throw V.badRequest('معرف القالب غير صالح');
+  db.run('UPDATE excel_templates SET is_active = 0, updated_at = :now WHERE id = :id', { id, now: db.nowIso() });
+  return { ok: true, data: { id, deleted: true } };
+});
+router.post('/api/invoices/templates/reset', (ctx) => {
+  need(ctx, 'issuers.write');
+  db.run('UPDATE excel_templates SET is_active = 1, updated_at = :now', { now: db.nowIso() });
+  return { ok: true, data: { reset: true } };
+});
 router.get('/api/invoices/template', (ctx) => {
   need(ctx, 'invoices.view');
-  const format = String(ctx.query.format || 'xls').toLowerCase() === 'csv' ? 'csv' : 'xls';
-  const tpl = invoices.generateTemplate({ format });
+  const rawFormat = String(ctx.query.format || 'xlsx').toLowerCase();
+  const format = rawFormat === 'csv' ? 'csv' : (rawFormat === 'xls' ? 'xls' : 'xlsx');
+  const style = String(ctx.query.style || 'standard').toLowerCase();
+  const tpl = invoices.generateTemplate({ format, style });
   ctx.raw({
     body: tpl.content,
     contentType: tpl.contentType,
     headers: { 'Content-Disposition': `attachment; filename="${tpl.filename}"` },
   });
   return null;
+});
+router.post('/api/invoices/parse-file', (ctx) => {
+  need(ctx, 'invoices.create');
+  const body = ctx.body || {};
+  const filename = body.filename || 'import.xlsx';
+  const fileBase64 = body.file_base64 || body.content || '';
+  const rows = invoices.parseSpreadsheetBuffer(fileBase64, filename);
+  return { ok: true, data: { rows } };
 });
 router.post('/api/invoices/import', (ctx) => {
   need(ctx, 'invoices.create');

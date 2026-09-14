@@ -139,7 +139,7 @@ export async function render(view, ctx) {
           <button class="btn btn-primary" id="btn-pdf-list" type="button">${raw(icon.pdf({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}تحميل قائمة PDF</button>
           <button class="btn" id="print-list" type="button">${raw(icon.printer({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}طباعة القائمة</button>
           ${raw(can('invoices.create') ? `<button class="btn" id="import-excel-btn" type="button">${icon.upload({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}استيراد Excel</button>` : '')}
-          <a class="btn" href="/api/invoices/template?format=xls" target="_blank" download="invoices_template.xls">${raw(icon.download({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}نموذج Excel</a>
+          <a class="btn" href="/api/invoices/template?format=xlsx" target="_blank" download="invoices_template.xlsx">${raw(icon.download({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}نموذج Excel (.xlsx)</a>
           <button class="btn" id="exp-xls" type="button">${raw(icon.fileSpreadsheet({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}تصدير Excel</button>
           <button class="btn" id="exp-csv" type="button">${raw(icon.fileText({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}CSV</button>
         </div>
@@ -337,13 +337,39 @@ export async function render(view, ctx) {
         title: 'استيراد الفواتير من ملف Excel / CSV',
         body: html`
           <div class="stack">
-            <div class="row" style="align-items:center;justify-content:space-between;background:#f8fafc;padding:.7rem .9rem;border-radius:var(--radius-sm);border:1px solid var(--line)">
+            <div class="row" style="align-items:center;justify-content:space-between;background:#f8fafc;padding:.7rem .9rem;border-radius:var(--radius-sm);border:1px solid var(--line);gap:.6rem;flex-wrap:wrap">
               <div>
                 <b>الشركة المصدرة:</b> <span class="mono">${esc(activeIssuer.name_ar)}</span>
               </div>
-              <div class="flex" style="gap:.4rem">
-                <a class="btn btn-sm" href="/api/invoices/template?format=xls" target="_blank" download="invoices_template.xls">تنزيل نموذج Excel</a>
-                <a class="btn btn-sm" href="/api/invoices/template?format=csv" target="_blank" download="invoices_template.csv">تنزيل نموذج CSV</a>
+              <div class="flex" style="gap:.4rem;align-items:center;flex-wrap:wrap">
+                <label class="tiny muted" style="font-weight:600">القالب:</label>
+                <select id="sel-template-style" style="padding:.25rem .5rem;border-radius:var(--radius-sm);border:1px solid var(--line);font-size:.82rem;background:#fff">
+                  <optgroup label="قوالب تقارير re السابقة">
+                    <option value="re_rawasi_telecom">رواسي ينبع (اتصالات وأجهزة ذكية)</option>
+                    <option value="re_alzahraani_contracting">الزهراني والمجد (مقاولات وحديد تسليح)</option>
+                    <option value="re_awtad_albadr">أوتاد البدر والحرة (لوجستي وتوريد)</option>
+                    <option value="re_mowjat_taradud">موجة تردد والإصدار الفاخر (أجهزة وصيانة)</option>
+                    <option value="re_tarkeeb_contracting">تركيب والكثيري (دهانات ومواد عزل)</option>
+                    <option value="re_ruwad_alittihad">رواد الاتحاد (عنوان وطني مفصل)</option>
+                  </optgroup>
+                  <optgroup label="قوالب الفواتير العامة">
+                    <option value="standard" selected>الرسمي المعتمد (Standard)</option>
+                    <option value="rawasi">رواسي (اتصالات وتجزئة)</option>
+                    <option value="ledger">سجل المقاولات (إنشاءات واستحقاق)</option>
+                    <option value="logistics">التوريد واللوجستيات (شحن ونقل)</option>
+                    <option value="detailed_address">العنوان الوطني المفصل</option>
+                    <option value="modern">العصري الأنيق (Modern)</option>
+                    <option value="classic">الكلاسيكي المحاسبي (Classic)</option>
+                    <option value="executive">الملكي التنفيذي (Executive)</option>
+                    <option value="minimal">البسيط الهادئ (Minimal)</option>
+                    <option value="grid">الهندسي للمشاريع (Grid)</option>
+                    <option value="compact">المدمج للخدمات (Compact)</option>
+                    <option value="corporate">المؤسسي الحديث (Corporate)</option>
+                  </optgroup>
+                </select>
+                <a class="btn btn-sm btn-primary" id="btn-dl-template" href="/api/invoices/template?style=standard&format=xlsx" target="_blank" download="invoice_template_standard.xlsx">
+                  ${raw(icon.download({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}تنزيل قالب Excel المعتمد (.xlsx)
+                </a>
               </div>
             </div>
 
@@ -351,9 +377,9 @@ export async function render(view, ctx) {
               <div class="dropzone-icon">
                 <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--brand);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
               </div>
-              <div style="font-weight:600;margin-bottom:.2rem">اسحب وأفلت ملف Excel أو CSV هنا، أو انقر للاختيار</div>
-              <div class="tiny muted">الصيغ المدعومة: .xls (SpreadsheetML / Excel), .xlsx, .csv, .tsv</div>
-              <input type="file" id="import-file" accept=".xls,.xlsx,.csv,.tsv,.xml" style="display:none" />
+              <div style="font-weight:600;margin-bottom:.2rem">اسحب وأفلت ملف Excel هنا، أو انقر للاختيار</div>
+              <div class="tiny muted">الصيغ المدعومة: .xlsx (Excel الأصلي المعتمد), .xls, .csv</div>
+              <input type="file" id="import-file" accept=".xlsx,.xls,.csv,.xml" style="display:none" />
             </div>
 
             <div id="import-preview-box" style="display:none"></div>
@@ -366,6 +392,15 @@ export async function render(view, ctx) {
       const fileInput = m.el.querySelector('#import-file');
       const previewBox = m.el.querySelector('#import-preview-box');
       const commitBtn = m.el.querySelector('#btn-commit-import');
+      const selTpl = m.el.querySelector('#sel-template-style');
+      const dlBtn = m.el.querySelector('#btn-dl-template');
+      if (selTpl && dlBtn) {
+        selTpl.addEventListener('change', () => {
+          const s = selTpl.value || 'standard';
+          dlBtn.href = `/api/invoices/template?style=${s}&format=xlsx`;
+          dlBtn.download = `invoice_template_${s}.xlsx`;
+        });
+      }
 
       dropzone.addEventListener('click', () => fileInput.click());
       dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
@@ -379,13 +414,53 @@ export async function render(view, ctx) {
         if (e.target.files && e.target.files[0]) processFile(e.target.files[0]);
       });
 
-      const processFile = (file) => {
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-          const content = ev.target.result;
-          const rawTable = parseSpreadsheetText(content, file.name);
+      const processFile = async (file) => {
+        try {
+          previewBox.style.display = 'block';
+          previewBox.innerHTML = '<div class="text-center muted" style="padding:1rem">جارٍ قراءة وفحص ملف Excel…</div>';
+          commitBtn.disabled = true;
+
+          let rawTable;
+          const isXlsx = file.name.toLowerCase().endsWith('.xlsx');
+          if (isXlsx) {
+            const b64 = await new Promise((resolve, reject) => {
+              const r = new FileReader();
+              r.onload = () => {
+                const res = r.result || '';
+                const commaIdx = res.indexOf(',');
+                resolve(commaIdx !== -1 ? res.slice(commaIdx + 1) : res);
+              };
+              r.onerror = reject;
+              r.readAsDataURL(file);
+            });
+            const parseRes = await api.post('/api/invoices/parse-file', { file_base64: b64, filename: file.name });
+            rawTable = parseRes.rows;
+          } else {
+            const textContent = await new Promise((resolve, reject) => {
+              const r = new FileReader();
+              r.onload = () => resolve(r.result);
+              r.onerror = reject;
+              r.readAsText(file);
+            });
+            rawTable = parseSpreadsheetText(textContent, file.name);
+            if (!rawTable || rawTable.length < 2) {
+              const b64 = await new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => {
+                  const res = r.result || '';
+                  const commaIdx = res.indexOf(',');
+                  resolve(commaIdx !== -1 ? res.slice(commaIdx + 1) : res);
+                };
+                r.onerror = reject;
+                r.readAsDataURL(file);
+              });
+              const parseRes = await api.post('/api/invoices/parse-file', { file_base64: b64, filename: file.name });
+              rawTable = parseRes.rows;
+            }
+          }
+
           if (!rawTable || rawTable.length < 2) {
-            toastErr('الملف فارغ أو لا يحتوي على أسطر بيانات كافية');
+            previewBox.innerHTML = '<div class="alert alert-danger">الملف فارغ أو لا يحتوي على أسطر بيانات كافية</div>';
             return;
           }
 
@@ -427,7 +502,6 @@ export async function render(view, ctx) {
             notes: r[colNotes] || '',
           }));
 
-          previewBox.style.display = 'block';
           previewBox.innerHTML = '<div class="text-center muted" style="padding:1rem">جارٍ فحص وتحليل البيانات مع الخادم…</div>';
           commitBtn.disabled = true;
 
@@ -442,8 +516,9 @@ export async function render(view, ctx) {
           } catch (err) {
             previewBox.innerHTML = `<div class="alert alert-danger">${esc(err.message || 'فشل فحص الملف')}</div>`;
           }
-        };
-        reader.readAsText(file);
+        } catch (err) {
+          previewBox.innerHTML = `<div class="alert alert-danger">${esc(err.message || 'فشل قراءة الملف')}</div>`;
+        }
       };
 
       const renderPreview = (res, fileName) => {

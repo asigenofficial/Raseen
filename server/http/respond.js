@@ -41,7 +41,7 @@ function sendJson(res, status, payload) {
 }
 
 function sendText(res, status, text, contentType = 'text/plain; charset=utf-8', extraHeaders = {}) {
-  const body = Buffer.from(String(text), 'utf8');
+  const body = Buffer.isBuffer(text) ? text : Buffer.from(String(text), 'utf8');
   res.writeHead(status, {
     'Content-Type': contentType,
     'Content-Length': body.length,

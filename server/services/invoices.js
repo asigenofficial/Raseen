@@ -9,6 +9,7 @@ const M = require('../lib/money');
 const { uuid, formatSerial } = require('../lib/ids');
 const zatca = require('../lib/zatca');
 const issuersSvc = require('./issuers');
+const excelTemplates = require('../db/templates');
 
 const STATUS_LABELS = {
   UNPAID: 'غير مسددة',
@@ -786,190 +787,112 @@ function verifyChain(issuerId) {
 
 // ---------------------------------------------------- قوالب واستيراد Excel
 /**
- * توليد نموذج Excel / CSV لاستيراد الفواتير.
+ * توليد نموذج Excel / CSV لاستيراد الفواتير من ملفات الـ Excel المادية.
+ * الصيغة الافتراضية هي .xlsx الأصلية المعتمدة لبرنامج Microsoft Excel.
  */
-function generateTemplate({ format = 'xls' } = {}) {
-  const headers = [
-    'مجموعة_الفاتورة', 'كود_أو_اسم_العميل', 'تاريخ_الفاتورة', 'وقت_الفاتورة',
-    'نوع_الفاتورة', 'طريقة_الدفع', 'كود_أو_اسم_الصنف', 'الوحدة',
-    'الكمية', 'سعر_الوحدة', 'الخصم', 'نسبة_الضريبة', 'ملاحظات',
-  ];
+function generateTemplate({ format = 'xlsx', style = 'standard' } = {}) {
+  const normFormat = String(format || 'xlsx').toLowerCase();
+  const tpl = excelTemplates.getTemplate(style, normFormat === 'xls' ? 'xls' : 'xlsx');
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const sampleRows = [
-    ['1', 'C001', todayStr, '09:30:00', 'STANDARD', 'CREDIT', 'أرز بسمتي 5 كجم', 'كيس', '2', '45.00', '0', '15', 'فاتورة تجريبية - بند 1'],
-    ['1', 'C001', todayStr, '09:30:00', 'STANDARD', 'CREDIT', 'زيت نباتي 1.5 لتر', 'حبة', '3', '18.50', '2.00', '15', 'فاتورة تجريبية - بند 2'],
-    ['2', 'عميل نقدي', todayStr, '11:15:00', 'SIMPLIFIED', 'CASH', 'سكر أبيض ناعم', 'كيس', '1', '35.00', '0', '15', 'فاتورة مبسطة نقدية'],
-  ];
-
-  if (format === 'csv') {
+  if (normFormat === 'csv') {
+    const baseHeaders = [
+      'مجموعة_الفاتورة', 'كود_أو_اسم_العميل', 'تاريخ_الفاتورة', 'وقت_الفاتورة',
+      'نوع_الفاتورة', 'طريقة_الدفع', ...tpl.extra_headers,
+      'كود_أو_اسم_الصنف', 'الوحدة', 'الكمية', 'سعر_الوحدة', 'الخصم', 'نسبة_الضريبة', 'ملاحظات',
+    ];
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const sampleRows = [
+      ['1', 'C001', todayStr, '09:30:00', 'STANDARD', 'CREDIT', ...tpl.sample_extra, 'أرز بسمتي 5 كجم', 'كيس', '2', '45.00', '0', '15', `فاتورة تجريبية - ${tpl.name_ar}`],
+      ['1', 'C001', todayStr, '09:30:00', 'STANDARD', 'CREDIT', ...tpl.sample_extra, 'زيت نباتي 1.5 لتر', 'حبة', '3', '18.50', '2.00', '15', 'فاتورة تجريبية - بند 2'],
+      ['2', 'عميل نقدي', todayStr, '11:15:00', 'SIMPLIFIED', 'CASH', ...tpl.sample_extra.map(() => '-'), 'سكر أبيض ناعم', 'كيس', '1', '35.00', '0', '15', 'فاتورة مبسطة نقدية'],
+    ];
     const csvCell = (v) => {
       const s = String(v ?? '');
       return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const lines = [headers.map(csvCell).join(',')];
+    const lines = [baseHeaders.map(csvCell).join(',')];
     for (const r of sampleRows) lines.push(r.map(csvCell).join(','));
     return {
       contentType: 'text/csv; charset=utf-8',
-      filename: 'invoices_import_template.csv',
+      filename: `invoices_template_${tpl.id}.csv`,
       content: '\uFEFF' + lines.join('\r\n'),
     };
   }
 
-  // صيغة SpreadsheetML (XML Spreadsheet 2003) يفتحها Excel أصلياً بدون تحذيرات
-  const escXml = (s) => String(s ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-  const headerCells = headers.map((h) => `<Cell ss:StyleID="Header"><Data ss:Type="String">${escXml(h)}</Data></Cell>`).join('');
-  const dataRowsXml = sampleRows.map((r, idx) => {
-    const style = idx % 2 === 0 ? 'DataRow' : 'DataRowAlt';
-    return `<Row>
-      <Cell ss:StyleID="${style}"><Data ss:Type="String">${escXml(r[0])}</Data></Cell>
-      <Cell ss:StyleID="${style}"><Data ss:Type="String">${escXml(r[1])}</Data></Cell>
-      <Cell ss:StyleID="${style}"><Data ss:Type="String">${escXml(r[2])}</Data></Cell>
-      <Cell ss:StyleID="${style}"><Data ss:Type="String">${escXml(r[3])}</Data></Cell>
-      <Cell ss:StyleID="${style}"><Data ss:Type="String">${escXml(r[4])}</Data></Cell>
-      <Cell ss:StyleID="${style}"><Data ss:Type="String">${escXml(r[5])}</Data></Cell>
-      <Cell ss:StyleID="${style}"><Data ss:Type="String">${escXml(r[6])}</Data></Cell>
-      <Cell ss:StyleID="${style}"><Data ss:Type="String">${escXml(r[7])}</Data></Cell>
-      <Cell ss:StyleID="${style}Number"><Data ss:Type="Number">${r[8]}</Data></Cell>
-      <Cell ss:StyleID="${style}Number"><Data ss:Type="Number">${r[9]}</Data></Cell>
-      <Cell ss:StyleID="${style}Number"><Data ss:Type="Number">${r[10]}</Data></Cell>
-      <Cell ss:StyleID="${style}Number"><Data ss:Type="Number">${r[11]}</Data></Cell>
-      <Cell ss:StyleID="${style}"><Data ss:Type="String">${escXml(r[12])}</Data></Cell>
-    </Row>`;
-  }).join('\n');
-
-  const instructions = [
-    ['الحقل', 'الوصف', 'مثال', 'إلزامي؟'],
-    ['مجموعة_الفاتورة', 'رمز أو رقم يجمع أسطر الفاتورة الواحدة معاً', '1 أو INV-01', 'نعم'],
-    ['كود_أو_اسم_العميل', 'كود العميل المسجل في النظام أو اسمه الدقيق', 'C001 أو شركة الأمل', 'نعم'],
-    ['تاريخ_الفاتورة', 'تاريخ الفاتورة بصيغة YYYY-MM-DD', todayStr, 'نعم'],
-    ['وقت_الفاتورة', 'وقت الفاتورة بصيغة HH:MM:SS (اختياري، يملأ آلياً)', '14:30:00', 'لا'],
-    ['نوع_الفاتورة', 'STANDARD (ضريبية عادية) أو SIMPLIFIED (مبسطة)', 'STANDARD', 'لا'],
-    ['طريقة_الدفع', 'CASH, CARD, TRANSFER, CREDIT, CHEQUE', 'CREDIT', 'لا'],
-    ['كود_أو_اسم_الصنف', 'كود الصنف المسجل أو اسمه في الفاتورة', 'ITM-01 أو أرز بسمتي', 'نعم'],
-    ['الوحدة', 'وحدة القياس (حبة، كرتون، كجم، إلخ)', 'حبة', 'لا'],
-    ['الكمية', 'كمية الصنف (عدد موجب)', '5', 'نعم'],
-    ['سعر_الوحدة', 'سعر الوحدة بالريال بدون ضريبة', '25.50', 'نعم'],
-    ['الخصم', 'مبلغ الخصم على هذا السطر (0 إن لم يوجد)', '0', 'لا'],
-    ['نسبة_الضريبة', 'نسبة الضريبة المئوية (الافتراضي 15)', '15', 'لا'],
-    ['ملاحظات', 'ملاحظات الفاتورة', 'طلب رقم 102', 'لا'],
-  ];
-
-  const instructionRowsXml = instructions.map((r, idx) => {
-    const style = idx === 0 ? 'Header' : (idx % 2 === 0 ? 'DataRow' : 'DataRowAlt');
-    return `<Row>${r.map((c) => `<Cell ss:StyleID="${style}"><Data ss:Type="String">${escXml(c)}</Data></Cell>`).join('')}</Row>`;
-  }).join('\n');
-
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:html="http://www.w3.org/TR/REC-html40">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal">
-   <Alignment ss:Vertical="Center"/>
-   <Font ss:FontName="Segoe UI" ss:Size="11" ss:Color="#0F172A"/>
-  </Style>
-  <Style ss:ID="Header">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F766E"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F766E"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F766E"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#0F766E"/>
-   </Borders>
-   <Font ss:FontName="Segoe UI" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>
-   <Interior ss:Color="#0D9488" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="DataRow">
-   <Alignment ss:Vertical="Center"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-   <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="DataRowAlt">
-   <Alignment ss:Vertical="Center"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-   <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="DataRowNumber">
-   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-   <NumberFormat ss:Format="#,##0.00"/>
-  </Style>
-  <Style ss:ID="DataRowAltNumber">
-   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-   <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
-   <NumberFormat ss:Format="#,##0.00"/>
-  </Style>
- </Styles>
- <Worksheet ss:Name="بيانات_الفواتير">
-  <Table ss:DefaultColumnWidth="110" ss:DefaultRowHeight="24">
-   <Column ss:Width="100"/>
-   <Column ss:Width="130"/>
-   <Column ss:Width="95"/>
-   <Column ss:Width="85"/>
-   <Column ss:Width="95"/>
-   <Column ss:Width="95"/>
-   <Column ss:Width="150"/>
-   <Column ss:Width="65"/>
-   <Column ss:Width="65"/>
-   <Column ss:Width="80"/>
-   <Column ss:Width="65"/>
-   <Column ss:Width="85"/>
-   <Column ss:Width="150"/>
-   <Row ss:Height="26">
-    ${headerCells}
-   </Row>
-   ${dataRowsXml}
-  </Table>
-  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
-   <DisplayRightToLeft/>
-  </WorksheetOptions>
- </Worksheet>
- <Worksheet ss:Name="تعليمات_الاستيراد">
-  <Table ss:DefaultColumnWidth="140" ss:DefaultRowHeight="22">
-   <Column ss:Width="130"/>
-   <Column ss:Width="260"/>
-   <Column ss:Width="140"/>
-   <Column ss:Width="80"/>
-   ${instructionRowsXml}
-  </Table>
-  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
-   <DisplayRightToLeft/>
-  </WorksheetOptions>
- </Worksheet>
-</Workbook>`;
-
   return {
-    contentType: 'application/vnd.ms-excel; charset=utf-8',
-    filename: 'invoices_import_template.xls',
-    content: xml,
+    contentType: tpl.contentType,
+    filename: tpl.filename,
+    content: tpl.content,
   };
+}
+
+/**
+ * تحليل محتوى ملف Excel (.xlsx أو .xls) أو CSV المرفوع واستخراج صفوف البيانات
+ */
+function parseSpreadsheetBuffer(bufferOrBase64, filename = '') {
+  const buf = Buffer.isBuffer(bufferOrBase64)
+    ? bufferOrBase64
+    : Buffer.from(String(bufferOrBase64 || '').replace(/^data:[^;]+;base64,/, ''), 'base64');
+  const lowerName = String(filename || '').toLowerCase();
+
+  // فحص ما إذا كان الملف هو أرشيف ZIP / XLSX أصيل (مبدوء ببايتات PK)
+  if (lowerName.endsWith('.xlsx') || (buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4b)) {
+    return excelTemplates.parseXlsxBuffer(buf);
+  }
+
+  // معالجة الملفات النصية (SpreadsheetML XML أو CSV)
+  const text = buf.toString('utf8').replace(/^\uFEFF/, '');
+  if (text.includes('<Workbook') && text.includes('<Table')) {
+    const rows = [];
+    const rowRegex = /<Row\b[^>]*>([\s\S]*?)<\/Row>/gi;
+    let rMatch;
+    while ((rMatch = rowRegex.exec(text)) !== null) {
+      const cellRegex = /<Cell\b[^>]*>(?:[\s\S]*?<Data\b[^>]*>([\s\S]*?)<\/Data>)?[\s\S]*?<\/Cell>/gi;
+      const row = [];
+      let cMatch;
+      while ((cMatch = cellRegex.exec(rMatch[1])) !== null) {
+        row.push(cMatch[1] !== undefined ? cMatch[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim() : '');
+      }
+      if (row.some((c) => c !== '')) rows.push(row);
+    }
+    if (rows.length) return excelTemplates.normalizeExtractedRows(rows);
+  }
+
+  const delimiter = lowerName.endsWith('.tsv') || text.includes('\t') ? '\t' : (text.includes(';') && !text.includes(',') ? ';' : ',');
+  const rows = [];
+  let currentRow = [];
+  let currentVal = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentVal += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
+      currentRow.push(currentVal.trim());
+      currentVal = '';
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') i++;
+      currentRow.push(currentVal.trim());
+      if (currentRow.some((c) => c !== '')) rows.push(currentRow);
+      currentRow = [];
+      currentVal = '';
+    } else {
+      currentVal += char;
+    }
+  }
+  if (currentVal || currentRow.length) {
+    currentRow.push(currentVal.trim());
+    if (currentRow.some((c) => c !== '')) rows.push(currentRow);
+  }
+  return rows;
 }
 
 /**
@@ -1174,6 +1097,6 @@ module.exports = {
   computeTotals, normalizeLines, allocateInvoiceNumber, nextSequenceNo, previousHash,
   buildEinvoice, postLedgerForInvoice, removeLedgerForInvoice, recalcInvoiceStatus,
   create, getById, search, openInvoices, cancel, remove, toXml, verifyChain,
-  generateTemplate, importInvoices,
+  generateTemplate, parseSpreadsheetBuffer, importInvoices,
   mapInvoice, mapLine,
 };

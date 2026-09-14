@@ -326,3 +326,20 @@ CREATE TABLE IF NOT EXISTS bulk_drafts (
 CREATE INDEX IF NOT EXISTS idx_drafts_issuer ON bulk_drafts(issuer_id);
 CREATE INDEX IF NOT EXISTS idx_drafts_status ON bulk_drafts(status, updated_at);
 
+-- ------------------------------------------------ قوالب Excel لإدخال الفواتير
+CREATE TABLE IF NOT EXISTS excel_templates (
+  id            TEXT PRIMARY KEY,
+  name_ar       TEXT NOT NULL,
+  name_en       TEXT NOT NULL DEFAULT '',
+  description   TEXT NOT NULL DEFAULT '',
+  badge         TEXT NOT NULL DEFAULT '',
+  category      TEXT NOT NULL DEFAULT 'general',
+  file_path     TEXT NOT NULL,
+  color_hex     TEXT NOT NULL DEFAULT '#0d9488',
+  headers_json  TEXT NOT NULL DEFAULT '[]',
+  is_active     INTEGER NOT NULL DEFAULT 1,
+  updated_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_excel_tpl_cat ON excel_templates(category, is_active);
+
+

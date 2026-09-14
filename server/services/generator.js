@@ -225,9 +225,39 @@ function closeGap(lines, targetTotal) {
 }
 
 // ------------------------------------------------------------ بناء سلة أصناف
-function buildBasket(rng, catalog, opts, targetTotal) {
-  const itemCount = randInt(rng, opts.min_items, Math.min(opts.max_items, catalog.length));
-  const chosen = shuffle(rng, catalog).slice(0, Math.max(1, itemCount));
+function buildBasket(rng, catalog, opts, targetTotal, usageTracker) {
+  const maxAvail = Math.min(opts.max_items, catalog.length);
+  const minAvail = Math.min(opts.min_items, maxAvail);
+  const itemCount = randInt(rng, minAvail, maxAvail);
+
+  let chosen = [];
+  if (opts.distribution_mode === 'BALANCED' && usageTracker && catalog.length > 0) {
+    // خوارزمية التوزيع المتوازن: نختار الأصناف الأقل ظهوراً حتى الآن لضمان توزيع كل الأصناف
+    const scored = catalog.map((item) => {
+      const key = item.id || item.name_ar;
+      return {
+        item,
+        key,
+        count: usageTracker.get(key) || 0,
+        randomVal: rng(),
+      };
+    });
+    // فرز تصاعدي بالأقل استخداماً، مع كسر التعادل عشوائياً
+    scored.sort((a, b) => (a.count - b.count) || (a.randomVal - b.randomVal));
+
+    // ضمان اختيار صنف أو أكثر من الأقل استخداماً
+    const guaranteedCount = Math.min(itemCount, Math.max(1, Math.ceil(itemCount / 2)));
+    chosen = scored.slice(0, guaranteedCount).map((s) => s.item);
+
+    // ملء باقي السلة عشوائياً من باقي الأصناف المتاحة
+    if (chosen.length < itemCount) {
+      const remainingPool = shuffle(rng, scored.slice(guaranteedCount).map((s) => s.item));
+      chosen.push(...remainingPool.slice(0, itemCount - chosen.length));
+    }
+  } else {
+    chosen = shuffle(rng, catalog).slice(0, Math.max(1, itemCount));
+  }
+
   const lines = [];
   let remaining = targetTotal || 0;
 
@@ -238,7 +268,7 @@ function buildBasket(rng, catalog, opts, targetTotal) {
       : 1;
     let unitPrice = Math.max(1, Math.round(item.sale_price * jitter));
     if (unitPrice <= 0) unitPrice = Math.max(1, item.sale_price || 100);
-    const taxRate = item.tax_rate;
+    const taxRate = item.tax_rate !== undefined ? item.tax_rate : 15;
     let quantity;
 
     if (targetTotal) {
@@ -262,10 +292,10 @@ function buildBasket(rng, catalog, opts, targetTotal) {
       discount = M.pct(gross, randFloat(rng, opts.discount_min_percent, opts.discount_max_percent));
     }
     const line = {
-      item_id: item.id,
-      item_code: item.item_code,
+      item_id: item.id || null,
+      item_code: item.item_code || '',
       item_name: item.name_ar,
-      unit: item.unit,
+      unit: item.unit || 'حبة',
       quantity,
       unit_price: unitPrice,
       discount,
@@ -280,13 +310,29 @@ function buildBasket(rng, catalog, opts, targetTotal) {
 
 function basketSignature(lines) {
   return lines
-    .map((l) => `${l.item_id}:${l.quantity}:${l.unit_price}`)
+    .map((l) => `${l.item_id || l.item_name}:${l.quantity}:${l.unit_price}`)
     .sort()
     .join('|');
 }
 
 // ------------------------------------------------------------ المدخلات
 function normalizeOptions(payload) {
+  const customItemsRaw = V.arr(payload.custom_items, 'الأصناف المخصصة', { max: 1000 });
+  const custom_items = customItemsRaw.map((ci, idx) => {
+    const field = `الصنف المخصص ${idx + 1}`;
+    const name = V.str(ci.name_ar || ci.item_name, `${field} - الاسم`, { required: true, max: 250 });
+    const salePriceMajor = V.num(ci.sale_price !== undefined ? ci.sale_price : ci.unit_price, `${field} - السعر`, { required: true, min: 0.0001, max: 1e9 });
+    const taxRate = V.num(ci.tax_rate !== undefined ? ci.tax_rate : 15, `${field} - الضريبة`, { min: 0, max: 100, def: 15 });
+    return {
+      id: V.str(ci.id, `${field} - المعرف`, { max: 40 }) || null,
+      item_code: V.str(ci.item_code, `${field} - الكود`, { max: 40 }) || '',
+      name_ar: name,
+      unit: V.str(ci.unit, `${field} - الوحدة`, { max: 40 }) || 'حبة',
+      sale_price: M.toMinor(salePriceMajor),
+      tax_rate: taxRate,
+    };
+  });
+
   const opts = {
     issuer_id: V.str(payload.issuer_id, 'الشركة المصدرة', { required: true, max: 40 }),
     client_id: V.str(payload.client_id, 'العميل', { required: true, max: 40 }),
@@ -296,6 +342,8 @@ function normalizeOptions(payload) {
     target_total: M.toMinor(V.num(payload.target_total, 'الميزانية الإجمالية', { min: 0, max: 1e12, def: 0 })),
     category_ids: V.arr(payload.category_ids, 'المجموعات', { max: 200 }).map(String),
     item_ids: V.arr(payload.item_ids, 'الأصناف', { max: 2000 }).map(String),
+    custom_items,
+    distribution_mode: V.oneOf(payload.distribution_mode, 'طريقة التوزيع', ['BALANCED', 'RANDOM'], 'BALANCED'),
     min_items: V.int(payload.min_items, 'أقل عدد أصناف', { min: 1, max: 100, def: 2 }),
     max_items: V.int(payload.max_items, 'أكثر عدد أصناف', { min: 1, max: 100, def: 6 }),
     min_qty: V.num(payload.min_qty, 'أقل كمية', { min: 0.01, max: 100000, def: 1 }),
@@ -317,6 +365,11 @@ function normalizeOptions(payload) {
     seed: V.int(payload.seed, 'مفتاح التوليد', { min: 0, max: 2 ** 31, def: 0 }) || (Date.now() % 2147483647),
     notes: V.str(payload.notes, 'ملاحظات', { max: 500 }),
   };
+
+  if (opts.custom_items && opts.custom_items.length) {
+    if (opts.min_items > opts.custom_items.length) opts.min_items = opts.custom_items.length;
+    if (opts.max_items > opts.custom_items.length) opts.max_items = opts.custom_items.length;
+  }
   if (opts.min_items > opts.max_items) throw V.bad('أقل عدد أصناف يجب أن يكون أصغر من أو يساوي الأكثر');
   if (opts.min_qty > opts.max_qty) throw V.bad('أقل كمية يجب أن تكون أصغر من أو تساوي الأكثر');
   if (opts.work_start_minutes >= opts.work_end_minutes) throw V.bad('وقت بداية العمل يجب أن يكون قبل وقت النهاية');
@@ -332,6 +385,9 @@ function normalizeOptions(payload) {
 }
 
 function loadCatalog(opts) {
+  if (opts.custom_items && opts.custom_items.length) {
+    return opts.custom_items;
+  }
   const rows = db.all(
     `SELECT * FROM items
       WHERE is_active = 1 AND sale_price > 0
@@ -410,6 +466,11 @@ function generate(payload) {
     void wsum;
   }
 
+  const usageTracker = new Map();
+  for (const it of catalog) {
+    usageTracker.set(it.id || it.name_ar, 0);
+  }
+
   const signatures = new Set();
   const invoices = [];
   for (let i = 0; i < count; i++) {
@@ -417,7 +478,7 @@ function generate(payload) {
     const targetTotal = shares ? shares[i] : 0;
     let lines = null;
     for (let attempt = 0; attempt < 12; attempt++) {
-      const candidate = buildBasket(rng, catalog, opts, targetTotal);
+      const candidate = buildBasket(rng, catalog, opts, targetTotal, usageTracker);
       if (!candidate.length) continue;
       if (targetTotal) closeGap(candidate, targetTotal);
       const totals = invoiceTotals(candidate);
@@ -433,9 +494,16 @@ function generate(payload) {
     }
     if (!lines) {
       // احتياطي: سلة بسيطة تحترم الحدود
-      lines = buildBasket(rng, catalog, opts, targetTotal || opts.min_invoice_total || 0);
+      lines = buildBasket(rng, catalog, opts, targetTotal || opts.min_invoice_total || 0, usageTracker);
       if (targetTotal) closeGap(lines, targetTotal);
     }
+
+    // تحديث تكرار ظهور الأصناف لتوزيع متوازن على مدار الدفعة
+    for (const l of lines) {
+      const k = l.item_id || l.item_name;
+      usageTracker.set(k, (usageTracker.get(k) || 0) + 1);
+    }
+
     const totals = invoiceTotals(lines);
     invoices.push({
       temp_id: `tmp-${i + 1}`,
@@ -484,7 +552,13 @@ function generate(payload) {
 
   const summary = summarize(invoices);
   return {
-    options: { ...opts, target_total: M.toMajor(opts.target_total), min_invoice_total: M.toMajor(opts.min_invoice_total), max_invoice_total: M.toMajor(opts.max_invoice_total) },
+    options: {
+      ...opts,
+      target_total: M.toMajor(opts.target_total),
+      min_invoice_total: M.toMajor(opts.min_invoice_total),
+      max_invoice_total: M.toMajor(opts.max_invoice_total),
+      custom_items: (opts.custom_items || []).map((ci) => ({ ...ci, sale_price: M.toMajor(ci.sale_price) })),
+    },
     issuer: { id: issuer.id, name: issuer.name_ar, code: issuer.code, currency: issuer.currency },
     client: { id: client.id, name: client.name, code: client.client_code },
     invoices,
@@ -500,6 +574,15 @@ function summarize(invoices) {
   const uniqueSignatures = new Set(invoices.map((i) => basketSignature(i.lines.map((l) => ({
     item_id: l.item_id, quantity: l.quantity, unit_price: M.toMinor(l.unit_price),
   }))))).size;
+
+  const itemCounts = {};
+  for (const inv of invoices) {
+    for (const l of inv.lines) {
+      const k = l.item_name || 'غير محدد';
+      itemCounts[k] = (itemCounts[k] || 0) + (l.quantity || 1);
+    }
+  }
+
   return {
     count: invoices.length,
     grand_total: M.toMajor(totalMinor),
@@ -511,6 +594,7 @@ function summarize(invoices) {
     unique_baskets: uniqueSignatures,
     date_from: invoices.length ? invoices[0].issue_date : null,
     date_to: invoices.length ? invoices[invoices.length - 1].issue_date : null,
+    item_distribution: itemCounts,
   };
 }
 

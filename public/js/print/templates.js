@@ -36,7 +36,7 @@ export const INVOICE_TEMPLATES = [
     id: 'standard',
     name: 'الرسمي المعتمد (Standard A4)',
     desc: 'القالب الضريبي القياسي المتوافق مع هيئة الزكاة والضريبة والجمارك، رأسية متوازنة وتنسيق رسمي شامل.',
-    badge: 'الافتراضي',
+    badge: 'الافتراضي العام',
     category: 'a4',
     icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg>',
     paper: 'A4',
@@ -102,6 +102,96 @@ export const INVOICE_TEMPLATES = [
     badge: 'مؤسسي متقدم',
     category: 'a4',
     icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>',
+    paper: 'A4',
+  },
+  {
+    id: 'rawasi',
+    name: 'رواسي (اتصالات وتجزئة)',
+    desc: 'شريط ترويسة علوي ملون، بطاقة طريقة الدفع، وصندوق تفقيط مدمج لشبكات التوزيع.',
+    badge: 'اتصالات وتجزئة',
+    category: 'a4',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>',
+    paper: 'A4',
+  },
+  {
+    id: 'ledger',
+    name: 'سجل المقاولات (إنشاءات)',
+    desc: 'شارة رئيسية داكنة فخمة، حقول المستودع وتاريخ الاستحقاق وتقسيم من/إلى لقطاع المقاولات.',
+    badge: 'مقاولات وحديد',
+    category: 'a4',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',
+    paper: 'A4',
+  },
+  {
+    id: 'logistics',
+    name: 'التوريدات واللوجستيات (شحن)',
+    desc: 'إطار هندسي كامل للصفحة، جداول وخلايا متوازية بلون أزرق ناعم مع بيانات النقل والتوريد.',
+    badge: 'لوجستي وتوريد',
+    category: 'a4',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4 7.55 4.24a1.78 1.78 0 0 0-2.5 1.55v12.42a1.78 1.78 0 0 0 2.5 1.55L16.5 14.6a1.78 1.78 0 0 0 0-3.2z"/><path d="M21 4v16"/></svg>',
+    paper: 'A4',
+  },
+  {
+    id: 'detailed_address',
+    name: 'العنوان الوطني والتوريد',
+    desc: 'شبكة العنوان الوطني المفصل (المبنى، الشارع، الحي، الرمز)، جدول دقيق مع إجمالي الكميات.',
+    badge: 'عنوان وطني مفصل',
+    category: 'a4',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
+    paper: 'A4',
+  },
+  {
+    id: 're_rawasi_telecom',
+    name: 'رواسي ينبع (تقرير re)',
+    desc: 'مستخرج من فاتورة مؤسسة رواسي ينبع للاتصالات (DOC-20260904-WA0040.pdf) مع السيريال والفرع.',
+    badge: 'عينة re',
+    category: 'a4',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>',
+    paper: 'A4',
+  },
+  {
+    id: 're_alzahraani_contracting',
+    name: 'الزهراني والمجد (تقرير re)',
+    desc: 'مستخرج من فاتورة الزهراني والمجد رقم 5295 مع مستودع خميس مشيط وأمر الشراء وتاريخ الاستحقاق.',
+    badge: 'عينة re',
+    category: 'a4',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/></svg>',
+    paper: 'A4',
+  },
+  {
+    id: 're_awtad_albadr',
+    name: 'أوتاد البدر والحرة (تقرير re)',
+    desc: 'مستخرج من فاتورة شركة أوتاد البدر رقم 5548 مع أصناف التوريد الفندقي وبوليصة الشحن.',
+    badge: 'عينة re',
+    category: 'a4',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="16" x="4" y="4" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>',
+    paper: 'A4',
+  },
+  {
+    id: 're_mowjat_taradud',
+    name: 'موجة تردد والإصدار الفاخر (تقرير re)',
+    desc: 'مستخرج من فاتورة محل موجة تردد رقم 10144 مع أجهزة سامسونج الذكية وفترة الضمان.',
+    badge: 'عينة re',
+    category: 'a4',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m10 15 5-3-5-3v6z"/></svg>',
+    paper: 'A4',
+  },
+  {
+    id: 're_tarkeeb_contracting',
+    name: 'تركيب والكثيري (تقرير re)',
+    desc: 'مستخرج من فاتورة مؤسسة تركيب رقم 5963 مع دهانات كابلات ومواد عزل المقاولات ومواصفة SASO.',
+    badge: 'عينة re',
+    category: 'a4',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M4 22h16a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/><path d="M4 14h6"/><path d="M4 18h4"/></svg>',
+    paper: 'A4',
+  },
+  {
+    id: 're_ruwad_alittihad',
+    name: 'رواد الاتحاد (تقرير re)',
+    desc: 'مستخرج من فاتورة مؤسسة رواد الاتحاد رقم 4523 مع العنوان الوطني السداسي الكامل ومجموع الكميات.',
+    badge: 'عينة re',
+    category: 'a4',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
     paper: 'A4',
   },
 ];
@@ -171,9 +261,28 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
       <td class="e"><b class="num">${money(l.total_line)}</b></td>
     </tr>`).join('');
 
+  const logoFallback = `<div class="logo-fallback" style="width:${logoWidth};height:${logoHeight};" title="شعار المنشأة">
+    <svg viewBox="0 0 110 88" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" style="display:block;max-height:100%;max-width:100%;overflow:visible;">
+      <defs>
+        <linearGradient id="lfb-grad-${esc(tplStyle || 'def')}" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="${brandColor}" stop-opacity="0.10"/>
+          <stop offset="100%" stop-color="${brandDark}" stop-opacity="0.22"/>
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="106" height="84" rx="8" fill="url(#lfb-grad-${esc(tplStyle || 'def')})" stroke="${brandColor}" stroke-width="1.6" stroke-dasharray="3.5 2.5"/>
+      <g transform="translate(55, 32)" stroke="${brandDark}" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="-18" y="-13" width="36" height="26" rx="4.5" />
+        <circle cx="-6" cy="-3" r="3.2" fill="${brandDark}" />
+        <path d="M-15 9 L-5 -2 L4 6 L10 0 L15 9" />
+      </g>
+      <text x="55" y="65" text-anchor="middle" font-family="'Cairo', 'Segoe UI', sans-serif" font-size="8.8" font-weight="700" fill="${brandDark}">شعار المنشأة</text>
+      <text x="55" y="76" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="6.5" font-weight="600" fill="#64748b" letter-spacing="0.5">LOGO AREA</text>
+    </svg>
+  </div>`;
+
   const logoHtml = logoPos === 'none' ? '' : (issuer.logo_data
     ? `<img class="logo" src="${esc(issuer.logo_data)}" alt="" style="max-width:${logoWidth};max-height:${logoHeight};" />`
-    : `<div class="logo-fallback" style="width:${logoWidth};height:${logoHeight};">${esc((sellerName || 'R').slice(0, 2))}</div>`);
+    : logoFallback);
 
   const one = `
   <div class="page"${tplStyle && tplStyle !== 'standard' ? ` data-tpl="${esc(tplStyle)}"` : ''}>
@@ -293,7 +402,7 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
     .head { display: flex; gap: 8mm; justify-content: space-between; border-bottom: 2px solid ${brandColor}; padding-bottom: 4mm; }
     .brand { display: flex; gap: 4mm; align-items: flex-start; }
     .logo { object-fit: contain; }
-    .logo-fallback { border-radius: 4mm; background: ${brandColor}; color: #fff; display: grid; place-items: center; font-size: 16pt; font-weight: 800; }
+    .logo-fallback { border-radius: 2.5mm; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; vertical-align: middle; background: transparent; }
     .co { font-size: 14pt; font-weight: 800; color: #0f172a; }
     .co-en { font-size: 9pt; color: #475569; }
     .tiny { font-size: 7.6pt; line-height: 1.5; }
@@ -528,10 +637,144 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
       border: 1px solid ${brandDark};
       font-weight: 700;
     }
-    .page[data-tpl="corporate"] table.totals tr.grand td {
-      background: ${brandColor};
+    /* قالب رواسي وينبع للاتصالات والتجزئة */
+    .page[data-tpl="rawasi"], .page[data-tpl="re_rawasi_telecom"] {
+      border-top: 4.5mm solid #1e3a8a;
+      padding: 9mm 11mm;
+    }
+    .page[data-tpl="rawasi"] .head, .page[data-tpl="re_rawasi_telecom"] .head {
+      border-bottom: 2px solid #1e3a8a;
+      padding-bottom: 4mm;
+    }
+    .page[data-tpl="rawasi"] .party-h, .page[data-tpl="re_rawasi_telecom"] .party-h {
+      background: #eff6ff;
+      color: #1e3a8a;
+      border-bottom: 1.5px solid #bfdbfe;
+    }
+    .page[data-tpl="rawasi"] table.items th, .page[data-tpl="re_rawasi_telecom"] table.items th {
+      background: #1e3a8a;
       color: #ffffff;
-      border-radius: 1.5mm;
+      border-color: #172554;
+    }
+    .page[data-tpl="rawasi"] table.totals tr.grand td, .page[data-tpl="re_rawasi_telecom"] table.totals tr.grand td {
+      background: #1e3a8a;
+    }
+
+    /* قالب سجل المقاولات والحديد (الزهراني والمجد) */
+    .page[data-tpl="ledger"], .page[data-tpl="re_alzahraani_contracting"] {
+      border: 2px solid #111827;
+      padding: 8mm 9mm;
+    }
+    .page[data-tpl="ledger"] .head, .page[data-tpl="re_alzahraani_contracting"] .head {
+      border-bottom: 2.5px solid #111827;
+      padding-bottom: 4mm;
+    }
+    .page[data-tpl="ledger"] .party-h, .page[data-tpl="re_alzahraani_contracting"] .party-h {
+      background: #1f2937;
+      color: #f9fafb;
+      border-bottom: 1px solid #111827;
+    }
+    .page[data-tpl="ledger"] table.items th, .page[data-tpl="re_alzahraani_contracting"] table.items th {
+      background: #111827;
+      color: #ffffff;
+      border-color: #030712;
+    }
+    .page[data-tpl="ledger"] table.totals tr.grand td, .page[data-tpl="re_alzahraani_contracting"] table.totals tr.grand td {
+      background: #111827;
+    }
+
+    /* قالب التوريد والشحن واللوجستيات (أوتاد البدر والحرة) */
+    .page[data-tpl="logistics"], .page[data-tpl="re_awtad_albadr"] {
+      padding: 9mm 11mm;
+      background: #fafafa;
+    }
+    .page[data-tpl="logistics"] .head, .page[data-tpl="re_awtad_albadr"] .head {
+      border-bottom: 2px solid #0f766e;
+      background: #f0fdfa;
+      padding: 3mm 4mm;
+      border-radius: 2mm;
+    }
+    .page[data-tpl="logistics"] .party-h, .page[data-tpl="re_awtad_albadr"] .party-h {
+      background: #ccfbf1;
+      color: #0f766e;
+      border-bottom: 1px solid #99f6e4;
+    }
+    .page[data-tpl="logistics"] table.items th, .page[data-tpl="re_awtad_albadr"] table.items th {
+      background: #0f766e;
+      color: #ffffff;
+      border-color: #134e4a;
+    }
+    .page[data-tpl="logistics"] table.totals tr.grand td, .page[data-tpl="re_awtad_albadr"] table.totals tr.grand td {
+      background: #0f766e;
+    }
+
+    /* قالب موجة تردد والإلكترونيات الفاخرة */
+    .page[data-tpl="re_mowjat_taradud"] {
+      border-top: 4mm solid #0284c7;
+      padding: 9mm 11mm;
+    }
+    .page[data-tpl="re_mowjat_taradud"] .head {
+      border-bottom: 2px solid #0284c7;
+      padding-bottom: 4mm;
+    }
+    .page[data-tpl="re_mowjat_taradud"] .party-h {
+      background: #e0f2fe;
+      color: #0369a1;
+      border-bottom: 1px solid #bae6fd;
+    }
+    .page[data-tpl="re_mowjat_taradud"] table.items th {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #0369a1;
+    }
+    .page[data-tpl="re_mowjat_taradud"] table.totals tr.grand td {
+      background: #0284c7;
+    }
+
+    /* قالب تركيب ومواد المقاولات والعزل والكثيري */
+    .page[data-tpl="re_tarkeeb_contracting"] {
+      border-top: 4mm solid #b45309;
+      padding: 8.5mm 10mm;
+    }
+    .page[data-tpl="re_tarkeeb_contracting"] .head {
+      border-bottom: 2px solid #b45309;
+      padding-bottom: 4mm;
+    }
+    .page[data-tpl="re_tarkeeb_contracting"] .party-h {
+      background: #fef3c7;
+      color: #92400e;
+      border-bottom: 1px solid #fde68a;
+    }
+    .page[data-tpl="re_tarkeeb_contracting"] table.items th {
+      background: #b45309;
+      color: #ffffff;
+      border-color: #78350f;
+    }
+    .page[data-tpl="re_tarkeeb_contracting"] table.totals tr.grand td {
+      background: #b45309;
+    }
+
+    /* قالب العنوان الوطني والتوريد المفصل (رواد الاتحاد) */
+    .page[data-tpl="detailed_address"], .page[data-tpl="re_ruwad_alittihad"] {
+      border-top: 4.5mm solid #15803d;
+      padding: 8.5mm 10mm;
+    }
+    .page[data-tpl="detailed_address"] .head, .page[data-tpl="re_ruwad_alittihad"] .head {
+      border-bottom: 2px solid #15803d;
+      padding-bottom: 4mm;
+    }
+    .page[data-tpl="detailed_address"] .party-h, .page[data-tpl="re_ruwad_alittihad"] .party-h {
+      background: #dcfce7;
+      color: #166534;
+      border-bottom: 1px solid #bbf7d0;
+    }
+    .page[data-tpl="detailed_address"] table.items th, .page[data-tpl="re_ruwad_alittihad"] table.items th {
+      background: #15803d;
+      color: #ffffff;
+      border-color: #166534;
+    }
+    .page[data-tpl="detailed_address"] table.totals tr.grand td, .page[data-tpl="re_ruwad_alittihad"] table.totals tr.grand td {
+      background: #15803d;
     }
     ${printCfg.custom_css || ''}
   `;

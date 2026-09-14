@@ -77,6 +77,8 @@ export async function render(view) {
     use_target: true,
     category_ids: [],
     item_ids: [],
+    custom_items: [],
+    distribution_mode: 'BALANCED',
     min_items: 4,
     max_items: 6,
     min_qty: 1,
@@ -126,6 +128,15 @@ export async function render(view) {
     target_total: state.use_target ? toNum(state.target_total, 0) : 0,
     category_ids: state.category_ids,
     item_ids: state.item_ids,
+    custom_items: state.custom_items.map((it) => ({
+      id: it.id || undefined,
+      name_ar: it.name_ar,
+      item_code: it.item_code || '',
+      unit: it.unit || 'حبة',
+      sale_price: toNum(it.sale_price, 0),
+      tax_rate: it.tax_rate !== undefined ? toNum(it.tax_rate, 15) : 15,
+    })),
+    distribution_mode: state.distribution_mode,
     min_items: toNum(state.min_items, 1),
     max_items: toNum(state.max_items, 6),
     min_qty: toNum(state.min_qty, 1),
@@ -156,6 +167,13 @@ export async function render(view) {
     const tax = Math.round(invs.reduce((s, i) => s + (i.tax_amount || 0), 0) * 100) / 100;
     const disc = Math.round(invs.reduce((s, i) => s + (i.discount_amount || 0), 0) * 100) / 100;
     const vals = invs.map((i) => i.grand_total);
+    const itemDistribution = {};
+    for (const inv of invs) {
+      for (const l of inv.lines || []) {
+        const k = l.item_name || 'غير محدد';
+        itemDistribution[k] = (itemDistribution[k] || 0) + (Number(l.quantity) || 1);
+      }
+    }
     state.preview.summary = {
       count: invs.length,
       grand_total: total,
@@ -167,7 +185,65 @@ export async function render(view) {
       unique_baskets: new Set(invs.map((i) => (i.lines || []).map((l) => `${l.item_id}:${l.quantity}`).sort().join('|'))).size,
       date_from: invs.length ? invs[0].issue_date : null,
       date_to: invs.length ? invs[invs.length - 1].issue_date : null,
+      item_distribution: itemDistribution,
     };
+  };
+
+  const customItemsTableHtml = () => {
+    if (!state.custom_items.length) {
+      return `
+        <div class="pad mt" style="background:rgba(255,255,255,0.02);border:1px dashed var(--line-strong);border-radius:var(--radius-sm);text-align:center">
+          <p class="muted tiny" style="margin:.4rem 0">لم يتم تحديد قائمة أصناف مخصصة بعد. سيتم استخدام أصناف الكتالوج العام تلقائياً، أو يمكنك اختيار أصناف وإضافة أسعارها المخصصة للدفعة من الأدوات أعلاه.</p>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="table-wrap mt">
+        <table class="tbl compact" style="background:var(--card)">
+          <thead>
+            <tr>
+              <th style="width:35px">#</th>
+              <th>الصنف</th>
+              <th style="width:100px">الكود</th>
+              <th style="width:80px">الوحدة</th>
+              <th style="width:170px" class="text-end">سعر الوحدة المحدد للدفعة (${esc(cur)})</th>
+              <th style="width:80px" class="text-center">الضريبة</th>
+              <th style="width:50px"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.custom_items.map((it, idx) => `
+              <tr>
+                <td class="tiny">${idx + 1}</td>
+                <td><b>${esc(it.name_ar)}</b></td>
+                <td class="tiny mono muted">${esc(it.item_code || '—')}</td>
+                <td class="tiny">${esc(it.unit || 'حبة')}</td>
+                <td class="text-end">
+                  <input type="number" step="any" min="0.01" class="custom-item-price" data-idx="${idx}" value="${it.sale_price}" style="width:130px;text-align:right;padding:.25rem .5rem;font-size:.85rem;font-weight:bold" />
+                </td>
+                <td class="tiny text-center">${num(it.tax_rate !== undefined ? it.tax_rate : 15)}%</td>
+                <td class="text-center">
+                  <button class="btn btn-sm btn-danger pad0" style="width:26px;height:26px;line-height:1" data-remove-custom-item="${idx}" type="button" title="حذف الصنف من الدفعة">✕</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="4">
+                <span class="badge blue tiny">إجمالي الأصناف المحددة للدفعة: <b>${num(state.custom_items.length)}</b> صنف</span>
+              </td>
+              <td colspan="3" class="text-end" style="gap:.4rem">
+                <button class="btn btn-sm" id="btn-bulk-price-adjust" type="button" style="font-size:.78rem">تعديل جماعي للأسعار (±%)</button>
+                <button class="btn btn-sm" id="btn-reset-default-prices" type="button" style="font-size:.78rem">استعادة الأسعار الأصلية</button>
+                <button class="btn btn-sm btn-danger" id="btn-clear-custom-items" type="button" style="font-size:.78rem">مسح الكل</button>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    `;
   };
 
   const draftsSectionHtml = () => {
@@ -260,6 +336,23 @@ export async function render(view) {
           </div>
         </div>
 
+        ${s.item_distribution && Object.keys(s.item_distribution).length ? `
+          <div class="mt-sm" style="background:rgba(6, 182, 212, 0.05);padding:.6rem 1rem;border-radius:var(--radius-sm);border:1px solid rgba(6, 182, 212, 0.25)">
+            <div class="row align-center">
+              <b class="tiny" style="color:var(--brand)">توزيع المنتجات على فواتير الدفعة (${num(Object.keys(s.item_distribution).length)} صنف تم توزيعه):</b>
+              <div class="spacer"></div>
+              <span class="tiny muted">إجمالي الكميات المسحوبة لكل صنف عبر الدفعة</span>
+            </div>
+            <div class="chips mt-xs" style="gap:.4rem">
+              ${raw(Object.entries(s.item_distribution).map(([k, count]) => `
+                <span class="badge gray tiny" style="font-size:.8rem;padding:.2rem .6rem">
+                  ${esc(k)}: <b class="num" style="color:var(--brand);margin-right:4px">${num(count)}</b>
+                </span>
+              `).join(''))}
+            </div>
+          </div>
+        ` : ''}
+
         <div class="row mt-sm" style="gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-sm" id="btn-save-draft" type="button" style="background:#0284c7;color:#fff">${raw(icon.copy({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}حفظ المسودة</button>
           <button class="btn btn-sm" id="btn-sample-print" type="button" style="background:#475569;color:#fff">${raw(icon.eye({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}إصدار عينة تجريبية</button>
@@ -275,8 +368,11 @@ export async function render(view) {
 
         <div class="mt">
           <div class="row align-center" style="margin-bottom:.5rem">
-            <h3 style="margin:0">قائمة وتفاصيل الفواتير (تعديل مباشر)</h3>
+            <h3 style="margin:0">قائمة وتفاصيل الفواتير (تعديل يدوي ومباشر)</h3>
             <div class="spacer"></div>
+            <button class="btn btn-sm" id="btn-add-manual-inv" type="button" style="background:#059669;color:#fff;font-weight:600;margin-left:.6rem">
+              ${raw(icon.plus({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}+ إضافة فاتورة يدوية
+            </button>
             <span class="tiny muted">انقر «تعديل البنود» لتخصيص أصناف وأسعار أي فاتورة مباشرة أو حذفها.</span>
           </div>
 
@@ -409,19 +505,80 @@ export async function render(view) {
       </div>
 
       <div class="card">
-        <div class="card-head" style="padding:0 0 .7rem"><h3>2. الأصناف المستخدمة</h3>
+        <div class="card-head" style="padding:0 0 .7rem">
+          <div>
+            <h3 style="margin:0">2. الأصناف وتحديد الأسعار وتوزيع المنتجات على الفواتير</h3>
+            <p class="tiny muted" style="margin:.2rem 0 0">حدد الأصناف وأسعارها المعتمدة للدفعة وطريقة توزيعها، أو اتركها لاستخدام الكتالوج العام تلقائياً.</p>
+          </div>
           <div class="spacer"></div>
-          <span class="tiny muted">اتركها فارغة لاستخدام كل الأصناف النشطة (${store.items.length} صنف)</span></div>
-        <label class="small" style="font-weight:600">المجموعات</label>
-        <div class="chips mt">
-          ${raw(store.categories.map((c) => `<span class="chip ${state.category_ids.includes(c.id) ? 'on' : ''}" data-cat="${esc(c.id)}">${esc(c.name)}</span>`).join(''))}
+          <span class="badge ${state.custom_items.length ? 'blue' : 'gray'}" id="custom-items-count-badge">
+            ${state.custom_items.length ? `${state.custom_items.length} صنف محدد بأسعار خاصة` : `الكتالوج العام (${store.items.length} صنف)`}
+          </span>
         </div>
-        <div class="row mt">
-          <div class="field"><label>أصناف محددة (اختياري)</label>
-            <select id="item_ids" multiple size="5">
-              ${raw(store.items.map((i) => `<option value="${esc(i.id)}" ${state.item_ids.includes(i.id) ? 'selected' : ''}>${esc(i.name_ar)} — ${money(i.sale_price)}</option>`).join(''))}
+
+        <!-- شريط إضافة وتحديد أسعار الأصناف للدفعة -->
+        <div class="row align-center mt-sm" style="gap:.6rem;flex-wrap:wrap;background:rgba(255,255,255,0.03);padding:.8rem;border-radius:var(--radius-sm);border:1px solid var(--line)">
+          <div class="field" style="flex:2;min-width:240px;margin:0">
+            <label class="tiny">اختر صنفاً من الدليل لإضافته وتحديد سعره للدفعة</label>
+            <select id="quick-catalog-item-select">
+              <option value="">-- اختر صنفاً من الدليل --</option>
+              ${raw(store.items.map((it) => `<option value="${esc(it.id)}" data-price="${it.sale_price}" data-unit="${esc(it.unit || 'حبة')}">${esc(it.name_ar)} (سعر الدليل: ${money(it.sale_price)} ${esc(cur)})</option>`).join(''))}
             </select>
-            <span class="hint">Ctrl + نقرة لاختيار أكثر من صنف</span></div>
+          </div>
+          <div class="field" style="max-width:140px;margin:0">
+            <label class="tiny">السعر المحدد (${esc(cur)})</label>
+            <input type="number" step="any" min="0" id="quick-catalog-item-price" placeholder="سعر الوحدة" />
+          </div>
+          <div style="align-self:flex-end">
+            <button class="btn btn-primary" id="btn-add-item-to-batch" type="button" style="font-weight:600;font-size:.85rem;height:38px">
+              ${raw(icon.plus({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}+ إضافة صنف
+            </button>
+          </div>
+          <div style="align-self:flex-end">
+            <button class="btn" id="btn-add-custom-adhoc" type="button" style="font-size:.85rem;height:38px">
+              ${raw(icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}+ صنف مخصص جديد
+            </button>
+          </div>
+          <div style="align-self:flex-end">
+            <button class="btn" id="btn-import-all-catalog" type="button" style="font-size:.85rem;height:38px">
+              ${raw(icon.package({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}إدراج كل الأصناف (${store.items.length})
+            </button>
+          </div>
+        </div>
+
+        <!-- إضافة مجموعة كاملة بنقرة واحدة -->
+        <div class="mt-sm">
+          <label class="tiny muted" style="font-weight:600;display:block;margin-bottom:.3rem">
+            إضافة مجموعة أصناف كاملة (انقر على أي مجموعة لإدراج كافة منتجاتها وتعديل أسعارها):
+          </label>
+          <div class="chips">
+            ${raw(store.categories.map((c) => `
+              <span class="chip" data-add-cat-items="${esc(c.id)}" style="cursor:pointer" title="انقر لإضافة كافة أصناف مجموعة ${esc(c.name)}">
+                ${raw(icon.layers({ size: 12, style: 'vertical-align:text-bottom;margin-left:3px' }))}
+                ${esc(c.name)} (${c.items_count || 0})
+              </span>
+            `).join(''))}
+          </div>
+        </div>
+
+        <!-- جدول الأصناف المحددة للدفعة وأسعارها -->
+        <div id="custom-items-container">
+          ${raw(customItemsTableHtml())}
+        </div>
+
+        <!-- خيارات طريقة توزيع المنتجات على الفواتير -->
+        <div class="row mt align-center" style="background:rgba(255,255,255,0.02);padding:.7rem 1rem;border-radius:var(--radius-sm);border:1px solid var(--line);gap:1.5rem;flex-wrap:wrap">
+          <div>
+            <b>طريقة توزيع المنتجات على الفواتير:</b>
+          </div>
+          <label class="check" style="margin:0;cursor:pointer">
+            <input type="radio" name="distribution_mode" value="BALANCED" ${state.distribution_mode === 'BALANCED' ? 'checked' : ''} />
+            <b>توزيع متوازن</b> (ضمان توزيع كافة الأصناف المختارة بالتساوي على الفواتير)
+          </label>
+          <label class="check" style="margin:0;cursor:pointer">
+            <input type="radio" name="distribution_mode" value="RANDOM" ${state.distribution_mode === 'RANDOM' ? 'checked' : ''} />
+            <b>توزيع عشوائي</b> (اختيار عشوائي حر)
+          </label>
         </div>
       </div>
 
@@ -516,18 +673,180 @@ export async function render(view) {
     const autoSaveCheck = $('#auto_save_draft', view);
     if (autoSaveCheck) autoSaveCheck.addEventListener('change', (e) => { state.auto_save_draft = e.target.checked; });
 
-    const itemsEl = $('#item_ids', view);
-    if (itemsEl) {
-      itemsEl.addEventListener('change', (e) => {
-        state.item_ids = Array.from(e.target.selectedOptions).map((o) => o.value);
-      });
-    }
+    const refreshCustomItemsArea = () => {
+      const container = $('#custom-items-container', view);
+      if (container) container.innerHTML = customItemsTableHtml();
+      const badge = $('#custom-items-count-badge', view);
+      if (badge) {
+        badge.className = `badge ${state.custom_items.length ? 'blue' : 'gray'}`;
+        badge.textContent = state.custom_items.length
+          ? `${state.custom_items.length} صنف محدد بأسعار خاصة`
+          : `الكتالوج العام (${store.items.length} صنف)`;
+      }
+    };
 
-    delegate(view, 'click', '[data-cat]', (e, chip) => {
-      const id = chip.dataset.cat;
-      if (state.category_ids.includes(id)) state.category_ids = state.category_ids.filter((x) => x !== id);
-      else state.category_ids.push(id);
-      chip.classList.toggle('on');
+    // تغيير اختيار الصنف السريع لملء سعره التلقائي
+    delegate(view, 'change', '#quick-catalog-item-select', (e, sel) => {
+      const opt = sel.selectedOptions[0];
+      const priceInput = $('#quick-catalog-item-price', view);
+      if (opt && opt.dataset.price && priceInput) {
+        priceInput.value = opt.dataset.price;
+      }
+    });
+
+    // إضافة صنف من الدليل
+    delegate(view, 'click', '#btn-add-item-to-batch', () => {
+      const select = $('#quick-catalog-item-select', view);
+      if (!select || !select.value) {
+        toastErr('اختر صنفاً من القائمة أولاً');
+        return;
+      }
+      const it = store.items.find((x) => x.id === select.value);
+      if (!it) return;
+      const priceInput = $('#quick-catalog-item-price', view);
+      const customPrice = priceInput && priceInput.value !== '' ? Number(priceInput.value) : it.sale_price;
+
+      const existingIdx = state.custom_items.findIndex((x) => x.id === it.id);
+      if (existingIdx >= 0) {
+        state.custom_items[existingIdx].sale_price = customPrice;
+        toastOk(`تم تحديث سعر الصنف: ${it.name_ar}`);
+      } else {
+        state.custom_items.push({
+          id: it.id,
+          item_code: it.item_code,
+          name_ar: it.name_ar,
+          unit: it.unit || 'حبة',
+          sale_price: customPrice,
+          tax_rate: it.tax_rate !== undefined ? it.tax_rate : 15,
+        });
+        toastOk(`تمت إضافة الصنف: ${it.name_ar} بسعر ${money(customPrice)} ${cur}`);
+      }
+      refreshCustomItemsArea();
+    });
+
+    // إضافة صنف مخصص بالكامل (غير موجود بالدليل)
+    delegate(view, 'click', '#btn-add-custom-adhoc', async () => {
+      const name = await promptDialog({ title: 'إضافة صنف مخصص للدفعة', label: 'اسم الصنف أو الخدمة', value: '' });
+      if (!name) return;
+      const priceStr = await promptDialog({ title: 'سعر الصنف', label: `سعر الوحدة (${cur})`, value: '100' });
+      const price = Number(priceStr) || 100;
+      state.custom_items.push({
+        id: null,
+        item_code: '',
+        name_ar: name,
+        unit: 'حبة',
+        sale_price: price,
+        tax_rate: 15,
+      });
+      refreshCustomItemsArea();
+      toastOk(`تمت إضافة الصنف المخصص: ${name}`);
+    });
+
+    // استيراد جميع الأصناف النشطة
+    delegate(view, 'click', '#btn-import-all-catalog', () => {
+      const activeItems = store.items.filter((it) => it.is_active !== false && it.sale_price > 0);
+      for (const it of activeItems) {
+        if (!state.custom_items.some((x) => x.id === it.id)) {
+          state.custom_items.push({
+            id: it.id,
+            item_code: it.item_code,
+            name_ar: it.name_ar,
+            unit: it.unit || 'حبة',
+            sale_price: it.sale_price,
+            tax_rate: it.tax_rate !== undefined ? it.tax_rate : 15,
+          });
+        }
+      }
+      refreshCustomItemsArea();
+      toastOk(`تم إدراج ${activeItems.length} صنف في جدول الأصناف المخصصة`);
+    });
+
+    // إضافة أصناف مجموعة كاملة
+    delegate(view, 'click', '[data-add-cat-items]', (e, btn) => {
+      const catId = btn.dataset.addCatItems;
+      const cat = store.categories.find((c) => c.id === catId);
+      const catItems = store.items.filter((it) => it.category_id === catId && it.is_active !== false);
+      if (!catItems.length) {
+        toastErr(`لا توجد أصناف في مجموعة ${cat ? cat.name : ''}`);
+        return;
+      }
+      let added = 0;
+      for (const it of catItems) {
+        if (!state.custom_items.some((x) => x.id === it.id)) {
+          state.custom_items.push({
+            id: it.id,
+            item_code: it.item_code,
+            name_ar: it.name_ar,
+            unit: it.unit || 'حبة',
+            sale_price: it.sale_price,
+            tax_rate: it.tax_rate !== undefined ? it.tax_rate : 15,
+          });
+          added++;
+        }
+      }
+      refreshCustomItemsArea();
+      toastOk(`تمت إضافة ${added} صنف من مجموعة ${cat ? cat.name : ''}`);
+    });
+
+    // حذف صنف من قائمة الأصناف المخصصة
+    delegate(view, 'click', '[data-remove-custom-item]', (e, btn) => {
+      const idx = Number(btn.dataset.removeCustomItem);
+      if (state.custom_items[idx]) {
+        const removed = state.custom_items.splice(idx, 1);
+        refreshCustomItemsArea();
+        toastOk(`تم حذف ${removed[0].name_ar} من أصناف الدفعة`);
+      }
+    });
+
+    // تعديل السعر في جدول الأصناف المخصصة
+    delegate(view, 'change', '.custom-item-price', (e, input) => {
+      const idx = Number(input.dataset.idx);
+      if (state.custom_items[idx]) {
+        state.custom_items[idx].sale_price = Number(input.value) || 0;
+      }
+    });
+
+    // تعديل جماعي لأسعار الأصناف المخصصة
+    delegate(view, 'click', '#btn-bulk-price-adjust', async () => {
+      if (!state.custom_items.length) return;
+      const pctStr = await promptDialog({
+        title: 'تعديل جماعي للأسعار',
+        label: 'أدخل نسبة التعديل المئوية (مثال: 10 لزيادة 10%، أو -5 لخصم 5%)',
+        value: '10',
+      });
+      if (pctStr === null || pctStr === '') return;
+      const pct = Number(pctStr);
+      if (Number.isNaN(pct)) { toastErr('أدخل رقماً صحيحاً'); return; }
+      for (const it of state.custom_items) {
+        const newPrice = Math.max(0.01, Math.round(it.sale_price * (1 + pct / 100) * 100) / 100);
+        it.sale_price = newPrice;
+      }
+      refreshCustomItemsArea();
+      toastOk(`تم تعديل جميع الأسعار بنسبة ${pct}%`);
+    });
+
+    // استعادة الأسعار الأصلية
+    delegate(view, 'click', '#btn-reset-default-prices', () => {
+      for (const ci of state.custom_items) {
+        if (ci.id) {
+          const original = store.items.find((x) => x.id === ci.id);
+          if (original) ci.sale_price = original.sale_price;
+        }
+      }
+      refreshCustomItemsArea();
+      toastOk('تمت استعادة الأسعار الأصلية للأصناف من الدليل');
+    });
+
+    // مسح الكل
+    delegate(view, 'click', '#btn-clear-custom-items', () => {
+      state.custom_items = [];
+      refreshCustomItemsArea();
+      toastOk('تم تفريغ قائمة الأصناف المخصصة والرجوع للكتالوج العام');
+    });
+
+    // تغيير نمط التوزيع
+    delegate(view, 'change', 'input[name="distribution_mode"]', (e, radio) => {
+      if (radio.checked) state.distribution_mode = radio.value;
     });
 
     delegate(view, 'click', '[data-pay]', (e, chip) => {
@@ -736,7 +1055,44 @@ export async function render(view) {
       state.preview.invoices[idx][field] = input.value;
     });
 
-    delegate(view, 'input', '.line-input', (e, input) => {
+    // إضافة فاتورة يدوية مباشرة إلى قائمة المعاينة
+    delegate(view, 'click', '#btn-add-manual-inv', () => {
+      if (!state.preview) return;
+      const defaultItem = state.custom_items[0] || store.items[0] || { id: null, name_ar: 'صنف عام', sale_price: 100, unit: 'حبة', tax_rate: 15 };
+      const newInv = {
+        temp_id: `tmp-${state.preview.invoices.length + 1}`,
+        issue_date: state.preview.invoices.length ? state.preview.invoices[state.preview.invoices.length - 1].issue_date : state.date_to,
+        issue_time: '12:00:00',
+        invoice_type: state.invoice_type,
+        payment_method: state.payment_methods[0] || 'CREDIT',
+        notes: '',
+        lines: [
+          {
+            item_id: defaultItem.id || null,
+            item_code: defaultItem.item_code || '',
+            item_name: defaultItem.name_ar,
+            unit: defaultItem.unit || 'حبة',
+            quantity: 1,
+            unit_price: defaultItem.sale_price,
+            discount: 0,
+            tax_rate: defaultItem.tax_rate !== undefined ? defaultItem.tax_rate : 15,
+          },
+        ],
+        subtotal: defaultItem.sale_price,
+        discount_amount: 0,
+        taxable_amount: defaultItem.sale_price,
+        tax_amount: Math.round(defaultItem.sale_price * 0.15 * 100) / 100,
+        grand_total: Math.round(defaultItem.sale_price * 1.15 * 100) / 100,
+      };
+      state.preview.invoices.push(newInv);
+      state.activeEditIndex = state.preview.invoices.length - 1;
+      recalcPreviewSummary();
+      const area = $('#preview-area', view);
+      if (area) area.innerHTML = previewHtml();
+      toastOk('تمت إضافة فاتورة يدوية جديدة إلى الدفعة');
+    });
+
+    delegate(view, 'change', '.line-input', (e, input) => {
       const invIdx = Number(input.dataset.inv);
       const lineIdx = Number(input.dataset.line);
       const lfield = input.dataset.lfield;

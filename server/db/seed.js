@@ -10,6 +10,7 @@ const auth = require('../services/auth');
 const issuersSvc = require('../services/issuers');
 const clientsSvc = require('../services/clients');
 const itemsSvc = require('../services/items');
+const logosSvc = require('../services/logos');
 
 const CATEGORIES = [
   { code: 'CAT-FOOD', name: 'مواد غذائية', description: 'أغذية ومشروبات ومواد استهلاكية' },
@@ -76,6 +77,7 @@ const ISSUERS = [
     legal_terms: 'تخضع هذه الفاتورة لأحكام نظام ضريبة القيمة المضافة في المملكة العربية السعودية.',
     default_tax_rate: 15,
     zatca_phase: 'PHASE1',
+    logo_data: logosSvc.LOGO_Z_TRADING_DATA_URL,
   },
   {
     code: 'ZS-002',
@@ -99,6 +101,7 @@ const ISSUERS = [
     legal_terms: 'أي خلاف ينشأ عن هذه الفاتورة يخضع لاختصاص المحاكم التجارية السعودية.',
     default_tax_rate: 15,
     zatca_phase: 'PHASE2',
+    logo_data: logosSvc.LOGO_HORIZON_TECH_DATA_URL,
   },
   {
     code: 'ZS-003',
@@ -122,6 +125,7 @@ const ISSUERS = [
     legal_terms: '',
     default_tax_rate: 15,
     zatca_phase: 'PHASE1',
+    logo_data: logosSvc.LOGO_DARB_SHARQ_DATA_URL,
   },
 ];
 

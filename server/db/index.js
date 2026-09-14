@@ -54,6 +54,12 @@ function open() {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
   migrate();
+  try {
+    const { syncExcelTemplatesToDb } = require('./templates');
+    syncExcelTemplatesToDb(db);
+  } catch (err) {
+    console.error('Failed to sync Excel templates:', err);
+  }
   db.prepare("INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '1')").run();
   return db;
 }

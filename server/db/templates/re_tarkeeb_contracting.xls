@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal">
+   <Alignment ss:Vertical="Center"/>
+   <Font ss:FontName="Segoe UI" ss:Size="10" ss:Color="#334155"/>
+  </Style>
+  <Style ss:ID="Header">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#92400e"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#92400e"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#92400e"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#92400e"/>
+   </Borders>
+   <Font ss:FontName="Segoe UI" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>
+   <Interior ss:Color="#b45309" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="CompanyTitle">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <Font ss:FontName="Segoe UI" ss:Size="14" ss:Color="#b45309" ss:Bold="1"/>
+  </Style>
+  <Style ss:ID="CardLabel">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+   </Borders>
+   <Font ss:FontName="Segoe UI" ss:Size="10" ss:Color="#0F172A" ss:Bold="1"/>
+   <Interior ss:Color="#F1F5F9" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="CardValue">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+   </Borders>
+   <Font ss:FontName="Segoe UI" ss:Size="10" ss:Color="#334155"/>
+  </Style>
+  <Style ss:ID="DataRow">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+   </Borders>
+   <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="DataRowCenter">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+   </Borders>
+   <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="DataRowNumber">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+   </Borders>
+   <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
+   <NumberFormat ss:Format="#,##0.00"/>
+  </Style>
+  <Style ss:ID="DataRowAlt">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+   </Borders>
+   <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="DataRowAltCenter">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+   </Borders>
+   <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="DataRowAltNumber">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+   </Borders>
+   <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+   <NumberFormat ss:Format="#,##0.00"/>
+  </Style>
+  <Style ss:ID="GrandTotal">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#b45309"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#b45309"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#b45309"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#b45309"/>
+   </Borders>
+   <Font ss:FontName="Segoe UI" ss:Size="12" ss:Color="#FFFFFF" ss:Bold="1"/>
+   <Interior ss:Color="#b45309" ss:Pattern="Solid"/>
+   <NumberFormat ss:Format="#,##0.00"/>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="بيانات_الفواتير">
+  <Table ss:DefaultColumnWidth="90" ss:DefaultRowHeight="22">
+   <Column ss:Index="1" ss:Width="35"/>
+   <Column ss:Index="2" ss:Width="95"/>
+   <Column ss:Index="3" ss:Width="190"/>
+   <Column ss:Index="4" ss:Width="60"/>
+   <Column ss:Index="5" ss:Width="60"/>
+   <Column ss:Index="6" ss:Width="80"/>
+   <Column ss:Index="7" ss:Width="90"/>
+   <Column ss:Index="8" ss:Width="105"/>
+   <Column ss:Index="9" ss:Width="90"/>
+   <Column ss:Index="10" ss:Width="110"/>
+   <Row ss:Height="28">
+    <Cell ss:Index="2" ss:StyleID="CompanyTitle"><Data ss:Type="String">مؤسسة محمد كمال محمد الكثيري التجارية</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="Default"><Data ss:Type="String">Al-Katheeri Trading Establishment</Data></Cell>
+   </Row>
+   <Row ss:Height="20">
+    <Cell ss:Index="2" ss:StyleID="Default"><Data ss:Type="String">جدة - حي العزيزية - طريق الملك فهد</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="Default"><Data ss:Type="String">الرقم الضريبي: 300645181300003 | السجل: 4030499958</Data></Cell>
+   </Row>
+   <Row ss:Height="10"/>
+   <Row ss:Height="24">
+    <Cell ss:Index="5" ss:StyleID="Header"><Data ss:Type="String">فاتورة بيع ومواد عزل (TAX INVOICE)</Data></Cell>
+   </Row>
+   <Row ss:Height="10"/>
+   <Row ss:Height="22">
+    <Cell ss:Index="2" ss:StyleID="CardLabel"><Data ss:Type="String">اسم العميل:</Data></Cell>
+    <Cell ss:Index="3" ss:StyleID="CardValue"><Data ss:Type="String">مؤسسة تركيب للمقاولات العامة</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="CardLabel"><Data ss:Type="String">رقم الفاتورة:</Data></Cell>
+    <Cell ss:Index="8" ss:StyleID="CardValue"><Data ss:Type="String">5963</Data></Cell>
+   </Row>
+   <Row ss:Height="22">
+    <Cell ss:Index="2" ss:StyleID="CardLabel"><Data ss:Type="String">الرقم الضريبي للعميل:</Data></Cell>
+    <Cell ss:Index="3" ss:StyleID="CardValue"><Data ss:Type="String">310576130700003</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="CardLabel"><Data ss:Type="String">تاريخ الفاتورة:</Data></Cell>
+    <Cell ss:Index="8" ss:StyleID="CardValue"><Data ss:Type="String">2025-12-18</Data></Cell>
+   </Row>
+   <Row ss:Height="22">
+    <Cell ss:Index="2" ss:StyleID="CardLabel"><Data ss:Type="String">عنوان العميل:</Data></Cell>
+    <Cell ss:Index="3" ss:StyleID="CardValue"><Data ss:Type="String">جدة - حي مشرفة - طريق الملك فهد</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="CardLabel"><Data ss:Type="String">طريقة السداد / النوع:</Data></Cell>
+    <Cell ss:Index="8" ss:StyleID="CardValue"><Data ss:Type="String">آجلة (CREDIT) (ضريبية معتمدة)</Data></Cell>
+   </Row>
+   <Row ss:Height="14"/>
+   <Row ss:Height="26">
+    <Cell ss:StyleID="Header"><Data ss:Type="String">#</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">رقم الصنف</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">اسم الصنف والبيان</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">الوحدة</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">الكمية</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">سعر الوحدة</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">الخصم</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">المبلغ قبل الضريبة</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">الضريبة (15%)</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">المجموع شامل الضريبة</Data></Cell>
+   </Row>
+   <Row ss:Height="22">
+      <Cell ss:StyleID="DataRowCenter"><Data ss:Type="Number">1</Data></Cell>
+      <Cell ss:StyleID="DataRowCenter"><Data ss:Type="String">CB-606-WHT</Data></Cell>
+      <Cell ss:StyleID="DataRow"><Data ss:Type="String">سي بي 606 أبيض 310 مل مواد لواصق عزل</Data></Cell>
+      <Cell ss:StyleID="DataRowCenter"><Data ss:Type="String">حبة</Data></Cell>
+      <Cell ss:StyleID="DataRowNumber"><Data ss:Type="Number">8</Data></Cell>
+      <Cell ss:StyleID="DataRowNumber"><Data ss:Type="Number">76.5</Data></Cell>
+      <Cell ss:StyleID="DataRowNumber"><Data ss:Type="Number">0</Data></Cell>
+      <Cell ss:StyleID="DataRowNumber"><Data ss:Type="Number">612</Data></Cell>
+      <Cell ss:StyleID="DataRowNumber"><Data ss:Type="Number">91.8</Data></Cell>
+      <Cell ss:StyleID="DataRowNumber"><Data ss:Type="Number">703.8</Data></Cell>
+    </Row>
+<Row ss:Height="22">
+      <Cell ss:StyleID="DataRowAltCenter"><Data ss:Type="Number">2</Data></Cell>
+      <Cell ss:StyleID="DataRowAltCenter"><Data ss:Type="String">CB-679-PNT</Data></Cell>
+      <Cell ss:StyleID="DataRowAlt"><Data ss:Type="String">دهان كابلات سي بي 679 مقاوم للحرارة والحريق</Data></Cell>
+      <Cell ss:StyleID="DataRowAltCenter"><Data ss:Type="String">برميل</Data></Cell>
+      <Cell ss:StyleID="DataRowAltNumber"><Data ss:Type="Number">3</Data></Cell>
+      <Cell ss:StyleID="DataRowAltNumber"><Data ss:Type="Number">5340</Data></Cell>
+      <Cell ss:StyleID="DataRowAltNumber"><Data ss:Type="Number">0</Data></Cell>
+      <Cell ss:StyleID="DataRowAltNumber"><Data ss:Type="Number">16020</Data></Cell>
+      <Cell ss:StyleID="DataRowAltNumber"><Data ss:Type="Number">2403</Data></Cell>
+      <Cell ss:StyleID="DataRowAltNumber"><Data ss:Type="Number">18423</Data></Cell>
+    </Row>
+<Row ss:Height="22">
+      <Cell ss:StyleID="DataRowCenter"><Data ss:Type="Number">3</Data></Cell>
+      <Cell ss:StyleID="DataRowCenter"><Data ss:Type="String">CF-RED-PNT</Data></Cell>
+      <Cell ss:StyleID="DataRow"><Data ss:Type="String">سي اف دهان أحمر صناعي وقائي للعزل</Data></Cell>
+      <Cell ss:StyleID="DataRowCenter"><Data ss:Type="String">برميل</Data></Cell>
+      <Cell ss:StyleID="DataRowNumber"><Data ss:Type="Number">2</Data></Cell>
+      <Cell ss:StyleID="DataRowNumber"><Data ss:Type="Number">2850</Data></Cell>
+      <Cell ss:StyleID="DataRowNumber"><Data ss:Type="Number">0</Data></Cell>
+      <Cell ss:StyleID="DataRowNumber"><Data ss:Type="Number">5700</Data></Cell>
+      <Cell ss:StyleID="DataRowNumber"><Data ss:Type="Number">855</Data></Cell>
+      <Cell ss:StyleID="DataRowNumber"><Data ss:Type="Number">6555</Data></Cell>
+    </Row>
+<Row ss:Height="22">
+      <Cell ss:StyleID="DataRowAltCenter"><Data ss:Type="Number">4</Data></Cell>
+      <Cell ss:StyleID="DataRowAltCenter"><Data ss:Type="String">FS-ONE-20</Data></Cell>
+      <Cell ss:StyleID="DataRowAlt"><Data ss:Type="String">اف اس وان 20 أوز مواد عزل حراري ومطاطي</Data></Cell>
+      <Cell ss:StyleID="DataRowAltCenter"><Data ss:Type="String">حبة</Data></Cell>
+      <Cell ss:StyleID="DataRowAltNumber"><Data ss:Type="Number">10</Data></Cell>
+      <Cell ss:StyleID="DataRowAltNumber"><Data ss:Type="Number">139</Data></Cell>
+      <Cell ss:StyleID="DataRowAltNumber"><Data ss:Type="Number">0</Data></Cell>
+      <Cell ss:StyleID="DataRowAltNumber"><Data ss:Type="Number">1390</Data></Cell>
+      <Cell ss:StyleID="DataRowAltNumber"><Data ss:Type="Number">208.5</Data></Cell>
+      <Cell ss:StyleID="DataRowAltNumber"><Data ss:Type="Number">1598.5</Data></Cell>
+    </Row>
+   <Row ss:Height="12"/>
+   <Row ss:Height="22">
+    <Cell ss:Index="2" ss:StyleID="CardLabel"><Data ss:Type="String">المبلغ كتابةً:</Data></Cell>
+    <Cell ss:Index="3" ss:StyleID="CardValue"><Data ss:Type="String">فقط سبعة وعشرون ألفاً ومئتان وثمانون ريالاً وثلاثون هللة لا غير</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="CardLabel"><Data ss:Type="String">الإجمالي قبل الضريبة:</Data></Cell>
+    <Cell ss:Index="9" ss:StyleID="DataRowNumber"><Data ss:Type="Number">23722.00</Data></Cell>
+   </Row>
+   <Row ss:Height="22">
+    <Cell ss:Index="2" ss:StyleID="CardLabel"><Data ss:Type="String">الحساب البنكي:</Data></Cell>
+    <Cell ss:Index="3" ss:StyleID="CardValue"><Data ss:Type="String">بنك الرياض  |  IBAN: SA5520000004030499958001</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="CardLabel"><Data ss:Type="String">إجمالي الخصم:</Data></Cell>
+    <Cell ss:Index="9" ss:StyleID="DataRowNumber"><Data ss:Type="Number">0.00</Data></Cell>
+   </Row>
+   <Row ss:Height="22">
+    <Cell ss:Index="2" ss:StyleID="CardLabel"><Data ss:Type="String">الملاحظات والشروط:</Data></Cell>
+    <Cell ss:Index="3" ss:StyleID="CardValue"><Data ss:Type="String">المواد خاضعة لشهادات مطابقة المواصفات القياسية السعودية SASO.</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="CardLabel"><Data ss:Type="String">ضريبة القيمة المضافة (15%):</Data></Cell>
+    <Cell ss:Index="9" ss:StyleID="DataRowNumber"><Data ss:Type="Number">3558.30</Data></Cell>
+   </Row>
+   <Row ss:Height="26">
+    <Cell ss:Index="2" ss:StyleID="CardLabel"><Data ss:Type="String">توقيع المستلم والختم:</Data></Cell>
+    <Cell ss:Index="3" ss:StyleID="CardValue"><Data ss:Type="String">..........................................</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="GrandTotal"><Data ss:Type="String">الإجمالي النهائي المستحق:</Data></Cell>
+    <Cell ss:Index="9" ss:StyleID="GrandTotal"><Data ss:Type="Number">27280.30</Data></Cell>
+   </Row>
+  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <DisplayRightToLeft/>
+  </WorksheetOptions>
+ </Worksheet>
+ <Worksheet ss:Name="دليل_الاستخدام">
+  <Table ss:DefaultColumnWidth="140" ss:DefaultRowHeight="22">
+   <Column ss:Width="140"/>
+   <Column ss:Width="280"/>
+   <Column ss:Width="160"/>
+   <Column ss:Width="90"/>
+   <Row ss:Height="24">
+    <Cell ss:StyleID="Header"><Data ss:Type="String">الحقل</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">الوصف والتفاصيل</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">مثال التعبئة</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">إلزامي؟</Data></Cell>
+   </Row>
+   <Row ss:Height="20">
+    <Cell ss:StyleID="DataRow"><Data ss:Type="String">مجموعة_الفاتورة</Data></Cell>
+    <Cell ss:StyleID="DataRow"><Data ss:Type="String">رقم أو معرّف يجمع أسطر وبنود الفاتورة الواحدة</Data></Cell>
+    <Cell ss:StyleID="DataRow"><Data ss:Type="String">1 أو 5963</Data></Cell>
+    <Cell ss:StyleID="DataRowCenter"><Data ss:Type="String">نعم</Data></Cell>
+   </Row>
+   <Row ss:Height="20">
+    <Cell ss:StyleID="DataRowAlt"><Data ss:Type="String">رقم الفاتورة</Data></Cell>
+    <Cell ss:StyleID="DataRowAlt"><Data ss:Type="String">رقم الفاتورة المرجعي الفريد</Data></Cell>
+    <Cell ss:StyleID="DataRowAlt"><Data ss:Type="String">5963</Data></Cell>
+    <Cell ss:StyleID="DataRowAltCenter"><Data ss:Type="String">نعم</Data></Cell>
+   </Row>
+   <Row ss:Height="20">
+    <Cell ss:StyleID="DataRowAlt"><Data ss:Type="String">اسم العميل</Data></Cell>
+    <Cell ss:StyleID="DataRowAlt"><Data ss:Type="String">اسم العميل أو المؤسسة المشترية</Data></Cell>
+    <Cell ss:StyleID="DataRowAlt"><Data ss:Type="String">مؤسسة تركيب للمقاولات العامة</Data></Cell>
+    <Cell ss:StyleID="DataRowAltCenter"><Data ss:Type="String">نعم</Data></Cell>
+   </Row>
+   <Row ss:Height="20">
+    <Cell ss:StyleID="DataRow"><Data ss:Type="String">تاريخ الفاتورة</Data></Cell>
+    <Cell ss:StyleID="DataRow"><Data ss:Type="String">تاريخ الإصدار بصيغة YYYY-MM-DD</Data></Cell>
+    <Cell ss:StyleID="DataRow"><Data ss:Type="String">2025-12-18</Data></Cell>
+    <Cell ss:StyleID="DataRowCenter"><Data ss:Type="String">نعم</Data></Cell>
+   </Row>
+   <Row ss:Height="20">
+    <Cell ss:StyleID="DataRowAlt"><Data ss:Type="String">جدول البنود</Data></Cell>
+    <Cell ss:StyleID="DataRowAlt"><Data ss:Type="String">صفوف المنتجات أو الخدمات مع الكمية وسعر الوحدة</Data></Cell>
+    <Cell ss:StyleID="DataRowAlt"><Data ss:Type="String">سطر 11 فما فوق</Data></Cell>
+    <Cell ss:StyleID="DataRowAltCenter"><Data ss:Type="String">نعم</Data></Cell>
+   </Row>
+  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <DisplayRightToLeft/>
+  </WorksheetOptions>
+ </Worksheet>
+</Workbook>
