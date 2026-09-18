@@ -1,9 +1,9 @@
 package services
 
 import (
+	"database/sql"
 	"fmt"
 	"math"
-	"time"
 
 	"raseen/internal/db"
 	"raseen/internal/models"
@@ -17,99 +17,308 @@ func NewReportService(d *db.DB) *ReportService {
 	return &ReportService{db: d}
 }
 
-type DashboardStats struct {
-	TotalSalesMajor       float64 `json:"total_sales"`
-	TotalCollectionsMajor float64 `json:"total_collections"`
-	TotalDueMajor         float64 `json:"total_due"`
-	TotalTaxMajor         float64 `json:"total_tax"`
-	InvoicesCount         int     `json:"invoices_count"`
-	ClientsCount          int     `json:"clients_count"`
-	ItemsCount            int     `json:"items_count"`
-	VouchersCount         int     `json:"vouchers_count"`
-	MonthlySales          []MonthStat `json:"monthly_sales"`
+type DashboardSummary struct {
+	Total float64 `json:"total"`
+	Count int     `json:"count"`
 }
 
-type MonthStat struct {
+type DashboardAllSummary struct {
+	Total     float64 `json:"total"`
+	Count     int     `json:"count"`
+	Tax       float64 `json:"tax"`
+	Remaining float64 `json:"remaining"`
+}
+
+type DashboardStatusItem struct {
+	Status string  `json:"status"`
+	Count  int     `json:"count"`
+	Total  float64 `json:"total"`
+}
+
+type DashboardCounts struct {
+	Issuers int `json:"issuers"`
+	Clients int `json:"clients"`
+	Items   int `json:"items"`
+	Batches int `json:"batches"`
+}
+
+type DashboardMonthItem struct {
 	Month string  `json:"month"`
 	Total float64 `json:"total"`
-	Tax   float64 `json:"tax"`
+	Count int     `json:"count"`
 }
 
-func (s *ReportService) DashboardStats(issuerID string) (*DashboardStats, error) {
-	stats := &DashboardStats{}
+type DashboardTopClient struct {
+	ClientID  string  `json:"client_id"`
+	Name      string  `json:"name"`
+	Code      string  `json:"code"`
+	Invoices  int     `json:"invoices"`
+	Total     float64 `json:"total"`
+	Remaining float64 `json:"remaining"`
+}
 
-	// Invoices stats
-	where := "WHERE status <> 'CANCELLED'"
-	args := []any{}
+type DashboardTopItem struct {
+	ItemName string  `json:"item_name"`
+	ItemCode string  `json:"item_code"`
+	Quantity float64 `json:"quantity"`
+	Total    float64 `json:"total"`
+}
+
+type DashboardIssuerSummary struct {
+	Name      string  `json:"name"`
+	Code      string  `json:"code"`
+	Invoices  int     `json:"invoices"`
+	Total     float64 `json:"total"`
+	Remaining float64 `json:"remaining"`
+}
+
+type DashboardRecentInvoice struct {
+	ID            string  `json:"id"`
+	InvoiceNumber string  `json:"invoice_number"`
+	IssueDate     string  `json:"issue_date"`
+	ClientName    string  `json:"client_name"`
+	IssuerName    string  `json:"issuer_name"`
+	GrandTotal    float64 `json:"grand_total"`
+	Status        string  `json:"status"`
+}
+
+type DashboardData struct {
+	Month          DashboardSummary         `json:"month"`
+	Today          DashboardSummary         `json:"today"`
+	All            DashboardAllSummary      `json:"all"`
+	ByStatus       []DashboardStatusItem    `json:"by_status"`
+	Counts         DashboardCounts          `json:"counts"`
+	Monthly        []DashboardMonthItem     `json:"monthly"`
+	TopClients     []DashboardTopClient     `json:"top_clients"`
+	TopItems       []DashboardTopItem       `json:"top_items"`
+	ByIssuer       []DashboardIssuerSummary `json:"by_issuer"`
+	RecentInvoices []DashboardRecentInvoice `json:"recent_invoices"`
+}
+
+func (s *ReportService) DashboardStats(issuerID string) (*DashboardData, error) {
+	data := &DashboardData{
+		ByStatus:       make([]DashboardStatusItem, 0),
+		Monthly:        make([]DashboardMonthItem, 0),
+		TopClients:     make([]DashboardTopClient, 0),
+		TopItems:       make([]DashboardTopItem, 0),
+		ByIssuer:       make([]DashboardIssuerSummary, 0),
+		RecentInvoices: make([]DashboardRecentInvoice, 0),
+	}
+
+	today := db.TodayIso()
+	curMonth := today[:7] // YYYY-MM
+
+	whereBase := "WHERE 1=1"
+	var argsBase []any
 	if issuerID != "" {
-		where += " AND issuer_id = ?"
-		args = append(args, issuerID)
+		whereBase += " AND issuer_id = ?"
+		argsBase = append(argsBase, issuerID)
 	}
 
-	var sumSales, sumTax, sumDue int64
-	var invCount int
-	err := s.db.QueryRow(fmt.Sprintf(`
-		SELECT COUNT(*), COALESCE(SUM(grand_total), 0), COALESCE(SUM(tax_amount), 0), COALESCE(SUM(remaining_amount), 0)
-		FROM invoices %s
-	`, where), args...).Scan(&invCount, &sumSales, &sumTax, &sumDue)
-	if err == nil {
-		stats.InvoicesCount = invCount
-		stats.TotalSalesMajor = models.ToMajor(sumSales)
-		stats.TotalTaxMajor = models.ToMajor(sumTax)
-		stats.TotalDueMajor = models.ToMajor(sumDue)
-	}
-
-	// Collections stats
-	vWhere := "WHERE status = 'ACTIVE'"
-	vArgs := []any{}
-	if issuerID != "" {
-		vWhere += " AND issuer_id = ?"
-		vArgs = append(vArgs, issuerID)
-	}
-	var sumCol int64
-	var vCount int
+	// 1. All Non-Cancelled summary
+	var allTotal, allTax, allRem int64
+	var allCount int
 	_ = s.db.QueryRow(fmt.Sprintf(`
-		SELECT COUNT(*), COALESCE(SUM(total_amount), 0)
-		FROM receipt_vouchers %s
-	`, vWhere), vArgs...).Scan(&vCount, &sumCol)
-	stats.VouchersCount = vCount
-	stats.TotalCollectionsMajor = models.ToMajor(sumCol)
+		SELECT COUNT(*), COALESCE(SUM(grand_total), 0), COALESCE(SUM(tax_amount), 0), COALESCE(SUM(remaining_amount), 0)
+		FROM invoices %s AND status <> 'CANCELLED'
+	`, whereBase), argsBase...).Scan(&allCount, &allTotal, &allTax, &allRem)
 
-	// Clients & Items count
-	_ = s.db.QueryRow("SELECT COUNT(*) FROM clients WHERE is_active = 1").Scan(&stats.ClientsCount)
-	_ = s.db.QueryRow("SELECT COUNT(*) FROM items WHERE is_active = 1").Scan(&stats.ItemsCount)
+	data.All = DashboardAllSummary{
+		Count:     allCount,
+		Total:     models.ToMajor(allTotal),
+		Tax:       models.ToMajor(allTax),
+		Remaining: models.ToMajor(allRem),
+	}
 
-	// Monthly sales for current year
-	curYear := time.Now().Format("2006")
-	mQuery := fmt.Sprintf(`
-		SELECT strftime('%%Y-%%m', issue_date) AS m, COALESCE(SUM(grand_total), 0), COALESCE(SUM(tax_amount), 0)
-		FROM invoices
-		WHERE status <> 'CANCELLED' AND issue_date >= ? %s
-		GROUP BY m ORDER BY m ASC
-	`, func() string {
-		if issuerID != "" {
-			return " AND issuer_id = '" + issuerID + "'"
-		}
-		return ""
-	}())
+	// 2. Month summary
+	var mTotal int64
+	var mCount int
+	mArgs := append(argsBase, curMonth)
+	_ = s.db.QueryRow(fmt.Sprintf(`
+		SELECT COUNT(*), COALESCE(SUM(grand_total), 0)
+		FROM invoices %s AND status <> 'CANCELLED' AND strftime('%%Y-%%m', issue_date) = ?
+	`, whereBase), mArgs...).Scan(&mCount, &mTotal)
 
-	rows, err := s.db.Query(mQuery, curYear+"-01-01")
+	data.Month = DashboardSummary{
+		Count: mCount,
+		Total: models.ToMajor(mTotal),
+	}
+
+	// 3. Today summary
+	var tTotal int64
+	var tCount int
+	tArgs := append(argsBase, today)
+	_ = s.db.QueryRow(fmt.Sprintf(`
+		SELECT COUNT(*), COALESCE(SUM(grand_total), 0)
+		FROM invoices %s AND status <> 'CANCELLED' AND issue_date = ?
+	`, whereBase), tArgs...).Scan(&tCount, &tTotal)
+
+	data.Today = DashboardSummary{
+		Count: tCount,
+		Total: models.ToMajor(tTotal),
+	}
+
+	// 4. By Status (PAID, PARTIAL, UNPAID, CANCELLED)
+	statusRows, err := s.db.Query(fmt.Sprintf(`
+		SELECT status, COUNT(*), COALESCE(SUM(grand_total), 0)
+		FROM invoices %s
+		GROUP BY status
+	`, whereBase), argsBase...)
+	statusMap := map[string]DashboardStatusItem{
+		"PAID":      {Status: "PAID"},
+		"PARTIAL":   {Status: "PARTIAL"},
+		"UNPAID":    {Status: "UNPAID"},
+		"CANCELLED": {Status: "CANCELLED"},
+	}
 	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
+		defer statusRows.Close()
+		for statusRows.Next() {
+			var st string
+			var cnt int
+			var tot int64
+			if err := statusRows.Scan(&st, &cnt, &tot); err == nil {
+				statusMap[st] = DashboardStatusItem{
+					Status: st,
+					Count:  cnt,
+					Total:  models.ToMajor(tot),
+				}
+			}
+		}
+	}
+	for _, k := range []string{"PAID", "PARTIAL", "UNPAID", "CANCELLED"} {
+		data.ByStatus = append(data.ByStatus, statusMap[k])
+	}
+
+	// 5. Counts (Issuers, Clients, Items, Batches)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM issuers WHERE is_active = 1").Scan(&data.Counts.Issuers)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM clients WHERE is_active = 1").Scan(&data.Counts.Clients)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM items WHERE is_active = 1").Scan(&data.Counts.Items)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM invoice_batches").Scan(&data.Counts.Batches)
+
+	// 6. Monthly (last 12 months)
+	mRows, err := s.db.Query(fmt.Sprintf(`
+		SELECT strftime('%%Y-%%m', issue_date) AS m, COUNT(*), COALESCE(SUM(grand_total), 0)
+		FROM invoices %s AND status <> 'CANCELLED' AND issue_date >= date('now', '-12 month')
+		GROUP BY m ORDER BY m ASC
+	`, whereBase), argsBase...)
+	if err == nil {
+		defer mRows.Close()
+		for mRows.Next() {
 			var m string
-			var gt, tx int64
-			if err := rows.Scan(&m, &gt, &tx); err == nil {
-				stats.MonthlySales = append(stats.MonthlySales, MonthStat{
+			var cnt int
+			var tot int64
+			if err := mRows.Scan(&m, &cnt, &tot); err == nil {
+				data.Monthly = append(data.Monthly, DashboardMonthItem{
 					Month: m,
-					Total: models.ToMajor(gt),
-					Tax:   models.ToMajor(tx),
+					Count: cnt,
+					Total: models.ToMajor(tot),
 				})
 			}
 		}
 	}
+	if len(data.Monthly) == 0 {
+		// at least provide current month so chart doesn't divide by zero
+		data.Monthly = append(data.Monthly, DashboardMonthItem{
+			Month: curMonth,
+			Count: 0,
+			Total: 0,
+		})
+	}
 
-	return stats, nil
+	// 7. Top Clients
+	tcRows, err := s.db.Query(fmt.Sprintf(`
+		SELECT c.id, c.name, c.client_code, COUNT(i.id), COALESCE(SUM(i.grand_total), 0), COALESCE(SUM(i.remaining_amount), 0)
+		FROM clients c
+		JOIN invoices i ON i.client_id = c.id
+		%s AND i.status <> 'CANCELLED'
+		GROUP BY c.id
+		ORDER BY SUM(i.grand_total) DESC LIMIT 5
+	`, func() string {
+		if issuerID != "" {
+			return "WHERE i.issuer_id = '" + issuerID + "'"
+		}
+		return "WHERE 1=1"
+	}()))
+	if err == nil {
+		defer tcRows.Close()
+		for tcRows.Next() {
+			var tc DashboardTopClient
+			var tot, rem int64
+			if err := tcRows.Scan(&tc.ClientID, &tc.Name, &tc.Code, &tc.Invoices, &tot, &rem); err == nil {
+				tc.Total = models.ToMajor(tot)
+				tc.Remaining = models.ToMajor(rem)
+				data.TopClients = append(data.TopClients, tc)
+			}
+		}
+	}
+
+	// 8. Top Items
+	tiRows, err := s.db.Query(fmt.Sprintf(`
+		SELECT ii.item_name, ii.item_code, COALESCE(SUM(ii.quantity), 0), COALESCE(SUM(ii.total_line), 0)
+		FROM invoice_items ii
+		JOIN invoices i ON i.id = ii.invoice_id
+		%s AND i.status <> 'CANCELLED'
+		GROUP BY ii.item_name
+		ORDER BY SUM(ii.total_line) DESC LIMIT 5
+	`, func() string {
+		if issuerID != "" {
+			return "WHERE i.issuer_id = '" + issuerID + "'"
+		}
+		return "WHERE 1=1"
+	}()))
+	if err == nil {
+		defer tiRows.Close()
+		for tiRows.Next() {
+			var ti DashboardTopItem
+			var tot int64
+			if err := tiRows.Scan(&ti.ItemName, &ti.ItemCode, &ti.Quantity, &tot); err == nil {
+				ti.Total = models.ToMajor(tot)
+				data.TopItems = append(data.TopItems, ti)
+			}
+		}
+	}
+
+	// 9. By Issuer
+	biRows, err := s.db.Query(`
+		SELECT s.name_ar, s.code, COUNT(i.id), COALESCE(SUM(i.grand_total), 0), COALESCE(SUM(i.remaining_amount), 0)
+		FROM issuers s
+		LEFT JOIN invoices i ON i.issuer_id = s.id AND i.status <> 'CANCELLED'
+		GROUP BY s.id
+		ORDER BY s.name_ar ASC
+	`)
+	if err == nil {
+		defer biRows.Close()
+		for biRows.Next() {
+			var bi DashboardIssuerSummary
+			var tot, rem int64
+			if err := biRows.Scan(&bi.Name, &bi.Code, &bi.Invoices, &tot, &rem); err == nil {
+				bi.Total = models.ToMajor(tot)
+				bi.Remaining = models.ToMajor(rem)
+				data.ByIssuer = append(data.ByIssuer, bi)
+			}
+		}
+	}
+
+	// 10. Recent Invoices
+	riRows, err := s.db.Query(fmt.Sprintf(`
+		SELECT i.id, i.invoice_number, i.issue_date, i.buyer_name, i.seller_name, i.grand_total, i.status
+		FROM invoices i
+		%s
+		ORDER BY i.issue_date DESC, i.sequence_no DESC LIMIT 10
+	`, whereBase), argsBase...)
+	if err == nil {
+		defer riRows.Close()
+		for riRows.Next() {
+			var ri DashboardRecentInvoice
+			var tot int64
+			if err := riRows.Scan(&ri.ID, &ri.InvoiceNumber, &ri.IssueDate, &ri.ClientName, &ri.IssuerName, &tot, &ri.Status); err == nil {
+				ri.GrandTotal = models.ToMajor(tot)
+				data.RecentInvoices = append(data.RecentInvoices, ri)
+			}
+		}
+	}
+
+	return data, nil
 }
 
 type TaxReportResult struct {
@@ -196,9 +405,9 @@ func (s *ReportService) TaxReport(issuerID, fromDate, toDate string) (*TaxReport
 }
 
 type AgingBucket struct {
-	Label    string  `json:"label"`
-	Count    int     `json:"count"`
-	Amount   float64 `json:"amount"`
+	Label  string  `json:"label"`
+	Count  int     `json:"count"`
+	Amount float64 `json:"amount"`
 }
 
 type AgingReportResult struct {
@@ -262,4 +471,9 @@ func (s *ReportService) AgingReport(issuerID string) (*AgingReportResult, error)
 		Buckets: buckets,
 		Total:   math.Round(grandTotal*100) / 100,
 	}, nil
+}
+
+func init() {
+	// dummy reference to sql if needed
+	var _ = sql.ErrNoRows
 }

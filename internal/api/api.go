@@ -120,6 +120,25 @@ func (s *Server) Handler() http.Handler {
 			"currency":         s.cfg.Defaults.Currency,
 			"default_tax_rate": s.cfg.Defaults.TaxRate,
 			"country":          s.cfg.Defaults.Country,
+			"invoice_statuses": map[string]string{
+				"UNPAID":    "غير مسددة",
+				"PARTIAL":   "مسددة جزئياً",
+				"PAID":      "مسددة",
+				"CANCELLED": "ملغاة",
+			},
+			"payment_methods": map[string]string{
+				"CASH":     "نقداً",
+				"CARD":     "شبكة",
+				"TRANSFER": "تحويل بنكي",
+				"CREDIT":   "آجل",
+				"CHEQUE":   "شيك",
+			},
+			"payment_types": map[string]string{
+				"CASH":     "نقداً",
+				"TRANSFER": "تحويل بنكي",
+				"CHEQUE":   "شيك",
+				"CARD":     "شبكة",
+			},
 		})
 	})
 
