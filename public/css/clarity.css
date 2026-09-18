@@ -112,7 +112,9 @@ html[data-theme="light"] .advanced-options summary { cursor: pointer; color: var
 html[data-theme="light"] .advanced-options > .row { margin-top: 1rem; }
 
 html[data-theme="light"] :focus-visible { outline: 3px solid #0f766e55; outline-offset: 3px; }
-html[data-theme="light"] .toast { background: #172b3a; color: white; }
+html[data-theme="light"] .toast { background: #172b3a; color: white; box-shadow: 0 8px 24px rgba(23, 43, 58, 0.2); }
+html[data-theme="light"] .toast.ok { box-shadow: 0 8px 24px rgba(23, 43, 58, 0.2); }
+html[data-theme="light"] .toast.err { box-shadow: 0 8px 24px rgba(23, 43, 58, 0.2); }
 
 /* إصلاح لون نص الصف في الجداول */
 html[data-theme="light"] table.tbl tbody td { color: var(--text); }
