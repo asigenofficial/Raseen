@@ -188,7 +188,6 @@ export async function render(view) {
   const hash = window.location.hash || '';
   let activeHubTab = 'invoices'; // افتراضياً فواتير المبيعات
   if (hash.includes('tab=vouchers')) activeHubTab = 'vouchers';
-  else if (hash.includes('tab=print')) activeHubTab = 'print';
   else activeHubTab = 'invoices';
 
   let printSubTab = 'branding';
@@ -711,7 +710,7 @@ export async function render(view) {
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary);"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="9" x2="9" y1="3" y2="21"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/></svg>
               قوالب الفواتير والسندات
             </h1>
-            <p style="margin:0;">إدارة وتخصيص قوالب Excel الذكية (.xlsx) لفواتير المبيعات وسندات القبض المعتمدة مع الكشف التلقائي للخلايا واستوديو الطباعة.</p>
+            <p style="margin:0;">إدارة وتخصيص قوالب Excel الذكية (.xlsx) لفواتير المبيعات وسندات القبض المعتمدة مع الكشف التلقائي للخلايا.</p>
           </div>
           <div class="page-actions" style="flex-wrap:wrap; gap:.5rem;">
             <div class="field" style="margin:0; min-width:210px;">
@@ -726,9 +725,6 @@ export async function render(view) {
             </label>
             <button class="btn" id="btn-reset-templates" title="إعادة فحص ومزامنة القوالب من القرص يدوياً" type="button">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom; margin-inline-end:5px;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>إعادة فحص القرص
-            </button>
-            <button class="btn btn-success" id="btn-save-settings" style="display:${activeHubTab === 'print' ? 'inline-flex' : 'none'};" type="button">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom; margin-inline-end:5px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>حفظ التخصيص
             </button>
           </div>
         </div>
@@ -745,10 +741,6 @@ export async function render(view) {
           <button type="button" class="doc-tpl-tab-btn ${activeHubTab === 'vouchers' || activeHubTab === 'documents' ? 'active' : ''}" data-hub-tab="vouchers">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
             قوالب المستندات والسندات (${voucherTemplates.length})
-          </button>
-          <button type="button" class="doc-tpl-tab-btn ${activeHubTab === 'print' ? 'active' : ''}" data-hub-tab="print">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m14 8-4 4 4 4"/></svg>
-            استوديو تخصيص الطباعة والهوية
           </button>
         </div>
 
