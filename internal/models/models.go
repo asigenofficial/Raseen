@@ -5,6 +5,7 @@ type User struct {
 	Username    string  `json:"username"`
 	FullName    string  `json:"full_name"`
 	Role        string  `json:"role"`
+	RoleLabel   string  `json:"role_label"`
 	Permissions string  `json:"permissions"`
 	IsActive    int     `json:"is_active"`
 	CreatedAt   string  `json:"created_at"`

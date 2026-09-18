@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"raseen/internal/crypto"
@@ -134,6 +135,19 @@ func (s *AuthService) ChangePassword(userID, oldPass, newPass string) error {
 	return err
 }
 
+func roleLabel(role string) string {
+	switch role {
+	case "ADMIN":
+		return "مدير النظام"
+	case "ACCOUNTANT":
+		return "محاسب"
+	case "VIEWER":
+		return "مراقب (قراءة فقط)"
+	default:
+		return role
+	}
+}
+
 func (s *AuthService) ListUsers() ([]models.User, error) {
 	rows, err := s.db.Query(`
 		SELECT id, username, full_name, role, permissions, is_active, created_at, last_login_at
@@ -152,6 +166,7 @@ func (s *AuthService) ListUsers() ([]models.User, error) {
 			if lastLogin.Valid {
 				u.LastLoginAt = &lastLogin.String
 			}
+			u.RoleLabel = roleLabel(u.Role)
 			list = append(list, u)
 		}
 	}
@@ -196,8 +211,177 @@ func (s *AuthService) CreateUser(input CreateUserInput) (*models.User, error) {
 		Username:    input.Username,
 		FullName:    input.FullName,
 		Role:        input.Role,
+		RoleLabel:   roleLabel(input.Role),
 		Permissions: string(permsJSON),
 		IsActive:    1,
 		CreatedAt:   now,
 	}, nil
+}
+
+type UpdateUserInput struct {
+	FullName    string   `json:"full_name"`
+	Password    string   `json:"password"`
+	Role        string   `json:"role"`
+	Permissions []string `json:"permissions"`
+	IsActive    *bool    `json:"is_active"`
+}
+
+func (s *AuthService) UpdateUser(id string, input UpdateUserInput) (*models.User, error) {
+	var current models.User
+	err := s.db.QueryRow(`
+		SELECT id, username, full_name, role, permissions, is_active, created_at
+		FROM users WHERE id = ?
+	`, id).Scan(&current.ID, &current.Username, &current.FullName, &current.Role, &current.Permissions, &current.IsActive, &current.CreatedAt)
+	if err != nil {
+		return nil, errors.New("المستخدم غير موجود")
+	}
+
+	if input.FullName != "" {
+		current.FullName = input.FullName
+	}
+	if input.Role != "" {
+		current.Role = input.Role
+	}
+	if input.IsActive != nil {
+		if *input.IsActive {
+			current.IsActive = 1
+		} else {
+			current.IsActive = 0
+		}
+	}
+	if input.Permissions != nil {
+		b, _ := json.Marshal(input.Permissions)
+		current.Permissions = string(b)
+	}
+
+	if input.Password != "" {
+		if len(input.Password) < 6 {
+			return nil, errors.New("كلمة المرور يجب ألا تقل عن 6 أحرف")
+		}
+		hash, salt := crypto.HashPassword(input.Password, "")
+		_, err = s.db.Exec(`
+			UPDATE users SET full_name = ?, role = ?, permissions = ?, is_active = ?, password_hash = ?, password_salt = ?
+			WHERE id = ?
+		`, current.FullName, current.Role, current.Permissions, current.IsActive, hash, salt, id)
+	} else {
+		_, err = s.db.Exec(`
+			UPDATE users SET full_name = ?, role = ?, permissions = ?, is_active = ?
+			WHERE id = ?
+		`, current.FullName, current.Role, current.Permissions, current.IsActive, id)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	current.RoleLabel = roleLabel(current.Role)
+	return &current, nil
+}
+
+func (s *AuthService) DeleteUser(id, currentUserID string) error {
+	if id == currentUserID {
+		return errors.New("لا يمكنك حذف حسابك الشخصي الحالي")
+	}
+
+	var count int
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM users WHERE role = 'ADMIN' AND id <> ?", id).Scan(&count)
+	if count == 0 {
+		return errors.New("لا يمكن حذف آخر مدير نظام في البرنامج")
+	}
+
+	_, err := s.db.Exec("DELETE FROM users WHERE id = ?", id)
+	return err
+}
+
+// ------------------------------------------------------------------ أدوار النظام
+func (s *AuthService) GetRolesAndPermissions() (map[string]string, map[string][]string) {
+	roles := map[string]string{
+		"ADMIN":      "مدير النظام",
+		"ACCOUNTANT": "محاسب",
+		"VIEWER":     "مراقب (قراءة فقط)",
+	}
+	rolePerms := map[string][]string{
+		"ADMIN":      {"*"},
+		"ACCOUNTANT": {"invoices.view", "invoices.create", "invoices.edit", "vouchers.view", "vouchers.create", "ledger.view", "clients.view", "clients.create", "clients.edit", "items.view", "items.create", "items.edit", "reports.view", "bulk.generate", "issuers.view"},
+		"VIEWER":     {"invoices.view", "vouchers.view", "ledger.view", "clients.view", "items.view", "reports.view", "issuers.view"},
+	}
+
+	// Read overrides from meta table
+	var customRolesJSON string
+	if err := s.db.QueryRow("SELECT value FROM meta WHERE key = 'custom_roles'").Scan(&customRolesJSON); err == nil && customRolesJSON != "" {
+		var cr map[string]string
+		if json.Unmarshal([]byte(customRolesJSON), &cr) == nil {
+			for k, v := range cr {
+				roles[k] = v
+			}
+		}
+	}
+
+	rows, err := s.db.Query("SELECT key, value FROM meta WHERE key LIKE 'role_perms_%'")
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var k, v string
+			if rows.Scan(&k, &v) == nil {
+				roleKey := strings.TrimPrefix(k, "role_perms_")
+				var perms []string
+				if json.Unmarshal([]byte(v), &perms) == nil {
+					rolePerms[roleKey] = perms
+				}
+			}
+		}
+	}
+
+	return roles, rolePerms
+}
+
+func (s *AuthService) UpdateRolePermissions(roleID string, perms []string) error {
+	b, err := json.Marshal(perms)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`
+		INSERT INTO meta (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, "role_perms_"+roleID, string(b))
+	return err
+}
+
+func (s *AuthService) CreateRole(key, label string, perms []string) error {
+	if key == "" || label == "" {
+		return errors.New("كود الدور واسم الدور مطلوبان")
+	}
+	roles, _ := s.GetRolesAndPermissions()
+	roles[key] = label
+	b, _ := json.Marshal(roles)
+	_, err := s.db.Exec(`
+		INSERT INTO meta (key, value) VALUES ('custom_roles', ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, string(b))
+	if err != nil {
+		return err
+	}
+	return s.UpdateRolePermissions(key, perms)
+}
+
+func (s *AuthService) DeleteRole(roleID string) error {
+	if roleID == "ADMIN" || roleID == "ACCOUNTANT" || roleID == "VIEWER" {
+		return errors.New("لا يمكن حذف الأدوار الافتراضية للنظام")
+	}
+	var count int
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM users WHERE role = ?", roleID).Scan(&count)
+	if count > 0 {
+		return errors.New("لا يمكن حذف الدور لوجود مستخدمين مرتبطين به")
+	}
+
+	roles, _ := s.GetRolesAndPermissions()
+	delete(roles, roleID)
+	b, _ := json.Marshal(roles)
+	_, _ = s.db.Exec("UPDATE meta SET value = ? WHERE key = 'custom_roles'", string(b))
+	_, _ = s.db.Exec("DELETE FROM meta WHERE key = ?", "role_perms_"+roleID)
+	return nil
+}
+
+func (s *AuthService) ResetRole(roleID string) error {
+	_, err := s.db.Exec("DELETE FROM meta WHERE key = ?", "role_perms_"+roleID)
+	return err
 }

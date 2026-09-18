@@ -306,3 +306,30 @@ func GenerateTemplateExcel() ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+// GenerateVoucherTemplateExcel creates a styled blank Excel template for receipt vouchers.
+func GenerateVoucherTemplateExcel() ([]byte, error) {
+	f := excelize.NewFile()
+	sheet := "سندات_القبض"
+	f.SetSheetName("Sheet1", sheet)
+
+	headers := []string{"اسم العميل", "رقم السند", "تاريخ السند", "المبلغ", "طريقة الدفع", "رقم المرجع", "ملاحظات"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(sheet, cell, h)
+	}
+
+	// Sample row
+	sample := []any{"مؤسسة الأفق التقنية", "RV-0001", "2026-09-18", 5000.0, "تحويل بنكي", "TRX-98214", "دفعة من الحساب"}
+	for i, v := range sample {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
+		f.SetCellValue(sheet, cell, v)
+	}
+
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+

@@ -1,7 +1,6 @@
 package services
 
 import (
-	"database/sql"
 	"fmt"
 	"math"
 
@@ -473,7 +472,562 @@ func (s *ReportService) AgingReport(issuerID string) (*AgingReportResult, error)
 	}, nil
 }
 
-func init() {
-	// dummy reference to sql if needed
-	var _ = sql.ErrNoRows
+// ------------------------------------------------------------------ تقرير المبيعات
+type SalesReportTotals struct {
+	Count    int     `json:"count"`
+	Subtotal float64 `json:"subtotal"`
+	Discount float64 `json:"discount"`
+	Tax      float64 `json:"tax"`
+	Total    float64 `json:"total"`
 }
+
+type SalesReportItem struct {
+	Label    string   `json:"label"`
+	Count    int      `json:"count"`
+	Quantity *float64 `json:"quantity,omitempty"`
+	Subtotal float64  `json:"subtotal"`
+	Discount float64  `json:"discount"`
+	Tax      float64  `json:"tax"`
+	Total    float64  `json:"total"`
+}
+
+type SalesReportResult struct {
+	Totals SalesReportTotals `json:"totals"`
+	Items  []SalesReportItem `json:"items"`
+}
+
+func (s *ReportService) SalesReport(issuerID, fromDate, toDate, clientID, groupBy string) (*SalesReportResult, error) {
+	res := &SalesReportResult{
+		Items: make([]SalesReportItem, 0),
+	}
+
+	where := "WHERE i.status <> 'CANCELLED'"
+	var args []any
+	if issuerID != "" {
+		where += " AND i.issuer_id = ?"
+		args = append(args, issuerID)
+	}
+	if clientID != "" {
+		where += " AND i.client_id = ?"
+		args = append(args, clientID)
+	}
+	if fromDate != "" {
+		where += " AND i.issue_date >= ?"
+		args = append(args, fromDate)
+	}
+	if toDate != "" {
+		where += " AND i.issue_date <= ?"
+		args = append(args, toDate)
+	}
+
+	var groupExpr string
+	switch groupBy {
+	case "month":
+		groupExpr = "substr(i.issue_date, 1, 7)"
+	case "client":
+		groupExpr = "i.buyer_name"
+	case "issuer":
+		groupExpr = "i.seller_name"
+	case "type":
+		groupExpr = "CASE WHEN i.invoice_type = 'SIMPLIFIED' THEN 'مبسطة (B2C)' ELSE 'ضريبية (B2B)' END"
+	case "item":
+		// Group by item from invoice_items
+		q := fmt.Sprintf(`
+			SELECT ii.item_name, COUNT(DISTINCT i.id), COALESCE(SUM(ii.quantity), 0),
+			       COALESCE(SUM(ii.taxable), 0), COALESCE(SUM(ii.discount), 0), COALESCE(SUM(ii.tax_amount), 0), COALESCE(SUM(ii.total_line), 0)
+			FROM invoice_items ii
+			JOIN invoices i ON i.id = ii.invoice_id
+			%s
+			GROUP BY ii.item_name
+			ORDER BY COALESCE(SUM(ii.total_line), 0) DESC
+		`, where)
+		rows, err := s.db.Query(q, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var label string
+			var count int
+			var qty float64
+			var sub, disc, tax, tot int64
+			if err := rows.Scan(&label, &count, &qty, &sub, &disc, &tax, &tot); err == nil {
+				subM := models.ToMajor(sub)
+				discM := models.ToMajor(disc)
+				taxM := models.ToMajor(tax)
+				totM := models.ToMajor(tot)
+				res.Items = append(res.Items, SalesReportItem{
+					Label:    label,
+					Count:    count,
+					Quantity: &qty,
+					Subtotal: subM,
+					Discount: discM,
+					Tax:      taxM,
+					Total:    totM,
+				})
+				res.Totals.Count += count
+				res.Totals.Subtotal += subM
+				res.Totals.Discount += discM
+				res.Totals.Tax += taxM
+				res.Totals.Total += totM
+			}
+		}
+		res.Totals.Subtotal = math.Round(res.Totals.Subtotal*100) / 100
+		res.Totals.Discount = math.Round(res.Totals.Discount*100) / 100
+		res.Totals.Tax = math.Round(res.Totals.Tax*100) / 100
+		res.Totals.Total = math.Round(res.Totals.Total*100) / 100
+		return res, nil
+	default:
+		groupExpr = "i.issue_date"
+	}
+
+	q := fmt.Sprintf(`
+		SELECT %s, COUNT(*),
+		       COALESCE(SUM(i.subtotal), 0), COALESCE(SUM(i.discount_amount), 0), COALESCE(SUM(i.tax_amount), 0), COALESCE(SUM(i.grand_total), 0)
+		FROM invoices i
+		%s
+		GROUP BY %s
+		ORDER BY %s ASC
+	`, groupExpr, where, groupExpr, groupExpr)
+
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var label string
+		var count int
+		var sub, disc, tax, tot int64
+		if err := rows.Scan(&label, &count, &sub, &disc, &tax, &tot); err == nil {
+			subM := models.ToMajor(sub)
+			discM := models.ToMajor(disc)
+			taxM := models.ToMajor(tax)
+			totM := models.ToMajor(tot)
+			res.Items = append(res.Items, SalesReportItem{
+				Label:    label,
+				Count:    count,
+				Subtotal: subM,
+				Discount: discM,
+				Tax:      taxM,
+				Total:    totM,
+			})
+			res.Totals.Count += count
+			res.Totals.Subtotal += subM
+			res.Totals.Discount += discM
+			res.Totals.Tax += taxM
+			res.Totals.Total += totM
+		}
+	}
+	res.Totals.Subtotal = math.Round(res.Totals.Subtotal*100) / 100
+	res.Totals.Discount = math.Round(res.Totals.Discount*100) / 100
+	res.Totals.Tax = math.Round(res.Totals.Tax*100) / 100
+	res.Totals.Total = math.Round(res.Totals.Total*100) / 100
+
+	return res, nil
+}
+
+// ------------------------------------------------------------------ تقرير ضريبة القيمة المضافة
+type VatReportTotals struct {
+	Invoices int     `json:"invoices"`
+	Taxable  float64 `json:"taxable"`
+	Tax      float64 `json:"tax"`
+	Total    float64 `json:"total"`
+}
+
+type VatReportItem struct {
+	IssuerName string  `json:"issuer_name"`
+	TaxNumber  string  `json:"tax_number"`
+	Invoices   int     `json:"invoices"`
+	Taxable    float64 `json:"taxable"`
+	Tax        float64 `json:"tax"`
+	Total      float64 `json:"total"`
+}
+
+type VatReportResult struct {
+	Totals VatReportTotals `json:"totals"`
+	Items  []VatReportItem `json:"items"`
+}
+
+func (s *ReportService) VatReport(issuerID, fromDate, toDate string) (*VatReportResult, error) {
+	res := &VatReportResult{
+		Items: make([]VatReportItem, 0),
+	}
+
+	where := "WHERE i.status <> 'CANCELLED'"
+	var args []any
+	if issuerID != "" {
+		where += " AND i.issuer_id = ?"
+		args = append(args, issuerID)
+	}
+	if fromDate != "" {
+		where += " AND i.issue_date >= ?"
+		args = append(args, fromDate)
+	}
+	if toDate != "" {
+		where += " AND i.issue_date <= ?"
+		args = append(args, toDate)
+	}
+
+	q := fmt.Sprintf(`
+		SELECT iss.name_ar, iss.tax_number, COUNT(i.id),
+		       COALESCE(SUM(i.taxable_amount), 0), COALESCE(SUM(i.tax_amount), 0), COALESCE(SUM(i.grand_total), 0)
+		FROM invoices i
+		JOIN issuers iss ON iss.id = i.issuer_id
+		%s
+		GROUP BY iss.id, iss.name_ar, iss.tax_number
+		ORDER BY iss.name_ar ASC
+	`, where)
+
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var name, taxNo string
+		var invs int
+		var taxable, tax, tot int64
+		if err := rows.Scan(&name, &taxNo, &invs, &taxable, &tax, &tot); err == nil {
+			taxableM := models.ToMajor(taxable)
+			taxM := models.ToMajor(tax)
+			totM := models.ToMajor(tot)
+			res.Items = append(res.Items, VatReportItem{
+				IssuerName: name,
+				TaxNumber:  taxNo,
+				Invoices:   invs,
+				Taxable:    taxableM,
+				Tax:        taxM,
+				Total:      totM,
+			})
+			res.Totals.Invoices += invs
+			res.Totals.Taxable += taxableM
+			res.Totals.Tax += taxM
+			res.Totals.Total += totM
+		}
+	}
+
+	res.Totals.Taxable = math.Round(res.Totals.Taxable*100) / 100
+	res.Totals.Tax = math.Round(res.Totals.Tax*100) / 100
+	res.Totals.Total = math.Round(res.Totals.Total*100) / 100
+
+	return res, nil
+}
+
+// ------------------------------------------------------------------ تقرير التحصيلات
+type CollectionsReportTotals struct {
+	Count       int     `json:"count"`
+	Amount      float64 `json:"amount"`
+	Allocated   float64 `json:"allocated"`
+	Unallocated float64 `json:"unallocated"`
+}
+
+type CollectionsReportItem struct {
+	Label       string  `json:"label"`
+	Count       int     `json:"count"`
+	Amount      float64 `json:"amount"`
+	Allocated   float64 `json:"allocated"`
+	Unallocated float64 `json:"unallocated"`
+}
+
+type CollectionsReportResult struct {
+	Totals CollectionsReportTotals `json:"totals"`
+	Items  []CollectionsReportItem `json:"items"`
+}
+
+func (s *ReportService) CollectionsReport(issuerID, fromDate, toDate, clientID, groupBy string) (*CollectionsReportResult, error) {
+	res := &CollectionsReportResult{
+		Items: make([]CollectionsReportItem, 0),
+	}
+
+	where := "WHERE v.status <> 'CANCELLED'"
+	var args []any
+	if issuerID != "" {
+		where += " AND v.issuer_id = ?"
+		args = append(args, issuerID)
+	}
+	if clientID != "" {
+		where += " AND v.client_id = ?"
+		args = append(args, clientID)
+	}
+	if fromDate != "" {
+		where += " AND v.voucher_date >= ?"
+		args = append(args, fromDate)
+	}
+	if toDate != "" {
+		where += " AND v.voucher_date <= ?"
+		args = append(args, toDate)
+	}
+
+	var groupExpr string
+	switch groupBy {
+	case "month":
+		groupExpr = "substr(v.voucher_date, 1, 7)"
+	case "client":
+		groupExpr = "c.name"
+	case "type":
+		groupExpr = "CASE v.payment_type WHEN 'CASH' THEN 'نقداً' WHEN 'TRANSFER' THEN 'تحويل بنكي' WHEN 'CHEQUE' THEN 'شيك' WHEN 'CARD' THEN 'شبكة' ELSE v.payment_type END"
+	default:
+		groupExpr = "v.voucher_date"
+	}
+
+	q := fmt.Sprintf(`
+		SELECT %s, COUNT(*),
+		       COALESCE(SUM(v.total_amount), 0), COALESCE(SUM(v.allocated_total), 0)
+		FROM receipt_vouchers v
+		JOIN clients c ON c.id = v.client_id
+		%s
+		GROUP BY %s
+		ORDER BY %s ASC
+	`, groupExpr, where, groupExpr, groupExpr)
+
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var label string
+		var count int
+		var tot, alloc int64
+		if err := rows.Scan(&label, &count, &tot, &alloc); err == nil {
+			totM := models.ToMajor(tot)
+			allocM := models.ToMajor(alloc)
+			unallocM := math.Round((totM-allocM)*100) / 100
+			res.Items = append(res.Items, CollectionsReportItem{
+				Label:       label,
+				Count:       count,
+				Amount:      totM,
+				Allocated:   allocM,
+				Unallocated: unallocM,
+			})
+			res.Totals.Count += count
+			res.Totals.Amount += totM
+			res.Totals.Allocated += allocM
+			res.Totals.Unallocated += unallocM
+		}
+	}
+
+	res.Totals.Amount = math.Round(res.Totals.Amount*100) / 100
+	res.Totals.Allocated = math.Round(res.Totals.Allocated*100) / 100
+	res.Totals.Unallocated = math.Round(res.Totals.Unallocated*100) / 100
+
+	return res, nil
+}
+
+// ------------------------------------------------------------------ تقرير الربحية
+type ProfitabilityReportTotals struct {
+	Revenue  float64 `json:"revenue"`
+	Cost     float64 `json:"cost"`
+	Profit   float64 `json:"profit"`
+	Margin   float64 `json:"margin"`
+	Invoices int     `json:"invoices"`
+}
+
+type ProfitabilityReportItem struct {
+	Label    string  `json:"label"`
+	Invoices int     `json:"invoices"`
+	Quantity float64 `json:"quantity"`
+	Revenue  float64 `json:"revenue"`
+	Cost     float64 `json:"cost"`
+	Profit   float64 `json:"profit"`
+	Margin   float64 `json:"margin"`
+}
+
+type ProfitabilityReportResult struct {
+	Totals ProfitabilityReportTotals `json:"totals"`
+	Items  []ProfitabilityReportItem `json:"items"`
+	Note   string                    `json:"note"`
+}
+
+func (s *ReportService) ProfitabilityReport(issuerID, fromDate, toDate, clientID, groupBy string) (*ProfitabilityReportResult, error) {
+	res := &ProfitabilityReportResult{
+		Items: make([]ProfitabilityReportItem, 0),
+		Note:  "يتم احتساب الربحية بناء على سعر البيع مطروحاً منه سعر التكلفة المسجل للصنف في النظام.",
+	}
+
+	where := "WHERE i.status <> 'CANCELLED'"
+	var args []any
+	if issuerID != "" {
+		where += " AND i.issuer_id = ?"
+		args = append(args, issuerID)
+	}
+	if clientID != "" {
+		where += " AND i.client_id = ?"
+		args = append(args, clientID)
+	}
+	if fromDate != "" {
+		where += " AND i.issue_date >= ?"
+		args = append(args, fromDate)
+	}
+	if toDate != "" {
+		where += " AND i.issue_date <= ?"
+		args = append(args, toDate)
+	}
+
+	var groupExpr string
+	switch groupBy {
+	case "client":
+		groupExpr = "i.buyer_name"
+	case "month":
+		groupExpr = "substr(i.issue_date, 1, 7)"
+	default:
+		groupExpr = "ii.item_name"
+	}
+
+	q := fmt.Sprintf(`
+		SELECT %s, COUNT(DISTINCT i.id), COALESCE(SUM(ii.quantity), 0),
+		       COALESCE(SUM(ii.taxable), 0),
+		       COALESCE(SUM(ROUND(ii.quantity * COALESCE(it.cost_price, 0))), 0)
+		FROM invoice_items ii
+		JOIN invoices i ON i.id = ii.invoice_id
+		LEFT JOIN items it ON it.id = ii.item_id
+		%s
+		GROUP BY %s
+		ORDER BY COALESCE(SUM(ii.taxable), 0) DESC
+	`, groupExpr, where, groupExpr)
+
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var label string
+		var invs int
+		var qty float64
+		var revMinor, costMinor int64
+		if err := rows.Scan(&label, &invs, &qty, &revMinor, &costMinor); err == nil {
+			revM := models.ToMajor(revMinor)
+			costM := models.ToMajor(costMinor)
+			profitM := math.Round((revM-costM)*100) / 100
+			margin := 0.0
+			if revM > 0 {
+				margin = math.Round((profitM/revM)*1000) / 10
+			}
+			res.Items = append(res.Items, ProfitabilityReportItem{
+				Label:    label,
+				Invoices: invs,
+				Quantity: qty,
+				Revenue:  revM,
+				Cost:     costM,
+				Profit:   profitM,
+				Margin:   margin,
+			})
+			res.Totals.Invoices += invs
+			res.Totals.Revenue += revM
+			res.Totals.Cost += costM
+			res.Totals.Profit += profitM
+		}
+	}
+
+	res.Totals.Revenue = math.Round(res.Totals.Revenue*100) / 100
+	res.Totals.Cost = math.Round(res.Totals.Cost*100) / 100
+	res.Totals.Profit = math.Round(res.Totals.Profit*100) / 100
+	if res.Totals.Revenue > 0 {
+		res.Totals.Margin = math.Round((res.Totals.Profit/res.Totals.Revenue)*1000) / 10
+	}
+
+	return res, nil
+}
+
+// ------------------------------------------------------------------ تقرير أعمار الديون المفصل للواجهة
+type AgingDetailedTotals struct {
+	B0_30   float64 `json:"b0_30"`
+	B31_60  float64 `json:"b31_60"`
+	B61_90  float64 `json:"b61_90"`
+	B90Plus float64 `json:"b90_plus"`
+	Total   float64 `json:"total"`
+}
+
+type AgingDetailedItem struct {
+	ClientName string  `json:"client_name"`
+	ClientCode string  `json:"client_code"`
+	B0_30      float64 `json:"b0_30"`
+	B31_60     float64 `json:"b31_60"`
+	B61_90     float64 `json:"b61_90"`
+	B90Plus    float64 `json:"b90_plus"`
+	Total      float64 `json:"total"`
+}
+
+type AgingDetailedResult struct {
+	Totals AgingDetailedTotals `json:"totals"`
+	Items  []AgingDetailedItem `json:"items"`
+}
+
+func (s *ReportService) AgingDetailedReport(issuerID, asOf string) (*AgingDetailedResult, error) {
+	if asOf == "" {
+		asOf = db.TodayIso()
+	}
+	where := "WHERE i.status IN ('UNPAID', 'PARTIAL')"
+	var args []any
+	args = append(args, asOf, asOf, asOf, asOf)
+	if issuerID != "" {
+		where += " AND i.issuer_id = ?"
+		args = append(args, issuerID)
+	}
+
+	q := fmt.Sprintf(`
+		SELECT c.name, c.client_code,
+		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(i.due_date, i.issue_date)) AS INT) <= 30 THEN i.remaining_amount ELSE 0 END), 0) AS b0_30,
+		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(i.due_date, i.issue_date)) AS INT) BETWEEN 31 AND 60 THEN i.remaining_amount ELSE 0 END), 0) AS b31_60,
+		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(i.due_date, i.issue_date)) AS INT) BETWEEN 61 AND 90 THEN i.remaining_amount ELSE 0 END), 0) AS b61_90,
+		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(i.due_date, i.issue_date)) AS INT) > 90 THEN i.remaining_amount ELSE 0 END), 0) AS b90_plus,
+		       COALESCE(SUM(i.remaining_amount), 0) AS total
+		FROM invoices i
+		JOIN clients c ON c.id = i.client_id
+		%s
+		GROUP BY c.id, c.name, c.client_code
+		HAVING total > 0
+		ORDER BY total DESC
+	`, where)
+
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res := &AgingDetailedResult{
+		Items: make([]AgingDetailedItem, 0),
+	}
+
+	for rows.Next() {
+		var name, code string
+		var b0, b31, b61, b90, tot int64
+		if err := rows.Scan(&name, &code, &b0, &b31, &b61, &b90, &tot); err == nil {
+			b0M := models.ToMajor(b0)
+			b31M := models.ToMajor(b31)
+			b61M := models.ToMajor(b61)
+			b90M := models.ToMajor(b90)
+			totM := models.ToMajor(tot)
+			res.Items = append(res.Items, AgingDetailedItem{
+				ClientName: name,
+				ClientCode: code,
+				B0_30:      b0M,
+				B31_60:     b31M,
+				B61_90:     b61M,
+				B90Plus:    b90M,
+				Total:      totM,
+			})
+			res.Totals.B0_30 += b0M
+			res.Totals.B31_60 += b31M
+			res.Totals.B61_90 += b61M
+			res.Totals.B90Plus += b90M
+			res.Totals.Total += totM
+		}
+	}
+
+	res.Totals.B0_30 = math.Round(res.Totals.B0_30*100) / 100
+	res.Totals.B31_60 = math.Round(res.Totals.B31_60*100) / 100
+	res.Totals.B61_90 = math.Round(res.Totals.B61_90*100) / 100
+	res.Totals.B90Plus = math.Round(res.Totals.B90Plus*100) / 100
+	res.Totals.Total = math.Round(res.Totals.Total*100) / 100
+
+	return res, nil
+}
+

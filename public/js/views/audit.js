@@ -59,16 +59,29 @@ export async function render(view) {
   };
 
   const load = async () => {
-    state.data = await api.get(qs('/api/audit', {
-      q: state.q, action: state.action, entity_type: state.entity_type, user: state.user,
-      from: state.from, to: state.to, limit: PAGE, offset: state.offset,
-    }));
+    try {
+      const res = await api.get(qs('/api/audit', {
+        q: state.q, action: state.action, entity_type: state.entity_type, user: state.user,
+        from: state.from, to: state.to, limit: PAGE, offset: state.offset,
+      }));
+      if (res && Array.isArray(res.items)) {
+        state.data = { items: res.items, total_count: Number(res.total_count) || res.items.length };
+      } else if (Array.isArray(res)) {
+        state.data = { items: res, total_count: res.length };
+      } else {
+        state.data = { items: [], total_count: 0 };
+      }
+    } catch {
+      state.data = { items: [], total_count: 0 };
+    }
   };
 
   const draw = () => {
-    const pageTo = Math.min(state.offset + PAGE, state.data.total_count);
-    const actions = Array.from(new Set([...Object.keys(ACTION_LABELS), ...state.data.items.map((i) => i.action)])).sort();
-    const users = Array.from(new Set(state.data.items.map((i) => i.user_name))).sort();
+    const items = (state.data && Array.isArray(state.data.items)) ? state.data.items : [];
+    const totalCount = (state.data && typeof state.data.total_count === 'number') ? state.data.total_count : items.length;
+    const pageTo = Math.min(state.offset + PAGE, totalCount);
+    const actions = Array.from(new Set([...Object.keys(ACTION_LABELS), ...items.map((i) => i.action)])).sort();
+    const users = Array.from(new Set(items.map((i) => i.user_name))).sort();
 
     view.innerHTML = html`
       <div class="page-head">
@@ -119,7 +132,7 @@ export async function render(view) {
             <thead><tr><th style="width:150px">الوقت</th><th>المستخدم</th><th>العملية</th>
               <th>الكيان</th><th>التفاصيل</th><th>IP</th><th></th></tr></thead>
             <tbody>
-              ${raw(state.data.items.length ? state.data.items.map((r) => `<tr>
+              ${raw(items.length ? items.map((r) => `<tr>
                 <td class="tiny nowrap">${esc(dateTimeAr(r.created_at))}</td>
                 <td><b>${esc(r.user_name)}</b></td>
                 <td><span class="badge ${ACTION_TONE(r.action)}">${esc(ACTION_LABELS[r.action] || r.action)}</span></td>
@@ -136,8 +149,8 @@ export async function render(view) {
         </div>
         <div class="pager">
           <button class="btn btn-sm" id="prev" ${raw(state.offset === 0 ? 'disabled' : '')} type="button">${raw(icon.arrowRight({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}السابق</button>
-          <span class="tiny muted">${state.data.total_count ? state.offset + 1 : 0} — ${pageTo} من ${num(state.data.total_count)}</span>
-          <button class="btn btn-sm" id="next" ${raw(pageTo >= state.data.total_count ? 'disabled' : '')} type="button">التالي${raw(icon.arrowLeft({ size: 14, style: 'vertical-align:text-bottom;margin-right:3px' }))}</button>
+          <span class="tiny muted">${totalCount ? state.offset + 1 : 0} — ${pageTo} من ${num(totalCount)}</span>
+          <button class="btn btn-sm" id="next" ${raw(pageTo >= totalCount ? 'disabled' : '')} type="button">التالي${raw(icon.arrowLeft({ size: 14, style: 'vertical-align:text-bottom;margin-right:3px' }))}</button>
         </div>
       </div>`;
 
@@ -158,7 +171,7 @@ export async function render(view) {
     $('#next', view).addEventListener('click', async () => { state.offset += PAGE; await reload(); });
 
     delegate(view, 'click', '[data-json]', (e, btn) => {
-      const row = state.data.items.find((r) => r.id === btn.dataset.json);
+      const row = items.find((r) => r.id === btn.dataset.json);
       if (!row) return;
       modal({
         title: `تفاصيل العملية — ${ACTION_LABELS[row.action] || row.action}`,
@@ -167,7 +180,7 @@ export async function render(view) {
     });
 
     const headers = ['الوقت', 'المستخدم', 'العملية', 'الكيان', 'المعرّف', 'التفاصيل', 'IP'];
-    const rows = () => state.data.items.map((r) => [r.created_at, r.user_name, ACTION_LABELS[r.action] || r.action,
+    const rows = () => items.map((r) => [r.created_at, r.user_name, ACTION_LABELS[r.action] || r.action,
       r.entity_type, r.entity_id, describe(r.details), r.ip]);
     $('#exp-csv', view).addEventListener('click', () => exportCsv('سجل-العمليات', headers, rows()));
     $('#exp-xls', view).addEventListener('click', () => exportExcel('سجل-العمليات', 'سجل العمليات', headers, rows()));

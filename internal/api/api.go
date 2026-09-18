@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"raseen/internal/config"
+	"raseen/internal/crypto"
 	"raseen/internal/db"
 	"raseen/internal/excel"
 	"raseen/internal/models"
@@ -28,6 +30,8 @@ type Server struct {
 	invoices   *services.InvoiceService
 	vouchers   *services.VoucherService
 	reports    *services.ReportService
+	bulk       *services.BulkService
+	templates  *services.TemplateService
 	masterKey  []byte
 	publicFS   fs.FS
 }
@@ -45,6 +49,8 @@ func NewServer(
 	invoiceSvc := services.NewInvoiceService(database, issuerSvc, masterKey)
 	voucherSvc := services.NewVoucherService(database, issuerSvc)
 	reportSvc := services.NewReportService(database)
+	bulkSvc := services.NewBulkService(database, invoiceSvc, voucherSvc, issuerSvc, clientSvc, itemSvc)
+	templateSvc := services.NewTemplateService(database, cfg.DataDir)
 
 	return &Server{
 		cfg:       cfg,
@@ -56,6 +62,8 @@ func NewServer(
 		invoices:  invoiceSvc,
 		vouchers:  voucherSvc,
 		reports:   reportSvc,
+		bulk:      bulkSvc,
+		templates: templateSvc,
 		masterKey: masterKey,
 		publicFS:  publicFS,
 	}
@@ -115,12 +123,15 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	mux.HandleFunc("GET /api/meta", func(w http.ResponseWriter, r *http.Request) {
+		roles, rolePerms := s.auth.GetRolesAndPermissions()
 		s.json(w, 200, map[string]any{
 			"name":             "Raseen",
 			"version":          "1.1.0",
 			"currency":         s.cfg.Defaults.Currency,
 			"default_tax_rate": s.cfg.Defaults.TaxRate,
 			"country":          s.cfg.Defaults.Country,
+			"roles":            roles,
+			"role_permissions": rolePerms,
 			"invoice_statuses": map[string]string{
 				"UNPAID":    "غير مسددة",
 				"PARTIAL":   "مسددة جزئياً",
@@ -222,6 +233,118 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		if err := s.auth.ChangePassword(u.ID, req.OldPassword, req.NewPassword); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{"ok": true})
+	})
+
+	// ---------------------------------------------------- المستخدمون والأدوار
+	mux.HandleFunc("GET /api/users", func(w http.ResponseWriter, r *http.Request) {
+		users, err := s.auth.ListUsers()
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, users)
+	})
+
+	mux.HandleFunc("POST /api/users", func(w http.ResponseWriter, r *http.Request) {
+		var input services.CreateUserInput
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		u, err := s.auth.CreateUser(input)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 201, u)
+	})
+
+	mux.HandleFunc("PUT /api/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		var input services.UpdateUserInput
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		u, err := s.auth.UpdateUser(id, input)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, u)
+	})
+
+	mux.HandleFunc("DELETE /api/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		currUser := s.getSessionUser(r)
+		currID := ""
+		if currUser != nil {
+			currID = currUser.ID
+		}
+		if err := s.auth.DeleteUser(id, currID); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{"ok": true})
+	})
+
+	mux.HandleFunc("GET /api/roles", func(w http.ResponseWriter, r *http.Request) {
+		roles, rolePerms := s.auth.GetRolesAndPermissions()
+		s.json(w, 200, map[string]any{
+			"roles":            roles,
+			"role_permissions": rolePerms,
+		})
+	})
+
+	mux.HandleFunc("POST /api/roles", func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			Key         string   `json:"key"`
+			Label       string   `json:"label"`
+			Permissions []string `json:"permissions"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		if err := s.auth.CreateRole(input.Key, input.Label, input.Permissions); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 201, map[string]any{"ok": true})
+	})
+
+	mux.HandleFunc("PUT /api/roles/{id}", func(w http.ResponseWriter, r *http.Request) {
+		roleID := r.PathValue("id")
+		var input struct {
+			Permissions []string `json:"permissions"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		if err := s.auth.UpdateRolePermissions(roleID, input.Permissions); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{"ok": true})
+	})
+
+	mux.HandleFunc("DELETE /api/roles/{id}", func(w http.ResponseWriter, r *http.Request) {
+		roleID := r.PathValue("id")
+		if err := s.auth.DeleteRole(roleID); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{"ok": true})
+	})
+
+	mux.HandleFunc("POST /api/roles/{id}/reset", func(w http.ResponseWriter, r *http.Request) {
+		roleID := r.PathValue("id")
+		if err := s.auth.ResetRole(roleID); err != nil {
 			s.err(w, 400, err.Error())
 			return
 		}
@@ -630,6 +753,297 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, res)
 	})
 
+	mux.HandleFunc("POST /api/invoices/import", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		username := "system"
+		if u != nil {
+			username = u.Username
+		}
+
+		var req struct {
+			IssuerID string           `json:"issuer_id"`
+			Rows     []map[string]any `json:"rows"`
+			DryRun   bool             `json:"dry_run"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+
+		if req.IssuerID == "" {
+			s.err(w, 400, "يجب تحديد المنشأة المصدرة")
+			return
+		}
+
+		type rowErr struct {
+			Row     int    `json:"row"`
+			Message string `json:"message"`
+		}
+		var errs []rowErr
+
+		type invGroup struct {
+			Key         string
+			ClientName  string
+			IssueDate   string
+			InvoiceType string
+			Lines       []services.CreateInvoiceLineInput
+			GrandTotal  float64
+		}
+		groupsMap := make(map[string]*invGroup)
+		var groupOrder []string
+
+		for idx, row := range req.Rows {
+			rowNum := idx + 1
+
+			clientName, _ := row["client_name"].(string)
+			if clientName == "" {
+				clientName, _ = row["buyer_name"].(string)
+			}
+			itemName, _ := row["item_name"].(string)
+			if clientName == "" {
+				errs = append(errs, rowErr{Row: rowNum, Message: "اسم العميل مطلوب"})
+			}
+			if itemName == "" {
+				errs = append(errs, rowErr{Row: rowNum, Message: "اسم الصنف / البيان مطلوب"})
+			}
+
+			qty := 1.0
+			if qVal, ok := row["quantity"].(float64); ok && qVal > 0 {
+				qty = qVal
+			}
+			price := 0.0
+			if pVal, ok := row["unit_price"].(float64); ok && pVal >= 0 {
+				price = pVal
+			}
+			disc := 0.0
+			if dVal, ok := row["discount"].(float64); ok && dVal >= 0 {
+				disc = dVal
+			}
+			taxRate := s.cfg.Defaults.TaxRate
+			if trVal, ok := row["tax_rate"].(float64); ok && trVal >= 0 {
+				taxRate = trVal
+			}
+
+			sub := qty*price - disc
+			if sub < 0 {
+				sub = 0
+			}
+			tax := sub * taxRate / 100
+			tot := sub + tax
+
+			groupKey, _ := row["group"].(string)
+			if groupKey == "" {
+				groupKey, _ = row["invoice_number"].(string)
+			}
+			if groupKey == "" {
+				groupKey = fmt.Sprintf("INV-%s-%d", clientName, rowNum)
+			}
+
+			issueDate, _ := row["issue_date"].(string)
+			if issueDate == "" {
+				issueDate = db.TodayIso()
+			}
+			invType, _ := row["invoice_type"].(string)
+			if invType == "" {
+				invType = "STANDARD"
+			}
+			unit, _ := row["unit"].(string)
+			if unit == "" {
+				unit = "حبة"
+			}
+			itemCode, _ := row["item_code"].(string)
+
+			g, exists := groupsMap[groupKey]
+			if !exists {
+				g = &invGroup{
+					Key:         groupKey,
+					ClientName:  clientName,
+					IssueDate:   issueDate,
+					InvoiceType: invType,
+					Lines:       make([]services.CreateInvoiceLineInput, 0),
+				}
+				groupsMap[groupKey] = g
+				groupOrder = append(groupOrder, groupKey)
+			}
+
+			g.Lines = append(g.Lines, services.CreateInvoiceLineInput{
+				ItemName:  itemName,
+				ItemCode:  itemCode,
+				Unit:      unit,
+				Quantity:  qty,
+				UnitPrice: price,
+				Discount:  disc,
+				TaxRate:   taxRate,
+			})
+			g.GrandTotal += tot
+		}
+
+		var grandTotalAll float64
+		previewList := make([]map[string]any, 0, len(groupOrder))
+		for _, key := range groupOrder {
+			g := groupsMap[key]
+			grandTotalAll += g.GrandTotal
+			previewList = append(previewList, map[string]any{
+				"group":        g.Key,
+				"client_name":  g.ClientName,
+				"issue_date":   g.IssueDate,
+				"invoice_type": g.InvoiceType,
+				"items_count":  len(g.Lines),
+				"grand_total":  math.Round(g.GrandTotal*100) / 100,
+			})
+		}
+
+		if req.DryRun || len(errs) > 0 {
+			s.json(w, 200, map[string]any{
+				"valid":          len(errs) == 0,
+				"errors":         errs,
+				"invoices_count": len(groupOrder),
+				"lines_count":    len(req.Rows),
+				"totals": map[string]any{
+					"grand_total": math.Round(grandTotalAll*100) / 100,
+				},
+				"preview": previewList,
+			})
+			return
+		}
+
+		// Commit import
+		importedCount := 0
+		var importedTotal float64
+		for _, key := range groupOrder {
+			g := groupsMap[key]
+			client, err := s.clients.FindOrCreateByName(req.IssuerID, g.ClientName)
+			clientID := ""
+			if err == nil && client != nil {
+				clientID = client.ID
+			}
+
+			inv, err := s.invoices.CreateInvoice(services.CreateInvoiceInput{
+				IssuerID:      req.IssuerID,
+				ClientID:      clientID,
+				InvoiceType:   g.InvoiceType,
+				IssueDate:     g.IssueDate,
+				PaymentMethod: "CREDIT",
+				Lines:         g.Lines,
+				Notes:         "استيراد من ملف Excel",
+			}, username, s.clientIP(r))
+			if err == nil && inv != nil {
+				importedCount++
+				importedTotal += models.ToMajor(inv.GrandTotal)
+			}
+		}
+
+		s.json(w, 200, map[string]any{
+			"success":        true,
+			"imported_count": importedCount,
+			"total_amount":   math.Round(importedTotal*100) / 100,
+		})
+	})
+
+	// ---------------------------------------------------- قوالب الفواتير والمستندات
+	mux.HandleFunc("GET /api/invoices/templates", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		list, err := s.templates.List(q.Get("type"), q.Get("category"))
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, list)
+	})
+
+	mux.HandleFunc("POST /api/invoices/templates/inspect", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			FileBase64 string `json:"file_base64"`
+			Filename   string `json:"filename"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		res, err := s.templates.Inspect(req.FileBase64, req.Filename)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("POST /api/invoices/templates/upload", func(w http.ResponseWriter, r *http.Request) {
+		var req services.UploadTemplateInput
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		res, err := s.templates.Upload(req)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 201, res)
+	})
+
+	mux.HandleFunc("DELETE /api/invoices/templates/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if err := s.templates.Delete(id); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{"ok": true})
+	})
+
+	mux.HandleFunc("POST /api/invoices/templates/reset", func(w http.ResponseWriter, r *http.Request) {
+		if err := s.templates.Reset(); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{"ok": true})
+	})
+
+	mux.HandleFunc("GET /api/templates/builder/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		res, err := s.templates.GetBuilderConfig(id)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("GET /api/templates/builder/{id}/config", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		res, err := s.templates.GetBuilderConfig(id)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("POST /api/templates/builder", func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		id, _ := req["id"].(string)
+		if id == "" {
+			id = crypto.UUID()
+		}
+		_ = s.templates.SaveBuilderConfig(id, req)
+		s.json(w, 201, map[string]any{"id": id, "saved": true})
+	})
+
+	mux.HandleFunc("PUT /api/templates/builder/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		_ = s.templates.SaveBuilderConfig(id, req)
+		s.json(w, 200, map[string]any{"id": id, "updated": true})
+	})
+
 	// ---------------------------------------------------- سندات القبض
 	mux.HandleFunc("GET /api/vouchers", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -744,6 +1158,18 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
+	mux.HandleFunc("GET /api/vouchers/template", func(w http.ResponseWriter, r *http.Request) {
+		b, err := excel.GenerateVoucherTemplateExcel()
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"voucher-template.xlsx\"")
+		w.WriteHeader(200)
+		_, _ = w.Write(b)
+	})
+
 	// ---------------------------------------------------- التقارير
 	mux.HandleFunc("GET /api/reports/dashboard", func(w http.ResponseWriter, r *http.Request) {
 		issuerID := r.URL.Query().Get("issuer_id")
@@ -755,9 +1181,49 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, stats)
 	})
 
+	mux.HandleFunc("GET /api/reports/sales", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		res, err := s.reports.SalesReport(q.Get("issuer_id"), q.Get("from"), q.Get("to"), q.Get("client_id"), q.Get("group_by"))
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("GET /api/reports/vat", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		res, err := s.reports.VatReport(q.Get("issuer_id"), q.Get("from"), q.Get("to"))
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
 	mux.HandleFunc("GET /api/reports/tax", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		res, err := s.reports.TaxReport(q.Get("issuer_id"), q.Get("from"), q.Get("to"))
+		res, err := s.reports.VatReport(q.Get("issuer_id"), q.Get("from"), q.Get("to"))
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("GET /api/reports/collections", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		res, err := s.reports.CollectionsReport(q.Get("issuer_id"), q.Get("from"), q.Get("to"), q.Get("client_id"), q.Get("group_by"))
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("GET /api/reports/profitability", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		res, err := s.reports.ProfitabilityReport(q.Get("issuer_id"), q.Get("from"), q.Get("to"), q.Get("client_id"), q.Get("group_by"))
 		if err != nil {
 			s.err(w, 500, err.Error())
 			return
@@ -766,8 +1232,8 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	mux.HandleFunc("GET /api/reports/aging", func(w http.ResponseWriter, r *http.Request) {
-		issuerID := r.URL.Query().Get("issuer_id")
-		res, err := s.reports.AgingReport(issuerID)
+		q := r.URL.Query()
+		res, err := s.reports.AgingDetailedReport(q.Get("issuer_id"), q.Get("as_of"))
 		if err != nil {
 			s.err(w, 500, err.Error())
 			return
@@ -874,35 +1340,221 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, list)
 	})
 
+	mux.HandleFunc("GET /api/bulk/drafts", func(w http.ResponseWriter, r *http.Request) {
+		issuerID := r.URL.Query().Get("issuer_id")
+		list, err := s.bulk.ListDrafts(issuerID)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, list)
+	})
+
+	mux.HandleFunc("GET /api/bulk/drafts/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		draft, err := s.bulk.GetDraft(id)
+		if err != nil {
+			s.err(w, 404, err.Error())
+			return
+		}
+		s.json(w, 200, draft)
+	})
+
+	mux.HandleFunc("POST /api/bulk/drafts", func(w http.ResponseWriter, r *http.Request) {
+		var input services.SaveDraftInput
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		draft, err := s.bulk.SaveDraft(input)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 201, draft)
+	})
+
+	mux.HandleFunc("DELETE /api/bulk/drafts/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if err := s.bulk.DeleteDraft(id); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{"ok": true})
+	})
+
+	mux.HandleFunc("POST /api/bulk/preview", func(w http.ResponseWriter, r *http.Request) {
+		var req services.PreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		res, err := s.bulk.GeneratePreview(req)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("POST /api/bulk/commit", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		username := "system"
+		if u != nil {
+			username = u.Username
+		}
+		var req services.CommitBatchRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		res, err := s.bulk.CommitBatch(req, username)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	// ---------------------------------------------------- إعدادات النظام
+	mux.HandleFunc("GET /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		rows, err := s.db.Query("SELECT key, value FROM settings")
+		res := map[string]any{
+			"currency":               s.cfg.Defaults.Currency,
+			"default_tax_rate":       s.cfg.Defaults.TaxRate,
+			"country":                s.cfg.Defaults.Country,
+			"bulk_max_invoices":      2000,
+			"invoice_prefix_default": "INV",
+			"invoice_pad_default":    5,
+			"voucher_prefix_default": "RV",
+			"print_copies_default":   1,
+		}
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var k, v string
+				if rows.Scan(&k, &v) == nil {
+					if k == "default_tax_rate" {
+						var f float64
+						_, _ = fmt.Sscanf(v, "%f", &f)
+						res[k] = f
+					} else if k == "bulk_max_invoices" || k == "invoice_pad_default" || k == "print_copies_default" {
+						var n int
+						_, _ = fmt.Sscanf(v, "%d", &n)
+						res[k] = n
+					} else {
+						res[k] = v
+					}
+				}
+			}
+		}
+		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("PUT /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		now := db.NowIso()
+		for k, v := range body {
+			valStr := fmt.Sprintf("%v", v)
+			_, _ = s.db.Exec(`
+				INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+				ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+			`, k, valStr, now)
+		}
+		s.json(w, 200, map[string]any{"ok": true})
+	})
+
 	// ---------------------------------------------------- سجل التدقيق
 	mux.HandleFunc("GET /api/audit", func(w http.ResponseWriter, r *http.Request) {
-		rows, err := s.db.Query(`
+		q := r.URL.Query()
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		if limit <= 0 || limit > 500 {
+			limit = 100
+		}
+		offset, _ := strconv.Atoi(q.Get("offset"))
+		if offset < 0 {
+			offset = 0
+		}
+
+		where := "WHERE 1=1"
+		var args []any
+
+		if search := strings.TrimSpace(q.Get("q")); search != "" {
+			like := "%" + search + "%"
+			where += " AND (user_name LIKE ? OR action LIKE ? OR entity_type LIKE ? OR entity_id LIKE ? OR details LIKE ?)"
+			args = append(args, like, like, like, like, like)
+		}
+		if action := strings.TrimSpace(q.Get("action")); action != "" {
+			where += " AND action = ?"
+			args = append(args, action)
+		}
+		if entityType := strings.TrimSpace(q.Get("entity_type")); entityType != "" {
+			where += " AND entity_type = ?"
+			args = append(args, entityType)
+		}
+		if user := strings.TrimSpace(q.Get("user")); user != "" {
+			where += " AND user_name = ?"
+			args = append(args, user)
+		}
+		if from := strings.TrimSpace(q.Get("from")); from != "" {
+			where += " AND created_at >= ?"
+			args = append(args, from)
+		}
+		if to := strings.TrimSpace(q.Get("to")); to != "" {
+			where += " AND created_at <= ?"
+			args = append(args, to+"T23:59:59Z")
+		}
+
+		var totalCount int
+		countQ := fmt.Sprintf("SELECT COUNT(*) FROM audit_logs %s", where)
+		_ = s.db.QueryRow(countQ, args...).Scan(&totalCount)
+
+		queryQ := fmt.Sprintf(`
 			SELECT id, user_name, action, entity_type, COALESCE(entity_id, ''), details, ip, created_at
-			FROM audit_logs ORDER BY created_at DESC LIMIT 100
-		`)
+			FROM audit_logs %s ORDER BY created_at DESC LIMIT ? OFFSET ?
+		`, where)
+		queryArgs := append(args, limit, offset)
+
+		rows, err := s.db.Query(queryQ, queryArgs...)
 		if err != nil {
 			s.err(w, 500, err.Error())
 			return
 		}
 		defer rows.Close()
 
-		var list []map[string]any
+		list := make([]map[string]any, 0)
 		for rows.Next() {
 			var id, u, act, et, eid, det, ip, cat string
 			if err := rows.Scan(&id, &u, &act, &et, &eid, &det, &ip, &cat); err == nil {
+				var detObj any
+				if det != "" {
+					_ = json.Unmarshal([]byte(det), &detObj)
+				}
+				if detObj == nil {
+					detObj = map[string]any{}
+				}
+
 				list = append(list, map[string]any{
 					"id":          id,
 					"user_name":   u,
 					"action":      act,
 					"entity_type": et,
 					"entity_id":   eid,
-					"details":     det,
+					"details":     detObj,
 					"ip":          ip,
 					"created_at":  cat,
 				})
 			}
 		}
-		s.json(w, 200, list)
+
+		s.json(w, 200, map[string]any{
+			"items":       list,
+			"total_count": totalCount,
+		})
 	})
 
 	// ---------------------------------------------------- واجهة الويب الثابتة (Public SPA)

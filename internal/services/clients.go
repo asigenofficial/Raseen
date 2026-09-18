@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 
 	"raseen/internal/crypto"
 	"raseen/internal/db"
@@ -530,3 +531,40 @@ func (s *ClientService) Balances(issuerID string, onlyDebtors bool) (*BalancesRe
 
 	return res, nil
 }
+
+func (s *ClientService) FindOrCreateByName(issuerID, name string) (*models.Client, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "عميل نقدي عام"
+	}
+
+	var c models.Client
+	err := s.db.QueryRow("SELECT id, name, client_code, client_type, country, is_active, created_at, updated_at FROM clients WHERE name = ? COLLATE NOCASE LIMIT 1", name).Scan(
+		&c.ID, &c.Name, &c.ClientCode, &c.ClientType, &c.Country, &c.IsActive, &c.CreatedAt, &c.UpdatedAt,
+	)
+	if err == nil && c.ID != "" {
+		return &c, nil
+	}
+
+	var count int
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM clients").Scan(&count)
+	code := fmt.Sprintf("C-%04d", count+1)
+
+	now := db.NowIso()
+	newID := crypto.UUID()
+	newClient := &models.Client{
+		ID:         newID,
+		Name:       name,
+		ClientCode: code,
+		ClientType: "COMPANY",
+		Country:    "SA",
+		IsActive:   1,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	if err := s.CreateClient(newClient); err != nil {
+		return nil, err
+	}
+	return newClient, nil
+}
+

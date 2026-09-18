@@ -13,6 +13,10 @@ data/backups/
 # Logs & temp
 *.log
 
+# Binaries
+*.exe
+raseen.exe
+
 # OS files
 .DS_Store
 Thumbs.db

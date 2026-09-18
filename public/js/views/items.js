@@ -126,10 +126,17 @@ export async function render(view, ctx) {
   const load = async () => {
     const params = { q: state.q, category_id: state.categoryId };
     if (state.status) params.status = state.status;
-    [state.items, state.categories] = await Promise.all([
-      api.get(qs('/api/items', params)),
-      api.get('/api/categories'),
-    ]);
+    try {
+      const [itemsRes, catsRes] = await Promise.all([
+        api.get(qs('/api/items', params)),
+        api.get('/api/categories'),
+      ]);
+      state.items = Array.isArray(itemsRes) ? itemsRes : [];
+      state.categories = Array.isArray(catsRes) ? catsRes : [];
+    } catch {
+      state.items = [];
+      state.categories = [];
+    }
     store.items = state.items;
     store.categories = state.categories;
     setFilterState('items', {
@@ -141,8 +148,9 @@ export async function render(view, ctx) {
   };
 
   const itemsRows = () => {
-    if (!state.items.length) return '<tr><td colspan="9" class="text-center muted" style="padding:1.5rem">لا توجد أصناف</td></tr>';
-    return state.items.map((i) => `<tr>
+    const list = Array.isArray(state.items) ? state.items : [];
+    if (!list.length) return '<tr><td colspan="9" class="text-center muted" style="padding:1.5rem">لا توجد أصناف</td></tr>';
+    return list.map((i) => `<tr>
       <td class="mono tiny">${esc(i.item_code)}</td>
       <td><b>${esc(i.name_ar)}</b>${i.name_en ? `<div class="tiny muted ltr">${esc(i.name_en)}</div>` : ''}</td>
       <td class="tiny">${esc(i.category_name || '—')}</td>
@@ -160,8 +168,9 @@ export async function render(view, ctx) {
   };
 
   const catRows = () => {
-    if (!state.categories.length) return '<tr><td colspan="5" class="text-center muted" style="padding:1.5rem">لا توجد مجموعات</td></tr>';
-    return state.categories.map((c) => `<tr>
+    const list = Array.isArray(state.categories) ? state.categories : [];
+    if (!list.length) return '<tr><td colspan="5" class="text-center muted" style="padding:1.5rem">لا توجد مجموعات</td></tr>';
+    return list.map((c) => `<tr>
       <td class="mono tiny">${esc(c.code)}</td>
       <td><b>${esc(c.name)}</b></td>
       <td class="tiny">${esc(c.parent_name || '—')}</td>
@@ -176,6 +185,9 @@ export async function render(view, ctx) {
   };
 
   const draw = () => {
+    const itemsList = Array.isArray(state.items) ? state.items : [];
+    const catList = Array.isArray(state.categories) ? state.categories : [];
+
     view.innerHTML = html`
       <div class="page-head">
         <div class="titles">
@@ -191,8 +203,8 @@ export async function render(view, ctx) {
       </div>
 
       <div class="tabs">
-        <div class="tab ${state.tab === 'items' ? 'active' : ''}" data-tab="items">الأصناف (${state.items.length})</div>
-        <div class="tab ${state.tab === 'cats' ? 'active' : ''}" data-tab="cats">المجموعات (${state.categories.length})</div>
+        <div class="tab ${state.tab === 'items' ? 'active' : ''}" data-tab="items">الأصناف (${itemsList.length})</div>
+        <div class="tab ${state.tab === 'cats' ? 'active' : ''}" data-tab="cats">المجموعات (${catList.length})</div>
       </div>
 
       ${raw(state.tab === 'items' ? `
@@ -203,7 +215,7 @@ export async function render(view, ctx) {
             <div class="field" style="max-width:220px"><label>المجموعة</label>
               <select id="cat-filter">
                 <option value="">كل المجموعات</option>
-                ${state.categories.map((c) => `<option value="${esc(c.id)}" ${c.id === state.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
+                ${catList.map((c) => `<option value="${esc(c.id)}" ${c.id === state.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
               </select></div>
             <div class="field" style="max-width:160px"><label>الحالة</label>
               <select id="status-filter">
