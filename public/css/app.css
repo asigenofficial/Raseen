@@ -3147,3 +3147,108 @@ textarea {
     color .25s ease,
     box-shadow .25s ease;
 }
+
+/* ==========================================================================
+   تصميم لوحات الفوترة والمحاسبة المنظمة (Structured Accounting Form Grid)
+   ========================================================================== */
+.inv-meta-card {
+  padding: 1.25rem 1.4rem;
+  margin-bottom: 1.2rem;
+}
+
+.inv-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 1.1rem;
+}
+
+.inv-form-box {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .65rem;
+  transition: border-color .15s ease;
+}
+
+.inv-form-box:hover {
+  border-color: var(--line-strong);
+}
+
+.inv-box-head {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .88rem;
+  font-weight: 700;
+  color: var(--text-heading);
+  padding-bottom: .45rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: .2rem;
+}
+
+.inv-field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .75rem;
+}
+
+.inv-addr-box {
+  margin-top: .4rem;
+  padding: .45rem .65rem;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: .78rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+
+.inv-addr-content {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  flex-wrap: wrap;
+}
+
+.inv-addr-label {
+  font-weight: 700;
+  color: var(--brand);
+}
+
+.inv-addr-text {
+  color: var(--text);
+  font-size: .78rem;
+}
+
+.inv-adv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: .85rem;
+}
+
+/* في وضع الضوء */
+html[data-theme="light"] .inv-form-box {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+html[data-theme="light"] .inv-form-box:hover {
+  border-color: var(--brand);
+}
+
+html[data-theme="light"] .inv-box-head {
+  border-bottom-color: #e2e8f0;
+  color: #1e293b;
+}
+
+html[data-theme="light"] .inv-addr-box {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}

@@ -225,74 +225,139 @@ export async function render(view, ctx) {
         </div>
       </div>
 
-      <div class="card">
-        <div class="row">
-          <div class="field"><label class="req">الشركة المصدرة</label>
-            <select id="issuer">
-              ${raw(activeIssuers.map((i) => `<option value="${esc(i.id)}" ${i.id === state.issuer_id ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}
-            </select>
-            <span class="hint">الرقم القادم: <span class="mono">${esc(iss.invoice_prefix)}-${String(iss.invoice_next_no).padStart(iss.invoice_pad, '0')}</span></span>
-          </div>
-          <div class="field" style="flex:1.4"><label class="req">العميل</label>
-            <div class="flex" style="gap:.35rem">
-              <select id="client" style="flex:1">
-                <option value="">— اختر العميل —</option>
-                ${raw(store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join(''))}
-              </select>
-              ${raw(can('clients.write') ? `<button class="btn" id="new-client" type="button" title="عميل جديد">${icon.userPlus({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}عميل جديد</button>` : '')}
+      <div class="card inv-meta-card">
+        <div class="inv-form-grid">
+          <!-- بطاقة المنشأة المصدرة -->
+          <div class="inv-form-box">
+            <div class="inv-box-head">
+              ${icon.building({ size: 16, style: 'color:var(--brand)' })}
+              <span>البيانات الأساسية للمنشأة</span>
             </div>
-            ${raw(curClient ? `
-              <div id="client-addr-card" style="margin-top:.4rem;padding:.35rem .6rem;background:rgba(255,255,255,0.03);border:1px solid var(--line);border-radius:6px;font-size:.78rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap">
-                <div>
-                  <span style="font-weight:700;color:var(--primary);margin-inline-end:4px">العنوان الوطني:</span>
-                  ${[
-                    curClient.city ? `المدينة: <b>${esc(curClient.city)}</b>` : '<span class="muted">المدينة: —</span>',
-                    curClient.district ? `الحي: <b>${esc(curClient.district)}</b>` : '<span class="muted">الحي: —</span>',
-                    curClient.street ? `الشارع: <b>${esc(curClient.street)}</b>` : '<span class="muted">الشارع: —</span>',
-                    curClient.building_no ? `مبنى: <b class="mono">${esc(curClient.building_no)}</b>` : '<span class="muted">مبنى: —</span>',
-                    curClient.postal_code ? `الرمز: <b class="mono">${esc(curClient.postal_code)}</b>` : '',
-                  ].join(' · ')}
-                </div>
-                ${can('clients.write') ? `<button class="btn btn-sm" id="edit-selected-client" type="button" style="padding:2px 7px;font-size:.72rem">تعديل العنوان</button>` : ''}
+            <div class="field">
+              <label class="req">الشركة المصدرة</label>
+              <select id="issuer">
+                ${raw(activeIssuers.map((i) => `<option value="${esc(i.id)}" ${i.id === state.issuer_id ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}
+              </select>
+              <span class="hint">الرقم التسلسلي القادم: <b class="mono" style="color:var(--primary)">${esc(iss.invoice_prefix)}-${String(iss.invoice_next_no).padStart(iss.invoice_pad, '0')}</b></span>
+            </div>
+            <div class="inv-field-pair mt">
+              <div class="field">
+                <label>نوع الفاتورة</label>
+                <select id="invoice_type">
+                  <option value="STANDARD" ${raw(state.invoice_type === 'STANDARD' ? 'selected' : '')}>فاتورة ضريبية (B2B)</option>
+                  <option value="SIMPLIFIED" ${raw(state.invoice_type === 'SIMPLIFIED' ? 'selected' : '')}>فاتورة مبسطة (B2C)</option>
+                </select>
               </div>
-            ` : '')}
+              <div class="field">
+                <label>طريقة الدفع</label>
+                <select id="payment_method">
+                  ${raw(Object.entries(store.meta.payment_methods).map(([k, v]) => `<option value="${esc(k)}" ${k === state.payment_method ? 'selected' : ''}>${esc(v)}</option>`).join(''))}
+                </select>
+              </div>
+            </div>
           </div>
-          <div class="field" style="max-width:140px"><label>نوع الفاتورة</label>
-            <select id="invoice_type">
-              <option value="STANDARD" ${raw(state.invoice_type === 'STANDARD' ? 'selected' : '')}>ضريبية</option>
-              <option value="SIMPLIFIED" ${raw(state.invoice_type === 'SIMPLIFIED' ? 'selected' : '')}>مبسطة</option>
-            </select>
+
+          <!-- بطاقة العميل والعنوان -->
+          <div class="inv-form-box">
+            <div class="inv-box-head">
+              ${icon.users({ size: 16, style: 'color:var(--brand)' })}
+              <span>بيانات العميل المستلم</span>
+            </div>
+            <div class="field">
+              <label class="req">العميل</label>
+              <div class="flex" style="gap:.4rem">
+                <select id="client" style="flex:1">
+                  <option value="">— اختر العميل —</option>
+                  ${raw(store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join(''))}
+                </select>
+                ${raw(can('clients.write') ? `<button class="btn btn-sm" id="new-client" type="button" title="إضافة عميل جديد">${icon.userPlus({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}عميل جديد</button>` : '')}
+              </div>
+            </div>
+            <div id="client-addr-card" class="inv-addr-box${curClient ? '' : ' hidden'}">
+              ${raw(curClient ? `
+                <div class="inv-addr-content">
+                  <span class="inv-addr-label">العنوان الوطني المعتمد:</span>
+                  <span class="inv-addr-text">
+                    ${[
+                      curClient.city ? `المدينة: <b>${esc(curClient.city)}</b>` : '',
+                      curClient.district ? `الحي: <b>${esc(curClient.district)}</b>` : '',
+                      curClient.street ? `الشارع: <b>${esc(curClient.street)}</b>` : '',
+                      curClient.building_no ? `مبنى: <b class="mono">${esc(curClient.building_no)}</b>` : '',
+                      curClient.postal_code ? `الرمز: <b class="mono">${esc(curClient.postal_code)}</b>` : '',
+                    ].filter(Boolean).join(' · ') || 'لم يُسجل عنوان وطني تفصيلي'}
+                  </span>
+                </div>
+                ${can('clients.write') ? `<button class="btn btn-sm" id="edit-selected-client" type="button" style="padding:2px 8px;font-size:.74rem">تعديل</button>` : ''}
+              ` : '')}
+            </div>
           </div>
-          <div class="field" style="max-width:240px"><label>مرحلة الباركود (ZATCA QR)</label>
-            <select id="zatca_phase">
-              <option value="PHASE1" ${raw(state.zatca_phase === 'PHASE1' ? 'selected' : '')}>المرحلة الأولى (5 حقول أساسية)</option>
-              <option value="PHASE2" ${raw(state.zatca_phase === 'PHASE2' ? 'selected' : '')}>المرحلة الثانية (مشفّر وموقّع)</option>
-            </select>
-            <span class="hint" id="phase-hint">${state.zatca_phase === 'PHASE2' ? 'يتضمن الهاش والتوقيع الرقمي وسلسلة الفواتير' : 'يتضمن الحقول الخمسة الأساسية فقط'}</span>
+
+          <!-- بطاقة التوقيت وتفاصيل الفاتورة -->
+          <div class="inv-form-box">
+            <div class="inv-box-head">
+              ${icon.calendar({ size: 16, style: 'color:var(--brand)' })}
+              <span>التاريخ والإعدادات المالية</span>
+            </div>
+            <div class="inv-field-pair">
+              <div class="field">
+                <label>تاريخ الفاتورة</label>
+                <input type="date" id="issue_date" value="${state.issue_date}" ${raw(can('invoices.backdate') ? '' : 'readonly title="لا تملك صلاحية تغيير التاريخ"')} />
+              </div>
+              <div class="field">
+                <label>وقت الإصدار</label>
+                <input type="time" id="issue_time" value="${state.issue_time}" step="1" ${raw(can('invoices.backdate') ? '' : 'readonly')} />
+              </div>
+            </div>
+            <div class="inv-field-pair mt">
+              <div class="field">
+                <label>رقم فاتورة يدوي</label>
+                <input type="text" id="invoice_number" value="${esc(state.invoice_number)}" class="ltr" placeholder="تلقائي (ZATCA)" />
+              </div>
+              <div class="field">
+                <label>خصم عام على الفاتورة %</label>
+                <input type="number" id="header_discount" value="${state.header_discount_percent}" min="0" max="100" step="0.01" placeholder="0.00" />
+              </div>
+            </div>
           </div>
         </div>
-        <div class="row mt">
-          <div class="field" style="max-width:160px"><label>التاريخ</label>
-            <input type="date" id="issue_date" value="${state.issue_date}" ${raw(can('invoices.backdate') ? '' : 'readonly title="لا تملك صلاحية تغيير التاريخ"')} /></div>
-          <div class="field" style="max-width:130px"><label>الوقت</label>
-            <input type="time" id="issue_time" value="${state.issue_time}" step="1" ${raw(can('invoices.backdate') ? '' : 'readonly')} /></div>
-          <div class="field" style="max-width:170px"><label>طريقة الدفع</label>
-            <select id="payment_method">
-              ${raw(Object.entries(store.meta.payment_methods).map(([k, v]) => `<option value="${esc(k)}" ${k === state.payment_method ? 'selected' : ''}>${esc(v)}</option>`).join(''))}
-            </select></div>
-          <div class="field" style="max-width:190px"><label>رقم فاتورة يدوي (اختياري)</label>
-            <input type="text" id="invoice_number" value="${esc(state.invoice_number)}" class="ltr" placeholder="تلقائي" /></div>
-          <div class="field" style="max-width:150px"><label>خصم عام %</label>
-            <input type="number" id="header_discount" value="${state.header_discount_percent}" min="0" max="100" step="0.01" /></div>
-        </div>
+
+        <!-- خيارات هيئة الزكاة والشيكات المتقدمة -->
+        <details class="advanced-options mt">
+          <summary>⚙️ خيارات متقدمة: إعدادات ZATCA، الشيكات وتاريخ الاستحقاق</summary>
+          <div class="inv-adv-grid mt">
+            <div class="field">
+              <label>مرحلة الفاتورة الإلكترونية (ZATCA Phase)</label>
+              <select id="zatca_phase">
+                <option value="PHASE1" ${raw(state.zatca_phase === 'PHASE1' ? 'selected' : '')}>المرحلة الأولى (5 حقول أساسية)</option>
+                <option value="PHASE2" ${raw(state.zatca_phase === 'PHASE2' ? 'selected' : '')}>المرحلة الثانية (مشفّر وموقّع ZATCA)</option>
+              </select>
+              <span class="hint" id="phase-hint">${state.zatca_phase === 'PHASE2' ? 'يتضمن الهاش والتوقيع الرقمي وسلسلة الفواتير' : 'يتضمن الحقول الخمسة الأساسية'}</span>
+            </div>
+            <div class="field">
+              <label for="due_date">تاريخ الاستحقاق (اختياري)</label>
+              <input type="date" id="due_date" value="${esc(state.due_date || '')}" />
+            </div>
+            <div class="field" data-cheque>
+              <label for="cheque_no">رقم الشيك</label>
+              <input id="cheque_no" type="text" value="${esc(state.cheque_no || '')}" placeholder="رقم الشيك المصرفي" />
+            </div>
+            <div class="field" data-cheque>
+              <label for="cheque_date">تاريخ الشيك</label>
+              <input id="cheque_date" type="date" value="${esc(state.cheque_date || '')}" />
+            </div>
+          </div>
+        </details>
       </div>
 
       <div class="card pad0">
         <div class="card-head">
-          <h3>بنود الفاتورة</h3>
+          <div class="flex" style="gap:.5rem;align-items:center;">
+            ${icon.invoice({ size: 18, style: 'color:var(--brand)' })}
+            <h3 style="margin:0">بنود الفاتورة</h3>
+          </div>
           <div class="spacer"></div>
           <span class="tiny muted">ابحث عن الصنف بالاسم أو الكود، أو اكتب وصفاً حراً</span>
-          <button class="btn btn-sm" id="add-line" type="button">${icon.plus({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}إضافة بند</button>
+          <button class="btn btn-sm btn-primary" id="add-line" type="button">${icon.plus({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}إضافة بند جديد</button>
         </div>
         <div class="table-wrap">
           <table class="tbl compact" id="lines-tbl">
@@ -308,39 +373,32 @@ export async function render(view, ctx) {
 
       <div class="grid grid-2">
         <div class="card">
-          <h3>ملاحظات وخيارات</h3>
-          <div class="field"><label>ملاحظات تظهر في الفاتورة</label>
-            <textarea id="notes" style="min-height:70px">${esc(state.notes)}</textarea></div>
+          <div class="flex" style="gap:.5rem;align-items:center;margin-bottom:.8rem">
+            ${icon.fileText({ size: 16, style: 'color:var(--brand)' })}
+            <h3 style="margin:0">ملاحظات وشروط الفاتورة</h3>
+          </div>
+          <div class="field"><label>ملاحظات تظهر في المطبوع</label>
+            <textarea id="notes" style="min-height:70px" placeholder="مثال: البضاعة المباعة لا ترد ولا تستبدل بعد 3 أيام...">${esc(state.notes)}</textarea></div>
           <label class="check mt"><input type="checkbox" id="auto_receipt" ${raw(state.auto_receipt ? 'checked' : '')} />
             إنشاء سند قبض تلقائي بكامل المبلغ (للفواتير غير الآجلة)</label>
           <label class="check"><input type="checkbox" id="print_after" ${raw(state.print_after ? 'checked' : '')} />
             الانتقال لشاشة الفاتورة للتحميل والمشاركة بعد الحفظ</label>
         </div>
         <div class="card">
-          <h3>الإجماليات</h3>
+          <div class="flex" style="gap:.5rem;align-items:center;margin-bottom:.8rem">
+            ${icon.calculator({ size: 16, style: 'color:var(--brand)' })}
+            <h3 style="margin:0">ملخص الإجماليات</h3>
+          </div>
           <div class="totals-box" id="totals">${raw(totalsHtml())}</div>
           <button class="btn btn-primary btn-block mt" id="save2" type="button">${icon.check({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}${state.is_edit ? 'حفظ التعديلات على الفاتورة' : 'حفظ وإصدار الفاتورة'}</button>
         </div>
       </div>`;
 
-    const paymentFields = document.createElement('div');
-    paymentFields.className = 'row mt';
-    paymentFields.innerHTML = `<div class="field"><label for="due_date">تاريخ الاستحقاق (اختياري)</label><input type="date" id="due_date" value="${esc(state.due_date || '')}" /></div>
-      <div class="field" data-cheque><label for="cheque_no">رقم الشيك</label><input id="cheque_no" type="text" value="${esc(state.cheque_no || '')}" /></div>
-      <div class="field" data-cheque><label for="cheque_date">تاريخ الشيك</label><input id="cheque_date" type="date" value="${esc(state.cheque_date || '')}" /></div>`;
-    view.querySelector('.card').append(paymentFields);
     for (const id of ['due_date', 'cheque_no', 'cheque_date']) {
-      paymentFields.querySelector('#' + id).addEventListener('change', e => { state[id] = e.target.value; saveDraft(state); });
+      const inp = view.querySelector('#' + id);
+      if (inp) inp.addEventListener('change', e => { state[id] = e.target.value; saveDraft(state); });
     }
-    paymentFields.querySelectorAll('[data-cheque]').forEach(el => el.classList.toggle('hidden', state.payment_method !== 'CHEQUE'));
-    const advanced = document.createElement('details');
-    advanced.className = 'advanced-options';
-    advanced.innerHTML = '<summary>خيارات إضافية: الخصم، الترقيم وإعدادات الفاتورة</summary><div class="row"></div>';
-    for (const id of ['zatca_phase', 'issue_time', 'invoice_number', 'header_discount', 'due_date']) {
-      const field = document.getElementById(id)?.closest('.field');
-      if (field) advanced.querySelector('.row').append(field);
-    }
-    view.querySelector('.card').append(advanced);
+    view.querySelectorAll('[data-cheque]').forEach(el => el.classList.toggle('hidden', state.payment_method !== 'CHEQUE'));
     bind();
   };
 
