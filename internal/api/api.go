@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -509,6 +510,18 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, res)
 	})
 
+	mux.HandleFunc("GET /api/invoices/open", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		clientID := q.Get("client_id")
+		issuerID := q.Get("issuer_id")
+		res, err := s.invoices.GetOpenInvoices(clientID, issuerID)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
 	mux.HandleFunc("GET /api/invoices/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		inv, err := s.invoices.GetInvoice(id)
@@ -771,6 +784,94 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		s.json(w, 200, res)
+	})
+
+	// ---------------------------------------------------- كشف الحساب والأستاذ العام
+	mux.HandleFunc("GET /api/ledger/statement", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		clientID := q.Get("client_id")
+		if clientID == "" {
+			s.err(w, 400, "client_id مطلوب")
+			return
+		}
+		res, err := s.clients.Statement(services.StatementParams{
+			ClientID: clientID,
+			IssuerID: q.Get("issuer_id"),
+			FromDate: q.Get("from"),
+			ToDate:   q.Get("to"),
+		})
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("GET /api/ledger/balances", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		onlyDebtors := q.Get("only_debtors") == "1" || q.Get("only_debtors") == "true"
+		res, err := s.clients.Balances(q.Get("issuer_id"), onlyDebtors)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	// ---------------------------------------------------- دفعات التوليد
+	mux.HandleFunc("GET /api/bulk/batches", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		issuerID := q.Get("issuer_id")
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		if limit <= 0 {
+			limit = 100
+		}
+		where := "WHERE 1=1"
+		var args []any
+		if issuerID != "" {
+			where += " AND b.issuer_id = ?"
+			args = append(args, issuerID)
+		}
+		args = append(args, limit)
+		rows, err := s.db.Query(fmt.Sprintf(`
+			SELECT b.id, b.issuer_id, b.client_id, b.params, b.invoice_count, b.total_amount,
+			       b.status, b.created_by, b.created_at,
+			       COALESCE(s.name_ar, ''), COALESCE(c.name, '')
+			FROM invoice_batches b
+			LEFT JOIN issuers s ON s.id = b.issuer_id
+			LEFT JOIN clients c ON c.id = b.client_id
+			%s
+			ORDER BY b.created_at DESC LIMIT ?
+		`, where), args...)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		defer rows.Close()
+
+		list := make([]map[string]any, 0)
+		for rows.Next() {
+			var id, issID, cID, paramsStr, status, createdBy, createdAt, issName, cName string
+			var invCount, totAmt int64
+			if err := rows.Scan(&id, &issID, &cID, &paramsStr, &invCount, &totAmt, &status, &createdBy, &createdAt, &issName, &cName); err == nil {
+				var paramsObj any
+				_ = json.Unmarshal([]byte(paramsStr), &paramsObj)
+				list = append(list, map[string]any{
+					"id":            id,
+					"issuer_id":     issID,
+					"issuer_name":   issName,
+					"client_id":     cID,
+					"client_name":   cName,
+					"invoice_count": invCount,
+					"total_amount":  models.ToMajor(totAmt),
+					"status":        status,
+					"created_by":    createdBy,
+					"created_at":    createdAt,
+					"params":        paramsObj,
+				})
+			}
+		}
+		s.json(w, 200, list)
 	})
 
 	// ---------------------------------------------------- سجل التدقيق

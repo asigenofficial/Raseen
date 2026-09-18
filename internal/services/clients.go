@@ -295,16 +295,21 @@ type StatementResult struct {
 		TaxNumber string `json:"tax_number"`
 		Currency  string `json:"currency"`
 	} `json:"issuer"`
-	Scope                string           `json:"scope"`
-	PeriodFrom           string           `json:"period_from"`
-	PeriodTo             string           `json:"period_to"`
-	OpeningBalancePeriod float64          `json:"opening_balance_period"`
-	Entries              []StatementEntry `json:"entries"`
-	Totals               struct {
-		Debit                float64 `json:"debit"`
-		Credit               float64 `json:"credit"`
-		ClosingBalance       float64 `json:"closing_balance"`
-		OpenInvoicesCount    int     `json:"open_invoices_count"`
+	Scope                     string `json:"scope"`
+	PeriodFrom                string `json:"period_from"`
+	PeriodTo                  string `json:"period_to"`
+	Period                    struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	} `json:"period"`
+	IncludesOpeningBalanceRow bool             `json:"includes_opening_balance_row"`
+	OpeningBalancePeriod      float64          `json:"opening_balance_period"`
+	Entries                   []StatementEntry `json:"entries"`
+	Totals                    struct {
+		Debit                 float64 `json:"debit"`
+		Credit                float64 `json:"credit"`
+		ClosingBalance        float64 `json:"closing_balance"`
+		OpenInvoicesCount     int     `json:"open_invoices_count"`
 		OpenInvoicesRemaining float64 `json:"open_invoices_remaining"`
 	} `json:"totals"`
 	GeneratedAt string `json:"generated_at"`
@@ -325,11 +330,15 @@ func (s *ClientService) Statement(p StatementParams) (*StatementResult, error) {
 	}
 
 	res := &StatementResult{
-		Scope:       "ALL",
-		PeriodFrom:  p.FromDate,
-		PeriodTo:    p.ToDate,
-		GeneratedAt: db.NowIso(),
+		Scope:                     "ALL",
+		PeriodFrom:                p.FromDate,
+		PeriodTo:                  p.ToDate,
+		IncludesOpeningBalanceRow: (p.IssuerID == ""),
+		Entries:                   make([]StatementEntry, 0),
+		GeneratedAt:               db.NowIso(),
 	}
+	res.Period.From = p.FromDate
+	res.Period.To = p.ToDate
 	res.Client.ID = client.ID
 	res.Client.Code = client.ClientCode
 	res.Client.Name = client.Name

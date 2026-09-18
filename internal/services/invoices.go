@@ -926,3 +926,45 @@ func (s *InvoiceService) GetXml(id string) (string, error) {
 	)
 	return xml, nil
 }
+
+type OpenInvoiceItem struct {
+	ID              string  `json:"id"`
+	InvoiceNumber   string  `json:"invoice_number"`
+	IssueDate       string  `json:"issue_date"`
+	GrandTotal      float64 `json:"grand_total"`
+	RemainingAmount float64 `json:"remaining_amount"`
+}
+
+func (s *InvoiceService) GetOpenInvoices(clientID, issuerID string) ([]OpenInvoiceItem, error) {
+	where := "WHERE client_id = ? AND status IN ('UNPAID', 'PARTIAL')"
+	args := []any{clientID}
+	if issuerID != "" {
+		where += " AND issuer_id = ?"
+		args = append(args, issuerID)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT id, invoice_number, issue_date, grand_total, remaining_amount
+		FROM invoices
+		%s
+		ORDER BY issue_date ASC, sequence_no ASC
+	`, where)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]OpenInvoiceItem, 0)
+	for rows.Next() {
+		var itm OpenInvoiceItem
+		var grandMinor, remMinor int64
+		if err := rows.Scan(&itm.ID, &itm.InvoiceNumber, &itm.IssueDate, &grandMinor, &remMinor); err == nil {
+			itm.GrandTotal = models.ToMajor(grandMinor)
+			itm.RemainingAmount = models.ToMajor(remMinor)
+			items = append(items, itm)
+		}
+	}
+	return items, nil
+}
