@@ -22,8 +22,8 @@ html[data-theme="light"] {
   --info:    #1d4ed8; --info-light:    #eff6ff; --info-border:    #bfdbfe;
 
   --shadow: 0 2px 6px #172b3a06; --shadow-lg: 0 16px 45px #172b3a24;
-  --radius: 10px; --radius-lg: 14px; --glass-blur: none;
-  --sidebar-width: 236px;
+  --radius: 14px; --radius-sm: 9px; --radius-lg: 20px; --glass-blur: none;
+  --sidebar-width: 260px;
 }
 
 /* ---------- تصحيحات ألوان النصوص والعناصر في وضع الضوء ---------- */
@@ -54,10 +54,10 @@ html[data-theme="light"] .issuer-pick select { color: var(--text); }
 html[data-theme="light"] .field > label,
 html[data-theme="light"] .check { color: var(--text); }
 
-html[data-theme="light"] .btn:not(.btn-primary):not(.btn-danger) {
+html[data-theme="light"] .btn:not(.btn-primary):not(.btn-danger):not(.tb-tool-btn):not(.tb-tab-btn) {
   color: var(--text); background: #fff;
 }
-html[data-theme="light"] .btn:not(.btn-primary):not(.btn-danger):hover {
+html[data-theme="light"] .btn:not(.btn-primary):not(.btn-danger):not(.tb-tool-btn):not(.tb-tab-btn):hover {
   color: var(--brand-dark); background: var(--brand-light); border-color: var(--brand);
 }
 
@@ -68,20 +68,15 @@ html[data-theme="light"] table.tbl tfoot td { color: var(--text); background: #f
 
 html[data-theme="light"] table.tbl td.num,
 html[data-theme="light"] table.tbl th.num { display: table-cell; }
-
-html[data-theme="light"] input,
-html[data-theme="light"] select,
-html[data-theme="light"] textarea { min-height: 42px; }
-
 html[data-theme="light"] input[type=checkbox],
 html[data-theme="light"] input[type=radio] { min-height: auto; accent-color: var(--brand); }
 
-html[data-theme="light"] .nav-item { color: var(--muted); border-radius: 7px; }
+html[data-theme="light"] .nav-item { color: var(--muted); }
 html[data-theme="light"] .nav-item.active {
   background: var(--brand-light); color: var(--brand-dark); box-shadow: none;
 }
 html[data-theme="light"] .nav-item:hover { background: var(--sidebar-hover); }
-html[data-theme="light"] .nav-group-label { color: var(--muted); font-size: .75rem; }
+html[data-theme="light"] .nav-group-label { color: var(--muted); }
 html[data-theme="light"] .sidebar,
 html[data-theme="light"] .topbar,
 html[data-theme="light"] .card,
@@ -228,6 +223,38 @@ html[data-theme="light"] .totals-box .line.grand { color: var(--brand); }
 
 /* pager */
 html[data-theme="light"] .pager { border-color: var(--line); }
+
+/* تثبيت أحجام الأيقونات والعناصر بدقة متطابقة بين الثيمين */
+.ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-sizing: content-box;
+}
+
+.theme-toggle {
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+}
+
+.user-chip .avatar {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  font-size: .82rem !important;
+}
+
+.nav-item .ico {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  font-size: 1rem !important;
+}
 
 @media (max-width: 720px) {
   html[data-theme="light"] .content { padding: 16px 12px; }

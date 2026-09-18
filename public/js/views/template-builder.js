@@ -1154,6 +1154,27 @@ function renderView() {
       .tb-empty-state { text-align: center; padding: 4rem 1rem; color: var(--text-muted); }
       .tb-empty-state h3 { color: var(--text); margin: 1rem 0 0.5rem; }
       .tb-empty-state p { margin-bottom: 1.2rem; font-size: 0.88rem; }
+
+      /* ثيم الضوء لمحرر القوالب (Light Theme Adaptations) */
+      html[data-theme="light"] .tb-studio { background: #ffffff; border-color: var(--line); }
+      html[data-theme="light"] .tb-header { background: #f8fafc; border-color: var(--line); }
+      html[data-theme="light"] .tb-ribbon { background: #ffffff; border-color: var(--line); }
+      html[data-theme="light"] .tb-formula-bar { background: #f1f5f9; border-color: var(--line); }
+      html[data-theme="light"] .tb-tabs-nav { background: #f1f5f9; border-color: var(--line); }
+      html[data-theme="light"] .tb-tab-btn { color: #64748b; }
+      html[data-theme="light"] .tb-tab-btn:hover { color: #0f172a; }
+      html[data-theme="light"] .tb-tab-btn.active { background: #ffffff; color: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+      html[data-theme="light"] .tb-tool-btn { background: #ffffff; border-color: var(--line); color: #1e293b; }
+      html[data-theme="light"] .tb-tool-btn:hover { border-color: var(--primary); color: var(--primary); background: #f8fafc; }
+      html[data-theme="light"] .tb-tool-btn.active { background: var(--primary); color: #ffffff; border-color: var(--primary); }
+      html[data-theme="light"] .tb-tool-select { background: #ffffff; border-color: var(--line); color: #1e293b; }
+      html[data-theme="light"] .tb-color-picker-wrap { background: #ffffff; border-color: var(--line); color: #1e293b; }
+      html[data-theme="light"] .tb-dim-badge { background: #f8fafc; border-color: var(--line); color: var(--primary); }
+      html[data-theme="light"] #tb-formula-input { background: #ffffff; border-color: var(--line); color: #0f172a; }
+      html[data-theme="light"] .tb-status-bar { background: #f8fafc; border-color: var(--line); color: #64748b; }
+      html[data-theme="light"] .tb-card { background: #f8fafc; border-color: var(--line); }
+      html[data-theme="light"] .tb-gallery-card { background: #ffffff; border-color: var(--line); }
+      html[data-theme="light"] .tb-gallery-actions { background: #f8fafc; border-color: var(--line); }
     </style>
   </div>`;
 }
