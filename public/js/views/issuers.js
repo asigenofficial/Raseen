@@ -297,40 +297,43 @@ export async function render(view) {
         ${writable ? `<button class="btn btn-primary" id="add-issuer-2" type="button">${icon.plus({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}إضافة شركة</button>` : ''}
       </div></div>` : '')}
 
-      ${raw(issuers.length ? `<div class="grid grid-2">
+      ${raw(issuers.length ? `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:0.65rem;">
         ${issuers.map((i) => `
-          <div class="card">
-            <div class="flex" style="align-items:flex-start">
-              <div style="width:54px;height:54px;border-radius:12px;background:rgba(6,182,212,0.12);display:grid;place-items:center;overflow:hidden;flex:none;border:1px solid rgba(6,182,212,0.25)">
-                ${i.has_logo ? `<img src="/api/issuers/${esc(i.id)}/logo" alt="logo" style="width:100%;height:100%;object-fit:contain" />` : icon.building({ size: 26, stroke: 'var(--brand)' })}
+          <div class="card" style="padding:0.65rem 0.85rem; border-radius:8px; border:1px solid ${i.id === store.activeIssuerId ? 'var(--primary, #06b6d4)' : 'var(--line)'}; background:${i.id === store.activeIssuerId ? 'rgba(6,182,212,0.04)' : 'var(--surface)'}; display:flex; flex-direction:column; justify-content:space-between; gap:0.45rem;">
+            <!-- ترويسة البطاقة المصغرة -->
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="width:34px; height:34px; border-radius:6px; background:rgba(6,182,212,0.1); display:grid; place-items:center; overflow:hidden; flex:none; border:1px solid rgba(6,182,212,0.2)">
+                ${i.has_logo ? `<img src="/api/issuers/${esc(i.id)}/logo" alt="logo" style="width:100%;height:100%;object-fit:contain" />` : icon.building({ size: 18, stroke: 'var(--brand)' })}
               </div>
-              <div style="flex:1;min-width:0">
-                <h3 style="margin:0">${esc(i.name_ar)}</h3>
-                <div class="tiny muted">${esc(i.name_en || '')}</div>
-                <div class="flex tiny mt">
-                  <span class="badge ${i.is_active ? 'green' : 'gray'}">${i.is_active ? 'نشطة' : 'غير نشطة'}</span>
-                  <span class="badge ${i.zatca_phase === 'PHASE2' ? 'teal' : 'blue'}">${i.zatca_phase === 'PHASE2' ? 'المرحلة الثانية' : 'المرحلة الأولى'}</span>
-                  <span class="badge gray mono">${esc(i.code)}</span>
-                  ${i.has_logo ? '<span class="badge gray">شعار</span>' : ''}
-                  ${i.id === store.activeIssuerId ? '<span class="badge amber">المنشأة النشطة</span>' : ''}
+              <div style="flex:1; min-width:0;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:4px;">
+                  <h4 style="margin:0; font-size:0.88rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${esc(i.name_ar)}">${esc(i.name_ar)}</h4>
+                  <span class="badge mono" style="font-size:0.65rem; padding:1px 4px; flex:none;">${esc(i.code)}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:3px; margin-top:2px; flex-wrap:wrap;">
+                  <span class="badge ${i.is_active ? 'green' : 'gray'}" style="font-size:0.62rem; padding:0 4px;">${i.is_active ? 'نشطة' : 'معطلة'}</span>
+                  <span class="badge ${i.zatca_phase === 'PHASE2' ? 'teal' : 'blue'}" style="font-size:0.62rem; padding:0 4px;">${i.zatca_phase === 'PHASE2' ? 'المرحلة 2' : 'المرحلة 1'}</span>
+                  ${i.id === store.activeIssuerId ? '<span class="badge amber" style="font-size:0.62rem; padding:0 4px;">النشطة</span>' : ''}
                 </div>
               </div>
             </div>
-            <dl class="kv mt">
-              <dt>الرقم الضريبي</dt><dd class="mono">${esc(i.tax_number || '—')}</dd>
-              <dt>السجل التجاري</dt><dd class="mono">${esc(i.commercial_register || '—')}</dd>
-              <dt>المدينة</dt><dd>${esc(i.city || '—')}</dd>
-              <dt>الهاتف</dt><dd class="mono">${esc(i.phone || '—')}</dd>
-              <dt>الترقيم</dt><dd class="mono">${esc(i.invoice_prefix)}-${String(i.invoice_next_no).padStart(i.invoice_pad, '0')}</dd>
-              <dt>الضريبة</dt><dd>${esc(String(i.default_tax_rate))}%</dd>
-            </dl>
-            <div class="flex mt">
-              ${i.id !== store.activeIssuerId ? `<button class="btn btn-sm" data-act="activate" data-id="${esc(i.id)}" type="button">${icon.check({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}تعيين كنشطة</button>` : ''}
-              ${writable ? `<button class="btn btn-sm" data-act="edit" data-id="${esc(i.id)}" type="button">${icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}تعديل</button>` : ''}
-              <button class="btn btn-sm" data-act="creds" data-id="${esc(i.id)}" type="button">${icon.shieldCheck({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}الربط الإلكتروني</button>
-              <button class="btn btn-sm" data-act="chain" data-id="${esc(i.id)}" type="button">${icon.search({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}تحقق من السلسلة</button>
-              <a class="btn btn-sm" href="#/invoices?issuer_id=${esc(i.id)}">${icon.invoice({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}فواتيرها</a>
-              ${writable ? `<button class="btn btn-sm btn-danger" data-act="del" data-id="${esc(i.id)}" type="button">${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}حذف</button>` : ''}
+
+            <!-- بيانات المنشأة في شبكة مدمجة -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:3px 6px; font-size:0.73rem; background:rgba(255,255,255,0.02); padding:5px 7px; border-radius:6px; border:1px solid rgba(255,255,255,0.04);">
+              <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">ضريبي:</span> <span class="mono" style="font-weight:600">${esc(i.tax_number || '—')}</span></div>
+              <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">سجل:</span> <span class="mono">${esc(i.commercial_register || '—')}</span></div>
+              <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">المدينة:</span> <span>${esc(i.city || '—')}</span></div>
+              <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">ترقيم:</span> <span class="mono">${esc(i.invoice_prefix)}-${String(i.invoice_next_no).padStart(i.invoice_pad, '0')}</span> (${esc(String(i.default_tax_rate))}%)</div>
+            </div>
+
+            <!-- أزرار الإجراءات المصغرة -->
+            <div style="display:flex; align-items:center; gap:3px; flex-wrap:wrap; padding-top:2px;">
+              ${i.id !== store.activeIssuerId ? `<button class="btn btn-xs" data-act="activate" data-id="${esc(i.id)}" type="button" title="تعيين كمنشأة نشطة">${icon.check({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}نشطة</button>` : ''}
+              ${writable ? `<button class="btn btn-xs" data-act="edit" data-id="${esc(i.id)}" type="button" title="تعديل">${icon.edit({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}تعديل</button>` : ''}
+              <button class="btn btn-xs" data-act="creds" data-id="${esc(i.id)}" type="button" title="الربط الإلكتروني والشهادات">${icon.shieldCheck({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}ربط</button>
+              <button class="btn btn-xs" data-act="chain" data-id="${esc(i.id)}" type="button" title="التحقق من سلسلة الفواتير">${icon.search({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}سلسلة</button>
+              <a class="btn btn-xs" href="#/invoices?issuer_id=${esc(i.id)}" title="فواتير المنشأة">${icon.invoice({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}فواتير</a>
+              ${writable ? `<button class="btn btn-xs btn-danger" style="margin-inline-start:auto; padding:2px 5px;" data-act="del" data-id="${esc(i.id)}" type="button" title="حذف المنشأة">${icon.trash({ size: 10, style: 'vertical-align:middle' })}</button>` : ''}
             </div>
           </div>`).join('')}
       </div>` : '')}`;

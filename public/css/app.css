@@ -1023,6 +1023,13 @@ select option {
   font-size: .82rem;
 }
 
+.btn-xs {
+  padding: .2rem .5rem;
+  font-size: .72rem;
+  border-radius: 6px;
+  line-height: 1.2;
+}
+
 .btn-icon {
   padding: .38rem .55rem;
 }
