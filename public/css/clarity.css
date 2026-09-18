@@ -89,7 +89,6 @@ html[data-theme="light"] .avatar { background: var(--brand); color: white; }
 html[data-theme="light"] .btn-primary:hover { background: var(--brand-dark); }
 html[data-theme="light"] .btn:hover { transform: none; }
 html[data-theme="light"] .btn-ghost:hover { color: var(--brand); background: var(--brand-light); }
-html[data-theme="light"] .content { max-width: 1600px; width: 100%; margin-inline: auto; }
 html[data-theme="light"] .page-head .titles p { max-width: 70ch; }
 
 html[data-theme="light"] .tbl thead th { background: #f6f8fa; color: #526575; }
@@ -259,7 +258,6 @@ html[data-theme="light"] .pager { border-color: var(--line); }
 }
 
 @media (max-width: 720px) {
-  html[data-theme="light"] .content { padding: 16px 12px; }
   html[data-theme="light"] .page-head { align-items: stretch; }
   html[data-theme="light"] .page-actions { width: 100%; flex-wrap: wrap; }
   html[data-theme="light"] .row > .field { max-width: none !important; min-width: 150px; }
