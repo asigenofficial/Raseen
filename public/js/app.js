@@ -20,7 +20,7 @@ const NAV = [
   { name: 'dashboard', label: 'الرئيسية', icon: icon.dashboard(), perm: 'reports.view' },
   { name: 'invoice', label: 'فاتورة جديدة', icon: icon.invoicePlus(), perm: 'invoices.create' },
   { name: 'invoices', label: 'الفواتير', icon: icon.invoice(), perm: 'invoices.view' },
-  { name: 'bulk', label: 'إنشاء فواتير بالجملة', icon: icon.bulk(), perm: 'bulk.generate' },
+  { name: 'bulk', label: 'التوليد الدفعي', icon: icon.bulk(), perm: 'bulk.generate' },
   { name: 'vouchers', label: 'سندات القبض', icon: icon.receipt(), perm: 'vouchers.view' },
   { name: 'statement', label: 'كشف حساب عميل', icon: icon.statement(), perm: 'ledger.view' },
   { group: 'البيانات الأساسية' },
