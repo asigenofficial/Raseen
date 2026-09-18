@@ -695,22 +695,11 @@ export async function render(view) {
       <div class="doc-tpl-hub">
         <!-- ترويسة الصفحة العامة -->
         <div class="page-head" style="margin-bottom:0;">
-          <div class="titles">
-            <div class="flex gap" style="align-items:center; margin-bottom:.35rem;">
-              <span class="badge blue" style="font-weight:800;">
-                ${activeZatcaPhase === 'PHASE2' ? 'المرحلة 2 (الربط والتكامل ZATCA)' : 'المرحلة 1 (الفوترة الإلكترونية)'}
-              </span>
-              <span class="badge green" style="font-weight:700; display:inline-flex; align-items:center; gap:4px;">
-                <span style="width:7px; height:7px; border-radius:50%; background:#10b981; display:inline-block;"></span>
-                اكتشاف تلقائي للقوالب نشط
-              </span>
-              <span class="badge gray">محرك القوالب الذكي 100% بدون كود</span>
-            </div>
-            <h1 style="margin:0 0 .35rem; display:flex; align-items:center; gap:8px;">
+          <div>
+            <h1 style="margin:0; display:flex; align-items:center; gap:8px;">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary);"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="9" x2="9" y1="3" y2="21"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/></svg>
-              قوالب الفواتير والسندات
+              القوالب
             </h1>
-            <p style="margin:0;">إدارة وتخصيص قوالب Excel الذكية (.xlsx) لفواتير المبيعات وسندات القبض المعتمدة مع الكشف التلقائي للخلايا.</p>
           </div>
           <div class="page-actions" style="flex-wrap:wrap; gap:.5rem;">
             <div class="field" style="margin:0; min-width:210px;">
