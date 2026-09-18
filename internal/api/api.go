@@ -480,15 +480,27 @@ func (s *Server) Handler() http.Handler {
 		q := r.URL.Query()
 		page, _ := strconv.Atoi(q.Get("page"))
 		limit, _ := strconv.Atoi(q.Get("limit"))
+		offset, _ := strconv.Atoi(q.Get("offset"))
+		minTotal, _ := strconv.ParseFloat(q.Get("min_total"), 64)
+		maxTotal, _ := strconv.ParseFloat(q.Get("max_total"), 64)
+		hasRemaining := q.Get("has_remaining") == "1" || q.Get("has_remaining") == "true"
+
 		res, err := s.invoices.ListInvoices(services.ListInvoicesFilter{
-			IssuerID: q.Get("issuer_id"),
-			ClientID: q.Get("client_id"),
-			Status:   q.Get("status"),
-			FromDate: q.Get("from"),
-			ToDate:   q.Get("to"),
-			Search:   q.Get("q"),
-			Page:     page,
-			Limit:    limit,
+			IssuerID:      q.Get("issuer_id"),
+			ClientID:      q.Get("client_id"),
+			Status:        q.Get("status"),
+			InvoiceType:   q.Get("invoice_type"),
+			PaymentMethod: q.Get("payment_method"),
+			BatchID:       q.Get("batch_id"),
+			HasRemaining:  hasRemaining,
+			MinTotal:      minTotal,
+			MaxTotal:      maxTotal,
+			FromDate:      q.Get("from"),
+			ToDate:        q.Get("to"),
+			Search:        q.Get("q"),
+			Page:          page,
+			Limit:         limit,
+			Offset:        offset,
 		})
 		if err != nil {
 			s.err(w, 500, err.Error())
@@ -610,15 +622,23 @@ func (s *Server) Handler() http.Handler {
 		q := r.URL.Query()
 		page, _ := strconv.Atoi(q.Get("page"))
 		limit, _ := strconv.Atoi(q.Get("limit"))
+		offset, _ := strconv.Atoi(q.Get("offset"))
+		minAmt, _ := strconv.ParseFloat(q.Get("min_amount"), 64)
+		maxAmt, _ := strconv.ParseFloat(q.Get("max_amount"), 64)
+
 		res, err := s.vouchers.ListVouchers(services.ListVouchersFilter{
-			IssuerID: q.Get("issuer_id"),
-			ClientID: q.Get("client_id"),
-			Status:   q.Get("status"),
-			FromDate: q.Get("from"),
-			ToDate:   q.Get("to"),
-			Search:   q.Get("q"),
-			Page:     page,
-			Limit:    limit,
+			IssuerID:    q.Get("issuer_id"),
+			ClientID:    q.Get("client_id"),
+			Status:      q.Get("status"),
+			PaymentType: q.Get("payment_type"),
+			FromDate:    q.Get("from"),
+			ToDate:      q.Get("to"),
+			MinAmount:   minAmt,
+			MaxAmount:   maxAmt,
+			Search:      q.Get("q"),
+			Page:        page,
+			Limit:       limit,
+			Offset:      offset,
 		})
 		if err != nil {
 			s.err(w, 500, err.Error())

@@ -57,16 +57,34 @@ type CreateInvoiceInput struct {
 	Lines            []CreateInvoiceLineInput `json:"lines"`
 }
 
+var invoicePaymentLabels = map[string]string{
+	"CASH":     "نقداً",
+	"CARD":     "شبكة",
+	"TRANSFER": "تحويل بنكي",
+	"CREDIT":   "آجل",
+	"CHEQUE":   "شيك",
+}
+
+var invoiceStatusLabels = map[string]string{
+	"UNPAID":    "غير مسددة",
+	"PARTIAL":   "مسددة جزئياً",
+	"PAID":      "مسددة",
+	"CANCELLED": "ملغاة",
+}
+
 type InvoiceView struct {
 	models.Invoice
-	SubtotalMajor        float64              `json:"subtotal"`
-	DiscountAmountMajor  float64              `json:"discount_amount"`
-	TaxableAmountMajor   float64              `json:"taxable_amount"`
-	TaxAmountMajor       float64              `json:"tax_amount"`
-	GrandTotalMajor      float64              `json:"grand_total"`
-	PaidAmountMajor      float64              `json:"paid_amount"`
-	RemainingAmountMajor float64              `json:"remaining_amount"`
-	Items                []InvoiceItemView    `json:"items"`
+	ClientCode           string            `json:"client_code"`
+	PaymentLabel         string            `json:"payment_label"`
+	StatusLabel          string            `json:"status_label"`
+	SubtotalMajor        float64           `json:"subtotal"`
+	DiscountAmountMajor  float64           `json:"discount_amount"`
+	TaxableAmountMajor   float64           `json:"taxable_amount"`
+	TaxAmountMajor       float64           `json:"tax_amount"`
+	GrandTotalMajor      float64           `json:"grand_total"`
+	PaidAmountMajor      float64           `json:"paid_amount"`
+	RemainingAmountMajor float64           `json:"remaining_amount"`
+	Items                []InvoiceItemView `json:"items"`
 }
 
 type InvoiceItemView struct {
@@ -489,8 +507,32 @@ func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 		inv.BatchID = &batchID.String
 	}
 
+	pLabel := invoicePaymentLabels[inv.PaymentMethod]
+	if pLabel == "" {
+		pLabel = inv.PaymentMethod
+	}
+	sLabel := invoiceStatusLabels[inv.Status]
+	if sLabel == "" {
+		sLabel = inv.Status
+	}
+
+	var issName, cCode string
+	_ = s.db.QueryRow(`
+		SELECT COALESCE(s.name_ar, ''), COALESCE(c.client_code, '')
+		FROM invoices i
+		LEFT JOIN issuers s ON s.id = i.issuer_id
+		LEFT JOIN clients c ON c.id = i.client_id
+		WHERE i.id = ?
+	`, id).Scan(&issName, &cCode)
+
+	inv.IssuerName = issName
+	inv.ClientName = inv.BuyerName
+
 	view := &InvoiceView{
 		Invoice:              inv,
+		ClientCode:           cCode,
+		PaymentLabel:         pLabel,
+		StatusLabel:          sLabel,
 		SubtotalMajor:        models.ToMajor(inv.Subtotal),
 		DiscountAmountMajor:  models.ToMajor(inv.DiscountAmount),
 		TaxableAmountMajor:   models.ToMajor(inv.TaxableAmount),
@@ -498,6 +540,7 @@ func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 		GrandTotalMajor:      models.ToMajor(inv.GrandTotal),
 		PaidAmountMajor:      models.ToMajor(inv.PaidAmount),
 		RemainingAmountMajor: models.ToMajor(inv.RemainingAmount),
+		Items:                make([]InvoiceItemView, 0),
 	}
 
 	// Fetch items
@@ -534,36 +577,48 @@ func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 }
 
 type ListInvoicesFilter struct {
-	IssuerID  string
-	ClientID  string
-	Status    string
-	FromDate  string
-	ToDate    string
-	Search    string
-	Page      int
-	Limit     int
+	IssuerID      string
+	ClientID      string
+	Status        string
+	InvoiceType   string
+	PaymentMethod string
+	BatchID       string
+	HasRemaining  bool
+	MinTotal      float64
+	MaxTotal      float64
+	FromDate      string
+	ToDate        string
+	Search        string
+	Page          int
+	Limit         int
+	Offset        int
+}
+
+type InvoiceTotals struct {
+	GrandTotal float64 `json:"grand_total"`
+	Paid       float64 `json:"paid"`
+	Remaining  float64 `json:"remaining"`
+	Tax        float64 `json:"tax"`
 }
 
 type ListInvoicesResult struct {
-	Items  []InvoiceView `json:"items"`
-	Total  int           `json:"total"`
-	Page   int           `json:"page"`
-	Limit  int           `json:"limit"`
-	Totals struct {
-		GrandTotal float64 `json:"grand_total"`
-		Paid       float64 `json:"paid"`
-		Remaining  float64 `json:"remaining"`
-	} `json:"totals"`
+	Items      []InvoiceView `json:"items"`
+	TotalCount int           `json:"total_count"`
+	Total      int           `json:"total"`
+	Page       int           `json:"page"`
+	Limit      int           `json:"limit"`
+	Totals     InvoiceTotals `json:"totals"`
 }
 
 func (s *InvoiceService) ListInvoices(f ListInvoicesFilter) (*ListInvoicesResult, error) {
-	if f.Page <= 0 {
-		f.Page = 1
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 50
 	}
-	if f.Limit <= 0 {
-		f.Limit = 50
+	offset := f.Offset
+	if offset <= 0 && f.Page > 1 {
+		offset = (f.Page - 1) * limit
 	}
-	offset := (f.Page - 1) * f.Limit
 
 	where := `WHERE 1=1`
 	var args []any
@@ -580,6 +635,29 @@ func (s *InvoiceService) ListInvoices(f ListInvoicesFilter) (*ListInvoicesResult
 		where += ` AND i.status = ?`
 		args = append(args, f.Status)
 	}
+	if f.InvoiceType != "" {
+		where += ` AND i.invoice_type = ?`
+		args = append(args, f.InvoiceType)
+	}
+	if f.PaymentMethod != "" {
+		where += ` AND i.payment_method = ?`
+		args = append(args, f.PaymentMethod)
+	}
+	if f.BatchID != "" {
+		where += ` AND i.batch_id = ?`
+		args = append(args, f.BatchID)
+	}
+	if f.HasRemaining {
+		where += ` AND i.remaining_amount > 0`
+	}
+	if f.MinTotal > 0 {
+		where += ` AND i.grand_total >= ?`
+		args = append(args, models.ToMinor(f.MinTotal))
+	}
+	if f.MaxTotal > 0 {
+		where += ` AND i.grand_total <= ?`
+		args = append(args, models.ToMinor(f.MaxTotal))
+	}
 	if f.FromDate != "" {
 		where += ` AND i.issue_date >= ?`
 		args = append(args, f.FromDate)
@@ -589,20 +667,27 @@ func (s *InvoiceService) ListInvoices(f ListInvoicesFilter) (*ListInvoicesResult
 		args = append(args, f.ToDate)
 	}
 	if f.Search != "" {
-		where += ` AND (i.invoice_number LIKE ? OR i.buyer_name LIKE ? OR i.buyer_tax_number LIKE ?)`
+		where += ` AND (i.invoice_number LIKE ? OR i.buyer_name LIKE ? OR c.name LIKE ? OR c.client_code LIKE ? OR i.buyer_tax_number LIKE ?)`
 		like := "%" + f.Search + "%"
-		args = append(args, like, like, like)
+		args = append(args, like, like, like, like, like)
 	}
 
 	// Count and Totals
 	countQuery := fmt.Sprintf(`
-		SELECT COUNT(*), COALESCE(SUM(i.grand_total), 0), COALESCE(SUM(i.paid_amount), 0), COALESCE(SUM(i.remaining_amount), 0)
-		FROM invoices i %s
+		SELECT COUNT(*),
+		       COALESCE(SUM(i.grand_total), 0),
+		       COALESCE(SUM(i.paid_amount), 0),
+		       COALESCE(SUM(i.remaining_amount), 0),
+		       COALESCE(SUM(i.tax_amount), 0)
+		FROM invoices i
+		LEFT JOIN clients c ON c.id = i.client_id
+		LEFT JOIN issuers s ON s.id = i.issuer_id
+		%s
 	`, where)
 
 	var totalCount int
-	var sumGrand, sumPaid, sumRem int64
-	err := s.db.QueryRow(countQuery, args...).Scan(&totalCount, &sumGrand, &sumPaid, &sumRem)
+	var sumGrand, sumPaid, sumRem, sumTax int64
+	err := s.db.QueryRow(countQuery, args...).Scan(&totalCount, &sumGrand, &sumPaid, &sumRem, &sumTax)
 	if err != nil {
 		return nil, err
 	}
@@ -613,39 +698,71 @@ func (s *InvoiceService) ListInvoices(f ListInvoicesFilter) (*ListInvoicesResult
 		       i.uuid, i.issue_date, i.issue_time, i.issue_datetime, i.currency,
 		       i.subtotal, i.discount_amount, i.taxable_amount, i.tax_amount, i.grand_total,
 		       i.paid_amount, i.remaining_amount, i.status, i.payment_method,
-		       i.seller_name, i.buyer_name, i.buyer_tax_number, i.created_at
-		FROM invoices i %s
+		       i.seller_name, i.buyer_name, i.buyer_tax_number, i.created_at, i.batch_id,
+		       COALESCE(s.name_ar, i.seller_name),
+		       COALESCE(c.name, i.buyer_name),
+		       COALESCE(c.client_code, '')
+		FROM invoices i
+		LEFT JOIN clients c ON c.id = i.client_id
+		LEFT JOIN issuers s ON s.id = i.issuer_id
+		%s
 		ORDER BY i.issue_date DESC, i.sequence_no DESC
 		LIMIT ? OFFSET ?
 	`, where)
 
-	queryArgs := append(args, f.Limit, offset)
+	queryArgs := append(args, limit, offset)
 	rows, err := s.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	res := &ListInvoicesResult{
-		Total: totalCount,
-		Page:  f.Page,
-		Limit: f.Limit,
+	page := f.Page
+	if page <= 0 {
+		page = (offset / limit) + 1
 	}
-	res.Totals.GrandTotal = models.ToMajor(sumGrand)
-	res.Totals.Paid = models.ToMajor(sumPaid)
-	res.Totals.Remaining = models.ToMajor(sumRem)
+
+	res := &ListInvoicesResult{
+		Items:      make([]InvoiceView, 0),
+		TotalCount: totalCount,
+		Total:      totalCount,
+		Page:       page,
+		Limit:      limit,
+		Totals: InvoiceTotals{
+			GrandTotal: models.ToMajor(sumGrand),
+			Paid:       models.ToMajor(sumPaid),
+			Remaining:  models.ToMajor(sumRem),
+			Tax:        models.ToMajor(sumTax),
+		},
+	}
 
 	for rows.Next() {
 		var inv models.Invoice
+		var issName, cName, cCode string
 		if err := rows.Scan(
 			&inv.ID, &inv.IssuerID, &inv.ClientID, &inv.InvoiceNumber, &inv.SequenceNo, &inv.InvoiceType, &inv.ZatcaPhase,
 			&inv.UUID, &inv.IssueDate, &inv.IssueTime, &inv.IssueDatetime, &inv.Currency,
 			&inv.Subtotal, &inv.DiscountAmount, &inv.TaxableAmount, &inv.TaxAmount, &inv.GrandTotal,
 			&inv.PaidAmount, &inv.RemainingAmount, &inv.Status, &inv.PaymentMethod,
-			&inv.SellerName, &inv.BuyerName, &inv.BuyerTaxNumber, &inv.CreatedAt,
+			&inv.SellerName, &inv.BuyerName, &inv.BuyerTaxNumber, &inv.CreatedAt, &inv.BatchID,
+			&issName, &cName, &cCode,
 		); err == nil {
+			inv.IssuerName = issName
+			inv.ClientName = cName
+			pLabel := invoicePaymentLabels[inv.PaymentMethod]
+			if pLabel == "" {
+				pLabel = inv.PaymentMethod
+			}
+			sLabel := invoiceStatusLabels[inv.Status]
+			if sLabel == "" {
+				sLabel = inv.Status
+			}
+
 			view := InvoiceView{
 				Invoice:              inv,
+				ClientCode:           cCode,
+				PaymentLabel:         pLabel,
+				StatusLabel:          sLabel,
 				SubtotalMajor:        models.ToMajor(inv.Subtotal),
 				DiscountAmountMajor:  models.ToMajor(inv.DiscountAmount),
 				TaxableAmountMajor:   models.ToMajor(inv.TaxableAmount),

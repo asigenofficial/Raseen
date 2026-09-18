@@ -36,25 +36,39 @@ type CreateVoucherInput struct {
 }
 
 type VoucherView struct {
-	models.ReceiptVoucher
-	TotalAmountMajor    float64                    `json:"total_amount"`
-	AllocatedTotalMajor float64                    `json:"allocated_total"`
-	UnallocatedMajor    float64                    `json:"unallocated"`
-	PaymentLabel        string                     `json:"payment_label"`
-	StatusLabel         string                     `json:"status_label"`
-	Allocations         []VoucherAllocationView    `json:"allocations"`
+	ID             string                  `json:"id"`
+	VoucherNumber  string                  `json:"voucher_number"`
+	IssuerID       string                  `json:"issuer_id"`
+	IssuerName     string                  `json:"issuer_name"`
+	ClientID       string                  `json:"client_id"`
+	ClientName     string                  `json:"client_name"`
+	ClientCode     string                  `json:"client_code"`
+	VoucherDate    string                  `json:"voucher_date"`
+	TotalAmount    float64                 `json:"total_amount"`
+	AllocatedTotal float64                 `json:"allocated_total"`
+	Unallocated    float64                 `json:"unallocated"`
+	PaymentType    string                  `json:"payment_type"`
+	PaymentLabel   string                  `json:"payment_label"`
+	ReferenceNo    string                  `json:"reference_no"`
+	Notes          string                  `json:"notes"`
+	Status         string                  `json:"status"`
+	StatusLabel    string                  `json:"status_label"`
+	CreatedBy      string                  `json:"created_by"`
+	CreatedAt      string                  `json:"created_at"`
+	UpdatedAt      string                  `json:"updated_at"`
+	Allocations    []VoucherAllocationView `json:"allocations"`
 }
 
 type VoucherAllocationView struct {
-	ID                   string  `json:"id"`
-	InvoiceID            string  `json:"invoice_id"`
-	InvoiceNumber        string  `json:"invoice_number"`
-	IssueDate            string  `json:"issue_date"`
-	AllocatedAmountMajor float64 `json:"allocated_amount"`
-	InvoiceTotalMajor    float64 `json:"invoice_total"`
-	InvoicePaidMajor     float64 `json:"invoice_paid"`
-	InvoiceRemainingMajor float64 `json:"invoice_remaining"`
-	InvoiceStatus        string  `json:"invoice_status"`
+	ID               string  `json:"id"`
+	InvoiceID        string  `json:"invoice_id"`
+	InvoiceNumber    string  `json:"invoice_number"`
+	IssueDate        string  `json:"issue_date"`
+	AllocatedAmount  float64 `json:"allocated_amount"`
+	InvoiceTotal     float64 `json:"invoice_total"`
+	InvoicePaid      float64 `json:"invoice_paid"`
+	InvoiceRemaining float64 `json:"invoice_remaining"`
+	InvoiceStatus    string  `json:"invoice_status"`
 }
 
 var paymentLabels = map[string]string{
@@ -216,36 +230,59 @@ func (s *VoucherService) CreateVoucher(input CreateVoucherInput, actor, ip strin
 }
 
 func (s *VoucherService) GetVoucher(id string) (*VoucherView, error) {
-	var v models.ReceiptVoucher
+	var idVal, vNum, issID, clientID, vDate, pType, refNo, notes, status, createdBy, createdAt, updatedAt, issName, clientName, clientCode string
+	var totalAmt, allocTotal int64
 	err := s.db.QueryRow(`
 		SELECT v.id, v.voucher_number, v.issuer_id, v.client_id, v.voucher_date,
 		       v.total_amount, v.allocated_total, v.payment_type, v.reference_no, v.notes,
 		       v.status, v.created_by, v.created_at, v.updated_at,
-		       s.name_ar, c.name
+		       s.name_ar, c.name, c.client_code
 		FROM receipt_vouchers v
 		JOIN issuers s ON s.id = v.issuer_id
 		JOIN clients c ON c.id = v.client_id
 		WHERE v.id = ?
 	`, id).Scan(
-		&v.ID, &v.VoucherNumber, &v.IssuerID, &v.ClientID, &v.VoucherDate,
-		&v.TotalAmount, &v.AllocatedTotal, &v.PaymentType, &v.ReferenceNo, &v.Notes,
-		&v.Status, &v.CreatedBy, &v.CreatedAt, &v.UpdatedAt,
-		&v.IssuerName, &v.ClientName,
+		&idVal, &vNum, &issID, &clientID, &vDate,
+		&totalAmt, &allocTotal, &pType, &refNo, &notes,
+		&status, &createdBy, &createdAt, &updatedAt,
+		&issName, &clientName, &clientCode,
 	)
 	if err != nil {
 		return nil, errors.New("سند القبض غير موجود")
 	}
 
-	view := &VoucherView{
-		ReceiptVoucher:      v,
-		TotalAmountMajor:    models.ToMajor(v.TotalAmount),
-		AllocatedTotalMajor: models.ToMajor(v.AllocatedTotal),
-		UnallocatedMajor:    models.ToMajor(v.TotalAmount - v.AllocatedTotal),
-		PaymentLabel:        paymentLabels[v.PaymentType],
-		StatusLabel:         "نشط",
+	pLabel := paymentLabels[pType]
+	sLabel := "نشط"
+	if status == "CANCELLED" {
+		sLabel = "ملغى"
 	}
-	if v.Status == "CANCELLED" {
-		view.StatusLabel = "ملغى"
+
+	totalMajor := models.ToMajor(totalAmt)
+	allocMajor := models.ToMajor(allocTotal)
+	unallocMajor := models.ToMajor(totalAmt - allocTotal)
+
+	view := &VoucherView{
+		ID:             idVal,
+		VoucherNumber:  vNum,
+		IssuerID:       issID,
+		IssuerName:     issName,
+		ClientID:       clientID,
+		ClientName:     clientName,
+		ClientCode:     clientCode,
+		VoucherDate:    vDate,
+		TotalAmount:    totalMajor,
+		AllocatedTotal: allocMajor,
+		Unallocated:    unallocMajor,
+		PaymentType:    pType,
+		PaymentLabel:   pLabel,
+		ReferenceNo:    refNo,
+		Notes:          notes,
+		Status:         status,
+		StatusLabel:    sLabel,
+		CreatedBy:      createdBy,
+		CreatedAt:      createdAt,
+		UpdatedAt:      updatedAt,
+		Allocations:    make([]VoucherAllocationView, 0),
 	}
 
 	// Allocations
@@ -265,10 +302,10 @@ func (s *VoucherService) GetVoucher(id string) (*VoucherView, error) {
 				&av.ID, &av.InvoiceID, &allocMinor, &av.InvoiceNumber, &av.IssueDate,
 				&totalMinor, &paidMinor, &remMinor, &av.InvoiceStatus,
 			); err == nil {
-				av.AllocatedAmountMajor = models.ToMajor(allocMinor)
-				av.InvoiceTotalMajor = models.ToMajor(totalMinor)
-				av.InvoicePaidMajor = models.ToMajor(paidMinor)
-				av.InvoiceRemainingMajor = models.ToMajor(remMinor)
+				av.AllocatedAmount = models.ToMajor(allocMinor)
+				av.InvoiceTotal = models.ToMajor(totalMinor)
+				av.InvoicePaid = models.ToMajor(paidMinor)
+				av.InvoiceRemaining = models.ToMajor(remMinor)
 				view.Allocations = append(view.Allocations, av)
 			}
 		}
@@ -278,31 +315,44 @@ func (s *VoucherService) GetVoucher(id string) (*VoucherView, error) {
 }
 
 type ListVouchersFilter struct {
-	IssuerID string
-	ClientID string
-	Status   string
-	FromDate string
-	ToDate   string
-	Search   string
-	Page     int
-	Limit    int
+	IssuerID    string
+	ClientID    string
+	Status      string
+	PaymentType string
+	FromDate    string
+	ToDate      string
+	MinAmount   float64
+	MaxAmount   float64
+	Search      string
+	Page        int
+	Limit       int
+	Offset      int
+}
+
+type VoucherTotals struct {
+	TotalAmount      float64 `json:"total_amount"`
+	AllocatedTotal   float64 `json:"allocated_total"`
+	UnallocatedTotal float64 `json:"unallocated_total"`
 }
 
 type ListVouchersResult struct {
-	Items []VoucherView `json:"items"`
-	Total int           `json:"total"`
-	Page  int           `json:"page"`
-	Limit int           `json:"limit"`
+	Items      []VoucherView `json:"items"`
+	TotalCount int           `json:"total_count"`
+	Total      int           `json:"total"`
+	Page       int           `json:"page"`
+	Limit      int           `json:"limit"`
+	Totals     VoucherTotals `json:"totals"`
 }
 
 func (s *VoucherService) ListVouchers(f ListVouchersFilter) (*ListVouchersResult, error) {
-	if f.Page <= 0 {
-		f.Page = 1
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 50
 	}
-	if f.Limit <= 0 {
-		f.Limit = 50
+	offset := f.Offset
+	if offset <= 0 && f.Page > 1 {
+		offset = (f.Page - 1) * limit
 	}
-	offset := (f.Page - 1) * f.Limit
 
 	where := `WHERE 1=1`
 	var args []any
@@ -319,6 +369,10 @@ func (s *VoucherService) ListVouchers(f ListVouchersFilter) (*ListVouchersResult
 		where += ` AND v.status = ?`
 		args = append(args, f.Status)
 	}
+	if f.PaymentType != "" {
+		where += ` AND v.payment_type = ?`
+		args = append(args, f.PaymentType)
+	}
 	if f.FromDate != "" {
 		where += ` AND v.voucher_date >= ?`
 		args = append(args, f.FromDate)
@@ -327,21 +381,43 @@ func (s *VoucherService) ListVouchers(f ListVouchersFilter) (*ListVouchersResult
 		where += ` AND v.voucher_date <= ?`
 		args = append(args, f.ToDate)
 	}
+	if f.MinAmount > 0 {
+		where += ` AND v.total_amount >= ?`
+		args = append(args, models.ToMinor(f.MinAmount))
+	}
+	if f.MaxAmount > 0 {
+		where += ` AND v.total_amount <= ?`
+		args = append(args, models.ToMinor(f.MaxAmount))
+	}
 	if f.Search != "" {
-		where += ` AND (v.voucher_number LIKE ? OR c.name LIKE ? OR v.reference_no LIKE ?)`
+		where += ` AND (v.voucher_number LIKE ? OR c.name LIKE ? OR c.client_code LIKE ? OR v.reference_no LIKE ? OR v.notes LIKE ?)`
 		like := "%" + f.Search + "%"
-		args = append(args, like, like, like)
+		args = append(args, like, like, like, like, like)
 	}
 
-	var count int
-	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM receipt_vouchers v JOIN clients c ON c.id = v.client_id %s`, where)
-	_ = s.db.QueryRow(countQuery, args...).Scan(&count)
+	totalsQuery := fmt.Sprintf(`
+		SELECT COUNT(*),
+		       COALESCE(SUM(v.total_amount), 0),
+		       COALESCE(SUM(v.allocated_total), 0)
+		FROM receipt_vouchers v
+		JOIN issuers s ON s.id = v.issuer_id
+		JOIN clients c ON c.id = v.client_id
+		%s
+	`, where)
+
+	var totalCount int
+	var sumTotalMinor, sumAllocMinor int64
+	_ = s.db.QueryRow(totalsQuery, args...).Scan(&totalCount, &sumTotalMinor, &sumAllocMinor)
+
+	sumTotal := models.ToMajor(sumTotalMinor)
+	sumAlloc := models.ToMajor(sumAllocMinor)
+	sumUnalloc := models.ToMajor(sumTotalMinor - sumAllocMinor)
 
 	query := fmt.Sprintf(`
 		SELECT v.id, v.voucher_number, v.issuer_id, v.client_id, v.voucher_date,
 		       v.total_amount, v.allocated_total, v.payment_type, v.reference_no, v.notes,
 		       v.status, v.created_by, v.created_at, v.updated_at,
-		       s.name_ar, c.name
+		       s.name_ar, c.name, c.client_code
 		FROM receipt_vouchers v
 		JOIN issuers s ON s.id = v.issuer_id
 		JOIN clients c ON c.id = v.client_id
@@ -350,37 +426,70 @@ func (s *VoucherService) ListVouchers(f ListVouchersFilter) (*ListVouchersResult
 		LIMIT ? OFFSET ?
 	`, where)
 
-	queryArgs := append(args, f.Limit, offset)
+	queryArgs := append(args, limit, offset)
 	rows, err := s.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
+	page := f.Page
+	if page <= 0 {
+		page = (offset / limit) + 1
+	}
+
 	res := &ListVouchersResult{
-		Total: count,
-		Page:  f.Page,
-		Limit: f.Limit,
+		Items:      make([]VoucherView, 0),
+		TotalCount: totalCount,
+		Total:      totalCount,
+		Page:       page,
+		Limit:      limit,
+		Totals: VoucherTotals{
+			TotalAmount:      sumTotal,
+			AllocatedTotal:   sumAlloc,
+			UnallocatedTotal: sumUnalloc,
+		},
 	}
 
 	for rows.Next() {
-		var v models.ReceiptVoucher
+		var idVal, vNum, issID, clientID, vDate, pType, refNo, notes, status, createdBy, createdAt, updatedAt, issName, clientName, clientCode string
+		var totalAmt, allocTotal int64
 		if err := rows.Scan(
-			&v.ID, &v.VoucherNumber, &v.IssuerID, &v.ClientID, &v.VoucherDate,
-			&v.TotalAmount, &v.AllocatedTotal, &v.PaymentType, &v.ReferenceNo, &v.Notes,
-			&v.Status, &v.CreatedBy, &v.CreatedAt, &v.UpdatedAt,
-			&v.IssuerName, &v.ClientName,
+			&idVal, &vNum, &issID, &clientID, &vDate,
+			&totalAmt, &allocTotal, &pType, &refNo, &notes,
+			&status, &createdBy, &createdAt, &updatedAt,
+			&issName, &clientName, &clientCode,
 		); err == nil {
-			view := VoucherView{
-				ReceiptVoucher:      v,
-				TotalAmountMajor:    models.ToMajor(v.TotalAmount),
-				AllocatedTotalMajor: models.ToMajor(v.AllocatedTotal),
-				UnallocatedMajor:    models.ToMajor(v.TotalAmount - v.AllocatedTotal),
-				PaymentLabel:        paymentLabels[v.PaymentType],
-				StatusLabel:         "نشط",
+			pLabel := paymentLabels[pType]
+			sLabel := "نشط"
+			if status == "CANCELLED" {
+				sLabel = "ملغى"
 			}
-			if v.Status == "CANCELLED" {
-				view.StatusLabel = "ملغى"
+			totMaj := models.ToMajor(totalAmt)
+			allocMaj := models.ToMajor(allocTotal)
+			unallocMaj := models.ToMajor(totalAmt - allocTotal)
+
+			view := VoucherView{
+				ID:             idVal,
+				VoucherNumber:  vNum,
+				IssuerID:       issID,
+				IssuerName:     issName,
+				ClientID:       clientID,
+				ClientName:     clientName,
+				ClientCode:     clientCode,
+				VoucherDate:    vDate,
+				TotalAmount:    totMaj,
+				AllocatedTotal: allocMaj,
+				Unallocated:    unallocMaj,
+				PaymentType:    pType,
+				PaymentLabel:   pLabel,
+				ReferenceNo:    refNo,
+				Notes:          notes,
+				Status:         status,
+				StatusLabel:    sLabel,
+				CreatedBy:      createdBy,
+				CreatedAt:      createdAt,
+				UpdatedAt:      updatedAt,
 			}
 			res.Items = append(res.Items, view)
 		}
@@ -412,7 +521,7 @@ func (s *VoucherService) CancelVoucher(id, actor, ip string) error {
 
 	// Rollback allocations from invoices
 	for _, a := range v.Allocations {
-		allocMinor := models.ToMinor(a.AllocatedAmountMajor)
+		allocMinor := models.ToMinor(a.AllocatedAmount)
 		var grandTotal, paidAmount int64
 		_ = tx.QueryRow("SELECT grand_total, paid_amount FROM invoices WHERE id = ?", a.InvoiceID).Scan(&grandTotal, &paidAmount)
 		newPaid := paidAmount - allocMinor
@@ -434,15 +543,16 @@ func (s *VoucherService) CancelVoucher(id, actor, ip string) error {
 	}
 
 	// Reverse entry in client_ledger
+	totalAmountMinor := models.ToMinor(v.TotalAmount)
 	_, err = tx.Exec(`
 		INSERT INTO client_ledger (
 			id, client_id, issuer_id, doc_type, doc_id, doc_number,
 			transaction_date, debit, credit, description, created_at
 		) VALUES (
 			?, ?, ?, 'RECEIPT_CANCEL', ?, ?,
-			?, ?, 0, ?, ?
+			?, 0, ?, ?, ?
 		)
-	`, crypto.UUID(), v.ClientID, v.IssuerID, v.ID, v.VoucherNumber, db.TodayIso(), v.TotalAmount, fmt.Sprintf("إلغاء سند قبض رقم %s", v.VoucherNumber), now)
+	`, crypto.UUID(), v.ClientID, v.IssuerID, v.ID, v.VoucherNumber, db.TodayIso(), totalAmountMinor, fmt.Sprintf("إلغاء سند قبض رقم %s", v.VoucherNumber), now)
 	if err != nil {
 		return err
 	}
@@ -453,7 +563,7 @@ func (s *VoucherService) CancelVoucher(id, actor, ip string) error {
 
 	s.db.Audit(actor, "VOUCHER_CANCEL", "voucher", id, v.IssuerID, map[string]any{
 		"voucher_number": v.VoucherNumber,
-		"amount":         v.TotalAmountMajor,
+		"amount":         v.TotalAmount,
 	}, ip)
 
 	return nil
