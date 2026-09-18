@@ -66,6 +66,8 @@ export const icon = {
   arrowRight: (opt) => createSvg('<line x1="5" x2="19" y1="12" y2="12"/><polyline points="12 5 19 12 12 19"/>', opt),
   arrowLeft: (opt) => createSvg('<line x1="19" x2="5" y1="12" y2="12"/><polyline points="12 19 5 12 12 5"/>', opt),
   chevronDown: (opt) => createSvg('<polyline points="6 9 12 15 18 9"/>', opt),
+  chevronLeft: (opt) => createSvg('<polyline points="15 18 9 12 15 6"/>', opt),
+  chevronRight: (opt) => createSvg('<polyline points="9 18 15 12 9 6"/>', opt),
   sparkles: (opt) => createSvg('<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>', opt),
   lock: (opt) => createSvg('<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>', opt),
   key: (opt) => createSvg('<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>', opt),

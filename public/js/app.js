@@ -141,10 +141,16 @@ function renderShell() {
           </div>
         </div>
         <nav class="nav" id="nav">${raw(navHtml())}</nav>
+        <button class="sidebar-edge-toggle" id="sidebar-edge-toggle" type="button" aria-label="طي / توسيع القائمة الجانبية" title="طي / توسيع القائمة الجانبية (Ctrl+B)">
+          <span class="ico-toggle-arrow">${raw(icon.chevronRight({ size: 16 }))}</span>
+        </button>
       </aside>
       <div class="main">
         <header class="topbar">
           <button class="burger" id="burger" type="button" aria-label="القائمة"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="18" y2="18"/></svg></button>
+          <button class="sidebar-desk-toggle" id="sidebar-desk-toggle" type="button" aria-label="طي القائمة الجانبية" title="طي / توسيع القائمة الجانبية">
+            ${raw(icon.chevronRight({ size: 18 }))}
+          </button>
           <div class="issuer-pick">
             <label for="issuer-select">الشركة الحالية</label>
             <select id="issuer-select" style="min-width:230px">${raw(issuerOptions())}</select>
@@ -165,6 +171,32 @@ function renderShell() {
       </div>
     </div>`;
 
+  const layoutEl = app.querySelector('.layout');
+  const updateToggleIcons = (collapsed) => {
+    const edge = $('#sidebar-edge-toggle .ico-toggle-arrow');
+    const desk = $('#sidebar-desk-toggle');
+    if (edge) edge.innerHTML = collapsed ? icon.chevronLeft({ size: 16 }) : icon.chevronRight({ size: 16 });
+    if (desk) desk.innerHTML = collapsed ? icon.chevronLeft({ size: 18 }) : icon.chevronRight({ size: 18 });
+  };
+
+  const setCollapsed = (collapsed) => {
+    if (!layoutEl) return;
+    layoutEl.classList.toggle('sidebar-collapsed', collapsed);
+    localStorage.setItem('raseen_sidebar_collapsed', collapsed ? '1' : '0');
+    updateToggleIcons(collapsed);
+  };
+
+  const isCollapsedInitial = localStorage.getItem('raseen_sidebar_collapsed') === '1';
+  if (isCollapsedInitial) {
+    setCollapsed(true);
+  }
+
+  const toggleDesktopSidebar = () => {
+    if (!layoutEl) return;
+    const isNow = !layoutEl.classList.contains('sidebar-collapsed');
+    setCollapsed(isNow);
+  };
+
   const toggleSidebar = (force) => {
     const sb = $('#sidebar');
     const bd = $('#sidebar-backdrop');
@@ -174,6 +206,9 @@ function renderShell() {
     bd.classList.toggle('active', open);
   };
 
+  $('#sidebar-edge-toggle')?.addEventListener('click', toggleDesktopSidebar);
+  $('#sidebar-desk-toggle')?.addEventListener('click', toggleDesktopSidebar);
+
   $('#issuer-select').addEventListener('change', (e) => {
     setActiveIssuer(e.target.value);
     router.render();
@@ -181,7 +216,13 @@ function renderShell() {
   $('#burger').addEventListener('click', () => toggleSidebar());
   $('#sidebar-backdrop').addEventListener('click', () => toggleSidebar(false));
   delegate($('#nav'), 'click', '.nav-item', () => toggleSidebar(false));
-  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleSidebar(false); });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') toggleSidebar(false);
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      e.preventDefault();
+      toggleDesktopSidebar();
+    }
+  });
   $('#user-chip').addEventListener('click', openUserMenu);
 
   // زر تبديل الثيم

@@ -323,6 +323,7 @@ a:hover {
   flex-direction: column;
   min-width: 0;
   position: relative;
+  transition: margin-inline-start .25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .topbar {
@@ -3251,4 +3252,110 @@ html[data-theme="light"] .inv-box-head {
 html[data-theme="light"] .inv-addr-box {
   background: #f8fafc;
   border-color: #e2e8f0;
+}
+
+/* ------------------------------------------------------------- أزرار طي وتوسيع الشريط الجانبي في سطح المكتب */
+.sidebar-desk-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  color: var(--text);
+  cursor: pointer;
+  transition: all .2s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.sidebar-desk-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--brand);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.sidebar-edge-toggle {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: -14px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #1e293b;
+  border: 1px solid var(--line-strong);
+  color: #f8fafc;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  z-index: 55;
+  transition: all .2s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0;
+}
+
+.sidebar-edge-toggle:hover {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+  transform: translateY(-50%) scale(1.12);
+}
+
+.sidebar-edge-toggle .ico-toggle-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .2s ease;
+}
+
+html[data-theme="light"] .sidebar-edge-toggle {
+  background: #ffffff;
+  color: #334155;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+html[data-theme="light"] .sidebar-edge-toggle:hover {
+  background: var(--brand);
+  color: #ffffff;
+  border-color: var(--brand);
+}
+
+html[data-theme="light"] .sidebar-desk-toggle {
+  background: #ffffff;
+  border-color: var(--line);
+  color: var(--text);
+}
+
+html[data-theme="light"] .sidebar-desk-toggle:hover {
+  background: var(--brand-light);
+  color: var(--brand-dark);
+  border-color: var(--brand);
+}
+
+/* سلوك طي الشريط الجانبي في شاشات الكمبيوتر / سطح المكتب */
+@media (min-width: 901px) {
+  .layout.sidebar-collapsed .sidebar {
+    transform: translateX(100%);
+  }
+  .layout.sidebar-collapsed .main {
+    margin-inline-start: 0;
+  }
+  .layout.sidebar-collapsed .sidebar-edge-toggle {
+    inset-inline-end: -26px;
+  }
+}
+
+@media (max-width: 900px) {
+  .sidebar-edge-toggle {
+    display: none !important;
+  }
+  .sidebar-desk-toggle {
+    display: none !important;
+  }
 }
