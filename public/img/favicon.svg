@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" role="img" aria-label="Raseen">
+  <rect width="120" height="120" rx="28" fill="#080d1a"/>
+  <path d="M 36 94 V 46 C 36 26 50 18 68 18 C 86 18 96 28 96 44 C 96 58 84 66 68 66 H 36" 
+        stroke="#06b6d4" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 52 94 V 54 C 52 44 58 36 68 36 C 76 36 80 40 80 48 C 80 56 74 62 64 64 L 88 94" 
+        stroke="#ffffff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
