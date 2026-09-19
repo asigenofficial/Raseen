@@ -29,7 +29,7 @@ func (s *ItemService) ListCategories() ([]models.ItemCategory, error) {
 	}
 	defer rows.Close()
 
-	var list []models.ItemCategory
+	list := make([]models.ItemCategory, 0)
 	for rows.Next() {
 		var cat models.ItemCategory
 		var parent sql.NullString
@@ -95,7 +95,7 @@ func (s *ItemService) ListItems(search, categoryID string, activeOnly bool) ([]I
 	}
 	defer rows.Close()
 
-	var list []ItemListItem
+	list := make([]ItemListItem, 0)
 	for rows.Next() {
 		var item ItemListItem
 		var catID sql.NullString

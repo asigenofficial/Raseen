@@ -31,12 +31,17 @@ export async function render(view, ctx) {
   }
 
   const load = async () => {
-    state.data = await api.get(qs('/api/ledger/statement', {
+    const res = await api.get(qs('/api/ledger/statement', {
       client_id: state.client_id,
       issuer_id: state.issuer_id,
       from: state.from,
       to: state.to,
     }));
+    state.data = res || {};
+    if (!Array.isArray(state.data.entries)) state.data.entries = [];
+    if (!state.data.totals) state.data.totals = {};
+    if (!state.data.period) state.data.period = {};
+    if (!state.data.client) state.data.client = { name: '' };
   };
 
   const draw = () => {

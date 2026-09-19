@@ -276,7 +276,8 @@ async function verifyChain(issuer) {
 
 export async function render(view) {
   const draw = async () => {
-    const issuers = await api.get('/api/issuers');
+    const rawIssuers = await api.get('/api/issuers');
+    const issuers = Array.isArray(rawIssuers) ? rawIssuers : (rawIssuers?.data || []);
     store.issuers = issuers;
     const writable = can('issuers.write');
 

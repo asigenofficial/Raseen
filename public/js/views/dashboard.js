@@ -29,7 +29,19 @@ function barChart(monthly) {
 
 export async function render(view) {
   const issuerId = store.activeIssuerId;
-  const data = await api.get(qs('/api/reports/dashboard', { issuer_id: issuerId }));
+  const rawData = await api.get(qs('/api/reports/dashboard', { issuer_id: issuerId }));
+  const data = rawData || {};
+  data.month = data.month || { count: 0, total: 0 };
+  data.today = data.today || { count: 0, total: 0 };
+  data.all = data.all || { count: 0, total: 0, tax: 0, remaining: 0 };
+  data.counts = data.counts || { issuers: 0, clients: 0, items: 0, batches: 0 };
+  data.by_status = Array.isArray(data.by_status) ? data.by_status : [];
+  data.monthly = Array.isArray(data.monthly) ? data.monthly : [];
+  data.top_clients = Array.isArray(data.top_clients) ? data.top_clients : [];
+  data.top_items = Array.isArray(data.top_items) ? data.top_items : [];
+  data.by_issuer = Array.isArray(data.by_issuer) ? data.by_issuer : [];
+  data.recent_invoices = Array.isArray(data.recent_invoices) ? data.recent_invoices : [];
+
   const cur = currencyLabel();
   const iss = activeIssuer();
 

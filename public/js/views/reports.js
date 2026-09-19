@@ -212,13 +212,18 @@ export async function render(view, ctx) {
 
   const load = async () => {
     const base = { issuer_id: state.issuer_id, from: state.from, to: state.to };
-    if (state.tab === 'sales') state.data = await api.get(qs('/api/reports/sales', { ...base, client_id: state.client_id, group_by: state.group_by }));
-    else if (state.tab === 'vat') state.data = await api.get(qs('/api/reports/vat', base));
-    else if (state.tab === 'collections') state.data = await api.get(qs('/api/reports/collections', { ...base, client_id: state.client_id, group_by: state.group_by }));
-    else if (state.tab === 'profitability') state.data = await api.get(qs('/api/reports/profitability', { ...base, client_id: state.client_id, group_by: state.group_by }));
-    else if (state.tab === 'aging') state.data = await api.get(qs('/api/reports/aging', { issuer_id: state.issuer_id, as_of: state.as_of }));
-    else if (state.tab === 'balances') state.data = await api.get(qs('/api/ledger/balances', { issuer_id: state.issuer_id, only_debtors: state.only_debtors ? 1 : '' }));
-    else state.data = await api.get(qs('/api/bulk/batches', { issuer_id: state.issuer_id, limit: 100 }));
+    let res;
+    if (state.tab === 'sales') res = await api.get(qs('/api/reports/sales', { ...base, client_id: state.client_id, group_by: state.group_by }));
+    else if (state.tab === 'vat') res = await api.get(qs('/api/reports/vat', base));
+    else if (state.tab === 'collections') res = await api.get(qs('/api/reports/collections', { ...base, client_id: state.client_id, group_by: state.group_by }));
+    else if (state.tab === 'profitability') res = await api.get(qs('/api/reports/profitability', { ...base, client_id: state.client_id, group_by: state.group_by }));
+    else if (state.tab === 'aging') res = await api.get(qs('/api/reports/aging', { issuer_id: state.issuer_id, as_of: state.as_of }));
+    else if (state.tab === 'balances') res = await api.get(qs('/api/ledger/balances', { issuer_id: state.issuer_id, only_debtors: state.only_debtors ? 1 : '' }));
+    else res = await api.get(qs('/api/bulk/batches', { issuer_id: state.issuer_id, limit: 100 }));
+
+    state.data = res || {};
+    if (!Array.isArray(state.data.items)) state.data.items = Array.isArray(res) ? res : [];
+    if (!state.data.totals) state.data.totals = {};
   };
 
   const periodLabel = () => `${state.from ? dateAr(state.from) : 'البداية'} — ${state.to ? dateAr(state.to) : 'الآن'}`;

@@ -322,7 +322,7 @@ export async function render(view, ctx) {
 
   const load = async () => {
     saveState();
-    state.data = await api.get(qs('/api/vouchers', {
+    const res = await api.get(qs('/api/vouchers', {
       issuer_id: state.issuer_id,
       client_id: state.client_id,
       status: state.status,
@@ -335,6 +335,9 @@ export async function render(view, ctx) {
       limit: PAGE,
       offset: state.offset,
     }));
+    state.data = res || { items: [], totals: {}, total_count: 0 };
+    if (!Array.isArray(state.data.items)) state.data.items = [];
+    if (!state.data.totals) state.data.totals = {};
   };
 
   const draw = () => {

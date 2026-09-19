@@ -85,7 +85,7 @@ func (s *ClientService) ListClients(f ListClientsFilter) ([]ClientListItem, erro
 	}
 	defer rows.Close()
 
-	var list []ClientListItem
+	list := make([]ClientListItem, 0)
 	for rows.Next() {
 		var item ClientListItem
 		var totalInvoicedMinor, totalPaidMinor int64

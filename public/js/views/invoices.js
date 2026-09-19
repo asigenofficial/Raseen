@@ -61,7 +61,7 @@ export async function render(view, ctx) {
 
   const load = async () => {
     saveState();
-    state.data = await api.get(qs('/api/invoices', {
+    const res = await api.get(qs('/api/invoices', {
       issuer_id: state.issuer_id,
       client_id: state.client_id,
       status: state.status,
@@ -76,7 +76,9 @@ export async function render(view, ctx) {
       payment_method: state.payment_method,
       limit: PAGE,
       offset: state.offset,
-    })) ?? { items: [], totals: {}, total_count: 0 };
+    }));
+    state.data = res || { items: [], totals: {}, total_count: 0 };
+    if (!Array.isArray(state.data.items)) state.data.items = [];
   };
 
   const reload = async () => {
@@ -97,10 +99,11 @@ export async function render(view, ctx) {
   };
 
   const rowsHtml = () => {
-    if (!state.data.items.length) {
+    const items = Array.isArray(state.data?.items) ? state.data.items : [];
+    if (!items.length) {
       return '<tr><td colspan="10" class="text-center muted" style="padding:2rem">لا توجد فواتير مطابقة للتصفية</td></tr>';
     }
-    return state.data.items.map((i) => `<tr>
+    return items.map((i) => `<tr>
       <td><a class="mono" href="#/invoice-view/${esc(i.id)}"><b>${esc(i.invoice_number)}</b></a>
         ${i.batch_id ? '<span class="badge blue tiny">دفعة</span>' : ''}
         <span class="badge ${i.zatca_phase === 'PHASE2' ? 'teal' : 'gray'} tiny" title="${i.zatca_phase === 'PHASE2' ? 'باركود المرحلة الثانية' : 'باركود المرحلة الأولى'}">${i.zatca_phase === 'PHASE2' ? 'م2' : 'م1'}</span>

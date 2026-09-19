@@ -101,6 +101,31 @@ func (d *DB) bootstrap() error {
 		_, _ = d.Exec(`INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)`, k, v, now)
 	}
 
+	// 3. Bootstrap default issuer if none exists
+	var issCount int
+	_ = d.QueryRow("SELECT COUNT(*) FROM issuers").Scan(&issCount)
+	if issCount == 0 {
+		issId := crypto.UUID()
+		_, _ = d.Exec(`
+			INSERT INTO issuers (
+				id, code, name_ar, name_en, tax_number, commercial_register,
+				street, building_no, district, city, postal_code, country,
+				default_tax_rate, currency, invoice_prefix, invoice_next_no, invoice_pad,
+				voucher_prefix, voucher_next_no, zatca_phase, qr_settings, print_settings,
+				bank_name, bank_iban, footer_notes, legal_terms, is_active, created_at, updated_at
+			) VALUES (
+				?, 'ZS-001', 'شركة رسين للتجارة والحلول الرقمية', 'Raseen Trading & Digital Solutions',
+				'300000000000003', '1010000000', 'طريق الملك فهد', '2418', 'حي العليا', 'الرياض',
+				'12214', 'المملكة العربية السعودية', 15.0, 'SAR', 'INV', 1, 5,
+				'RV', 1, 'PHASE1', '{}', '{}',
+				'البنك الأهلي السعودي', 'SA0380000000608010167519',
+				'شكراً لتعاملكم معنا. الأسعار تشمل ضريبة القيمة المضافة 15%.',
+				'تخضع هذه الفاتورة لأحكام نظام ضريبة القيمة المضافة في المملكة العربية السعودية.',
+				1, ?, ?
+			)
+		`, issId, now, now)
+	}
+
 	return nil
 }
 

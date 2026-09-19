@@ -120,7 +120,7 @@ function navHtml() {
 }
 
 function issuerOptions() {
-  return store.issuers
+  return (store.issuers || [])
     .filter((i) => i.is_active)
     .map((i) => `<option value="${esc(i.id)}" ${i.id === store.activeIssuerId ? 'selected' : ''}>${esc(i.name_ar)}</option>`)
     .join('');
@@ -390,8 +390,10 @@ function registerRoutes() {
         console.error(err);
         view.classList.remove('view-switching');
         finishRouteProgress();
-        view.innerHTML = html`<div class="card"><div class="alert alert-danger">
-          تعذر تحميل الشاشة: ${err.message || err}</div></div>`;
+        view.innerHTML = html`<div class="card"><div class="alert alert-danger" style="display:flex;flex-direction:column;gap:6px;">
+          <div style="font-weight:700;">تعذر تحميل الشاشة: ${err.message || err}</div>
+          ${raw(err.stack ? `<details style="opacity:0.8;font-size:0.75rem;"><summary style="cursor:pointer;">تفاصيل الخطأ التقني</summary><pre class="mono" style="margin-top:6px;padding:8px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:0.72rem;overflow-x:auto;direction:ltr;text-align:left;">${esc(err.stack)}</pre></details>` : '')}
+        </div></div>`;
         return undefined;
       }
     });

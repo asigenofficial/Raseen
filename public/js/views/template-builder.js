@@ -689,7 +689,7 @@ function renderGalleryTab() {
     <div class="tb-gallery-grid">${raw(readyCards)}</div>
   </div>`;
 
-  if (!existingTemplates.length) {
+  if (!existingTemplates || !existingTemplates.length) {
     return `
     <div class="tb-gallery-wrap">
       ${readySection}
@@ -702,7 +702,7 @@ function renderGalleryTab() {
     </div>`;
   }
 
-  const cards = existingTemplates.map(t => {
+  const cards = (existingTemplates || []).map(t => {
     const bc = t.builder_config ? (typeof t.builder_config === 'object' ? t.builder_config : {}) : {};
     const pc = bc.primary_color || t.color_hex || '#059669';
     const isEditing = editingId === t.id;
@@ -2148,9 +2148,11 @@ async function loadExisting() {
       api.get('/api/invoices/templates?category=invoices'),
       api.get('/api/invoices/templates?category=documents'),
     ]);
+    const invList = Array.isArray(inv) ? inv : (Array.isArray(inv?.data) ? inv.data : []);
+    const docList = Array.isArray(doc) ? doc : (Array.isArray(doc?.data) ? doc.data : []);
     existingTemplates = [
-      ...(Array.isArray(inv) ? inv : []).map(t => ({ ...t, category: 'invoices' })),
-      ...(Array.isArray(doc) ? doc : []).map(t => ({ ...t, category: 'documents' })),
+      ...invList.map(t => ({ ...t, category: 'invoices' })),
+      ...docList.map(t => ({ ...t, category: 'documents' })),
     ];
   } catch {
     existingTemplates = [];

@@ -40,7 +40,7 @@ func (s *IssuerService) ListIssuers(activeOnly bool) ([]models.Issuer, error) {
 	}
 	defer rows.Close()
 
-	var list []models.Issuer
+	list := make([]models.Issuer, 0)
 	for rows.Next() {
 		var iss models.Issuer
 		var logo sql.NullString

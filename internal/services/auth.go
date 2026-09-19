@@ -181,7 +181,7 @@ func (s *AuthService) ListUsers() ([]models.User, error) {
 	}
 	defer rows.Close()
 
-	var list []models.User
+	list := make([]models.User, 0)
 	for rows.Next() {
 		var u models.User
 		var lastLogin sql.NullString

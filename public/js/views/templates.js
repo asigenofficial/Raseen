@@ -137,8 +137,9 @@ function formatBytes(bytes) {
 }
 
 export async function render(view) {
-  const issuers = await api.get('/api/issuers');
-  if (!issuers || !issuers.length) {
+  const rawIssuers = await api.get('/api/issuers');
+  const issuers = Array.isArray(rawIssuers) ? rawIssuers : (rawIssuers?.data || []);
+  if (!issuers.length) {
     view.innerHTML = html`
       <div class="card"><div class="empty">
         <h3>لا توجد شركات مصدرة في النظام</h3>
@@ -152,7 +153,8 @@ export async function render(view) {
   let activeIssuer = issuers.find((i) => i.id === activeIssuerId) || issuers[0];
 
   try {
-    activeIssuer = await api.get(`/api/issuers/${activeIssuer.id}`);
+    const rawActive = await api.get(`/api/issuers/${activeIssuer.id}`);
+    if (rawActive && rawActive.id) activeIssuer = rawActive;
   } catch { /* التراجع للمنشأة المتاحة */ }
 
   let excelTemplates = [];
@@ -184,6 +186,20 @@ export async function render(view) {
   }
   await loadIssuerData();
 
+  let issuerPrintSettings = {};
+  try {
+    issuerPrintSettings = typeof activeIssuer.print_settings === 'string'
+      ? JSON.parse(activeIssuer.print_settings || '{}')
+      : (activeIssuer.print_settings || {});
+  } catch { issuerPrintSettings = {}; }
+
+  let issuerQrSettings = {};
+  try {
+    issuerQrSettings = typeof activeIssuer.qr_settings === 'string'
+      ? JSON.parse(activeIssuer.qr_settings || '{}')
+      : (activeIssuer.qr_settings || {});
+  } catch { issuerQrSettings = {}; }
+
   let printCfg = {
     template_style: 'standard',
     primary_color: '#06b6d4',
@@ -208,7 +224,7 @@ export async function render(view) {
     qr_position: 'right',
     copies: 1,
     custom_css: '',
-    ...(activeIssuer.print_settings || {}),
+    ...issuerPrintSettings,
   };
 
   let qrCfg = {
@@ -217,7 +233,7 @@ export async function render(view) {
     size: 'medium',
     scale: 4,
     thermal_scale: 3,
-    ...(activeIssuer.qr_settings || {}),
+    ...issuerQrSettings,
   };
 
   // فحص علامة التبويب من الرابط

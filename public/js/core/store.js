@@ -58,7 +58,8 @@ export async function loadSession() {
 
 export async function loadIssuers(force = false) {
   if (store.loaded.issuers && !force) return store.issuers;
-  store.issuers = (await api.get('/api/issuers')) ?? [];
+  const res = await api.get('/api/issuers');
+  store.issuers = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
   store.loaded.issuers = true;
   if (store.activeIssuerId && !store.issuers.some((i) => i.id === store.activeIssuerId)) {
     store.activeIssuerId = '';
@@ -75,21 +76,24 @@ export async function loadIssuers(force = false) {
 
 export async function loadClients(force = false) {
   if (store.loaded.clients && !force) return store.clients;
-  store.clients = (await api.get(qs('/api/clients', { active_only: true }))) ?? [];
+  const res = await api.get(qs('/api/clients', { active_only: true }));
+  store.clients = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
   store.loaded.clients = true;
   return store.clients;
 }
 
 export async function loadItems(force = false) {
   if (store.loaded.items && !force) return store.items;
-  store.items = (await api.get(qs('/api/items', { active_only: true }))) ?? [];
+  const res = await api.get(qs('/api/items', { active_only: true }));
+  store.items = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
   store.loaded.items = true;
   return store.items;
 }
 
 export async function loadCategories(force = false) {
   if (store.loaded.categories && !force) return store.categories;
-  store.categories = (await api.get('/api/categories')) ?? [];
+  const res = await api.get('/api/categories');
+  store.categories = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
   store.loaded.categories = true;
   return store.categories;
 }
