@@ -15,6 +15,7 @@ data/backups/
 
 # Binaries
 *.exe
+*.exe~
 raseen.exe
 
 # OS files

@@ -20,19 +20,45 @@ import (
 //go:embed all:public
 var embeddedPublic embed.FS
 
+func isCloudOrServerEnv() bool {
+	if os.Getenv("NO_BROWSER") != "" {
+		return true
+	}
+	// Cloud hosting and container environments (Railway, Render, Heroku, Docker, etc.)
+	if os.Getenv("PORT") != "" ||
+		os.Getenv("RAILWAY_ENVIRONMENT") != "" ||
+		os.Getenv("RAILWAY_SERVICE_ID") != "" ||
+		os.Getenv("DYNO") != "" ||
+		os.Getenv("RENDER") != "" ||
+		os.Getenv("FLY_APP_NAME") != "" ||
+		os.Getenv("APP_ENV") == "production" ||
+		os.Getenv("ENVIRONMENT") == "production" {
+		return true
+	}
+	// Headless Linux servers (no desktop GUI)
+	if runtime.GOOS == "linux" && os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+		return true
+	}
+	return false
+}
+
 func openBrowser(url string) {
-	var err error
+	if isCloudOrServerEnv() {
+		return
+	}
+	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	case "darwin":
-		err = exec.Command("open", url).Start()
+		cmd = exec.Command("open", url)
 	default:
-		err = exec.Command("xdg-open", url).Start()
+		if _, err := exec.LookPath("xdg-open"); err != nil {
+			return
+		}
+		cmd = exec.Command("xdg-open", url)
 	}
-	if err != nil {
-		log.Printf("تعذر فتح المتصفح تلقائياً: %v", err)
-	}
+	_ = cmd.Start()
 }
 
 func main() {
@@ -75,8 +101,8 @@ func main() {
 	fmt.Println("   اضغط Ctrl+C لإيقاف الخادم.")
 	fmt.Println()
 
-	// Open browser automatically after 500ms
-	if os.Getenv("NO_BROWSER") == "" {
+	// Open browser automatically after 500ms on desktop only
+	if !isCloudOrServerEnv() {
 		go func() {
 			time.Sleep(500 * time.Millisecond)
 			target := fmt.Sprintf("http://127.0.0.1:%d", cfg.Port)
