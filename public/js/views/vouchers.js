@@ -360,24 +360,24 @@ export async function render(view, ctx) {
         </div>
       </div>
 
-      <div class="card">
-        <div class="row">
-          <div class="field" style="flex:1.4"><label>بحث</label>
+      <div class="card filter-box">
+        <div class="filter-row">
+          <div class="field flex-2"><label for="q">بحث سريع</label>
             <input type="search" id="q" value="${esc(state.q)}" placeholder="رقم السند، المرجع، اسم العميل، ملاحظات…" /></div>
-          <div class="field"><label>الشركة</label>
+          <div class="field"><label for="issuer_id">الشركة</label>
             <select id="issuer_id"><option value="">كل الشركات</option>
               ${raw(store.issuers.map((i) => `<option value="${esc(i.id)}" ${i.id === state.issuer_id ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}
             </select></div>
-          <div class="field"><label>العميل</label>
+          <div class="field"><label for="client_id">العميل</label>
             <select id="client_id"><option value="">كل العملاء</option>
               ${raw(store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)}</option>`).join(''))}
             </select></div>
-          <div class="field" style="max-width:140px"><label>الحالة</label>
-            <select id="status"><option value="">الكل</option>
+          <div class="field field-sm"><label for="status">الحالة</label>
+            <select id="status"><option value="">كل الحالات</option>
               <option value="ACTIVE" ${raw(state.status === 'ACTIVE' ? 'selected' : '')}>نشط</option>
               <option value="CANCELLED" ${raw(state.status === 'CANCELLED' ? 'selected' : '')}>ملغى</option>
             </select></div>
-          <div class="field" style="max-width:140px"><label>طريقة السداد</label>
+          <div class="field field-sm"><label for="payment_type">طريقة السداد</label>
             <select id="payment_type"><option value="">كل الطرق</option>
               <option value="CASH" ${raw(state.payment_type === 'CASH' ? 'selected' : '')}>نقداً</option>
               <option value="TRANSFER" ${raw(state.payment_type === 'TRANSFER' ? 'selected' : '')}>تحويل بنكي</option>
@@ -385,17 +385,18 @@ export async function render(view, ctx) {
               <option value="CHEQUE" ${raw(state.payment_type === 'CHEQUE' ? 'selected' : '')}>شيك</option>
             </select></div>
         </div>
-        <div class="row mt">
-          <div class="field" style="max-width:160px"><label>من تاريخ</label><input type="date" id="from" value="${state.from}" /></div>
-          <div class="field" style="max-width:160px"><label>إلى تاريخ</label><input type="date" id="to" value="${state.to}" /></div>
-          <div class="field" style="max-width:140px"><label>أقل مبلغ</label><input type="number" id="min_amount" value="${state.min_amount}" step="0.01" min="0" /></div>
-          <div class="field" style="max-width:140px"><label>أعلى مبلغ</label><input type="number" id="max_amount" value="${state.max_amount}" step="0.01" min="0" /></div>
-          <div class="field" style="max-width:240px"><label>&nbsp;</label>
-            <div class="flex">
-              <button class="btn btn-sm" data-quick="month" type="button">هذا الشهر</button>
-              <button class="btn btn-sm" data-quick="today" type="button">اليوم</button>
-              <button class="btn btn-sm" data-quick="clear" type="button">إزالة التصفية</button>
-            </div></div>
+        <div class="filter-row" style="margin-top:.75rem">
+          <div class="field field-date"><label for="from">من تاريخ</label><input type="date" id="from" value="${state.from}" /></div>
+          <div class="field field-date"><label for="to">إلى تاريخ</label><input type="date" id="to" value="${state.to}" /></div>
+          <div class="field field-num"><label for="min_amount">أقل مبلغ</label><input type="number" id="min_amount" value="${state.min_amount}" placeholder="0.00" step="0.01" min="0" /></div>
+          <div class="field field-num"><label for="max_amount">أعلى مبلغ</label><input type="number" id="max_amount" value="${state.max_amount}" placeholder="0.00" step="0.01" min="0" /></div>
+          <div class="filter-actions-col">
+            <div class="filter-btn-group">
+              <button class="btn btn-sm" data-quick="today" type="button" title="سندات اليوم">${raw(icon.calendar({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}اليوم</button>
+              <button class="btn btn-sm" data-quick="month" type="button" title="سندات هذا الشهر">${raw(icon.calendar({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}هذا الشهر</button>
+              <button class="btn btn-sm" data-quick="clear" type="button" title="إعادة تعيين الفلاتر">إعادة تعيين</button>
+            </div>
+          </div>
         </div>
       </div>
 

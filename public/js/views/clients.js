@@ -88,6 +88,135 @@ function openClientModal(client, onSaved) {
   });
 }
 
+function openClientImportModal(onSuccess) {
+  const m = modal({
+    title: 'استيراد العملاء من ملف Excel / CSV',
+    body: html`
+      <div class="stack">
+        <p class="tiny muted" style="margin:0">
+          يمكنك استيراد قاعدة العملاء دفعة واحدة. يقوم النظام تلقائياً بالتعرف على الأعمدة وتحديث العملاء الحاليين وإضافة الجدد.
+        </p>
+        <div class="row items-center" style="gap:1rem;background:var(--bg-subtle,#f8fafc);padding:.75rem;border-radius:6px;border:1px dashed var(--border,#cbd5e1)">
+          <div style="flex:1">
+            <label class="btn btn-sm btn-outline" style="cursor:pointer;display:inline-flex;align-items:center;gap:.4rem">
+              ${icon.upload({ size: 15 })}
+              <span>اختر ملف Excel أو CSV</span>
+              <input type="file" id="client-import-file" accept=".xlsx,.xls,.csv" style="display:none" />
+            </label>
+            <span id="client-selected-file" class="tiny muted" style="margin-right:.5rem">لم يتم اختيار ملف</span>
+          </div>
+          <a class="btn btn-sm btn-ghost" href="/api/clients/template" download="clients-import-template.xlsx">
+            ${icon.download({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}تحميل نموذج Excel فارغ
+          </a>
+        </div>
+        <div id="client-import-preview" style="display:none"></div>
+      </div>
+    `,
+    footer: `
+      <button class="btn" data-close type="button">إلغاء</button>
+      <button class="btn btn-primary" id="commit-client-import" type="button" disabled>اعتماد وإضافة العملاء</button>
+    `,
+  });
+
+  const fileInput = m.el.querySelector('#client-import-file');
+  const fileNameEl = m.el.querySelector('#client-selected-file');
+  const previewArea = m.el.querySelector('#client-import-preview');
+  const commitBtn = m.el.querySelector('#commit-client-import');
+  let parsedClients = [];
+
+  fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    fileNameEl.textContent = file.name;
+    previewArea.style.display = 'block';
+    previewArea.innerHTML = '<div class="text-center muted" style="padding:1.5rem">جارٍ قراءة وفحص ملف العملاء…</div>';
+    commitBtn.disabled = true;
+
+    try {
+      const b64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => {
+          const res = r.result || '';
+          const commaIdx = res.indexOf(',');
+          resolve(commaIdx !== -1 ? res.slice(commaIdx + 1) : res);
+        };
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+
+      const res = await api.post('/api/clients/analyze-excel', { file_base64: b64, filename: file.name });
+      parsedClients = (res.rows || []).filter((r) => !r.errors || r.errors.length === 0);
+
+      const errorRows = (res.rows || []).filter((r) => r.errors && r.errors.length > 0);
+      let errorsSnippet = '';
+      if (errorRows.length) {
+        errorsSnippet = `
+          <div class="alert alert-danger tiny mt" style="max-height:100px;overflow-y:auto">
+            <b>تحذير: تم استبعاد ${errorRows.length} صف لاحتوائها على أخطاء:</b>
+            <ul>${errorRows.slice(0, 5).map((er) => `<li>صف ${er.row_index}: ${esc(er.name || 'بدون اسم')} (${er.errors.join('، ')})</li>`).join('')}</ul>
+          </div>
+        `;
+      }
+
+      previewArea.innerHTML = html`
+        <div class="card pad0 mt" style="border:1px solid var(--border)">
+          <div style="padding:.6rem 1rem;background:var(--bg-subtle);display:flex;justify-content:space-between;align-items:center">
+            <b>معاينة العملاء (${parsedClients.length} عميل)</b>
+            <span class="badge blue">${res.total_rows} سطر في الملف</span>
+          </div>
+          <div class="table-wrap" style="max-height:220px;overflow-y:auto">
+            <table class="tbl tiny">
+              <thead><tr><th>#</th><th>كود</th><th>اسم العميل</th><th>الجوال</th><th>الرقم الضريبي</th><th>السجل التجاري</th><th>المدينة</th><th>الرصيد الافتتاحي</th></tr></thead>
+              <tbody>
+                ${parsedClients.slice(0, 20).map((c, idx) => `
+                  <tr>
+                    <td>${idx + 1}</td>
+                    <td class="mono">${esc(c.client_code || 'تلقائي')}</td>
+                    <td><b>${esc(c.name)}</b></td>
+                    <td class="mono">${esc(c.phone || '—')}</td>
+                    <td class="mono">${esc(c.tax_number || '—')}</td>
+                    <td class="mono">${esc(c.commercial_register || '—')}</td>
+                    <td>${esc(c.city || '—')}</td>
+                    <td class="num">${esc(c.opening_balance || 0)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${parsedClients.length > 20 ? `<div class="tiny muted text-center" style="padding:.4rem">تم عرض أول 20 عميلاً فقط من أصل ${parsedClients.length}…</div>` : ''}
+        </div>
+        ${raw(errorsSnippet)}
+      `;
+
+      if (parsedClients.length > 0) {
+        commitBtn.disabled = false;
+      } else {
+        previewArea.innerHTML += '<div class="alert alert-danger tiny mt">لم يتم العثور على أي عملاء صالحين للاستيراد في الملف</div>';
+      }
+    } catch (err) {
+      previewArea.innerHTML = `<div class="alert alert-danger tiny">${esc(err.message || 'فشل فحص الملف')}</div>`;
+    }
+  });
+
+  commitBtn.addEventListener('click', async () => {
+    if (!parsedClients.length) return;
+    commitBtn.disabled = true;
+    commitBtn.textContent = 'جارٍ الحفظ في قاعدة البيانات…';
+    try {
+      const saveRes = await api.post('/api/clients/import', { clients: parsedClients });
+      toastOk(`تم استيراد العملاء بنجاح (جديد: ${saveRes.created || 0}، محدث: ${saveRes.updated || 0})`);
+      m.close();
+      invalidate('clients');
+      await loadClients(true);
+      await onSuccess();
+    } catch (err) {
+      commitBtn.disabled = false;
+      commitBtn.textContent = 'اعتماد وإضافة العملاء';
+      toastErr(err.message || 'فشل استيراد العملاء');
+    }
+  });
+}
+
 export async function render(view) {
   const defaults = { q: '', client_type: '', onlyDebtors: false, scope: 'ALL' };
   const cached = getFilterState('clients', defaults);
@@ -169,6 +298,7 @@ export async function render(view) {
         </div>
         <div class="page-actions">
           ${raw(can('clients.write') ? `<button class="btn btn-primary" id="add" type="button">${icon.userPlus({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}إضافة عميل</button>` : '')}
+          ${raw(can('clients.write') ? `<button class="btn btn-outline" id="import-clients-btn" type="button">${icon.upload({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}استيراد Excel</button>` : '')}
           <button class="btn" id="exp-xls" type="button">${raw(icon.fileSpreadsheet({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}تصدير Excel</button>
           <button class="btn" id="exp-csv" type="button">${raw(icon.fileText({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}CSV</button>
         </div>
@@ -220,6 +350,8 @@ export async function render(view) {
 
     const addBtn = $('#add', view);
     if (addBtn) addBtn.addEventListener('click', () => openClientModal(null, async () => { await load(); draw(); }));
+    const importClientsBtn = $('#import-clients-btn', view);
+    if (importClientsBtn) importClientsBtn.addEventListener('click', () => openClientImportModal(async () => { await load(); draw(); }));
 
     $('#q', view).addEventListener('input', debounce(async (e) => {
       state.q = e.target.value;

@@ -62,10 +62,14 @@ func (s *IssuerService) ListIssuers(activeOnly bool) ([]models.Issuer, error) {
 }
 
 func (s *IssuerService) GetIssuer(id string) (*models.Issuer, error) {
+	return getIssuer(s.db,id)
+}
+
+func getIssuer(q interface { QueryRow(string, ...any) *sql.Row }, id string) (*models.Issuer, error) {
 	var iss models.Issuer
 	var logo sql.NullString
 
-	err := s.db.QueryRow(`
+	err := q.QueryRow(`
 		SELECT id, code, name_ar, name_en, tax_number, commercial_register,
 		       street, street_en, building_no, district, district_en, city, city_en,
 		       address_en, postal_code, country, phone, email, website, logo_data,

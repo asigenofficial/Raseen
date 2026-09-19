@@ -7,6 +7,7 @@ type User struct {
 	Role        string  `json:"role"`
 	RoleLabel   string  `json:"role_label"`
 	Permissions string  `json:"permissions"`
+	EffectivePermissions []string `json:"effective_permissions"`
 	IsActive    int     `json:"is_active"`
 	CreatedAt   string  `json:"created_at"`
 	LastLoginAt *string `json:"last_login_at"`

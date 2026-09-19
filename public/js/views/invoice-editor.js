@@ -266,11 +266,11 @@ export async function render(view, ctx) {
             <div class="field">
               <label class="req">العميل</label>
               <div class="flex" style="gap:.4rem">
-                <select id="client" style="flex:1">
+                <select id="client" style="flex:1;min-width:0">
                   <option value="">— اختر العميل —</option>
                   ${raw(store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join(''))}
                 </select>
-                ${raw(can('clients.write') ? `<button class="btn btn-sm" id="new-client" type="button" title="إضافة عميل جديد">${icon.userPlus({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}عميل جديد</button>` : '')}
+                ${raw(can('clients.write') ? `<button class="btn btn-sm" id="new-client" type="button" title="إضافة عميل جديد" style="flex-shrink:0">${icon.userPlus({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}عميل جديد</button>` : '')}
               </div>
             </div>
             <div id="client-addr-card" class="inv-addr-box${curClient ? '' : ' hidden'}">
@@ -321,9 +321,12 @@ export async function render(view, ctx) {
           </div>
         </div>
 
-        <!-- خيارات هيئة الزكاة والشيكات المتقدمة -->
-        <details class="advanced-options mt">
-          <summary>⚙️ خيارات متقدمة: إعدادات ZATCA، الشيكات وتاريخ الاستحقاق</summary>
+        <!-- خيارات هيئة الزكاة والشيكات المتقدمة (مفتوحة وثابتة دائماً) -->
+        <div class="advanced-options mt">
+          <div class="advanced-options-head">
+            ${icon.settings({ size: 15, style: 'color:var(--brand)' })}
+            <span>خيارات متقدمة: إعدادات ZATCA، الشيكات وتاريخ الاستحقاق</span>
+          </div>
           <div class="inv-adv-grid mt">
             <div class="field">
               <label>مرحلة الفاتورة الإلكترونية (ZATCA Phase)</label>
@@ -346,7 +349,7 @@ export async function render(view, ctx) {
               <input id="cheque_date" type="date" value="${esc(state.cheque_date || '')}" />
             </div>
           </div>
-        </details>
+        </div>
       </div>
 
       <div class="card pad0">

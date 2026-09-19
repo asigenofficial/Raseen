@@ -106,6 +106,136 @@ function openCategoryModal(category, categories, onSaved) {
   });
 }
 
+function openImportModal(onSuccess) {
+  const m = modal({
+    title: 'استيراد الأصناف من ملف Excel / CSV',
+    body: html`
+      <div class="stack">
+        <p class="tiny muted" style="margin:0">
+          يمكنك استيراد آلاف الأصناف دفعة واحدة. يقوم النظام تلقائياً بالتعرف على الأعمدة وتحديث الأصناف المتطابقة وإضافة الأصناف الجديدة.
+        </p>
+        <div class="row items-center" style="gap:1rem;background:var(--bg-subtle,#f8fafc);padding:.75rem;border-radius:6px;border:1px dashed var(--border,#cbd5e1)">
+          <div style="flex:1">
+            <label class="btn btn-sm btn-outline" style="cursor:pointer;display:inline-flex;align-items:center;gap:.4rem">
+              ${icon.upload({ size: 15 })}
+              <span>اختر ملف Excel أو CSV</span>
+              <input type="file" id="import-file-input" accept=".xlsx,.xls,.csv" style="display:none" />
+            </label>
+            <span id="selected-file-name" class="tiny muted" style="margin-right:.5rem">لم يتم اختيار ملف</span>
+          </div>
+          <a class="btn btn-sm btn-ghost" href="/api/items/template" download="items-import-template.xlsx">
+            ${icon.download({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}تحميل نموذج Excel فارغ
+          </a>
+        </div>
+        <div id="import-preview-area" style="display:none"></div>
+      </div>
+    `,
+    footer: `
+      <button class="btn" data-close type="button">إلغاء</button>
+      <button class="btn btn-primary" id="commit-import-btn" type="button" disabled>اعتماد وإضافة الأصناف</button>
+    `,
+  });
+
+  const fileInput = m.el.querySelector('#import-file-input');
+  const fileNameEl = m.el.querySelector('#selected-file-name');
+  const previewArea = m.el.querySelector('#import-preview-area');
+  const commitBtn = m.el.querySelector('#commit-import-btn');
+  let parsedItems = [];
+
+  fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    fileNameEl.textContent = file.name;
+    previewArea.style.display = 'block';
+    previewArea.innerHTML = '<div class="text-center muted" style="padding:1.5rem">جارٍ قراءة وفحص ملف الأصناف…</div>';
+    commitBtn.disabled = true;
+
+    try {
+      const b64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => {
+          const res = r.result || '';
+          const commaIdx = res.indexOf(',');
+          resolve(commaIdx !== -1 ? res.slice(commaIdx + 1) : res);
+        };
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+
+      const res = await api.post('/api/items/analyze-excel', { file_base64: b64, filename: file.name });
+      parsedItems = (res.rows || []).filter((r) => !r.errors || r.errors.length === 0);
+
+      const errorRows = (res.rows || []).filter((r) => r.errors && r.errors.length > 0);
+      let errorsSnippet = '';
+      if (errorRows.length) {
+        errorsSnippet = `
+          <div class="alert alert-danger tiny mt" style="max-height:100px;overflow-y:auto">
+            <b>تحذير: تم استبعاد ${errorRows.length} صف لاحتوائها على أخطاء:</b>
+            <ul>${errorRows.slice(0, 5).map((er) => `<li>صف ${er.row_index}: ${esc(er.name_ar || 'بدون اسم')} (${er.errors.join('، ')})</li>`).join('')}</ul>
+          </div>
+        `;
+      }
+
+      previewArea.innerHTML = html`
+        <div class="card pad0 mt" style="border:1px solid var(--border)">
+          <div style="padding:.6rem 1rem;background:var(--bg-subtle);display:flex;justify-content:space-between;align-items:center">
+            <b>معاينة الأصناف الجاهزة للاستيراد (${parsedItems.length} صنف)</b>
+            <span class="badge blue">${res.total_rows} سطر في الملف</span>
+          </div>
+          <div class="table-wrap" style="max-height:220px;overflow-y:auto">
+            <table class="tbl tiny">
+              <thead><tr><th>#</th><th>كود</th><th>اسم الصنف</th><th>المجموعة</th><th>الوحدة</th><th>التكلفة</th><th>سعر البيع</th><th>الضريبة</th></tr></thead>
+              <tbody>
+                ${parsedItems.slice(0, 20).map((it, idx) => `
+                  <tr>
+                    <td>${idx + 1}</td>
+                    <td class="mono">${esc(it.item_code || 'تلقائي')}</td>
+                    <td><b>${esc(it.name_ar)}</b></td>
+                    <td>${esc(it.category || '—')}</td>
+                    <td>${esc(it.unit || 'حبة')}</td>
+                    <td class="num">${esc(it.cost_price)}</td>
+                    <td class="num"><b>${esc(it.sale_price)}</b></td>
+                    <td class="num">${esc(it.tax_rate)}%</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${parsedItems.length > 20 ? `<div class="tiny muted text-center" style="padding:.4rem">تم عرض أول 20 صنفاً فقط من أصل ${parsedItems.length}…</div>` : ''}
+        </div>
+        ${raw(errorsSnippet)}
+      `;
+
+      if (parsedItems.length > 0) {
+        commitBtn.disabled = false;
+      } else {
+        previewArea.innerHTML += '<div class="alert alert-danger tiny mt">لم يتم العثور على أي أصناف صالحة للاستيراد في الملف</div>';
+      }
+    } catch (err) {
+      previewArea.innerHTML = `<div class="alert alert-danger tiny">${esc(err.message || 'فشل فحص الملف')}</div>`;
+    }
+  });
+
+  commitBtn.addEventListener('click', async () => {
+    if (!parsedItems.length) return;
+    commitBtn.disabled = true;
+    commitBtn.textContent = 'جارٍ الحفظ في قاعدة البيانات…';
+    try {
+      const saveRes = await api.post('/api/items/import', { items: parsedItems });
+      toastOk(`تم استيراد الأصناف بنجاح (جديد: ${saveRes.created || 0}، محدث: ${saveRes.updated || 0})`);
+      m.close();
+      invalidate('items');
+      invalidate('categories');
+      await loadCategories(true);
+      await onSuccess();
+    } catch (err) {
+      commitBtn.disabled = false;
+      commitBtn.textContent = 'اعتماد وإضافة الأصناف';
+      toastErr(err.message || 'فشل استيراد الأصناف');
+    }
+  });
+}
+
 export async function render(view, ctx) {
   const initial = getFilterState('items', {
     tab: (ctx && ctx.query && ctx.query.tab) || 'items',
@@ -158,7 +288,7 @@ export async function render(view, ctx) {
       <td class="mono tiny">${esc(i.barcode || '—')}</td>
       <td class="text-end num">${amount(i.cost_price)}</td>
       <td class="text-end num"><b>${amount(i.sale_price)}</b></td>
-      <td class="text-center tiny">${num(i.tax_rate)}%</td>
+      <td class="text-center tiny">${i.tax_rate}%</td>
       <td class="actions">
         <span class="badge ${i.is_active ? 'green' : 'gray'}">${i.is_active ? 'نشط' : 'موقوف'}</span>
         ${writable ? `<button class="btn btn-sm" data-act="edit-item" data-id="${esc(i.id)}" type="button" title="تعديل">${icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}تعديل</button>` : ''}
@@ -196,6 +326,7 @@ export async function render(view, ctx) {
         </div>
         <div class="page-actions">
           ${raw(writable ? `<button class="btn btn-primary" id="add-item" type="button">${icon.plus({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}إضافة صنف</button>` : '')}
+          ${raw(writable ? `<button class="btn btn-outline" id="import-items-btn" type="button">${icon.upload({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}استيراد Excel</button>` : '')}
           ${raw(writable ? `<button class="btn" id="add-cat" type="button">${icon.plus({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}إضافة مجموعة</button>` : '')}
           <button class="btn" id="exp-xls" type="button">${raw(icon.fileSpreadsheet({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}تصدير Excel</button>
           <button class="btn" id="exp-csv" type="button">${raw(icon.fileText({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}CSV</button>
@@ -281,6 +412,8 @@ export async function render(view, ctx) {
 
     const addItemBtn = $('#add-item', view);
     if (addItemBtn) addItemBtn.addEventListener('click', () => openItemModal(null, state.categories, async () => { await load(); draw(); }));
+    const importItemsBtn = $('#import-items-btn', view);
+    if (importItemsBtn) importItemsBtn.addEventListener('click', () => openImportModal(async () => { await load(); draw(); }));
     const addCatBtn = $('#add-cat', view);
     if (addCatBtn) addCatBtn.addEventListener('click', () => openCategoryModal(null, state.categories, async () => { await load(); draw(); }));
 

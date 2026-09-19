@@ -225,6 +225,33 @@ html[data-theme="light"] .totals-box .line.grand { color: var(--brand); }
 /* pager */
 html[data-theme="light"] .pager { border-color: var(--line); }
 
+/* قوالب المستندات في وضع الضوء */
+html[data-theme="light"] .doc-tpl-card {
+  background: #ffffff;
+  border-color: var(--line);
+  box-shadow: 0 2px 8px rgba(23, 43, 58, 0.06);
+}
+html[data-theme="light"] .doc-tpl-card:hover {
+  border-color: var(--brand);
+  box-shadow: 0 8px 24px rgba(23, 43, 58, 0.1);
+}
+html[data-theme="light"] .doc-tpl-card.is-active {
+  border-color: var(--brand);
+  background: linear-gradient(145deg, #f0fdf9, #ffffff);
+  box-shadow: 0 0 0 1px var(--brand), 0 4px 16px rgba(5, 150, 105, 0.12);
+}
+html[data-theme="light"] .doc-tpl-card-title {
+  color: var(--text-heading);
+}
+html[data-theme="light"] .doc-tpl-chip {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #334155;
+}
+html[data-theme="light"] .doc-tpl-card-foot {
+  border-top-color: #f1f5f9;
+}
+
 /* تثبيت أحجام الأيقونات والعناصر بدقة متطابقة بين الثيمين */
 .ico {
   display: inline-flex;

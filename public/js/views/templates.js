@@ -76,6 +76,15 @@ function buildMockInvoice(issuer, phase = 'PHASE1') {
         tax_rate: 15,
         tax_amount: 345,
         total_line: 2645,
+        batch_no: 'BATCH-2026-A',
+        warehouse: 'المستودع الرئيسي',
+        cost_center: 'المركز العام',
+        project: 'مشروع التحول الرقمي',
+        serial_no: 'SN-998877',
+        brand: 'رسين',
+        origin: 'المملكة العربية السعودية',
+        po_number: 'PO-2026-101',
+        tracking_no: 'WB-99120',
       },
       {
         line_no: 2,
@@ -89,6 +98,15 @@ function buildMockInvoice(issuer, phase = 'PHASE1') {
         tax_rate: 15,
         tax_amount: 210,
         total_line: 1610,
+        batch_no: 'BATCH-2026-B',
+        warehouse: 'المستودع السحابي',
+        cost_center: 'تقنية المعلومات',
+        project: 'مشروع التحول الرقمي',
+        serial_no: 'SN-998878',
+        brand: 'رسين كولاب',
+        origin: 'المملكة العربية السعودية',
+        po_number: 'PO-2026-101',
+        tracking_no: 'WB-99121',
       },
     ],
   };
@@ -148,6 +166,24 @@ export async function render(view) {
   }
   await loadTemplates();
 
+  // جلب فواتير وعملاء حقيقيين للمنشأة لتكون المعاينة ديناميكية بالكامل بدون بيانات ثابتة
+  let liveClients = [];
+  let liveInvoices = [];
+  async function loadIssuerData() {
+    try {
+      const [invRes, cliRes] = await Promise.all([
+        api.get(`/api/invoices?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=5`),
+        api.get(`/api/clients?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=5`),
+      ]);
+      liveInvoices = Array.isArray(invRes) ? invRes : (invRes?.items || invRes?.data || []);
+      liveClients = Array.isArray(cliRes) ? cliRes : (cliRes?.items || cliRes?.data || []);
+    } catch {
+      liveInvoices = [];
+      liveClients = [];
+    }
+  }
+  await loadIssuerData();
+
   let printCfg = {
     template_style: 'standard',
     primary_color: '#06b6d4',
@@ -194,7 +230,39 @@ export async function render(view) {
   let zoomLevel = 62;
   let activeZatcaPhase = activeIssuer.zatca_phase || 'PHASE1';
   let invoiceState = 'normal';
-  let currentInvoice = buildMockInvoice(activeIssuer, activeZatcaPhase);
+
+  function getDynamicPreviewInvoice() {
+    if (liveInvoices.length > 0) {
+      const realInv = liveInvoices[0];
+      return {
+        ...buildMockInvoice(activeIssuer, activeZatcaPhase),
+        id: realInv.id,
+        invoice_number: realInv.invoice_number,
+        issue_date: realInv.issue_date || new Date().toISOString().slice(0, 10),
+        issue_time: realInv.issue_time || '12:00:00',
+        currency: realInv.currency || activeIssuer.currency || 'SAR',
+        subtotal: realInv.subtotal,
+        discount_amount: realInv.discount_amount || 0,
+        taxable_amount: realInv.taxable_amount || realInv.subtotal,
+        tax_amount: realInv.tax_amount,
+        grand_total: realInv.grand_total,
+        paid_amount: realInv.paid_amount,
+        remaining_amount: realInv.remaining_amount,
+        status: realInv.status,
+        status_label: realInv.status_label || (realInv.status === 'PAID' ? 'مسددة' : 'معتمدة'),
+        payment_method: realInv.payment_method || 'TRANSFER',
+        payment_label: realInv.payment_label || 'تحويل بنكي',
+        buyer_name: realInv.client_name || (liveClients[0]?.name) || 'عميل معتمد',
+        buyer_tax_number: realInv.client_tax_number || (liveClients[0]?.tax_number) || '',
+        buyer_cr: liveClients[0]?.commercial_register || '',
+        buyer_address: realInv.client_address || (liveClients[0]?.address) || '',
+        lines: realInv.lines && realInv.lines.length ? realInv.lines : buildMockInvoice(activeIssuer, activeZatcaPhase).lines,
+      };
+    }
+    return buildMockInvoice(activeIssuer, activeZatcaPhase);
+  }
+
+  let currentInvoice = getDynamicPreviewInvoice();
   let searchQuery = '';
 
   // ------------------------------------------------------------- مولدات الأقسام
@@ -304,7 +372,7 @@ export async function render(view) {
             <div class="flex gap-xs" style="align-items:center; flex-wrap:wrap;">
               <button type="button" class="btn btn-sm btn-info btn-visual-preview" data-tpl-id="${esc(tpl.id)}" style="display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:700; background:rgba(6,182,212,0.16); border:1px solid rgba(6,182,212,0.38); color:#38bdf8;" title="عرض ومعاينة التقرير بصرية كصورة ومستند رسمي">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                عرض التقرير (صورة) 👁️
+                عرض التقرير (صورة)
               </button>
               <button type="button" class="btn btn-sm btn-success btn-generate-report" data-tpl-id="${esc(tpl.id)}" style="display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:700; background:linear-gradient(135deg, #059669, #047857); border-color:#34d399; color:#fff;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -344,21 +412,22 @@ export async function render(view) {
 
     const cards = invoices.map((tpl) => {
       const isActive = tpl.id === currentStyle;
+      const tplColor = tpl.color_hex || '#06b6d4';
       const headers = tpl.headers || [];
-      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip primary"><span style="opacity:0.6;">#${i+1}</span> ${esc(h)}</span>`).join('');
+      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};"><span style="opacity:0.6;">#${i+1}</span> ${esc(h)}</span>`).join('');
       const moreChips = headers.length > 4 ? `<span class="doc-tpl-chip" style="font-size:0.68rem;">+${headers.length - 4} أعمدة</span>` : '';
       const sizeBadge = tpl.file_size ? `<span class="badge gray tiny" style="font-size:0.65rem;">${formatBytes(tpl.file_size)}</span>` : '';
 
       return `
-        <div class="doc-tpl-card ${isActive ? 'is-active' : ''}">
+        <div class="doc-tpl-card ${isActive ? 'is-active' : ''}" style="${isActive ? `border-color:${tplColor}; box-shadow:0 0 0 1.5px ${tplColor}44;` : `border-color:${tplColor}25;`}">
           <div class="doc-tpl-card-top">
-            <div class="doc-tpl-card-icon" style="background:rgba(6,182,212,0.12); color:#06b6d4;">
+            <div class="doc-tpl-card-icon" style="background:${tplColor}18; color:${tplColor}; border:1px solid ${tplColor}35;">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="9" x2="9" y1="3" y2="21"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/></svg>
             </div>
             <div class="doc-tpl-card-meta">
               <div class="doc-tpl-card-title">
-                <span>${esc(tpl.name_ar || tpl.name)}</span>
-                ${isActive ? '<span class="badge green tiny" style="font-weight:700;">القالب المعتمد النشط ✓</span>' : '<span class="badge blue tiny" style="font-size:0.68rem;">فاتورة إكسل</span>'}
+                <span style="font-weight:800;">${esc(tpl.name_ar || tpl.name)}</span>
+                ${isActive ? `<span class="badge tiny" style="background:${tplColor}22; color:${tplColor}; border:1px solid ${tplColor}55; font-weight:700;">القالب المعتمد النشط ✓</span>` : `<span class="badge tiny" style="background:${tplColor}15; color:${tplColor}; font-size:0.68rem;">${esc(tpl.badge || 'فاتورة إكسل')}</span>`}
                 ${sizeBadge}
               </div>
               <p class="doc-tpl-card-desc">${esc(tpl.description || 'قالب فاتورة مبيعات ضريبية متوافق مع هيئة الزكاة')}</p>
@@ -371,12 +440,12 @@ export async function render(view) {
           </div>
           <div class="doc-tpl-card-foot">
             <div class="flex gap-xs" style="align-items:center; flex-wrap:wrap;">
-              <button type="button" class="btn btn-sm btn-info btn-visual-invoice-modal" data-tpl-id="${esc(tpl.id)}" title="معاينة الفاتورة كصورة ومستند A4 رسمي" style="display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:700; background:rgba(6,182,212,0.16); border:1px solid rgba(6,182,212,0.38); color:#38bdf8;">
+              <button type="button" class="btn btn-sm btn-info btn-visual-invoice-modal" data-tpl-id="${esc(tpl.id)}" title="معاينة الفاتورة كصورة ومستند A4 رسمي" style="display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:700; background:rgba(6,182,212,0.18); border:1px solid rgba(6,182,212,0.45); color:#38bdf8;">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                عرض الفاتورة (صورة) 👁️
+                عرض الفاتورة (صورة)
               </button>
               ${isActive ? `
-                <button type="button" class="btn btn-sm btn-success" disabled style="font-size:0.78rem; padding:4px 10px; font-weight:700;">معتمد للمنشأة ✓</button>
+                <button type="button" class="btn btn-sm" disabled style="background:${tplColor}22; border:1px solid ${tplColor}55; color:${tplColor}; font-size:0.78rem; padding:4px 10px; font-weight:700;">معتمد للمنشأة ✓</button>
               ` : `
                 <button type="button" class="btn btn-sm btn-primary btn-select-template" data-tpl-id="${esc(tpl.id)}" style="font-size:0.78rem; padding:4px 10px;">اعتماد القالب</button>
               `}
@@ -412,20 +481,21 @@ export async function render(view) {
     }
 
     const cards = vouchers.map((tpl) => {
+      const tplColor = tpl.color_hex || '#7c3aed';
       const headers = tpl.headers || [];
-      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip" style="background:rgba(168,85,247,0.12); border-color:rgba(168,85,247,0.3); color:#d8b4fe;"><span style="opacity:0.6;">#${i+1}</span> ${esc(h)}</span>`).join('');
+      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};"><span style="opacity:0.6;">#${i+1}</span> ${esc(h)}</span>`).join('');
       const sizeBadge = tpl.file_size ? `<span class="badge gray tiny" style="font-size:0.65rem;">${formatBytes(tpl.file_size)}</span>` : '';
 
       return `
-        <div class="doc-tpl-card">
+        <div class="doc-tpl-card" style="border-color:${tplColor}25;">
           <div class="doc-tpl-card-top">
-            <div class="doc-tpl-card-icon" style="background:rgba(168,85,247,0.12); color:#a855f7;">
+            <div class="doc-tpl-card-icon" style="background:${tplColor}18; color:${tplColor}; border:1px solid ${tplColor}35;">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
             </div>
             <div class="doc-tpl-card-meta">
               <div class="doc-tpl-card-title">
-                <span>${esc(tpl.name_ar || tpl.name)}</span>
-                <span class="badge blue tiny" style="font-size:0.68rem;">سند قبض إكسل</span>
+                <span style="font-weight:800;">${esc(tpl.name_ar || tpl.name)}</span>
+                <span class="badge tiny" style="background:${tplColor}15; color:${tplColor}; font-size:0.68rem;">${esc(tpl.badge || 'سند قبض إكسل')}</span>
                 ${sizeBadge}
               </div>
               <p class="doc-tpl-card-desc">${esc(tpl.description || 'قالب إيصال وسند قبض مالي معتمد')}</p>
@@ -437,9 +507,9 @@ export async function render(view) {
           </div>
           <div class="doc-tpl-card-foot">
             <div class="flex gap-xs" style="align-items:center; flex-wrap:wrap;">
-              <button type="button" class="btn btn-sm btn-info btn-visual-preview" data-tpl-id="${esc(tpl.id)}" style="display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:700; background:rgba(168,85,247,0.16); border:1px solid rgba(168,85,247,0.38); color:#d8b4fe;" title="عرض ومعاينة السند بصرية كصورة ومستند رسمي">
+              <button type="button" class="btn btn-sm btn-info btn-visual-preview" data-tpl-id="${esc(tpl.id)}" style="display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:700; background:${tplColor}20; border:1px solid ${tplColor}55; color:${tplColor};" title="عرض ومعاينة السند بصرية كصورة ومستند رسمي">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                عرض السند (صورة) 👁️
+                عرض السند (صورة)
               </button>
               <button type="button" class="btn btn-sm btn-success btn-generate-report" data-tpl-id="${esc(tpl.id)}" style="display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:700; background:linear-gradient(135deg, #059669, #047857); border-color:#34d399; color:#fff;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -792,15 +862,48 @@ export async function render(view) {
       signature_mode: activeZatcaPhase === 'PHASE2' ? 'LOCAL' : 'NONE',
     };
 
-    if (snap && snap.seller && (snap.invoice?.lines?.length || snap.seller.name_ar)) {
+    if (snap && (snap.seller || snap.invoice)) {
+      let sName = snap.seller?.name_ar || '';
+      let sTax = snap.seller?.tax_number || '';
+      let sCr = snap.seller?.commercial_register || '';
+      let sAddr = snap.seller?.address || '';
+
+      if (snap.seller && typeof snap.seller === 'object') {
+        for (const [k, v] of Object.entries(snap.seller)) {
+          if (!v || typeof v !== 'string') continue;
+          const lk = k.toLowerCase();
+          if (!sName && (lk.includes('اسم') || lk.includes('منشأة') || lk.includes('شركة') || lk.includes('مؤسسة') || lk.includes('name') || lk.includes('seller') || lk.includes('المورد'))) sName = v;
+          if (!sTax && (lk.includes('ضريب') || lk.includes('vat') || lk.includes('tax'))) sTax = v;
+          if (!sCr && (lk.includes('سجل') || lk.includes('cr'))) sCr = v;
+          if (!sAddr && (lk.includes('عنوان') || lk.includes('address') || lk.includes('حي') || lk.includes('طريق'))) sAddr = v;
+        }
+      }
+      if (!sName) {
+        sName = tpl?.name_ar || activeIssuer.name_ar;
+      }
+
+      let bName = snap.buyer?.name || '';
+      let bTax = snap.buyer?.tax_number || '';
+      let bAddr = snap.buyer?.address || '';
+      if (snap.buyer && typeof snap.buyer === 'object') {
+        for (const [k, v] of Object.entries(snap.buyer)) {
+          if (!v || typeof v !== 'string') continue;
+          const lk = k.toLowerCase();
+          if (!bName && (lk.includes('اسم') || lk.includes('عميل') || lk.includes('مشتري') || lk.includes('buyer') || lk.includes('client'))) bName = v;
+          if (!bTax && (lk.includes('ضريب') || lk.includes('vat') || lk.includes('tax'))) bTax = v;
+          if (!bAddr && (lk.includes('عنوان') || lk.includes('address') || lk.includes('حي'))) bAddr = v;
+        }
+      }
+      if (!bName) bName = mockClient.name;
+
       issuerToUse = {
         ...activeIssuer,
-        name_ar: snap.seller.name_ar || activeIssuer.name_ar,
-        name_en: snap.seller.name_en || activeIssuer.name_en || '',
-        tax_number: snap.seller.tax_number || activeIssuer.tax_number,
-        commercial_register: snap.seller.commercial_register || activeIssuer.commercial_register,
+        name_ar: sName || activeIssuer.name_ar,
+        name_en: activeIssuer.name_en || '',
+        tax_number: sTax || activeIssuer.tax_number,
+        commercial_register: sCr || activeIssuer.commercial_register,
         building_no: '',
-        street: snap.seller.address || activeIssuer.street || '',
+        street: sAddr || activeIssuer.street || '',
         district: '',
         city: '',
         address_en: '',
@@ -808,10 +911,10 @@ export async function render(view) {
 
       clientToUse = {
         ...mockClient,
-        name: snap.buyer?.name || mockClient.name,
-        tax_number: snap.buyer?.tax_number || mockClient.tax_number,
+        name: bName || mockClient.name,
+        tax_number: bTax || mockClient.tax_number,
         commercial_register: snap.buyer?.cr || '',
-        address: snap.buyer?.address || mockClient.address,
+        address: bAddr || mockClient.address,
       };
 
       const dateStr = (snap.invoice?.issue_date || new Date().toISOString().slice(0, 10)) + 'T14:30:00Z';
@@ -819,26 +922,44 @@ export async function render(view) {
       const taxAmount = snap.invoice?.tax_amount ?? currentInvoice.tax_amount;
 
       const qrPayload = generateZatcaTlvBase64(
-        snap.seller.name_ar || activeIssuer.name_ar,
-        snap.seller.tax_number || activeIssuer.tax_number,
+        sName || activeIssuer.name_ar,
+        sTax || activeIssuer.tax_number,
         dateStr,
         grandTotal,
         taxAmount
       );
+
+      let mergedLines = currentInvoice.lines;
+      if (snap.invoice?.lines && snap.invoice.lines.length) {
+        mergedLines = snap.invoice.lines.map((sl, idx) => {
+          const fallbackLine = currentInvoice.lines[idx % currentInvoice.lines.length] || {};
+          return {
+            ...fallbackLine,
+            ...sl,
+            line_no: idx + 1,
+            item_name: sl['item_name'] || sl['السلعة أو الخدمة'] || sl['الصنف'] || sl['الوصف'] || fallbackLine.item_name,
+            quantity: Number(sl['quantity'] || sl['الكمية'] || fallbackLine.quantity) || 1,
+            unit_price: Number(sl['unit_price'] || sl['سعر الوحدة'] || sl['السعر'] || fallbackLine.unit_price) || 100,
+            total_line: Number(sl['total_line'] || sl['الإجمالي شامل الضريبة'] || sl['الإجمالي'] || fallbackLine.total_line) || 115,
+            tax_amount: Number(sl['tax_amount'] || sl['قيمة الضريبة'] || fallbackLine.tax_amount) || 15,
+            taxable: Number(sl['taxable'] || sl['الصافي قبل الضريبة'] || fallbackLine.taxable) || 100,
+          };
+        });
+      }
 
       invToRender = {
         ...invToRender,
         invoice_number: snap.invoice?.invoice_number || currentInvoice.invoice_number,
         issue_date: snap.invoice?.issue_date || currentInvoice.issue_date,
         payment_label: snap.invoice?.payment_label || currentInvoice.payment_label,
-        seller_name: snap.seller.name_ar || activeIssuer.name_ar,
-        seller_name_en: snap.seller.name_en || activeIssuer.name_en || '',
-        seller_tax_number: snap.seller.tax_number || activeIssuer.tax_number,
-        seller_cr: snap.seller.commercial_register || activeIssuer.commercial_register,
-        seller_address: snap.seller.address || activeIssuer.address,
-        buyer_name: snap.buyer?.name || mockClient.name,
-        buyer_tax_number: snap.buyer?.tax_number || mockClient.tax_number,
-        buyer_address: snap.buyer?.address || mockClient.address,
+        seller_name: sName || activeIssuer.name_ar,
+        seller_name_en: activeIssuer.name_en || '',
+        seller_tax_number: sTax || activeIssuer.tax_number,
+        seller_cr: sCr || activeIssuer.commercial_register,
+        seller_address: sAddr || activeIssuer.address,
+        buyer_name: bName || mockClient.name,
+        buyer_tax_number: bTax || mockClient.tax_number,
+        buyer_address: bAddr || mockClient.address,
         subtotal: snap.invoice?.subtotal ?? currentInvoice.subtotal,
         discount_amount: snap.invoice?.discount_amount ?? currentInvoice.discount_amount,
         taxable_amount: snap.invoice?.taxable_amount ?? currentInvoice.taxable_amount,
@@ -847,7 +968,7 @@ export async function render(view) {
         paid_amount: grandTotal,
         remaining_amount: 0,
         qr_payload: qrPayload || currentInvoice.qr_payload,
-        lines: (snap.invoice?.lines && snap.invoice.lines.length) ? snap.invoice.lines : currentInvoice.lines,
+        lines: mergedLines,
       };
     }
 
@@ -883,14 +1004,17 @@ export async function render(view) {
 
   function openFullscreenPreview(tplOverride = null) {
     const tpl = tplOverride || excelTemplates.find((t) => t.id === printCfg.template_style);
+    const previewPrintCfg = { ...printCfg };
     if (tpl) {
-      printCfg.template_style = tpl.id;
-      printCfg.headers = tpl.headers || [];
-      printCfg.header_fill = tpl.style_meta?.header_fill || tpl.color_hex;
-      printCfg.banner_text = tpl.style_meta?.banner_text || '';
-      printCfg.banner_fill = tpl.style_meta?.banner_fill || tpl.style_meta?.header_fill || '';
-      printCfg.primary_color = tpl.color_hex || printCfg.primary_color || '#0d9488';
-      printCfg.template_title = tpl.name_ar || tpl.name;
+      previewPrintCfg.template_style = tpl.id;
+      previewPrintCfg.headers = tpl.headers || [];
+      previewPrintCfg.alignments = tpl.style_meta?.alignments || [];
+      previewPrintCfg.header_fill = tpl.style_meta?.header_fill || tpl.color_hex;
+      previewPrintCfg.banner_text = tpl.style_meta?.banner_text || '';
+      previewPrintCfg.banner_fill = tpl.style_meta?.banner_fill || tpl.style_meta?.header_fill || '';
+      previewPrintCfg.primary_color = tpl.color_hex || previewPrintCfg.primary_color || '#0d9488';
+      previewPrintCfg.dark_color = tpl.style_meta?.header_fill || tpl.color_hex;
+      previewPrintCfg.template_title = tpl.name_ar || tpl.name;
     }
 
     const { issuerToUse, clientToUse, invToRender } = resolvePreviewEntities(tpl);
@@ -899,7 +1023,7 @@ export async function render(view) {
       invoice: invToRender,
       issuer: issuerToUse,
       client: clientToUse,
-      printSettings: printCfg,
+      printSettings: previewPrintCfg,
       qrSettings: qrCfg,
     });
 
@@ -1295,36 +1419,31 @@ export async function render(view) {
   // نافذة فحص خلايا وأعمدة القالب
   function showTemplateInspectionModal(tpl, inspectionData = null) {
     const headers = inspectionData?.headers || tpl.headers || [];
-    const meta = inspectionData?.metadata || inspectionData?.metadataFields || {};
-    const sampleRows = inspectionData?.samplePreviewRows || inspectionData?.sampleRows || [];
-    const snap = inspectionData?.snapshot || tpl.style_meta?.snapshot;
+    const sampleRows = inspectionData?.samplePreviewRows || inspectionData?.sampleRows || tpl.style_meta?.sample_rows || [];
+    const seller = inspectionData?.metadata?.seller || tpl.style_meta?.seller || tpl.style_meta?.snapshot?.seller || {};
+    const buyer = inspectionData?.metadata?.buyer || tpl.style_meta?.buyer || tpl.style_meta?.snapshot?.buyer || {};
+    const merges = inspectionData?.layoutMerges || tpl.style_meta?.merges || [];
+    const color = tpl.color_hex || tpl.style_meta?.accent_color || tpl.style_meta?.header_fill || '#06b6d4';
 
-    const snapBoxHtml = snap ? `
+    const sellerEntries = Object.entries(seller).filter(([k, v]) => v && typeof v === 'string');
+    const buyerEntries = Object.entries(buyer).filter(([k, v]) => v && typeof v === 'string');
+
+    const snapBoxHtml = (sellerEntries.length || buyerEntries.length) ? `
       <div class="card" style="background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.3); border-radius:8px; padding:0.8rem; margin-bottom:1rem;">
         <div style="font-size:0.88rem; font-weight:800; color:#38bdf8; margin-bottom:0.5rem; display:flex; align-items:center; gap:6px;">
-          <span>🏢</span> البيانات الفعلية المكتشفة تلقائياً من ملف الإكسل
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M8 14h.01"/><path d="M16 14h.01"/></svg>
+          البيانات الفعلية المكتشفة تلقائياً من ملف الإكسل
         </div>
         <div class="grid grid-2" style="gap:8px; font-size:0.8rem;">
-          <div style="background:rgba(255,255,255,0.03); padding:7px 10px; border-radius:6px; border:1px solid var(--line);">
-            <b style="color:#e2e8f0; display:block; margin-bottom:2px;">بيانات المورد (البائع):</b>
-            <div style="color:var(--primary); font-weight:700;">${esc(snap.seller?.name_ar || '—')}</div>
-            ${snap.seller?.tax_number ? `<div class="tiny muted">الرقم الضريبي: <span class="ltr font-mono">${esc(snap.seller.tax_number)}</span></div>` : ''}
-            ${snap.seller?.commercial_register ? `<div class="tiny muted">السجل التجاري: <span class="ltr font-mono">${esc(snap.seller.commercial_register)}</span></div>` : ''}
-            ${snap.seller?.address ? `<div class="tiny muted">العنوان: ${esc(snap.seller.address)}</div>` : ''}
+          <div style="background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:6px; border:1px solid var(--line);">
+            <b style="color:#e2e8f0; display:block; margin-bottom:4px; font-size:0.82rem;">بيانات المنشأة (البائع):</b>
+            ${sellerEntries.map(([k, v]) => `<div style="margin-bottom:3px;"><span class="tiny muted">${esc(k)}:</span> <b style="color:var(--primary); font-size:0.8rem;">${esc(v)}</b></div>`).join('') || '<span class="tiny muted">لا توجد بيانات</span>'}
           </div>
-          <div style="background:rgba(255,255,255,0.03); padding:7px 10px; border-radius:6px; border:1px solid var(--line);">
-            <b style="color:#e2e8f0; display:block; margin-bottom:2px;">بيانات العميل (المشتري):</b>
-            <div style="color:#38bdf8; font-weight:700;">${esc(snap.buyer?.name || '—')}</div>
-            ${snap.buyer?.tax_number ? `<div class="tiny muted">الرقم الضريبي: <span class="ltr font-mono">${esc(snap.buyer.tax_number)}</span></div>` : ''}
-            ${snap.buyer?.address ? `<div class="tiny muted">العنوان: ${esc(snap.buyer.address)}</div>` : ''}
+          <div style="background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:6px; border:1px solid var(--line);">
+            <b style="color:#e2e8f0; display:block; margin-bottom:4px; font-size:0.82rem;">بيانات العميل (المشتري):</b>
+            ${buyerEntries.map(([k, v]) => `<div style="margin-bottom:3px;"><span class="tiny muted">${esc(k)}:</span> <b style="color:#38bdf8; font-size:0.8rem;">${esc(v)}</b></div>`).join('') || '<span class="tiny muted">لا توجد بيانات</span>'}
           </div>
         </div>
-        ${snap.invoice ? `
-          <div style="margin-top:7px; padding:6px 10px; background:rgba(255,255,255,0.02); border-radius:6px; border:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:0.8rem;">
-            <div>رقم الفاتورة: <b class="ltr font-mono" style="color:#fff;">${esc(snap.invoice.invoice_number || '—')}</b> | التاريخ: <b style="color:#fff;">${esc(snap.invoice.issue_date || '—')}</b></div>
-            <div>عدد الأصناف: <b style="color:#38bdf8;">${snap.invoice.lines?.length || 0}</b> | الإجمالي: <b style="color:#34d399;">${snap.invoice.grand_total ? snap.invoice.grand_total.toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' ر.س' : '—'}</b></div>
-          </div>
-        ` : ''}
       </div>
     ` : '';
 
@@ -1335,13 +1454,14 @@ export async function render(view) {
       </div>
     `).join('');
 
-    const metaCardsHtml = [
-      meta.client_name ? `<div class="card tiny" style="margin:0; padding:6px 10px; background:rgba(255,255,255,0.02); border:1px solid var(--line);"><b>اسم العميل:</b> <span class="font-mono" style="color:var(--primary);">${esc(meta.client_name.cell)}</span> (${esc(meta.client_name.value || meta.client_name.val || '')})</div>` : '',
-      meta.invoice_number ? `<div class="card tiny" style="margin:0; padding:6px 10px; background:rgba(255,255,255,0.02); border:1px solid var(--line);"><b>رقم الفاتورة:</b> <span class="font-mono" style="color:var(--primary);">${esc(meta.invoice_number.cell)}</span> (${esc(meta.invoice_number.value || meta.invoice_number.val || '')})</div>` : '',
-      meta.date ? `<div class="card tiny" style="margin:0; padding:6px 10px; background:rgba(255,255,255,0.02); border:1px solid var(--line);"><b>تاريخ الفاتورة:</b> <span class="font-mono" style="color:var(--primary);">${esc(meta.date.cell)}</span> (${esc(meta.date.value || meta.date.val || '')})</div>` : '',
-      meta.payment_method ? `<div class="card tiny" style="margin:0; padding:6px 10px; background:rgba(255,255,255,0.02); border:1px solid var(--line);"><b>طريقة الدفع:</b> <span class="font-mono" style="color:var(--primary);">${esc(meta.payment_method.cell)}</span> (${esc(meta.payment_method.value || meta.payment_method.val || '')})</div>` : '',
-      meta.tax_number ? `<div class="card tiny" style="margin:0; padding:6px 10px; background:rgba(255,255,255,0.02); border:1px solid var(--line);"><b>الرقم الضريبي:</b> <span class="font-mono" style="color:var(--primary);">${esc(meta.tax_number.cell)}</span> (${esc(meta.tax_number.value || meta.tax_number.val || '')})</div>` : '',
-    ].filter(Boolean).join('');
+    const mergesHtml = merges.length ? `
+      <div style="margin-bottom:1rem;">
+        <b style="display:block; font-size:0.86rem; margin-bottom:0.4rem; color:#fff;">الخلايا المدمجة المكتشفة في القالب (${merges.length}):</b>
+        <div class="flex gap-xs" style="flex-wrap:wrap; max-height:100px; overflow-y:auto;">
+          ${merges.map(m => `<span class="badge tiny" style="background:rgba(148,163,184,0.12); border:1px solid rgba(148,163,184,0.3); color:#94a3b8; font-family:monospace;">${esc(m)}</span>`).join('')}
+        </div>
+      </div>
+    ` : '';
 
     const sampleTableHtml = sampleRows && sampleRows.length ? `
       <div style="margin-top:1rem;">
@@ -1367,7 +1487,13 @@ export async function render(view) {
               <div style="font-size:0.95rem; font-weight:800; color:#fff;">${esc(tpl.name_ar || tpl.name)}</div>
               <div class="tiny muted" style="margin-top:3px;">المسار الفعلي: <span class="ltr font-mono" style="color:var(--primary);">${esc(tpl.file_path || tpl.id + '.xlsx')}</span></div>
             </div>
-            <span class="badge green" style="font-weight:700;">اكتشاف ذكي وتلقائي 100%</span>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="badge tiny" style="display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,0.05); border:1px solid var(--line);">
+                <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${color};"></span>
+                <span style="font-family:monospace; color:${color}; font-weight:700;">${color}</span>
+              </span>
+              <span class="badge green" style="font-weight:700;">اكتشاف ذكي وتلقائي 100%</span>
+            </div>
           </div>
 
           ${snapBoxHtml ? raw(snapBoxHtml) : ''}
@@ -1377,12 +1503,7 @@ export async function render(view) {
             ${headers.length ? raw(`<div class="flex gap-xs" style="flex-wrap:wrap;">${headersChipsHtml}</div>`) : '<p class="tiny muted">لا توجد أعمدة محددة أو الملف غير مهيأ.</p>'}
           </div>
 
-          ${metaCardsHtml ? raw(`
-            <div style="margin-bottom:1rem;">
-              <b style="display:block; font-size:0.86rem; margin-bottom:0.5rem; color:#fff;">خلايا الترويسة المكتشفة:</b>
-              <div class="grid grid-2" style="gap:6px;">${metaCardsHtml}</div>
-            </div>
-          `) : ''}
+          ${mergesHtml ? raw(mergesHtml) : ''}
 
           ${sampleTableHtml ? raw(sampleTableHtml) : ''}
 
@@ -1773,13 +1894,27 @@ export async function render(view) {
       });
     });
 
-    // معاينة بصرية للتقرير كصورة ومستند رسمي A4
+    // معاينة الفاتورة كصورة ومستند A4 رسمي
+    $$('.btn-visual-invoice-modal', view).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tplId = btn.dataset.tplId;
+        const tpl = excelTemplates.find((t) => t.id === tplId);
+        if (!tpl) return;
+        openFullscreenPreview(tpl);
+      });
+    });
+
+    // معاينة بصرية للمستند/التقرير/السند كصورة ومستند رسمي A4
     $$('.btn-visual-preview', view).forEach((btn) => {
       btn.addEventListener('click', () => {
         const tplId = btn.dataset.tplId;
         const tpl = excelTemplates.find((t) => t.id === tplId);
         if (!tpl) return;
-        openVisualReportPreviewModal(tpl);
+        if (tpl.category === 'invoices') {
+          openFullscreenPreview(tpl);
+        } else {
+          openVisualReportPreviewModal(tpl);
+        }
       });
     });
 
@@ -1795,20 +1930,32 @@ export async function render(view) {
 
     // اختيار قالب معتمد
     $$('.btn-select-template', view).forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const tplId = btn.dataset.tplId;
         const tpl = excelTemplates.find((t) => t.id === tplId);
         printCfg.template_style = tplId;
         if (tpl) {
           printCfg.headers = tpl.headers || [];
+          printCfg.alignments = tpl.style_meta?.alignments || [];
           printCfg.header_fill = tpl.style_meta?.header_fill || tpl.color_hex;
           printCfg.banner_text = tpl.style_meta?.banner_text || '';
           printCfg.banner_fill = tpl.style_meta?.banner_fill || tpl.style_meta?.header_fill || '';
           printCfg.primary_color = tpl.color_hex || printCfg.primary_color || '#0d9488';
+          printCfg.dark_color = tpl.style_meta?.header_fill || tpl.color_hex;
           printCfg.template_title = tpl.name_ar || tpl.name;
         }
+        try {
+          await api.put(`/api/issuers/${activeIssuer.id}`, {
+            ...activeIssuer,
+            print_settings: printCfg,
+            qr_settings: qrCfg,
+          });
+          activeIssuer.print_settings = printCfg;
+          toastOk(`تم اعتماد قالب «${tpl?.name_ar || tplId}» رسمياً للمنشأة وحفظ الإعدادات بنجاح`);
+        } catch (err) {
+          toastErr('حدث خطأ أثناء حفظ اعتماد القالب: ' + err.message);
+        }
         renderView();
-        toastOk('تم اعتماد القالب كقالب رسمي للمنشأة');
       });
     });
 
@@ -1913,7 +2060,8 @@ export async function render(view) {
           thermal_scale: 3,
           ...(activeIssuer.qr_settings || {}),
         };
-        currentInvoice = buildMockInvoice(activeIssuer, activeZatcaPhase);
+        await loadIssuerData();
+        currentInvoice = getDynamicPreviewInvoice();
         renderView();
         toastOk(`تم تحميل بيانات: ${activeIssuer.name_ar}`);
       } catch (err) {

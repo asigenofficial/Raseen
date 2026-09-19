@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"raseen/internal/crypto"
 	"raseen/internal/db"
@@ -225,4 +226,180 @@ func (s *ItemService) DeleteItem(id string) error {
 	}
 	_, err := s.db.Exec("DELETE FROM items WHERE id = ?", id)
 	return err
+}
+
+type ImportItemInput struct {
+	ItemCode  string  `json:"item_code"`
+	NameAr    string  `json:"name_ar"`
+	NameEn    string  `json:"name_en"`
+	Category  string  `json:"category"`
+	Barcode   string  `json:"barcode"`
+	Unit      string  `json:"unit"`
+	CostPrice float64 `json:"cost_price"`
+	SalePrice float64 `json:"sale_price"`
+	TaxRate   float64 `json:"tax_rate"`
+	Notes     string  `json:"notes"`
+}
+
+type ImportItemsResult struct {
+	Total     int `json:"total"`
+	Created   int `json:"created"`
+	Updated   int `json:"updated"`
+	Errors    int `json:"errors"`
+}
+
+func (s *ItemService) BatchImportItems(items []ImportItemInput) (*ImportItemsResult, error) {
+	if len(items) == 0 {
+		return &ImportItemsResult{}, nil
+	}
+
+	// Cache or create categories
+	cats, err := s.ListCategories()
+	if err != nil {
+		return nil, err
+	}
+	catMap := make(map[string]string) // name -> id
+	for _, c := range cats {
+		catMap[strings.ToLower(strings.TrimSpace(c.Name))] = c.ID
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	stmtFindByName, err := tx.Prepare("SELECT id FROM items WHERE LOWER(TRIM(name_ar)) = LOWER(TRIM(?)) LIMIT 1")
+	if err != nil {
+		return nil, err
+	}
+	defer stmtFindByName.Close()
+
+	stmtFindByCode, err := tx.Prepare("SELECT id FROM items WHERE item_code = ? AND item_code != '' LIMIT 1")
+	if err != nil {
+		return nil, err
+	}
+	defer stmtFindByCode.Close()
+
+	stmtInsertCat, err := tx.Prepare("INSERT INTO item_categories (id, code, name, description, created_at) VALUES (?, ?, ?, '', ?)")
+	if err != nil {
+		return nil, err
+	}
+	defer stmtInsertCat.Close()
+
+	stmtInsertItem, err := tx.Prepare(`
+		INSERT INTO items (
+			id, item_code, category_id, name_ar, name_en, barcode,
+			unit, cost_price, sale_price, tax_rate, is_active, notes,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer stmtInsertItem.Close()
+
+	stmtUpdateItem, err := tx.Prepare(`
+		UPDATE items SET
+			item_code = CASE WHEN ? != '' THEN ? ELSE item_code END,
+			category_id = COALESCE(?, category_id),
+			name_en = CASE WHEN ? != '' THEN ? ELSE name_en END,
+			barcode = CASE WHEN ? != '' THEN ? ELSE barcode END,
+			unit = CASE WHEN ? != '' THEN ? ELSE unit END,
+			cost_price = ?,
+			sale_price = ?,
+			tax_rate = ?,
+			notes = CASE WHEN ? != '' THEN ? ELSE notes END,
+			updated_at = ?
+		WHERE id = ?
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer stmtUpdateItem.Close()
+
+	now := db.NowIso()
+	res := &ImportItemsResult{Total: len(items)}
+
+	for _, itm := range items {
+		nameAr := strings.TrimSpace(itm.NameAr)
+		if nameAr == "" {
+			res.Errors++
+			continue
+		}
+
+		var catID *string
+		if itm.Category != "" {
+			catKey := strings.ToLower(strings.TrimSpace(itm.Category))
+			if cid, exists := catMap[catKey]; exists {
+				catID = &cid
+			} else {
+				newCid := crypto.UUID()
+				newCode := fmt.Sprintf("CAT-%03d", len(catMap)+1)
+				if _, err := stmtInsertCat.Exec(newCid, newCode, itm.Category, now); err == nil {
+					catMap[catKey] = newCid
+					catID = &newCid
+				}
+			}
+		}
+
+		// Check if exists by code or by Arabic name
+		var existingID string
+		if itm.ItemCode != "" {
+			_ = stmtFindByCode.QueryRow(itm.ItemCode).Scan(&existingID)
+		}
+		if existingID == "" {
+			_ = stmtFindByName.QueryRow(nameAr).Scan(&existingID)
+		}
+
+		unit := itm.Unit
+		if unit == "" {
+			unit = "حبة"
+		}
+		taxRate := itm.TaxRate
+		if !validAmount(taxRate) || taxRate > 100 || !validAmount(itm.CostPrice) || !validAmount(itm.SalePrice) { return nil,errors.New("سعر أو ضريبة الصنف غير صالح") }
+		costMinor := models.ToMinor(itm.CostPrice)
+		saleMinor := models.ToMinor(itm.SalePrice)
+
+		if existingID != "" {
+			// Update
+			_, err := stmtUpdateItem.Exec(
+				itm.ItemCode, itm.ItemCode,
+				catID,
+				itm.NameEn, itm.NameEn,
+				itm.Barcode, itm.Barcode,
+				unit, unit,
+				costMinor, saleMinor, taxRate,
+				itm.Notes, itm.Notes,
+				now, existingID,
+			)
+			if err != nil {
+				res.Errors++
+			} else {
+				res.Updated++
+			}
+		} else {
+			// Insert
+			itemCode := itm.ItemCode
+			if itemCode == "" {
+				itemCode = "ITM-" + crypto.UUID()
+			}
+			newID := crypto.UUID()
+			_, err := stmtInsertItem.Exec(
+				newID, itemCode, catID, nameAr, itm.NameEn, itm.Barcode,
+				unit, costMinor, saleMinor, taxRate, itm.Notes,
+				now, now,
+			)
+			if err != nil {
+				res.Errors++
+			} else {
+				res.Created++
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return res, nil
 }

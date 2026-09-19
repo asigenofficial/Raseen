@@ -3,6 +3,8 @@ package services
 import (
 	"errors"
 	"fmt"
+	"math"
+	"time"
 
 	"raseen/internal/crypto"
 	"raseen/internal/db"
@@ -82,7 +84,7 @@ func (s *VoucherService) CreateVoucher(input CreateVoucherInput, actor, ip strin
 	if input.IssuerID == "" || input.ClientID == "" {
 		return nil, errors.New("المنشأة المصدرة والعميل مطلوبان")
 	}
-	if input.TotalAmount <= 0 {
+	if !validAmount(input.TotalAmount) || models.ToMinor(input.TotalAmount) <= 0 {
 		return nil, errors.New("مبلغ السند يجب أن يكون أكبر من الصفر")
 	}
 
@@ -95,6 +97,8 @@ func (s *VoucherService) CreateVoucher(input CreateVoucherInput, actor, ip strin
 	if paymentType == "" {
 		paymentType = "CASH"
 	}
+	if _, err := time.Parse("2006-01-02", voucherDate); err != nil { return nil, errors.New("تاريخ السند غير صالح") }
+	if _, ok := paymentLabels[paymentType]; !ok { return nil, errors.New("طريقة السداد غير صالحة") }
 
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -119,12 +123,14 @@ func (s *VoucherService) CreateVoucher(input CreateVoucherInput, actor, ip strin
 	var allocatedTotalMinor int64
 
 	if len(input.Allocations) > 0 {
+		seen := map[string]bool{}
 		for _, a := range input.Allocations {
 			amt := models.ToMinor(a.Amount)
-			if amt > 0 && a.InvoiceID != "" {
-				finalAllocations = append(finalAllocations, allocItem{invoiceID: a.InvoiceID, amount: amt})
-				allocatedTotalMinor += amt
-			}
+			if !validAmount(a.Amount) || amt <= 0 || a.InvoiceID == "" || seen[a.InvoiceID] { return nil, errors.New("تخصيص غير صالح أو فاتورة مكررة") }
+			seen[a.InvoiceID] = true
+			if amt > totalAmountMinor-allocatedTotalMinor { return nil, errors.New("مجموع التخصيصات يتجاوز مبلغ السند") }
+			finalAllocations = append(finalAllocations, allocItem{invoiceID: a.InvoiceID, amount: amt})
+			allocatedTotalMinor += amt
 		}
 	} else if input.AutoAllocate {
 		// FIFO oldest unpaid invoices first
@@ -133,7 +139,8 @@ func (s *VoucherService) CreateVoucher(input CreateVoucherInput, actor, ip strin
 			WHERE client_id = ? AND issuer_id = ? AND status IN ('UNPAID', 'PARTIAL')
 			ORDER BY issue_date ASC, sequence_no ASC
 		`, input.ClientID, input.IssuerID)
-		if err == nil {
+		if err != nil { return nil, err }
+		{
 			defer rows.Close()
 			remBudget := totalAmountMinor
 			for rows.Next() && remBudget > 0 {
@@ -149,6 +156,14 @@ func (s *VoucherService) CreateVoucher(input CreateVoucherInput, actor, ip strin
 					allocatedTotalMinor += take
 				}
 			}
+			if err := rows.Err(); err != nil { return nil, err }
+			if err := rows.Close(); err != nil { return nil, err }
+		}
+	}
+	for _, a := range finalAllocations {
+		var remaining int64
+		if err := tx.QueryRow("SELECT remaining_amount FROM invoices WHERE id=? AND issuer_id=? AND client_id=? AND status IN ('UNPAID','PARTIAL')",a.invoiceID,input.IssuerID,input.ClientID).Scan(&remaining); err != nil || a.amount > remaining {
+			return nil, errors.New("الفاتورة لا تخص الشركة والعميل أو أن التخصيص يتجاوز المتبقي")
 		}
 	}
 
@@ -183,7 +198,7 @@ func (s *VoucherService) CreateVoucher(input CreateVoucherInput, actor, ip strin
 
 		// Update invoice
 		var grandTotal, paidAmount int64
-		_ = tx.QueryRow("SELECT grand_total, paid_amount FROM invoices WHERE id = ?", a.invoiceID).Scan(&grandTotal, &paidAmount)
+		if err = tx.QueryRow("SELECT grand_total, paid_amount FROM invoices WHERE id = ?", a.invoiceID).Scan(&grandTotal, &paidAmount); err != nil { return nil, err }
 		newPaid := paidAmount + a.amount
 		newRem := grandTotal - newPaid
 		if newRem < 0 {
@@ -514,19 +529,21 @@ func (s *VoucherService) CancelVoucher(id, actor, ip string) error {
 	defer tx.Rollback()
 
 	now := db.NowIso()
-	_, err = tx.Exec("UPDATE receipt_vouchers SET status = 'CANCELLED', updated_at = ? WHERE id = ?", now, id)
+	result, err := tx.Exec("UPDATE receipt_vouchers SET status = 'CANCELLED', updated_at = ? WHERE id = ? AND status = 'ACTIVE'", now, id)
 	if err != nil {
 		return err
 	}
+	if n, err := result.RowsAffected(); err != nil || n != 1 { return errors.New("سند القبض ملغى بالفعل") }
 
 	// Rollback allocations from invoices
 	for _, a := range v.Allocations {
 		allocMinor := models.ToMinor(a.AllocatedAmount)
 		var grandTotal, paidAmount int64
-		_ = tx.QueryRow("SELECT grand_total, paid_amount FROM invoices WHERE id = ?", a.InvoiceID).Scan(&grandTotal, &paidAmount)
+		var status string
+		if err := tx.QueryRow("SELECT grand_total, paid_amount, status FROM invoices WHERE id = ?", a.InvoiceID).Scan(&grandTotal, &paidAmount, &status); err != nil { return err }
 		newPaid := paidAmount - allocMinor
 		if newPaid < 0 {
-			newPaid = 0
+			return errors.New("السدادات الحالية لا تطابق التخصيصات؛ يلزم مراجعة السند")
 		}
 		newRem := grandTotal - newPaid
 		newStatus := "UNPAID"
@@ -536,10 +553,12 @@ func (s *VoucherService) CancelVoucher(id, actor, ip string) error {
 			newStatus = "PAID"
 		}
 
-		_, _ = tx.Exec(`
+		if status == "CANCELLED" { newStatus = "CANCELLED" }
+		_, err = tx.Exec(`
 			UPDATE invoices SET paid_amount = ?, remaining_amount = ?, status = ?, updated_at = ?
 			WHERE id = ?
 		`, newPaid, newRem, newStatus, now, a.InvoiceID)
+		if err != nil { return err }
 	}
 
 	// Reverse entry in client_ledger
@@ -550,7 +569,7 @@ func (s *VoucherService) CancelVoucher(id, actor, ip string) error {
 			transaction_date, debit, credit, description, created_at
 		) VALUES (
 			?, ?, ?, 'RECEIPT_CANCEL', ?, ?,
-			?, 0, ?, ?, ?
+			?, ?, 0, ?, ?
 		)
 	`, crypto.UUID(), v.ClientID, v.IssuerID, v.ID, v.VoucherNumber, db.TodayIso(), totalAmountMinor, fmt.Sprintf("إلغاء سند قبض رقم %s", v.VoucherNumber), now)
 	if err != nil {
@@ -568,3 +587,6 @@ func (s *VoucherService) CancelVoucher(id, actor, ip string) error {
 
 	return nil
 }
+
+// Bound monetary inputs before conversion, arithmetic and accumulation.
+func validAmount(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v,0) && v >= 0 && v <= 1e12 }

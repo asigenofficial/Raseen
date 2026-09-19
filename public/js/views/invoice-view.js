@@ -13,6 +13,9 @@ import { invoiceA4, tafqeet, INVOICE_TEMPLATES } from '../print/templates.js';
 
 async function loadContext(invoiceId) {
   const invoice = await api.get(`/api/invoices/${invoiceId}`);
+  const lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
+  invoice.lines = lines;
+  invoice.items = lines;
   const [issuer, client] = await Promise.all([
     api.get(`/api/issuers/${invoice.issuer_id}`),
     api.get(`/api/clients/${invoice.client_id}`),
@@ -83,7 +86,7 @@ export async function fetchInvoicePdfBlob(invoiceId, docHtml) {
         body: JSON.stringify({ html: docHtml }),
       });
       if (res.ok) return await res.blob();
-    } catch {}
+    } catch { }
   }
   const res = await fetch(`/api/invoices/${invoiceId}/pdf`, {
     headers: { origin: window.location.origin },
@@ -94,6 +97,8 @@ export async function fetchInvoicePdfBlob(invoiceId, docHtml) {
 
 export async function downloadInvoicePdf({ invoice, issuer, client, printSettings = null }) {
   try {
+    invoice.lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
+    invoice.items = invoice.lines;
     toastOk('جارٍ تجهيز ملف PDF الفاتورة...');
     const docHtml = invoiceA4({ invoice, issuer, client, printSettings });
     const blob = await fetchInvoicePdfBlob(invoice.id, docHtml);
@@ -115,6 +120,8 @@ export async function downloadInvoicePdf({ invoice, issuer, client, printSetting
 
 export async function shareInvoicePdfFile({ invoice, issuer, client, text, printSettings = null }) {
   try {
+    invoice.lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
+    invoice.items = invoice.lines;
     toastOk('جارٍ تجهيز ملف PDF للمشاركة...');
     const docHtml = invoiceA4({ invoice, issuer, client, printSettings });
     const blob = await fetchInvoicePdfBlob(invoice.id, docHtml);
@@ -332,7 +339,7 @@ export async function render(view, ctx) {
             طباعة ورقية ▾
           </button>
           ${raw(invoice.status !== 'CANCELLED' && invoice.remaining_amount > 0 && can('vouchers.create')
-    ? `<button class="btn btn-primary" id="pay" type="button">${icon.receipt({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}سند قبض</button>` : '')}
+      ? `<button class="btn btn-primary" id="pay" type="button">${icon.receipt({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}سند قبض</button>` : '')}
           ${raw(invoice.status !== 'CANCELLED' && can('invoices.edit') ? `<a class="btn" href="#/invoice?edit=${esc(invoice.id)}" title="تعديل الفاتورة يدوياً">${icon.edit({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}تعديل الفاتورة</a>` : '')}
           ${raw(invoice.status !== 'CANCELLED' && can('invoices.edit') ? `<button class="btn btn-danger" id="cancel" type="button">${icon.invoiceX({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}إلغاء الفاتورة</button>` : '')}
           <a class="btn" href="#/invoices">${raw(icon.arrowRight({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}القائمة</a>
@@ -353,7 +360,7 @@ export async function render(view, ctx) {
                 </button>
                 <button type="button" class="btn btn-sm ${activeViewMode === 'items' ? 'btn-primary' : ''}" id="tab-btn-items" style="padding:.35rem .75rem;border-radius:6px;font-size:.82rem">
                   ${raw(icon.fileSpreadsheet({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}
-                  جدول البنود والبيانات 📋 (${invoice.lines.length})
+                  جدول البنود والبيانات 📋 (${(invoice.lines || []).length})
                 </button>
               </div>
 
@@ -361,8 +368,8 @@ export async function render(view, ctx) {
                 <span style="font-size:.8rem;color:var(--text-muted);font-weight:600">القالب:</span>
                 <select id="sel-invoice-tpl" class="input input-sm" style="padding:.28rem .6rem;font-size:.82rem;border-radius:6px;background:var(--bg-card);color:var(--text);border-color:var(--line-strong)">
                   ${raw(availableTemplates.length
-                    ? availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name_ar || t.id)}${t.headers?.length ? ` (${t.headers.length} أعمدة)` : ''}</option>`).join('')
-                    : INVOICE_TEMPLATES.map((t) => `<option value="${t.id}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name)}</option>`).join(''))}
+        ? availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name_ar || t.id)}${t.headers?.length ? ` (${t.headers.length} أعمدة)` : ''}</option>`).join('')
+        : INVOICE_TEMPLATES.map((t) => `<option value="${t.id}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name)}</option>`).join(''))}
                 </select>
               </div>
             </div>
@@ -393,7 +400,7 @@ export async function render(view, ctx) {
           <div id="pane-items-details" style="display:${activeViewMode === 'items' ? 'block' : 'none'}">
             <div class="card pad0">
               <div class="card-head"><h3>بنود الفاتورة</h3><div class="spacer"></div>
-                <span class="tiny muted">${invoice.lines.length} بند</span></div>
+                <span class="tiny muted">${(invoice.lines || []).length} بند</span></div>
               <div class="table-wrap">
                 <table class="tbl compact">
                   <thead><tr><th>#</th><th>الصنف</th><th>الوحدة</th><th class="text-end">الكمية</th>
@@ -404,7 +411,7 @@ export async function render(view, ctx) {
                     <th class="text-end">قيمة الضريبة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
                     <th class="text-end">الإجمالي <span class="cur-sym">${sarSvg({ size: 11 })}</span></th></tr></thead>
                   <tbody>
-                    ${invoice.lines.map((l, i) => raw(`<tr>
+                    ${(invoice.lines || []).map((l, i) => raw(`<tr>
                       <td class="tiny">${i + 1}</td>
                       <td><b>${esc(l.item_name)}</b>${l.item_code ? `<div class="tiny muted mono">${esc(l.item_code)}</div>` : ''}</td>
                       <td class="tiny">${esc(l.unit)}</td>
@@ -445,8 +452,8 @@ export async function render(view, ctx) {
               <dt>بصمة الفاتورة السابقة (PIH)</dt><dd class="mono tiny" style="word-break:break-all">${invoice.previous_invoice_hash}</dd>
               <dt>وضع التوقيع</dt><dd>
                 ${raw(invoice.signature_mode === 'PRODUCTION' ? '<span class="badge green">شهادة إنتاج</span>'
-    : invoice.signature_mode === 'LOCAL' ? '<span class="badge amber">توقيع محلي (بدون شهادة معتمدة)</span>'
-      : '<span class="badge gray">المرحلة الأولى — بدون توقيع</span>')}</dd>
+          : invoice.signature_mode === 'LOCAL' ? '<span class="badge amber">توقيع محلي (بدون شهادة معتمدة)</span>'
+            : '<span class="badge gray">المرحلة الأولى — بدون توقيع</span>')}</dd>
               <dt>حمولة QR (Base64)</dt><dd class="mono tiny" style="word-break:break-all">${invoice.qr_payload}</dd>
             </dl>
             <div class="flex mt">
@@ -486,8 +493,8 @@ export async function render(view, ctx) {
             <div class="qr-box">${raw(qrSvg(invoice.qr_payload, { scale: 5 }))}</div>
             <p class="tiny muted text-center mb0 mt">
               ${invoice.zatca_phase === 'PHASE2'
-                ? 'باركود معتمد للمرحلة الثانية: يتضمن الحقول الأساسية الخمسة + هاش الفاتورة والتوقيع الرقمي والمفتاح العام وسلسلة PIH.'
-                : 'باركود معتمد للمرحلة الأولى: يتضمن الحقول الإلزامية الخمسة (اسم المورد، الرقم الضريبي، التاريخ والوقت، الإجمالي، والضريبة).'}
+        ? 'باركود معتمد للمرحلة الثانية: يتضمن الحقول الأساسية الخمسة + هاش الفاتورة والتوقيع الرقمي والمفتاح العام وسلسلة PIH.'
+        : 'باركود معتمد للمرحلة الأولى: يتضمن الحقول الإلزامية الخمسة (اسم المورد، الرقم الضريبي، التاريخ والوقت، الإجمالي، والضريبة).'}
             </p>
           </div>
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -15,10 +16,30 @@ import (
 
 type AuthService struct {
 	db *db.DB
+	ttl time.Duration
 }
 
-func NewAuthService(d *db.DB) *AuthService {
-	return &AuthService{db: d}
+func NewAuthService(d *db.DB, hours ...int) *AuthService {
+	ttl := 12 * time.Hour
+	if len(hours) > 0 && hours[0] > 0 { ttl = time.Duration(hours[0]) * time.Hour }
+	return &AuthService{db: d, ttl: ttl}
+}
+
+func (s *AuthService) permissions(user *models.User) {
+	_, roles := s.GetRolesAndPermissions()
+	user.EffectivePermissions = append([]string{}, roles[user.Role]...)
+	var extra []string
+	if json.Unmarshal([]byte(user.Permissions), &extra) == nil {
+		user.EffectivePermissions = append(user.EffectivePermissions, extra...)
+	}
+	if user.Role == "ADMIN" { user.EffectivePermissions = []string{"*"} }
+}
+
+func HasPermission(user *models.User, permission string) bool {
+	if user == nil { return false }
+	if slices.Contains(user.EffectivePermissions, "*") || slices.Contains(user.EffectivePermissions, permission) { return true }
+	resource, action, _ := strings.Cut(permission, ".")
+	return (action == "create" || action == "edit" || action == "delete") && slices.Contains(user.EffectivePermissions, resource+".write")
 }
 
 func (s *AuthService) Login(username, password, ip string) (*models.User, string, error) {
@@ -51,7 +72,7 @@ func (s *AuthService) Login(username, password, ip string) (*models.User, string
 	// Create session
 	token := crypto.Token(32)
 	now := db.NowIso()
-	expiresAt := time.Now().UTC().Add(12 * time.Hour).Format(time.RFC3339)
+	expiresAt := time.Now().UTC().Add(s.ttl).Format(time.RFC3339)
 
 	_, err = s.db.Exec(`
 		INSERT INTO sessions (token, user_id, created_at, expires_at, ip)
@@ -67,6 +88,7 @@ func (s *AuthService) Login(username, password, ip string) (*models.User, string
 	}
 
 	s.db.Audit(user.Username, "LOGIN", "user", user.ID, "", nil, ip)
+	s.permissions(&user)
 	return &user, token, nil
 }
 
@@ -97,7 +119,7 @@ func (s *AuthService) ValidateSession(token string) (*models.User, error) {
 	}
 
 	exp, err := time.Parse(time.RFC3339, expiresAt)
-	if err == nil && time.Now().UTC().After(exp) {
+	if err != nil || !time.Now().UTC().Before(exp) {
 		_, _ = s.db.Exec("DELETE FROM sessions WHERE token = ?", token)
 		return nil, errors.New("session expired")
 	}
@@ -106,6 +128,7 @@ func (s *AuthService) ValidateSession(token string) (*models.User, error) {
 		user.LastLoginAt = &lastLogin.String
 	}
 
+	s.permissions(&user)
 	return &user, nil
 }
 

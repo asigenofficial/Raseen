@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"math"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -42,7 +43,7 @@ func NewServer(
 	masterKey []byte,
 	publicFS fs.FS,
 ) *Server {
-	authSvc := services.NewAuthService(database)
+	authSvc := services.NewAuthService(database, cfg.SessionTtlHours)
 	issuerSvc := services.NewIssuerService(database)
 	clientSvc := services.NewClientService(database)
 	itemSvc := services.NewItemService(database)
@@ -90,6 +91,7 @@ func (s *Server) err(w http.ResponseWriter, status int, msg string) {
 }
 
 func (s *Server) getSessionUser(r *http.Request) *models.User {
+	if user, ok := r.Context().Value(sessionUserKey{}).(*models.User); ok { return user }
 	c, err := r.Cookie("zs_session")
 	if err != nil || c.Value == "" {
 		return nil
@@ -190,6 +192,7 @@ func (s *Server) Handler() http.Handler {
 			Path:     "/",
 			MaxAge:   s.cfg.SessionTtlHours * 3600,
 			HttpOnly: true,
+			Secure:   r.TLS != nil,
 			SameSite: http.SameSiteLaxMode,
 		})
 		s.json(w, 200, user)
@@ -519,6 +522,60 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, res)
 	})
 
+	mux.HandleFunc("GET /api/clients/template", func(w http.ResponseWriter, r *http.Request) {
+		b, err := excel.GenerateClientTemplateExcel()
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"clients-import-template.xlsx\"")
+		w.WriteHeader(200)
+		_, _ = w.Write(b)
+	})
+
+	mux.HandleFunc("POST /api/clients/analyze-excel", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			FileBase64 string `json:"file_base64"`
+			Filename   string `json:"filename"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		data, err := base64.StdEncoding.DecodeString(req.FileBase64)
+		if err != nil {
+			data, err = base64.RawStdEncoding.DecodeString(req.FileBase64)
+			if err != nil {
+				s.err(w, 400, "ترميز الملف غير صالح")
+				return
+			}
+		}
+		res, err := excel.AnalyzeClientsSpreadsheet(bytes.NewReader(data), req.Filename)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("POST /api/clients/import", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Clients []services.ImportClientInput `json:"clients"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		res, err := s.clients.BatchImportClients(req.Clients)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+
 	// ---------------------------------------------------- الأصناف والمجموعات
 	mux.HandleFunc("GET /api/categories", func(w http.ResponseWriter, r *http.Request) {
 		list, err := s.items.ListCategories()
@@ -598,6 +655,60 @@ func (s *Server) Handler() http.Handler {
 		}
 		s.json(w, 200, map[string]any{"ok": true})
 	})
+
+	mux.HandleFunc("GET /api/items/template", func(w http.ResponseWriter, r *http.Request) {
+		b, err := excel.GenerateItemTemplateExcel()
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"items-import-template.xlsx\"")
+		w.WriteHeader(200)
+		_, _ = w.Write(b)
+	})
+
+	mux.HandleFunc("POST /api/items/analyze-excel", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			FileBase64 string `json:"file_base64"`
+			Filename   string `json:"filename"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		data, err := base64.StdEncoding.DecodeString(req.FileBase64)
+		if err != nil {
+			data, err = base64.RawStdEncoding.DecodeString(req.FileBase64)
+			if err != nil {
+				s.err(w, 400, "ترميز الملف غير صالح")
+				return
+			}
+		}
+		res, err := excel.AnalyzeItemsSpreadsheet(bytes.NewReader(data), req.Filename, s.cfg.Defaults.TaxRate)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("POST /api/items/import", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Items []services.ImportItemInput `json:"items"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		res, err := s.items.BatchImportItems(req.Items)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
 
 	// ---------------------------------------------------- الفواتير
 	mux.HandleFunc("GET /api/invoices", func(w http.ResponseWriter, r *http.Request) {
@@ -715,6 +826,25 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	mux.HandleFunc("GET /api/invoices/template", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		style := q.Get("style")
+		if style == "" {
+			style = q.Get("id")
+		}
+
+		// If a specific template style or ID is requested, stream that template's XLSX file
+		if style != "" {
+			filePath, err := s.templates.GetFilePath(style)
+			if err == nil && filePath != "" {
+				fileName := filepath.Base(filePath)
+				w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+				http.ServeFile(w, r, filePath)
+				return
+			}
+		}
+
+		// Default: return the standard invoice import template
 		b, err := excel.GenerateTemplateExcel()
 		if err != nil {
 			s.err(w, 500, err.Error())
@@ -1594,6 +1724,7 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		w.Header().Set("Referrer-Policy", "same-origin")
+		if !s.authorize(w, r, mux) { return }
 		mux.ServeHTTP(w, r)
 	})
 }

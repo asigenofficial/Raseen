@@ -1203,6 +1203,7 @@ export async function render(view) {
     }
     try {
       const res = await api.post('/api/bulk/commit', {
+		request_id: state.preview.request_id ||= crypto.randomUUID(),
         draft_id: state.current_draft_id || undefined,
         issuer_id: state.issuer_id,
         client_id: state.client_id,

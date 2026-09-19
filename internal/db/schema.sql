@@ -238,6 +238,20 @@ CREATE TABLE IF NOT EXISTS invoice_items (
 CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_invoice_items_search ON invoice_items(invoice_id, item_name);
 
+-- Issued documents are immutable even when the company or customer changes.
+CREATE TABLE IF NOT EXISTS invoice_documents (
+  invoice_id TEXT PRIMARY KEY REFERENCES invoices(id) ON DELETE CASCADE,
+  xml TEXT NOT NULL,
+  issuer_json TEXT NOT NULL,
+  client_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS batch_requests (
+  request_key TEXT PRIMARY KEY,
+  request_hash TEXT NOT NULL,
+  result_json TEXT NOT NULL
+);
+
 -- ----------------------------------------------------------- سندات القبض
 CREATE TABLE IF NOT EXISTS receipt_vouchers (
   id              TEXT PRIMARY KEY,
@@ -351,5 +365,4 @@ CREATE TABLE IF NOT EXISTS excel_templates (
   updated_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_excel_tpl_cat ON excel_templates(category, is_active);
-
 

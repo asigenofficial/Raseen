@@ -42,8 +42,7 @@ export function activeIssuer() {
 }
 
 export async function loadMeta() {
-  store.meta = (await api.get('/api/meta', { silent: true })) || {};
-
+  store.meta = (await api.get('/api/meta', { silent: true })) ?? {};
   return store.meta;
 }
 
@@ -59,7 +58,7 @@ export async function loadSession() {
 
 export async function loadIssuers(force = false) {
   if (store.loaded.issuers && !force) return store.issuers;
-  store.issuers = (await api.get('/api/issuers')) || [];
+  store.issuers = (await api.get('/api/issuers')) ?? [];
   store.loaded.issuers = true;
   if (store.activeIssuerId && !store.issuers.some((i) => i.id === store.activeIssuerId)) {
     store.activeIssuerId = '';
@@ -76,21 +75,21 @@ export async function loadIssuers(force = false) {
 
 export async function loadClients(force = false) {
   if (store.loaded.clients && !force) return store.clients;
-  store.clients = (await api.get(qs('/api/clients', { active_only: true }))) || [];
+  store.clients = (await api.get(qs('/api/clients', { active_only: true }))) ?? [];
   store.loaded.clients = true;
   return store.clients;
 }
 
 export async function loadItems(force = false) {
   if (store.loaded.items && !force) return store.items;
-  store.items = (await api.get(qs('/api/items', { active_only: true }))) || [];
+  store.items = (await api.get(qs('/api/items', { active_only: true }))) ?? [];
   store.loaded.items = true;
   return store.items;
 }
 
 export async function loadCategories(force = false) {
   if (store.loaded.categories && !force) return store.categories;
-  store.categories = (await api.get('/api/categories')) || [];
+  store.categories = (await api.get('/api/categories')) ?? [];
   store.loaded.categories = true;
   return store.categories;
 }

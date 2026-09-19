@@ -23,6 +23,9 @@ const PERM_CATEGORIES = [
       { key: 'invoices.delete', label: 'حذف الفواتير نهائياً', desc: 'حذف مسودات الفواتير غير المعتمدة نهائياً' },
       { key: 'invoices.backdate', label: 'إصدار بتاريخ سابق', desc: 'إصدار فواتير بتواريخ أو أوقات سابقة لليوم الحالي' },
       { key: 'bulk.generate', label: 'التوليد الدفعي للفواتير', desc: 'توليد دفعات فواتير متعددة آلياً بضغطة زر' },
+      { key: 'bulk.approve', label: 'اعتماد الدفعات', desc: 'حفظ الفواتير المعاينة نهائيًا' },
+      { key: 'invoices.edit_datetime', label: 'تعديل تاريخ ووقت الإصدار', desc: 'تحديد تاريخ ووقت الفاتورة يدويًا' },
+      { key: 'templates.write', label: 'إدارة القوالب', desc: 'إضافة وتعديل قوالب المستندات' },
     ],
   },
   {
@@ -33,6 +36,7 @@ const PERM_CATEGORIES = [
       { key: 'vouchers.view', label: 'عرض سندات القبض', desc: 'استعراض سندات القبض والدفعات المسجلة' },
       { key: 'vouchers.create', label: 'تسجيل سندات القبض', desc: 'إنشاء سندات قبض جديدة وإلغاؤها' },
       { key: 'vouchers.delete', label: 'حذف سندات القبض', desc: 'حذف سندات القبض نهائياً من النظام' },
+      { key: 'vouchers.cancel', label: 'إلغاء سندات القبض', desc: 'عكس السداد والقيود المحاسبية' },
       { key: 'ledger.view', label: 'عرض كشوف الحساب', desc: 'الاطلاع على كشف حساب العملاء والحركات المالية' },
     ],
   },
@@ -43,6 +47,7 @@ const PERM_CATEGORIES = [
     items: [
       { key: 'issuers.view', label: 'عرض الشركات المصدرة', desc: 'عرض بيانات الشركات المصدرة وإعدادات المرحلة والختم' },
       { key: 'issuers.write', label: 'إضافة وتعديل الشركات', desc: 'إنشاء وتعديل بيانات المنشآت والشهادات الرقمية' },
+      { key: 'issuers.credentials', label: 'إدارة بيانات الربط', desc: 'تعديل بيانات الربط والمفاتيح الخاصة بالشركة' },
       { key: 'clients.view', label: 'عرض العملاء', desc: 'استعراض قائمة العملاء والأرصدة المدينة والدائنة' },
       { key: 'clients.write', label: 'إضافة وتعديل العملاء', desc: 'إنشاء وتعديل وحذف العملاء وأرصدتهم الافتتاحية' },
     ],
@@ -62,6 +67,8 @@ const PERM_CATEGORIES = [
     iconName: 'report',
     items: [
       { key: 'reports.view', label: 'عرض وتصدير التقارير', desc: 'استعراض تقارير المبيعات والضريبة وتصديرها PDF / Excel' },
+      { key: 'export.pdf', label: 'تصدير PDF', desc: 'تنزيل المستندات بصيغة PDF' },
+      { key: 'export.excel', label: 'تصدير Excel', desc: 'تنزيل البيانات بصيغة XLSX' },
       { key: 'audit.view', label: 'عرض سجل التدقيق', desc: 'الاطلاع على سجل العمليات ومحاولات الدخول والتعديل' },
     ],
   },

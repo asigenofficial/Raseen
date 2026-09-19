@@ -5,7 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -109,29 +109,14 @@ func (d *DB) CreateBackup() (*BackupResult, error) {
 		return nil, err
 	}
 
-	stamp := time.Now().Format("2006-01-02_150405")
+	stamp := time.Now().Format("2006-01-02_150405.000000000")
 	filename := fmt.Sprintf("raseen_backup_%s.db", stamp)
 	destPath := filepath.Join(d.cfg.BackupDir, filename)
 
-	// SQLite backup via copy or VACUUM INTO
-	_, err := d.Exec(fmt.Sprintf("VACUUM INTO '%s'", filepath.ToSlash(destPath)))
+	// VACUUM INTO includes committed WAL contents in a consistent snapshot.
+	_, err := d.Exec("VACUUM INTO ?", filepath.ToSlash(destPath))
 	if err != nil {
-		// fallback to file copy
-		src, errSrc := os.Open(d.cfg.DbFile)
-		if errSrc != nil {
-			return nil, errSrc
-		}
-		defer src.Close()
-
-		dst, errDst := os.Create(destPath)
-		if errDst != nil {
-			return nil, errDst
-		}
-		defer dst.Close()
-
-		if _, errCopy := io.Copy(dst, src); errCopy != nil {
-			return nil, errCopy
-		}
+		return nil, fmt.Errorf("consistent backup failed: %w",err)
 	}
 
 	stat, err := os.Stat(destPath)
@@ -148,6 +133,10 @@ func (d *DB) CreateBackup() (*BackupResult, error) {
 }
 
 func (d *DB) Audit(userName, action, entityType, entityId, issuerId string, details any, ip string) {
+	if err := AuditTx(d,userName,action,entityType,entityId,issuerId,details,ip); err != nil { log.Printf("audit write failed (%s): %v",action,err) }
+}
+
+func AuditTx(q interface { Exec(string,...any) (sql.Result,error) }, userName, action, entityType, entityId, issuerId string, details any, ip string) error {
 	var detailsJson string
 	if details == nil {
 		detailsJson = "{}"
@@ -164,15 +153,11 @@ func (d *DB) Audit(userName, action, entityType, entityId, issuerId string, deta
 	if issuerId != "" {
 		issId = &issuerId
 	}
-	var entId *string
-	if entityId != "" {
-		entId = &entityId
-	}
-
-	_, _ = d.Exec(`
+	_, err := q.Exec(`
 		INSERT INTO audit_logs (id, user_name, action, entity_type, entity_id, issuer_id, details, ip, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, crypto.UUID(), userName, action, entityType, entId, issId, detailsJson, ip, NowIso())
+	`, crypto.UUID(), userName, action, entityType, entityId, issId, detailsJson, ip, NowIso())
+	return err
 }
 
 func NowIso() string {

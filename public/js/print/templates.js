@@ -92,8 +92,8 @@ export function isLightColor(hex) {
   return l > 0.62;
 }
 
-// ------------------------------------------------------------- محول الأعمدة الديناميكي من ملف الإكسل
-export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBadge, showItemCode }) {
+// ------------------------------------------------------------- محول الأعمدة الديناميكي الذكي من ملف الإكسل
+export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBadge, showItemCode, alignment } = {}) {
   const rawH = String(header || '').trim();
   const h = rawH.toLowerCase().replace(/\s+/g, ' ');
 
@@ -101,16 +101,16 @@ export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBad
   if (/^(#|م|ت|رقم|تسلسل|no\.?|sr|sn)$/i.test(h) || h === '#') {
     return {
       thClass: 'c',
-      thStyle: 'width:30px',
+      thStyle: 'width:32px',
       renderTd: (l, i) => `<td class="c">${i + 1}</td>`,
     };
   }
 
-  // 2. كود الصنف
-  if (/كود|رمز|رقم الصنف|item code|code/i.test(h) && !/اسم|وصف|description|name/i.test(h)) {
+  // 2. كود / رمز الصنف
+  if (/^(كود|رمز|رقم الصنف|item code|code|item no)$/i.test(h) || (/كود|رمز|code/i.test(h) && !/اسم|وصف|description|name/i.test(h))) {
     return {
       thClass: 'c',
-      thStyle: 'width:70px',
+      thStyle: 'width:75px',
       renderTd: (l) => `<td class="c mono tiny">${esc(l.item_code || '—')}</td>`,
     };
   }
@@ -124,7 +124,42 @@ export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBad
     };
   }
 
-  // 4. الكمية
+  // 4. الكميات المتنوعة
+  if (/مطلوب|ordered/i.test(h)) {
+    return {
+      thClass: 'e',
+      thStyle: 'width:60px',
+      renderTd: (l) => `<td class="e num">${num(l.ordered_qty || l.quantity)}</td>`,
+    };
+  }
+  if (/مسلم|مستلم|received|delivered/i.test(h)) {
+    return {
+      thClass: 'e',
+      thStyle: 'width:60px',
+      renderTd: (l) => `<td class="e num">${num(l.delivered_qty || l.received_qty || l.quantity)}</td>`,
+    };
+  }
+  if (/متبقي|remaining/i.test(h)) {
+    return {
+      thClass: 'e',
+      thStyle: 'width:60px',
+      renderTd: (l) => `<td class="e num">${num(l.remaining_qty || 0)}</td>`,
+    };
+  }
+  if (/مقبول|accepted/i.test(h)) {
+    return {
+      thClass: 'e',
+      thStyle: 'width:60px',
+      renderTd: (l) => `<td class="e num">${num(l.accepted_qty || l.quantity)}</td>`,
+    };
+  }
+  if (/مرفوض|rejected/i.test(h)) {
+    return {
+      thClass: 'e',
+      thStyle: 'width:55px',
+      renderTd: (l) => `<td class="e num">${num(l.rejected_qty || 0)}</td>`,
+    };
+  }
   if (/كمية|الكمية|العدد|qty|quantity/i.test(h)) {
     return {
       thClass: 'e',
@@ -155,8 +190,17 @@ export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBad
   if (/النسبة|نسبة|معدل|vat %|tax rate|rate %/i.test(h)) {
     return {
       thClass: 'c',
-      thStyle: 'width:48px',
+      thStyle: 'width:50px',
       renderTd: (l) => `<td class="c num">${num(l.tax_rate)}%</td>`,
+    };
+  }
+
+  // 7b. فئة الضريبة (ZATCA Tax Category)
+  if (/فئة الضريبة|فئة|كود الضريبة|tax cat/i.test(h) && !/صنف|item/i.test(h)) {
+    return {
+      thClass: 'c',
+      thStyle: 'width:46px',
+      renderTd: (l) => `<td class="c mono tiny">${esc(l.tax_category || (l.tax_rate > 0 ? 'S' : 'Z'))}</td>`,
     };
   }
 
@@ -178,8 +222,8 @@ export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBad
     };
   }
 
-  // 10. الإجمالي قبل الضريبة (الخاضع للضريبة)
-  if (/قبل الضريبة|خاضع|الخاضع|subtotal|taxable|amount before|اجمالي|إجمالي|total/i.test(h)) {
+  // 10. الإجمالي قبل الضريبة (الخاضع للضريبة / الصافي)
+  if (/قبل الضريبة|خاضع|الخاضع|صافي|الصافي|subtotal|taxable|amount before|مبلغ قبل/i.test(h)) {
     return {
       thClass: 'e',
       thStyle: 'width:86px',
@@ -196,7 +240,111 @@ export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBad
     };
   }
 
-  // 12. الملاحظات
+  // 12. الحساب أو الفاتورة أو المستند
+  if (/حساب|مستند|account|doc/i.test(h)) {
+    return {
+      thClass: 'c',
+      thStyle: 'width:85px',
+      renderTd: (l) => `<td class="c mono tiny">${esc(l.account_no || l.invoice_number || l.doc_no || '—')}</td>`,
+    };
+  }
+
+  // 13. التاريخ
+  if (/تاريخ|date/i.test(h)) {
+    return {
+      thClass: 'c',
+      thStyle: 'width:85px',
+      renderTd: (l) => `<td class="c tiny">${esc(l.date || l.issue_date || '—')}</td>`,
+    };
+  }
+
+  // 14. المرجع
+  if (/مرجع|reference|ref/i.test(h)) {
+    return {
+      thClass: 'c',
+      thStyle: 'width:80px',
+      renderTd: (l) => `<td class="c mono tiny">${esc(l.reference || l.ref || '—')}</td>`,
+    };
+  }
+
+  // 15. مركز التكلفة
+  if (/مركز|cost center/i.test(h)) {
+    return {
+      thClass: 's',
+      thStyle: 'width:85px',
+      renderTd: (l) => `<td class="s tiny">${esc(l.cost_center || 'المركز العام')}</td>`,
+    };
+  }
+
+  // 16. المشروع
+  if (/مشروع|project/i.test(h)) {
+    return {
+      thClass: 's',
+      thStyle: 'width:90px',
+      renderTd: (l) => `<td class="s tiny">${esc(l.project || 'المشروع الرئيسي')}</td>`,
+    };
+  }
+
+  // 17. موقع التخزين / المستودع
+  if (/موقع|مستودع|warehouse|location/i.test(h)) {
+    return {
+      thClass: 's',
+      thStyle: 'width:85px',
+      renderTd: (l) => `<td class="s tiny">${esc(l.warehouse || l.location || 'المستودع الرئيسي')}</td>`,
+    };
+  }
+
+  // 18. رقم التشغيلة / الدفعة
+  if (/تشغيل|دفعة|batch|lot/i.test(h)) {
+    return {
+      thClass: 'c',
+      thStyle: 'width:80px',
+      renderTd: (l) => `<td class="c mono tiny">${esc(l.batch_no || '—')}</td>`,
+    };
+  }
+
+  // 19. طريقة الدفع
+  if (/طريقة|دفع|سداد|payment/i.test(h)) {
+    return {
+      thClass: 'c',
+      thStyle: 'width:80px',
+      renderTd: (l) => `<td class="c tiny">${esc(l.payment_method_label || l.payment_method || '—')}</td>`,
+    };
+  }
+
+  // 20. مدين / دائن / رصيد
+  if (/مدين|debit/i.test(h)) {
+    return {
+      thClass: 'e',
+      thStyle: 'width:80px',
+      renderTd: (l) => `<td class="e num">${l.debit ? money(l.debit) : money(l.taxable || 0)}</td>`,
+    };
+  }
+  if (/دائن|credit/i.test(h)) {
+    return {
+      thClass: 'e',
+      thStyle: 'width:80px',
+      renderTd: (l) => `<td class="e num">${l.credit ? money(l.credit) : '0.00'}</td>`,
+    };
+  }
+  if (/رصيد|balance/i.test(h)) {
+    return {
+      thClass: 'e',
+      thStyle: 'width:85px',
+      renderTd: (l) => `<td class="e num">${money(l.balance || l.total_line || 0)}</td>`,
+    };
+  }
+
+  // 21. الحالة
+  if (/حالة|status/i.test(h)) {
+    return {
+      thClass: 'c',
+      thStyle: 'width:70px',
+      renderTd: (l) => `<td class="c tiny"><span class="badge green tiny">${esc(l.status || 'معتمد')}</span></td>`,
+    };
+  }
+
+  // 22. الملاحظات
   if (/ملاحظ|notes|comment/i.test(h)) {
     return {
       thClass: 's',
@@ -205,11 +353,116 @@ export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBad
     };
   }
 
-  // 13. الافتراضي: الصنف والوصف
+  // 23. الفئة
+  if (/فئة|category/i.test(h) && !/ضريب/i.test(h)) {
+    return {
+      thClass: 's',
+      thStyle: 'width:80px',
+      renderTd: (l) => `<td class="s tiny">${esc(l.category || 'عام')}</td>`,
+    };
+  }
+
+  // 24. السيريال أو الرقم التسلسلي أو IMEI
+  if (/سيريال|تسلسل|serial|imei|sn/i.test(h) && !/^(#|م|ت|رقم|no\.?)$/i.test(h)) {
+    return {
+      thClass: 'c',
+      thStyle: 'width:85px',
+      renderTd: (l) => `<td class="c mono tiny">${esc(l.serial_no || l.serial || '—')}</td>`,
+    };
+  }
+
+  // 25. الباركود الدولي
+  if (/باركود|بار كود|barcode|gtin|ean/i.test(h)) {
+    return {
+      thClass: 'c',
+      thStyle: 'width:85px',
+      renderTd: (l) => `<td class="c mono tiny">${esc(l.barcode || '—')}</td>`,
+    };
+  }
+
+  // 26. الماركة أو العلامة التجارية
+  if (/ماركة|علامة|براند|brand|maker/i.test(h)) {
+    return {
+      thClass: 's',
+      thStyle: 'width:80px',
+      renderTd: (l) => `<td class="s tiny">${esc(l.brand || '—')}</td>`,
+    };
+  }
+
+  // 27. المقاس والحجم والوزن
+  if (/مقاس|حجم|size|dimension/i.test(h)) {
+    return {
+      thClass: 'c',
+      thStyle: 'width:70px',
+      renderTd: (l) => `<td class="c tiny">${esc(l.size || '—')}</td>`,
+    };
+  }
+  if (/وزن|weight/i.test(h)) {
+    return {
+      thClass: 'e',
+      thStyle: 'width:65px',
+      renderTd: (l) => `<td class="e num tiny">${esc(l.weight || '—')}</td>`,
+    };
+  }
+
+  // 28. الضمان وبلد المنشأ
+  if (/ضمان|warranty/i.test(h)) {
+    return {
+      thClass: 's',
+      thStyle: 'width:80px',
+      renderTd: (l) => `<td class="s tiny">${esc(l.warranty || 'سنتان')}</td>`,
+    };
+  }
+  if (/منشأ|بلد|origin|country/i.test(h)) {
+    return {
+      thClass: 's',
+      thStyle: 'width:75px',
+      renderTd: (l) => `<td class="s tiny">${esc(l.origin || 'السعودية')}</td>`,
+    };
+  }
+
+  // 29. أمر الشراء وبوليصة الشحن
+  if (/أمر الشراء|أمر شراء|purchase order|po(\s+no)?/i.test(h)) {
+    return {
+      thClass: 'c',
+      thStyle: 'width:85px',
+      renderTd: (l) => `<td class="c mono tiny">${esc(l.po_number || l.po || '—')}</td>`,
+    };
+  }
+  if (/بوليصة|شحن|waybill|tracking/i.test(h)) {
+    return {
+      thClass: 'c',
+      thStyle: 'width:85px',
+      renderTd: (l) => `<td class="c mono tiny">${esc(l.tracking_no || l.waybill || '—')}</td>`,
+    };
+  }
+
+  // 30. الاسم أو الصنف أو الوصف (إذا تطابق مع كلمات الصنف)
+  if (/صنف|سلعة|خدمة|بيان|وصف|item|desc|particular/i.test(h) || !allHeaders || allHeaders.length <= 3) {
+    const hasDedicatedCodeCol = Array.isArray(allHeaders) && allHeaders.some((item) => /كود|رمز|رقم الصنف|item code/i.test(item));
+    return {
+      thClass: 's',
+      thStyle: '',
+      renderTd: (l) => `<td>${esc(l.item_name)}${!hasDedicatedCodeCol && showItemCode && l.item_code ? `<div class="tiny muted ltr">${esc(l.item_code)}</div>` : ''}</td>`,
+    };
+  }
+
+  // 31. محرك ذكي تلقائي لأي عمود مخصص أو كلمة جديدة يضيفها المستخدم في ملف Excel
+  const alignClass = alignment === 'center' ? 'c' : (alignment === 'left' ? 'e' : 's');
   return {
-    thClass: 's',
-    thStyle: '',
-    renderTd: (l) => `<td>${esc(l.item_name)}${showItemCode && l.item_code ? `<div class="tiny muted ltr">${esc(l.item_code)}</div>` : ''}</td>`,
+    thClass: alignClass,
+    thStyle: 'width:80px',
+    renderTd: (l) => {
+      let val = l[rawH] ?? l[h] ?? l.custom_fields?.[rawH] ?? l.custom_fields?.[h] ?? l.extra?.[rawH];
+      if (val === undefined && Array.isArray(l) && colIndex < l.length) {
+        val = l[colIndex];
+      }
+      if (val !== undefined && val !== null && val !== '') {
+        const isNum = !isNaN(Number(String(val).replace(/,/g, ''))) && String(val).trim() !== '';
+        return `<td class="${isNum ? 'e num' : alignClass} tiny">${esc(String(val))}</td>`;
+      }
+      return `<td class="c tiny muted">—</td>`;
+    },
   };
 }
 
@@ -280,6 +533,7 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
   ].filter(Boolean).join(' - ');
   const buyerAddr = invoice.buyer_address || buyerNationalAddr || client.address || client.city || '—';
 
+  invoice.lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
   const taxGroups = new Map();
   for (const l of invoice.lines) {
     const key = String(l.tax_rate);
@@ -295,7 +549,13 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
   let linesHtml = '';
 
   if (customHeaders) {
-    const renderers = customHeaders.map((h, i) => getColumnRenderer(h, i, customHeaders, { curSym, curBadge, showItemCode }));
+    const alignments = Array.isArray(printCfg.alignments) ? printCfg.alignments : [];
+    const renderers = customHeaders.map((h, i) => getColumnRenderer(h, i, customHeaders, {
+      curSym,
+      curBadge,
+      showItemCode,
+      alignment: alignments[i],
+    }));
     theadHtml = `<tr>` + customHeaders.map((h, i) => {
       const r = renderers[i];
       return `<th class="${r.thClass}" style="${r.thStyle}">${esc(h)}</th>`;
@@ -372,10 +632,10 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
   const one = `
   <div class="page"${tplStyle && tplStyle !== 'standard' ? ` data-tpl="${esc(tplStyle)}"` : ''}>
     ${isCancelled ? '<div class="watermark">ملغاة</div>' : ''}
-    <header class="head" style="background:${isLightColor(brandLight) ? brandLight : '#f8fafc'}; border:1px solid ${isLightHdr ? brandColor + '44' : '#c8e1fc'}; border-radius:4px; padding:12px 16px 14px 16px; margin-bottom:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px 20px; position:relative;">
+    <header class="head" style="background:${isLightColor(brandLight) ? brandLight : '#f8fafc'}; border:1.5px solid ${brandColor}44; border-radius:6px; padding:12px 16px 14px 16px; margin-bottom:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px 20px; position:relative;">
       <!-- Left Column: English Info -->
       <div class="brand-side-info-en" style="text-align:left; direction:ltr;">
-        ${sellerNameEn ? `<div style="font-size:13.5pt; font-weight:800; color:#0b3b60; font-family:'Segoe UI', Arial, sans-serif; line-height:1.25; margin-bottom:8px;">${esc(sellerNameEn)}</div>` : ''}
+        ${sellerNameEn ? `<div style="font-size:13.5pt; font-weight:800; color:${brandDark}; font-family:'Segoe UI', Arial, sans-serif; line-height:1.25; margin-bottom:8px;">${esc(sellerNameEn)}</div>` : ''}
         <table style="font-size:9pt; border-collapse:collapse; text-align:left; line-height:1.4;">
           ${sellerTax ? `<tr><td style="padding:2px 0; font-weight:700; color:#0f172a; width:72px;">Vat No.</td><td style="padding:2px 0; color:#0f172a; font-weight:600;"><span class="ltr" style="margin-left:14px;">${esc(sellerTax)}</span></td></tr>` : ''}
           ${sellerCr ? `<tr><td style="padding:2px 0; font-weight:700; color:#0f172a; width:72px;">CR.</td><td style="padding:2px 0; color:#0f172a; font-weight:600;"><span class="ltr" style="margin-left:14px;">${esc(sellerCr)}</span></td></tr>` : ''}
@@ -385,7 +645,7 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
 
       <!-- Right Column: Arabic Info -->
       <div class="brand-side-info" style="text-align:right;">
-        <div style="font-size:14.5pt; font-weight:800; color:#0b3b60; line-height:1.25; margin-bottom:4px;">${esc(sellerName)}</div>
+        <div style="font-size:14.5pt; font-weight:800; color:${brandDark}; line-height:1.25; margin-bottom:4px;">${esc(sellerName)}</div>
         <div style="font-size:8.5pt; color:#334155; margin-bottom:8px;">${esc(sellerAddr)}</div>
         <table style="font-size:9pt; border-collapse:collapse; margin-inline-start:auto; line-height:1.4;">
           ${sellerTax ? `<tr><td style="padding:2px 0; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr" style="margin-inline-end:14px;">${esc(sellerTax)}</span></td><td style="padding:2px 0; font-weight:700; color:#0f172a; width:95px; text-align:right;">:الرقم الضريبي</td></tr>` : ''}
@@ -510,7 +770,7 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
     table.meta td:first-child { background: #f1f5f9; color: #475569; white-space: nowrap; }
     .parties { display: flex; gap: 4mm; margin: 4mm 0; }
     .party { flex: 1; border: 1px solid #cbd5e1; border-radius: 2mm; overflow: hidden; }
-    .party-h { background: #f1f5f9; padding: 1.4mm 2mm; font-size: 8.5pt; font-weight: 700; border-bottom: 1px solid #cbd5e1; }
+    .party-h { background: ${isLightColor(brandLight) ? brandLight : '#f8fafc'}; padding: 1.4mm 2mm; font-size: 8.5pt; font-weight: 800; border-bottom: 1.5px solid ${brandColor}44; color: ${brandDark}; }
     table.kv { font-size: 8.4pt; border-collapse: collapse; width: 100%; }
     table.kv td { padding: 1mm 2mm; border-bottom: 1px solid #eef2f7; }
     table.kv td:first-child { color: #64748b; width: 26mm; }
@@ -1790,7 +2050,8 @@ export function invoiceThermal({ invoice, issuer, client, printSettings = null, 
   const buyerName = invoice.buyer_name || client.name;
   const buyerTax = invoice.buyer_tax_number || client.tax_number;
 
-  const lines = invoice.lines.map((l) => `<tr>
+  const thermalLines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
+  const lines = thermalLines.map((l) => `<tr>
       <td colspan="3" class="nm">${esc(l.item_name)}${isDetailed && l.item_code ? ` <span class="muted ltr tiny">(${esc(l.item_code)})</span>` : ''}</td></tr>
     <tr class="dt">
       <td>${num(l.quantity)} × ${money(l.unit_price)}${l.discount ? ` − ${money(l.discount)}` : ''}</td>
@@ -2256,7 +2517,7 @@ export function bulkPreviewReport({ issuer, client, invoices, summary, options =
     <td class="c">${idx + 1}</td>
     <td class="c">${esc(inv.issue_date)}</td>
     <td class="c ltr">${esc(inv.issue_time || '—')}</td>
-    <td class="c">${inv.lines.length}</td>
+    <td class="c">${(inv.lines || inv.items || []).length}</td>
     <td>${esc(inv.payment_method === 'CASH' ? 'نقداً' : inv.payment_method === 'CREDIT' ? 'آجل' : inv.payment_method || '—')}</td>
     <td class="e"><span class="num">${money(inv.taxable_amount)}</span></td>
     <td class="e"><span class="num">${money(inv.discount_amount)}</span></td>

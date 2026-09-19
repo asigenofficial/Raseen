@@ -61,7 +61,7 @@ export async function render(view, ctx) {
 
   const load = async () => {
     saveState();
-    state.data = (await api.get(qs('/api/invoices', {
+    state.data = await api.get(qs('/api/invoices', {
       issuer_id: state.issuer_id,
       client_id: state.client_id,
       status: state.status,
@@ -76,7 +76,7 @@ export async function render(view, ctx) {
       payment_method: state.payment_method,
       limit: PAGE,
       offset: state.offset,
-    })) || { items: [], totals: {}, total_count: 0 };
+    })) ?? { items: [], totals: {}, total_count: 0 };
   };
 
   const reload = async () => {
@@ -86,6 +86,9 @@ export async function render(view, ctx) {
 
   const printOne = async (id, kind) => {
     const invoice = await api.get(`/api/invoices/${id}`);
+    const lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
+    invoice.lines = lines;
+    invoice.items = lines;
     const [issuer, client] = await Promise.all([
       api.get(`/api/issuers/${invoice.issuer_id}`),
       api.get(`/api/clients/${invoice.client_id}`),
@@ -147,51 +150,54 @@ export async function render(view, ctx) {
       </div>
 
       <div class="card filter-box">
-        <div class="row">
-          <div class="field" style="flex:1.4"><label>بحث</label>
-            <input type="search" id="q" value="${esc(state.q)}" placeholder="رقم الفاتورة، اسم العميل، كوده…" /></div>
-          <div class="field"><label>الشركة المصدرة</label>
+        <div class="filter-row">
+          <div class="field flex-2"><label for="q">بحث سريع</label>
+            <input type="search" id="q" value="${esc(state.q)}" placeholder="رقم الفاتورة، اسم العميل، كوده، الرقم الضريبي…" /></div>
+          <div class="field"><label for="issuer_id">الشركة المصدرة</label>
             <select id="issuer_id">
               <option value="">كل الشركات</option>
               ${raw(store.issuers.map((i) => `<option value="${esc(i.id)}" ${i.id === state.issuer_id ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}
             </select></div>
-          <div class="field"><label>العميل</label>
+          <div class="field"><label for="client_id">العميل</label>
             <select id="client_id">
               <option value="">كل العملاء</option>
               ${raw(store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)}</option>`).join(''))}
             </select></div>
-          <div class="field" style="max-width:140px"><label>الحالة</label>
+          <div class="field field-sm"><label for="status">الحالة</label>
             <select id="status">
               <option value="">كل الحالات</option>
               ${raw(Object.entries(store.meta?.invoice_statuses || {}).map(([k, v]) => `<option value="${esc(k)}" ${k === state.status ? 'selected' : ''}>${esc(v)}</option>`).join(''))}
             </select></div>
-          <div class="field" style="max-width:140px"><label>النوع</label>
+          <div class="field field-sm"><label for="invoice_type">النوع</label>
             <select id="invoice_type">
               <option value="">كل الأنواع</option>
               <option value="STANDARD" ${state.invoice_type === 'STANDARD' ? 'selected' : ''}>ضريبية (B2B)</option>
               <option value="SIMPLIFIED" ${state.invoice_type === 'SIMPLIFIED' ? 'selected' : ''}>مبسطة (B2C)</option>
             </select></div>
-          <div class="field" style="max-width:130px"><label>&nbsp;</label>
-            <label class="check" style="white-space:nowrap">
-              <input type="checkbox" id="has_remaining" ${state.has_remaining ? 'checked' : ''} /> المتبقي فقط
-            </label></div>
         </div>
-        <div class="row mt">
-          <div class="field" style="max-width:160px"><label>من تاريخ</label><input type="date" id="from" value="${state.from}" /></div>
-          <div class="field" style="max-width:160px"><label>إلى تاريخ</label><input type="date" id="to" value="${state.to}" /></div>
-          <div class="field" style="max-width:140px"><label>أقل قيمة</label><input type="number" id="min_total" value="${state.min_total}" step="0.01" min="0" /></div>
-          <div class="field" style="max-width:140px"><label>أعلى قيمة</label><input type="number" id="max_total" value="${state.max_total}" step="0.01" min="0" /></div>
-          <div class="field" style="max-width:150px"><label>طريقة الدفع</label>
+
+        <div class="filter-row" style="margin-top:.75rem">
+          <div class="field field-date"><label for="from">من تاريخ</label><input type="date" id="from" value="${state.from}" /></div>
+          <div class="field field-date"><label for="to">إلى تاريخ</label><input type="date" id="to" value="${state.to}" /></div>
+          <div class="field field-num"><label for="min_total">أقل قيمة</label><input type="number" id="min_total" value="${state.min_total}" placeholder="0.00" step="0.01" min="0" /></div>
+          <div class="field field-num"><label for="max_total">أعلى قيمة</label><input type="number" id="max_total" value="${state.max_total}" placeholder="0.00" step="0.01" min="0" /></div>
+          <div class="field field-sm"><label for="payment_method">طريقة الدفع</label>
             <select id="payment_method">
               <option value="">الكل</option>
               ${raw(Object.entries(store.meta?.payment_methods || {}).map(([k, v]) => `<option value="${esc(k)}" ${k === state.payment_method ? 'selected' : ''}>${esc(v)}</option>`).join(''))}
             </select></div>
-          <div class="field" style="max-width:240px"><label>&nbsp;</label>
-            <div class="flex">
-              <button class="btn btn-sm" data-quick="month" type="button">${raw(icon.calendar({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}هذا الشهر</button>
-              <button class="btn btn-sm" data-quick="today" type="button">${raw(icon.calendar({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}اليوم</button>
-              <button class="btn btn-sm" data-quick="clear" type="button">إزالة التصفية</button>
-            </div></div>
+
+          <div class="filter-actions-col">
+            <label class="filter-check" title="عرض الفواتير التي عليها رصيد متبقي غير مسدد">
+              <input type="checkbox" id="has_remaining" ${state.has_remaining ? 'checked' : ''} />
+              <span>المتبقي فقط</span>
+            </label>
+            <div class="filter-btn-group">
+              <button class="btn btn-sm" data-quick="today" type="button" title="فواتير اليوم">${raw(icon.calendar({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}اليوم</button>
+              <button class="btn btn-sm" data-quick="month" type="button" title="فواتير هذا الشهر">${raw(icon.calendar({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}هذا الشهر</button>
+              <button class="btn btn-sm" data-quick="clear" type="button" title="إعادة تعيين الفلاتر">إعادة تعيين</button>
+            </div>
+          </div>
         </div>
         ${raw(state.batch_id ? `<div class="alert alert-info mt tiny">التصفية مقيّدة بدفعة توليد محددة (<span class="mono">${esc(state.batch_id.slice(0, 8))}</span>).
           <a href="#/invoices">إزالة</a></div>` : '')}

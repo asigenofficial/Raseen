@@ -210,11 +210,13 @@ func (s *ClientService) CreateClient(c *models.Client) error {
 	}
 
 	// Insert opening balance entry in ledger if > 0
-	if c.OpeningBalance > 0 {
+	if c.OpeningBalance != 0 {
+		debit, credit := c.OpeningBalance, int64(0)
+		if debit < 0 { credit, debit = -debit,0 }
 		_, err = tx.Exec(`
 			INSERT INTO client_ledger (id, client_id, issuer_id, doc_type, doc_id, doc_number, transaction_date, debit, credit, description, created_at)
-			VALUES (?, ?, NULL, 'OPENING_BALANCE', NULL, 'OPENING', ?, ?, 0, 'رصيد افتتاحي', ?)
-		`, crypto.UUID(), c.ID, db.TodayIso(), c.OpeningBalance, now)
+			VALUES (?, ?, NULL, 'OPENING_BALANCE', NULL, 'OPENING', ?, ?, ?, 'رصيد افتتاحي', ?)
+		`, crypto.UUID(), c.ID, db.TodayIso(), debit, credit, now)
 		if err != nil {
 			return err
 		}
@@ -566,5 +568,157 @@ func (s *ClientService) FindOrCreateByName(issuerID, name string) (*models.Clien
 		return nil, err
 	}
 	return newClient, nil
+}
+
+type ImportClientInput struct {
+	ClientCode         string  `json:"client_code"`
+	Name               string  `json:"name"`
+	NameEn             string  `json:"name_en"`
+	Phone              string  `json:"phone"`
+	Email              string  `json:"email"`
+	TaxNumber          string  `json:"tax_number"`
+	CommercialRegister string  `json:"commercial_register"`
+	City               string  `json:"city"`
+	Street             string  `json:"street"`
+	OpeningBalance     float64 `json:"opening_balance"`
+	Notes              string  `json:"notes"`
+}
+
+type ImportClientsResult struct {
+	Total   int `json:"total"`
+	Created int `json:"created"`
+	Updated int `json:"updated"`
+	Errors  int `json:"errors"`
+}
+
+func (s *ClientService) BatchImportClients(clients []ImportClientInput) (*ImportClientsResult, error) {
+	if len(clients) == 0 {
+		return &ImportClientsResult{}, nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	stmtFindByName, err := tx.Prepare("SELECT id FROM clients WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1")
+	if err != nil {
+		return nil, err
+	}
+	defer stmtFindByName.Close()
+
+	stmtFindByCode, err := tx.Prepare("SELECT id FROM clients WHERE client_code = ? AND client_code != '' LIMIT 1")
+	if err != nil {
+		return nil, err
+	}
+	defer stmtFindByCode.Close()
+
+	stmtInsertClient, err := tx.Prepare(`
+		INSERT INTO clients (
+			id, client_code, name, name_en, phone, mobile, email,
+			address, building_no, street, district, city, postal_code, country,
+			tax_number, commercial_register, client_type, payment_terms_days,
+			opening_balance, credit_limit, notes, is_active, created_at, updated_at
+		) VALUES (
+			?, ?, ?, ?, ?, '', ?,
+			?, '', ?, '', ?, '', 'SA',
+			?, ?, 'COMPANY', 30,
+			?, 0, ?, 1, ?, ?
+		)
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer stmtInsertClient.Close()
+
+	stmtUpdateClient, err := tx.Prepare(`
+		UPDATE clients SET
+			client_code = CASE WHEN ? != '' THEN ? ELSE client_code END,
+			name_en = CASE WHEN ? != '' THEN ? ELSE name_en END,
+			phone = CASE WHEN ? != '' THEN ? ELSE phone END,
+			email = CASE WHEN ? != '' THEN ? ELSE email END,
+			tax_number = CASE WHEN ? != '' THEN ? ELSE tax_number END,
+			commercial_register = CASE WHEN ? != '' THEN ? ELSE commercial_register END,
+			city = CASE WHEN ? != '' THEN ? ELSE city END,
+			street = CASE WHEN ? != '' THEN ? ELSE street END,
+			notes = CASE WHEN ? != '' THEN ? ELSE notes END,
+			updated_at = ?
+		WHERE id = ?
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer stmtUpdateClient.Close()
+
+	now := db.NowIso()
+	res := &ImportClientsResult{Total: len(clients)}
+
+	for _, c := range clients {
+		name := strings.TrimSpace(c.Name)
+		if name == "" {
+			res.Errors++
+			continue
+		}
+
+		var existingID string
+		if c.ClientCode != "" {
+			_ = stmtFindByCode.QueryRow(c.ClientCode).Scan(&existingID)
+		}
+		if existingID == "" {
+			_ = stmtFindByName.QueryRow(name).Scan(&existingID)
+		}
+
+		balMinor := models.ToMinor(c.OpeningBalance)
+		if !validAmount(c.OpeningBalance) && !validAmount(-c.OpeningBalance) { return nil,errors.New("رصيد افتتاحي غير صالح") }
+
+		if existingID != "" {
+			_, err := stmtUpdateClient.Exec(
+				c.ClientCode, c.ClientCode,
+				c.NameEn, c.NameEn,
+				c.Phone, c.Phone,
+				c.Email, c.Email,
+				c.TaxNumber, c.TaxNumber,
+				c.CommercialRegister, c.CommercialRegister,
+				c.City, c.City,
+				c.Street, c.Street,
+				c.Notes, c.Notes,
+				now, existingID,
+			)
+			if err != nil {
+				res.Errors++
+			} else {
+				res.Updated++
+			}
+		} else {
+			code := c.ClientCode
+			if code == "" {
+				code = "C-" + crypto.UUID()
+			}
+			newID := crypto.UUID()
+			_, err := stmtInsertClient.Exec(
+				newID, code, name, c.NameEn, c.Phone, c.Email,
+				c.Street, c.Street, c.City,
+				c.TaxNumber, c.CommercialRegister,
+				balMinor, c.Notes,
+				now, now,
+			)
+			if err != nil {
+				res.Errors++
+			} else {
+				res.Created++
+				if balMinor != 0 {
+					debit, credit := balMinor,int64(0)
+					if debit < 0 { credit,debit = -debit,0 }
+					if _, err := tx.Exec("INSERT INTO client_ledger (id,client_id,doc_type,doc_number,transaction_date,debit,credit,description,created_at) VALUES (?,?,'OPENING_BALANCE','OPENING',?,?,?,'رصيد افتتاحي مستورد',?)",crypto.UUID(),newID,db.TodayIso(),debit,credit,now); err != nil { return nil,err }
+				}
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 

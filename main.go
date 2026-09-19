@@ -49,10 +49,16 @@ func main() {
 	}
 	defer database.Close()
 
-	// Prepare public static filesystem
-	publicFS, err := fs.Sub(embeddedPublic, "public")
-	if err != nil {
-		log.Fatalf("فشل تجهيز ملفات الواجهة: %v", err)
+	// Prepare public static filesystem (prefer local public folder in dev)
+	var publicFS fs.FS
+	if fi, err := os.Stat("public"); err == nil && fi.IsDir() {
+		publicFS = os.DirFS("public")
+	} else {
+		var subErr error
+		publicFS, subErr = fs.Sub(embeddedPublic, "public")
+		if subErr != nil {
+			log.Fatalf("فشل تجهيز ملفات الواجهة: %v", subErr)
+		}
 	}
 
 	server := api.NewServer(cfg, database, masterKey, publicFS)
@@ -64,7 +70,7 @@ func main() {
 	fmt.Println("   تم البناء بلغة Go (Golang) — صفر اعتماديات تشغيل خارجية")
 	fmt.Println("==================================================================")
 	fmt.Printf("   الرابط المحلي:   http://%s\n", addr)
-	fmt.Printf("   بيانات الدخول:   اسم المستخدم: %s  |  كلمة المرور: %s\n", cfg.BootstrapAdmin.Username, cfg.BootstrapAdmin.Password)
+	fmt.Printf("   اسم المستخدم الأولي: %s\n", cfg.BootstrapAdmin.Username)
 	fmt.Println("==================================================================")
 	fmt.Println("   اضغط Ctrl+C لإيقاف الخادم.")
 	fmt.Println()
