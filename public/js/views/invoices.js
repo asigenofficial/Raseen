@@ -61,7 +61,7 @@ export async function render(view, ctx) {
 
   const load = async () => {
     saveState();
-    state.data = await api.get(qs('/api/invoices', {
+    state.data = (await api.get(qs('/api/invoices', {
       issuer_id: state.issuer_id,
       client_id: state.client_id,
       status: state.status,
@@ -76,7 +76,7 @@ export async function render(view, ctx) {
       payment_method: state.payment_method,
       limit: PAGE,
       offset: state.offset,
-    }));
+    })) || { items: [], totals: {}, total_count: 0 };
   };
 
   const reload = async () => {
@@ -163,7 +163,7 @@ export async function render(view, ctx) {
           <div class="field" style="max-width:140px"><label>الحالة</label>
             <select id="status">
               <option value="">كل الحالات</option>
-              ${raw(Object.entries(store.meta.invoice_statuses).map(([k, v]) => `<option value="${esc(k)}" ${k === state.status ? 'selected' : ''}>${esc(v)}</option>`).join(''))}
+              ${raw(Object.entries(store.meta?.invoice_statuses || {}).map(([k, v]) => `<option value="${esc(k)}" ${k === state.status ? 'selected' : ''}>${esc(v)}</option>`).join(''))}
             </select></div>
           <div class="field" style="max-width:140px"><label>النوع</label>
             <select id="invoice_type">
@@ -184,7 +184,7 @@ export async function render(view, ctx) {
           <div class="field" style="max-width:150px"><label>طريقة الدفع</label>
             <select id="payment_method">
               <option value="">الكل</option>
-              ${raw(Object.entries(store.meta.payment_methods).map(([k, v]) => `<option value="${esc(k)}" ${k === state.payment_method ? 'selected' : ''}>${esc(v)}</option>`).join(''))}
+              ${raw(Object.entries(store.meta?.payment_methods || {}).map(([k, v]) => `<option value="${esc(k)}" ${k === state.payment_method ? 'selected' : ''}>${esc(v)}</option>`).join(''))}
             </select></div>
           <div class="field" style="max-width:240px"><label>&nbsp;</label>
             <div class="flex">

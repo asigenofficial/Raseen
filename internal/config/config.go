@@ -51,7 +51,9 @@ func Load() *Config {
 
 	host := os.Getenv("ZS_HOST")
 	if host == "" {
-		if os.Getenv("NODE_ENV") == "production" || os.Getenv("APP_ENV") == "production" {
+		if os.Getenv("PORT") != "" ||
+			os.Getenv("NODE_ENV") == "production" ||
+			os.Getenv("APP_ENV") == "production" {
 			host = "0.0.0.0"
 		} else {
 			host = "127.0.0.1"
