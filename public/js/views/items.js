@@ -438,28 +438,33 @@ export async function render(view, ctx) {
       }
     });
 
-    delegate(view, 'click', '[data-act]', async (e, btn) => {
-      const id = btn.dataset.id;
-      const reload = async () => { await load(); draw(); };
-      switch (btn.dataset.act) {
-        case 'edit-item': openItemModal(await api.get(`/api/items/${id}`), state.categories, reload); break;
-        case 'edit-cat': openCategoryModal(state.categories.find((c) => c.id === id), state.categories, reload); break;
-        case 'del-item': {
-          const item = state.items.find((x) => x.id === id);
-          if (!await confirmDialog({ title: 'حذف صنف', message: `حذف «${item.name_ar}»؟ لا يمكن الحذف إذا كان مستخدماً في فواتير.`, danger: true, okText: 'حذف' })) return;
-          try { await api.del(`/api/items/${id}`); toastOk('تم الحذف'); invalidate('items'); await reload(); } catch { /* تنبيه */ }
-          break;
-        }
-        case 'del-cat': {
-          const cat = state.categories.find((x) => x.id === id);
-          if (!await confirmDialog({ title: 'حذف مجموعة', message: `حذف «${cat.name}»؟ لا يمكن الحذف إذا كانت تحتوي أصنافاً.`, danger: true, okText: 'حذف' })) return;
-          try { await api.del(`/api/categories/${id}`); toastOk('تم الحذف'); invalidate('categories'); await reload(); } catch { /* تنبيه */ }
-          break;
-        }
-        default: break;
-      }
-    });
   };
+
+  delegate(view, 'click', '[data-act]', async (e, btn) => {
+    const id = btn.dataset.id;
+    const reload = async () => { await load(); draw(); };
+    switch (btn.dataset.act) {
+      case 'edit-item': openItemModal(await api.get(`/api/items/${id}`), state.categories, reload); break;
+      case 'edit-cat': openCategoryModal(state.categories.find((c) => c.id === id), state.categories, reload); break;
+      case 'del-item': {
+        const item = state.items.find((x) => x.id === id);
+        if (!await confirmDialog({ title: 'حذف صنف', message: `حذف «${item.name_ar}»؟ لا يمكن الحذف إذا كان مستخدماً في فواتير.`, danger: true, okText: 'حذف' })) return;
+        const row = btn.closest('tr');
+        if (row) row.style.opacity = '0.3';
+        try { await api.del(`/api/items/${id}`); toastOk('تم الحذف'); invalidate('items'); await reload(); } catch { if (row) row.style.opacity = '1'; }
+        break;
+      }
+      case 'del-cat': {
+        const cat = state.categories.find((x) => x.id === id);
+        if (!await confirmDialog({ title: 'حذف مجموعة', message: `حذف «${cat.name}»؟ لا يمكن الحذف إذا كانت تحتوي أصنافاً.`, danger: true, okText: 'حذف' })) return;
+        const row = btn.closest('tr');
+        if (row) row.style.opacity = '0.3';
+        try { await api.del(`/api/categories/${id}`); toastOk('تم الحذف'); invalidate('categories'); await reload(); } catch { if (row) row.style.opacity = '1'; }
+        break;
+      }
+      default: break;
+    }
+  });
 
   await load();
   draw();

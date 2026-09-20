@@ -2624,7 +2624,7 @@ tr.row-open>td {
 .tpl-zoom-controls {
   display: inline-flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -2636,13 +2636,13 @@ tr.row-open>td {
   padding: .25rem .55rem;
   font-size: .8rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text);
   cursor: pointer;
-  transition: background .15s;
+  transition: background .15s, color .15s;
 }
 
 .tpl-zoom-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--card-hover);
 }
 
 .tpl-zoom-val {

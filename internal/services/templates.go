@@ -411,8 +411,8 @@ func (s *TemplateService) SyncDiskTemplates() error {
 		category string
 		badge    string
 	}{
-		{relPath: filepath.Join("data", "templates", "invoices"), category: "invoices", badge: "فاتورة Excel"},
-		{relPath: filepath.Join("data", "templates", "documents"), category: "vouchers", badge: "سند Excel"},
+		{relPath: filepath.Join(s.dataDir, "templates", "invoices"), category: "invoices", badge: "فاتورة Excel"},
+		{relPath: filepath.Join(s.dataDir, "templates", "documents"), category: "vouchers", badge: "سند Excel"},
 	}
 
 	// Remove previously synced disk templates to avoid duplicate accumulation
@@ -916,8 +916,17 @@ func (s *TemplateService) GetFilePath(id string) (string, error) {
 	var filePath string
 	err := s.db.QueryRow("SELECT file_path FROM excel_templates WHERE id = ?", id).Scan(&filePath)
 	if err == nil && filePath != "" {
-		if _, errStat := os.Stat(filePath); errStat == nil {
-			return filePath, nil
+		normalized := filepath.FromSlash(strings.ReplaceAll(filePath, "\\", "/"))
+		if _, errStat := os.Stat(normalized); errStat == nil {
+			return normalized, nil
+		}
+		// Also check by filename in s.dataDir templates
+		base := filepath.Base(normalized)
+		for _, sub := range []string{"invoices", "documents"} {
+			cand := filepath.Join(s.dataDir, "templates", sub, base)
+			if _, errStat := os.Stat(cand); errStat == nil {
+				return cand, nil
+			}
 		}
 	}
 

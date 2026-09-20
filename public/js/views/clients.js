@@ -393,31 +393,39 @@ export async function render(view) {
       ]);
     $('#exp-csv', view).addEventListener('click', () => exportCsv(`العملاء-${dateAr(new Date().toISOString())}`, headers, dataRows()));
     $('#exp-xls', view).addEventListener('click', () => exportExcel('العملاء', 'كشف أرصدة العملاء', headers, dataRows()));
-
-    delegate(view, 'click', '[data-act]', async (e, btn) => {
-      const client = state.rows.find((x) => x.id === btn.dataset.id);
-      if (!client) return;
-      if (btn.dataset.act === 'edit') {
-        const full = await api.get(`/api/clients/${client.id}`);
-        openClientModal(full, async () => { await load(); draw(); });
-      } else if (btn.dataset.act === 'del') {
-        const ok = await confirmDialog({
-          title: 'حذف عميل',
-          message: `سيتم حذف «${client.name}». لا يمكن الحذف إذا كانت له فواتير أو سندات.`,
-          danger: true,
-          okText: 'حذف',
-        });
-        if (!ok) return;
-        try {
-          await api.del(`/api/clients/${client.id}`);
-          toastOk('تم حذف العميل');
-          invalidate('clients');
-          await load();
-          draw();
-        } catch { /* تنبيه تلقائي */ }
-      }
-    });
   };
+
+  delegate(view, 'click', '[data-act]', async (e, btn) => {
+    const client = state.rows.find((x) => x.id === btn.dataset.id);
+    if (!client) return;
+    if (btn.dataset.act === 'edit') {
+      const full = await api.get(`/api/clients/${client.id}`);
+      openClientModal(full, async () => { await load(); draw(); });
+    } else if (btn.dataset.act === 'del') {
+      const ok = await confirmDialog({
+        title: 'حذف عميل',
+        message: `سيتم حذف «${client.name}». لا يمكن الحذف إذا كانت له فواتير أو سندات.`,
+        danger: true,
+        okText: 'حذف',
+      });
+      if (!ok) return;
+      const row = btn.closest('tr');
+      if (row) row.style.opacity = '0.3';
+      try {
+        await api.del(`/api/clients/${client.id}`);
+        toastOk('تم حذف العميل');
+        row?.remove();
+        state.rows = state.rows.filter((x) => x.id !== client.id);
+        invalidate('clients');
+        await load();
+        draw();
+      } catch {
+        if (row) row.style.opacity = '1';
+        await load();
+        draw();
+      }
+    }
+  });
 
   await load();
   draw();

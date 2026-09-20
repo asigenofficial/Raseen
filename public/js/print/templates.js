@@ -628,39 +628,42 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
   </div>`;
 
   const logoHtml = logoPos === 'none' ? '' : (issuer.logo_data
-    ? `<img class="logo" src="${esc(issuer.logo_data)}" alt="" style="max-width:${logoWidth};max-height:${logoHeight};" />`
+    ? `<img class="logo" src="${esc(issuer.logo_data)}" alt="" style="max-width:${logoWidth};max-height:${logoHeight};display:block;margin:0 auto;" />`
     : logoFallback);
 
   const one = `
   <div class="page"${tplStyle && tplStyle !== 'standard' ? ` data-tpl="${esc(tplStyle)}"` : ''}>
     ${isCancelled ? '<div class="watermark">ملغاة</div>' : ''}
-    <header class="head" style="background:${isLightColor(brandLight) ? brandLight : '#f8fafc'}; border:1.5px solid ${brandColor}44; border-radius:6px; padding:12px 16px 14px 16px; margin-bottom:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px 20px; position:relative;">
+    <header class="head" style="background:${isLightColor(brandLight) ? brandLight : '#f8fafc'}; border:1.5px solid ${brandColor}44; border-radius:6px; padding:10px 16px; margin-bottom:12px; display:grid; grid-template-columns:minmax(0,1.1fr) auto minmax(0,1.1fr); gap:8px 14px; align-items:center; position:relative;">
       <!-- Left Column: English Info -->
       <div class="brand-side-info-en" style="text-align:left; direction:ltr;">
-        ${sellerNameEn ? `<div style="font-size:13.5pt; font-weight:800; color:${brandDark}; font-family:'Segoe UI', Arial, sans-serif; line-height:1.25; margin-bottom:8px;">${esc(sellerNameEn)}</div>` : ''}
-        <table style="font-size:9pt; border-collapse:collapse; text-align:left; line-height:1.4;">
-          ${sellerTax ? `<tr><td style="padding:2px 0; font-weight:700; color:#0f172a; width:72px;">Vat No.</td><td style="padding:2px 0; color:#0f172a; font-weight:600;"><span class="ltr" style="margin-left:14px;">${esc(sellerTax)}</span></td></tr>` : ''}
-          ${sellerCr ? `<tr><td style="padding:2px 0; font-weight:700; color:#0f172a; width:72px;">CR.</td><td style="padding:2px 0; color:#0f172a; font-weight:600;"><span class="ltr" style="margin-left:14px;">${esc(sellerCr)}</span></td></tr>` : ''}
-          ${issuer.phone ? `<tr><td style="padding:2px 0; font-weight:700; color:#0f172a; width:72px;">Phone.</td><td style="padding:2px 0; color:#0f172a; font-weight:600;"><span class="ltr" style="margin-left:14px;">${esc(issuer.phone)}</span></td></tr>` : ''}
+        ${sellerNameEn ? `<div style="font-size:12.5pt; font-weight:800; color:${brandDark}; font-family:'Segoe UI', Arial, sans-serif; line-height:1.25; margin-bottom:4px;">${esc(sellerNameEn)}</div>` : ''}
+        <table style="font-size:8.5pt; border-collapse:collapse; text-align:left; line-height:1.4;">
+          ${sellerTax ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:65px;">Vat No.</td><td style="padding:1.5px 0; color:#0f172a; font-weight:600;"><span class="ltr">${esc(sellerTax)}</span></td></tr>` : ''}
+          ${sellerCr ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:65px;">CR.</td><td style="padding:1.5px 0; color:#0f172a; font-weight:600;"><span class="ltr">${esc(sellerCr)}</span></td></tr>` : ''}
+          ${issuer.phone ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:65px;">Phone.</td><td style="padding:1.5px 0; color:#0f172a; font-weight:600;"><span class="ltr">${esc(issuer.phone)}</span></td></tr>` : ''}
         </table>
+      </div>
+
+      <!-- Center Column: Logo & Document Title Badge -->
+      <div class="brand-side-center" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; min-width:140px;">
+        <div style="display:flex; align-items:center; justify-content:center; max-height:80px;">
+          ${logoHtml}
+        </div>
+        <div style="background:${bannerFill}; border:1.5px solid ${bannerBorder}; border-radius:4px; padding:4px 22px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,0.05); white-space:nowrap;">
+          <span style="color:${bannerTextColor}; font-weight:900; font-size:10.5pt; text-decoration:underline;">${esc(bannerText)}</span>
+        </div>
       </div>
 
       <!-- Right Column: Arabic Info -->
-      <div class="brand-side-info" style="text-align:right;">
-        <div style="font-size:14.5pt; font-weight:800; color:${brandDark}; line-height:1.25; margin-bottom:4px;">${esc(sellerName)}</div>
-        <div style="font-size:8.5pt; color:#334155; margin-bottom:8px;">${esc(sellerAddr)}</div>
-        <table style="font-size:9pt; border-collapse:collapse; margin-inline-start:auto; line-height:1.4;">
-          ${sellerTax ? `<tr><td style="padding:2px 0; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr" style="margin-inline-end:14px;">${esc(sellerTax)}</span></td><td style="padding:2px 0; font-weight:700; color:#0f172a; width:95px; text-align:right;">:الرقم الضريبي</td></tr>` : ''}
-          ${sellerCr ? `<tr><td style="padding:2px 0; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr" style="margin-inline-end:14px;">${esc(sellerCr)}</span></td><td style="padding:2px 0; font-weight:700; color:#0f172a; width:95px; text-align:right;">:السجل التجاري</td></tr>` : ''}
-          ${issuer.phone ? `<tr><td style="padding:2px 0; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr" style="margin-inline-end:14px;">${esc(issuer.phone)}</span></td><td style="padding:2px 0; font-weight:700; color:#0f172a; width:95px; text-align:right;">:جوال</td></tr>` : ''}
+      <div class="brand-side-info" style="text-align:right; direction:rtl;">
+        <div style="font-size:13.5pt; font-weight:800; color:${brandDark}; line-height:1.25; margin-bottom:3px;">${esc(sellerName)}</div>
+        ${sellerAddr ? `<div style="font-size:8pt; color:#334155; margin-bottom:4px; line-height:1.3;">${esc(sellerAddr)}</div>` : ''}
+        <table style="font-size:8.5pt; border-collapse:collapse; margin-inline-start:auto; line-height:1.4; direction:rtl;">
+          ${sellerTax ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:85px; text-align:right;">الرقم الضريبي:</td><td style="padding:1.5px 4px; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr mono">${esc(sellerTax)}</span></td></tr>` : ''}
+          ${sellerCr ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:85px; text-align:right;">السجل التجاري:</td><td style="padding:1.5px 4px; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr mono">${esc(sellerCr)}</span></td></tr>` : ''}
+          ${issuer.phone ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:85px; text-align:right;">رقم الجوال:</td><td style="padding:1.5px 4px; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr mono">${esc(issuer.phone)}</span></td></tr>` : ''}
         </table>
-      </div>
-
-      <!-- Center Box: Dynamic Document Title Badge -->
-      <div style="grid-column:1 / -1; display:flex; justify-content:center; align-items:center; margin-top:6px;">
-        <div style="background:${bannerFill}; border:1.5px solid ${bannerBorder}; border-radius:4px; padding:5px 36px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-          <span style="color:${bannerTextColor}; font-weight:900; font-size:11.5pt; text-decoration:underline;">${esc(bannerText)}</span>
-        </div>
       </div>
     </header>
 

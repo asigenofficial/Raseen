@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ["go", "chromium"]
+
+[phases.build]
+cmds = ["go build -o raseen ."]
+
+[start]
+cmd = "./raseen"

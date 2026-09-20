@@ -252,6 +252,31 @@ html[data-theme="light"] .doc-tpl-card-foot {
   border-top-color: #f1f5f9;
 }
 
+/* لوحة معاينة القالب والورقة في وضع الضوء */
+html[data-theme="light"] .tpl-paper-wrapper {
+  background: #cbd5e1;
+  background-image: radial-gradient(rgba(15, 23, 42, 0.12) 1px, transparent 1px);
+  background-size: 16px 16px;
+  border-color: #94a3b8;
+}
+html[data-theme="light"] .tpl-paper-frame {
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.18);
+}
+html[data-theme="light"] .tpl-zoom-controls {
+  background: #ffffff;
+  border-color: var(--line-strong);
+}
+html[data-theme="light"] .tpl-zoom-btn {
+  color: var(--text);
+}
+html[data-theme="light"] .tpl-zoom-btn:hover {
+  background: #f1f5f9;
+}
+html[data-theme="light"] .tab-pill-group {
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0;
+}
+
 /* تثبيت أحجام الأيقونات والعناصر بدقة متطابقة بين الثيمين */
 .ico {
   display: inline-flex;

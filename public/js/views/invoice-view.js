@@ -78,30 +78,16 @@ export function formatSaudiPhone(phone) {
 }
 
 export async function fetchInvoicePdfBlob(invoiceId, docHtml) {
-  if (docHtml) {
-    try {
-      const res = await fetch(`/api/invoices/${invoiceId}/pdf`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', origin: window.location.origin },
-        body: JSON.stringify({ html: docHtml }),
-      });
-      if (res.ok) return await res.blob();
-    } catch { }
-
-    try {
-      const res = await fetch('/api/pdf/render', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', origin: window.location.origin },
-        body: JSON.stringify({ html: docHtml, filename: `invoice_${invoiceId}.pdf` }),
-      });
-      if (res.ok) return await res.blob();
-    } catch { }
+  try {
+    const res = await fetch(`/api/invoices/${invoiceId}/pdf`, {
+      method: docHtml ? 'POST' : 'GET',
+      headers: { 'Content-Type': 'application/json', origin: window.location.origin },
+      ...(docHtml ? { body: JSON.stringify({ html: docHtml }) } : {}),
+    });
+    if (res.ok) return await res.blob();
+  } catch (e) {
+    console.warn('PDF server endpoint unreachable:', e);
   }
-
-  const res = await fetch(`/api/invoices/${invoiceId}/pdf`, {
-    headers: { origin: window.location.origin },
-  });
-  if (res.ok) return await res.blob();
   throw new Error('تعذر إنشاء ملف PDF من الخادم');
 }
 
@@ -418,22 +404,22 @@ export async function render(view, ctx) {
       <div class="grid" style="grid-template-columns:minmax(0,2.4fr) minmax(280px,1fr);align-items:start;gap:1.2rem">
         <div>
           <!-- شريط أدوات الفاتورة والقالب -->
-          <div class="card" style="padding:.65rem .85rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem;background:rgba(15,23,42,0.7);border-color:var(--line-strong)">
+          <div class="card" style="padding:.65rem .85rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem;border-color:var(--line-strong)">
             <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
-              <div class="tab-pill-group" style="display:flex;gap:3px;background:rgba(0,0,0,0.3);padding:3px;border-radius:8px">
-                <button type="button" class="btn btn-sm ${activeViewMode === 'template' ? 'btn-primary' : ''}" id="tab-btn-template" style="padding:.35rem .75rem;border-radius:6px;font-size:.82rem">
+              <div class="tab-pill-group" style="display:flex;gap:3px;background:var(--bg);padding:3px;border-radius:8px;border:1px solid var(--line)">
+                <button type="button" class="btn btn-sm ${activeViewMode === 'template' ? 'btn-primary' : 'btn-ghost'}" id="tab-btn-template" style="padding:.35rem .75rem;border-radius:6px;font-size:.82rem">
                   ${raw(icon.fileText({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}
                   معاينة الفاتورة بالقالب 📄
                 </button>
-                <button type="button" class="btn btn-sm ${activeViewMode === 'items' ? 'btn-primary' : ''}" id="tab-btn-items" style="padding:.35rem .75rem;border-radius:6px;font-size:.82rem">
+                <button type="button" class="btn btn-sm ${activeViewMode === 'items' ? 'btn-primary' : 'btn-ghost'}" id="tab-btn-items" style="padding:.35rem .75rem;border-radius:6px;font-size:.82rem">
                   ${raw(icon.fileSpreadsheet({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}
                   جدول البنود والبيانات 📋 (${(invoice.lines || []).length})
                 </button>
               </div>
 
               <div id="tpl-select-wrap" style="display:${activeViewMode === 'template' ? 'flex' : 'none'};align-items:center;gap:6px">
-                <span style="font-size:.8rem;color:var(--text-muted);font-weight:600">القالب:</span>
-                <select id="sel-invoice-tpl" class="input input-sm" style="padding:.28rem .6rem;font-size:.82rem;border-radius:6px;background:var(--bg-card);color:var(--text);border-color:var(--line-strong)">
+                <span style="font-size:.8rem;color:var(--muted);font-weight:600">القالب:</span>
+                <select id="sel-invoice-tpl" class="input input-sm" style="padding:.28rem .6rem;font-size:.82rem;border-radius:6px;background:var(--card);color:var(--text);border:1px solid var(--line-strong)">
                   ${raw(availableTemplates.length
         ? availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name_ar || t.id)}${t.headers?.length ? ` (${t.headers.length} أعمدة)` : ''}</option>`).join('')
         : INVOICE_TEMPLATES.map((t) => `<option value="${t.id}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name)}</option>`).join(''))}
@@ -687,7 +673,9 @@ export async function render(view, ctx) {
       if (selWrap) selWrap.style.display = 'flex';
       if (zoomWrap) zoomWrap.style.display = 'flex';
       $('#tab-btn-template', view)?.classList.add('btn-primary');
+      $('#tab-btn-template', view)?.classList.remove('btn-ghost');
       $('#tab-btn-items', view)?.classList.remove('btn-primary');
+      $('#tab-btn-items', view)?.classList.add('btn-ghost');
       setTimeout(fitZoom, 50);
     });
 
@@ -702,7 +690,9 @@ export async function render(view, ctx) {
       if (selWrap) selWrap.style.display = 'none';
       if (zoomWrap) zoomWrap.style.display = 'none';
       $('#tab-btn-template', view)?.classList.remove('btn-primary');
+      $('#tab-btn-template', view)?.classList.add('btn-ghost');
       $('#tab-btn-items', view)?.classList.add('btn-primary');
+      $('#tab-btn-items', view)?.classList.remove('btn-ghost');
     });
 
     $('#download-invoice', view).addEventListener('click', async (e) => {

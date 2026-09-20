@@ -206,19 +206,34 @@ export function modal({ title, body, footer, wide = false, slim = false, onClose
 
 /** تأكيد بنعم/لا. */
 export function confirmDialog({ title = 'تأكيد', message = '', danger = false, okText = 'تأكيد' } = {}) {
+  // Ponytail: Close any duplicate lingering confirm dialogs immediately
+  document.querySelectorAll('.modal-backdrop.confirm-dialog-active').forEach((el) => el.remove());
+
   return new Promise((resolve) => {
+    let resolved = false;
+    const finish = (val) => {
+      if (resolved) return;
+      resolved = true;
+      m.close();
+      resolve(val);
+    };
+
     const m = modal({
       title,
       slim: true,
       body: html`<p style="margin:0">${message}</p>`,
       footer: `<button class="btn" data-close type="button">إلغاء</button>
                <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-ok type="button">${esc(okText)}</button>`,
-      onClose: () => resolve(false),
+      onClose: () => finish(false),
     });
-    m.el.querySelector('[data-ok]').addEventListener('click', () => {
-      m.el.remove();
-      resolve(true);
-    });
+    m.el.classList.add('confirm-dialog-active');
+    const okBtn = m.el.querySelector('[data-ok]');
+    if (okBtn) {
+      okBtn.addEventListener('click', () => {
+        okBtn.disabled = true;
+        finish(true);
+      });
+    }
   });
 }
 

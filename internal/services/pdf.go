@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,20 +11,30 @@ import (
 	"time"
 )
 
-// FindAvailableBrowser locates Edge, Chrome, or Chromium on the host system
+var ErrNoBrowser = errors.New("لم يتم العثور على متصفح Chromium أو Chrome لتحويل المستند إلى PDF")
+
+// FindAvailableBrowser locates Edge, Chrome, or Chromium on the host system (Windows / Linux / Mac)
 func FindAvailableBrowser() string {
 	candidates := []string{
 		`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
 		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
 		`C:\Program Files\Google\Chrome\Application\chrome.exe`,
 		`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
+		`/usr/bin/chromium`,
+		`/usr/bin/chromium-browser`,
+		`/usr/bin/google-chrome-stable`,
+		`/usr/bin/google-chrome`,
+		`/snap/bin/chromium`,
+		`/usr/local/bin/chromium`,
+		`/usr/local/bin/chrome`,
+		`/usr/bin/chrome`,
 	}
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {
 			return c
 		}
 	}
-	names := []string{"msedge", "chrome", "google-chrome", "chromium"}
+	names := []string{"chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "chrome", "msedge"}
 	for _, n := range names {
 		if p, err := exec.LookPath(n); err == nil {
 			return p
@@ -36,7 +47,7 @@ func FindAvailableBrowser() string {
 func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 	browser := FindAvailableBrowser()
 	if browser == "" {
-		return nil, fmt.Errorf("لم يتم العثور على متصفح لتحويل المستند إلى PDF")
+		return nil, ErrNoBrowser
 	}
 
 	tmpDir := os.TempDir()
