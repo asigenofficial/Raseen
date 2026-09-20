@@ -52,7 +52,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, mux *http.Ser
 			if err != nil || u.Host != r.Host || (u.Scheme != "http" && u.Scheme != "https") { s.err(w,403,"مصدر الطلب غير مسموح"); return false }
 		}
 	}
-	if (r.Method == "POST" && r.URL.Path == "/api/auth/login") || (r.Method == "GET" && (r.URL.Path == "/api/health" || r.URL.Path == "/api/meta")) { return true }
+	if (r.Method == "POST" && r.URL.Path == "/api/auth/login") || (r.Method == "GET" && (r.URL.Path == "/api/health" || r.URL.Path == "/api/meta" || strings.HasSuffix(r.URL.Path, "/render-html"))) { return true }
 	u := s.getSessionUser(r)
 	if u == nil { s.err(w,401,"يلزم تسجيل الدخول"); return false }
 	_, pattern := mux.Handler(r)

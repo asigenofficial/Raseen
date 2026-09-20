@@ -177,12 +177,15 @@ export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBad
     };
   }
 
-  // 8. الإجمالي شامل الضريبة
-  if (/شامل|مع الضريبة|total with vat|inclusive|total amount/i.test(h) || (/اجمالي|إجمالي|total/i.test(h) && /ضريب/i.test(h))) {
+  // 8. الإجمالي شامل الضريبة أو الإجمالي
+  if (/شامل|مع الضريبة|total with vat|inclusive|total amount/i.test(h) || /اجمالي|إجمالي|المجموع|مجموع|total|line total/i.test(h)) {
     return {
       thClass: 'e',
       thStyle: 'width:96px',
-      renderTd: (l) => `<td class="e"><b class="num">${money(l.total_line)}</b> <small class="cur-sym">${curSym}</small></td>`,
+      renderTd: (l) => {
+        const tot = l.total_line ?? l.line_total ?? l.total ?? ((l.quantity || 0) * (l.unit_price || 0) + (l.tax_amount || 0));
+        return `<td class="e"><b class="num">${money(tot)}</b> <small class="cur-sym">${curSym}</small></td>`;
+      },
     };
   }
 
@@ -516,18 +519,44 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
     taxGroups.set(key, g);
   }
 
-  // تنسيق وبناء أعمدة الجدول ديناميكياً من ملف الإكسل
-  const customHeaders = Array.isArray(printCfg.headers) && printCfg.headers.length > 0 ? printCfg.headers : null;
+  // تنسيق وبناء أعمدة الجدول ديناميكياً من ملف الإكسل مع تنظيف الدمج المكرر
+  let customHeaders = null;
+  let customAlignments = [];
+  if (Array.isArray(printCfg.headers) && printCfg.headers.length > 0) {
+    const deduped = [];
+    const dedupedAligns = [];
+    const rawAligns = Array.isArray(printCfg.alignments) ? printCfg.alignments : [];
+    for (let i = 0; i < printCfg.headers.length; i++) {
+      const h = String(printCfg.headers[i] || '').trim();
+      if (h && (deduped.length === 0 || deduped[deduped.length - 1].toLowerCase() !== h.toLowerCase())) {
+        deduped.push(h);
+        dedupedAligns.push(rawAligns[i] || 'right');
+      }
+    }
+    // Reverse if in LTR order (where total is first and item/description is last)
+    const firstIsTotal = /إجمالي|اجمالي|total|مجموع/i.test(deduped[0] || '');
+    const lastIsItem = /صنف|وصف|خدمة|بيان|item|desc|م|#/i.test(deduped[deduped.length - 1] || '');
+    if (firstIsTotal && lastIsItem) {
+      deduped.reverse();
+      dedupedAligns.reverse();
+    }
+    // Only use customHeaders if it contains actual item-related column headers
+    const hasItemConcept = deduped.some((h) => /صنف|وصف|خدمة|بيان|سلعة|كمية|سعر|مفرد|ضريبة|vat|tax|إجمالي|اجمالي|مجموع|total|item|desc|qty|price/i.test(h));
+    if (hasItemConcept && deduped.length >= 2) {
+      customHeaders = deduped;
+      customAlignments = dedupedAligns;
+    }
+  }
+
   let theadHtml = '';
   let linesHtml = '';
 
   if (customHeaders) {
-    const alignments = Array.isArray(printCfg.alignments) ? printCfg.alignments : [];
     const renderers = customHeaders.map((h, i) => getColumnRenderer(h, i, customHeaders, {
       curSym,
       curBadge,
       showItemCode,
-      alignment: alignments[i],
+      alignment: customAlignments[i],
     }));
     theadHtml = `<tr>` + customHeaders.map((h, i) => {
       const r = renderers[i];
@@ -719,7 +748,7 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
 
   const css = `
     html, body { font-family: ${fontFamily}; font-size: ${fontSize}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .page { width: 210mm; min-height: 297mm; padding: 10mm 9mm; position: relative; page-break-after: always; box-sizing: border-box; }
+    .page { width: 210mm; min-height: 297mm; padding: 10mm 9mm; position: relative; page-break-after: always; box-sizing: border-box; background: ${printCfg.light_color && printCfg.light_color !== '#ffffff' ? printCfg.light_color : '#ffffff'}; ${isCustomTemplate ? `border: 1.5px solid ${brandColor}88;` : ''} }
     .page:last-child { page-break-after: auto; }
     .watermark { position: absolute; inset: 0; display: grid; place-items: center; font-size: 90pt; color: rgba(220,38,38,.13); font-weight: 800; transform: rotate(-20deg); pointer-events: none; z-index: 0; }
     .head { display: flex; gap: 8mm; justify-content: space-between; border-bottom: 2px solid ${brandColor}; padding-bottom: 4mm; }
@@ -971,6 +1000,39 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
       border: 1px solid ${brandDark};
       font-weight: 700;
     }
+
+    /* قالب 2 - ذهبي عاجي */
+    .page[data-tpl*="4b0d1693"], .page[data-tpl*="gold"], .page[data-tpl*="ذهبي"] {
+      background: #FAF6EB;
+      border: 2px solid #76602D;
+      padding: 9mm;
+    }
+    .page[data-tpl*="4b0d1693"] .head, .page[data-tpl*="gold"] .head {
+      border: 1.5px solid #76602D !important;
+      background: #FAF6EB !important;
+    }
+    .page[data-tpl*="4b0d1693"] .party, .page[data-tpl*="gold"] .party {
+      border: 1px solid #c8ba9d;
+      background: #ffffff;
+    }
+    .page[data-tpl*="4b0d1693"] .party-h, .page[data-tpl*="gold"] .party-h {
+      background: #f5eedf;
+      color: #76602D;
+      border-bottom: 1.5px solid #76602D;
+    }
+    .page[data-tpl*="4b0d1693"] table.items th, .page[data-tpl*="gold"] table.items th {
+      background: #76602D !important;
+      color: #ffffff !important;
+      border: 1px solid #59481e !important;
+    }
+    .page[data-tpl*="4b0d1693"] table.items td, .page[data-tpl*="gold"] table.items td {
+      border-color: #dcd3c3;
+    }
+    .page[data-tpl*="4b0d1693"] table.totals tr.grand td, .page[data-tpl*="gold"] table.totals tr.grand td {
+      background: #76602D !important;
+      color: #ffffff !important;
+    }
+
     /* قالب رواسي وينبع للاتصالات والتجزئة */
     .page[data-tpl="rawasi"], .page[data-tpl="re_rawasi_telecom"] {
       border-top: 4.5mm solid #1e3a8a;

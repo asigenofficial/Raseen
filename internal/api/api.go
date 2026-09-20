@@ -916,6 +916,116 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte(xmlStr))
 	})
 
+	mux.HandleFunc("GET /api/invoices/{id}/render-html", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		inv, err := s.invoices.GetInvoice(id)
+		if err != nil {
+			s.err(w, 404, "الفاتورة غير موجودة")
+			return
+		}
+		style := r.URL.Query().Get("style")
+		htmlStr, err := s.templates.RenderInvoiceHTML(inv, style)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(htmlStr))
+	})
+
+	mux.HandleFunc("GET /api/invoices/{id}/pdf", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		inv, err := s.invoices.GetInvoice(id)
+		if err != nil {
+			s.err(w, 404, "الفاتورة غير موجودة")
+			return
+		}
+		style := r.URL.Query().Get("style")
+		htmlStr, err := s.templates.RenderInvoiceHTML(inv, style)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		pdfBytes, err := services.RenderHTMLToPDF(htmlStr)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		filename := fmt.Sprintf("invoice_%s.pdf", inv.InvoiceNumber)
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(pdfBytes)
+	})
+
+	mux.HandleFunc("POST /api/invoices/{id}/pdf", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		var body struct {
+			HTML string `json:"html"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+
+		htmlStr := body.HTML
+		var invNum string
+		if strings.TrimSpace(htmlStr) == "" {
+			inv, err := s.invoices.GetInvoice(id)
+			if err != nil {
+				s.err(w, 404, "الفاتورة غير موجودة")
+				return
+			}
+			invNum = inv.InvoiceNumber
+			style := r.URL.Query().Get("style")
+			htmlStr, err = s.templates.RenderInvoiceHTML(inv, style)
+			if err != nil {
+				s.err(w, 500, err.Error())
+				return
+			}
+		} else {
+			if inv, err := s.invoices.GetInvoice(id); err == nil && inv != nil {
+				invNum = inv.InvoiceNumber
+			}
+		}
+
+		pdfBytes, err := services.RenderHTMLToPDF(htmlStr)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		if invNum == "" {
+			invNum = id
+		}
+		filename := fmt.Sprintf("invoice_%s.pdf", invNum)
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(pdfBytes)
+	})
+
+	mux.HandleFunc("POST /api/pdf/render", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			HTML     string `json:"html"`
+			Filename string `json:"filename"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.HTML) == "" {
+			s.err(w, 400, "محتوى المستند HTML مطلوب")
+			return
+		}
+		pdfBytes, err := services.RenderHTMLToPDF(req.HTML)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		filename := req.Filename
+		if filename == "" {
+			filename = "document.pdf"
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(pdfBytes)
+	})
+
 	mux.HandleFunc("GET /api/invoices/template", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		style := q.Get("style")
@@ -1218,6 +1328,18 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		s.json(w, 200, map[string]any{"ok": true})
+	})
+
+	mux.HandleFunc("GET /api/invoices/templates/{id}/render-html", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		htmlStr, err := s.templates.RenderTemplateHTML(id)
+		if err != nil {
+			s.err(w, 404, err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(htmlStr))
 	})
 
 	mux.HandleFunc("GET /api/templates/builder/{id}", func(w http.ResponseWriter, r *http.Request) {

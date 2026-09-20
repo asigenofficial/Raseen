@@ -87,44 +87,73 @@ export async function fetchInvoicePdfBlob(invoiceId, docHtml) {
       });
       if (res.ok) return await res.blob();
     } catch { }
+
+    try {
+      const res = await fetch('/api/pdf/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', origin: window.location.origin },
+        body: JSON.stringify({ html: docHtml, filename: `invoice_${invoiceId}.pdf` }),
+      });
+      if (res.ok) return await res.blob();
+    } catch { }
   }
+
   const res = await fetch(`/api/invoices/${invoiceId}/pdf`, {
     headers: { origin: window.location.origin },
   });
-  if (!res.ok) throw new Error('تعذر إنشاء ملف PDF');
-  return await res.blob();
+  if (res.ok) return await res.blob();
+  throw new Error('تعذر إنشاء ملف PDF من الخادم');
 }
 
-export async function downloadInvoicePdf({ invoice, issuer, client, printSettings = null }) {
+export async function downloadInvoicePdf({ invoice, issuer, client, printSettings = null, docHtml = null }) {
+  const finalHtml = docHtml || invoiceA4({ invoice, issuer, client, printSettings });
   try {
     invoice.lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
     invoice.items = invoice.lines;
     toastOk('جارٍ تجهيز ملف PDF الفاتورة...');
-    const docHtml = invoiceA4({ invoice, issuer, client, printSettings });
-    const blob = await fetchInvoicePdfBlob(invoice.id, docHtml);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `فاتورة_${invoice.invoice_number}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 6000);
-    toastOk('تم تحميل ملف الفاتورة PDF بنجاح 📄');
-    return blob;
+    let blob = null;
+    try {
+      blob = await fetchInvoicePdfBlob(invoice.id, finalHtml);
+    } catch (e) {
+      console.warn('PDF direct generation failed:', e);
+    }
+
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `فاتورة_${invoice.invoice_number || invoice.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 6000);
+      toastOk('تم تحميل ملف الفاتورة PDF بنجاح 📄');
+      return blob;
+    }
+
+    // Fallback: open print dialog to save as PDF
+    printDoc(finalHtml);
+    toastOk('تم فتح حوار الطباعة / الحفظ كملف PDF');
+    return null;
   } catch (err) {
-    toastErr('تعذر تنزيل ملف PDF: ' + (err.message || 'خطأ'));
+    console.warn('Fallback printDoc error:', err);
+    printDoc(finalHtml);
+    toastOk('تم فتح حوار الطباعة / الحفظ كملف PDF');
     return null;
   }
 }
 
-export async function shareInvoicePdfFile({ invoice, issuer, client, text, printSettings = null }) {
+export async function shareInvoicePdfFile({ invoice, issuer, client, text, printSettings = null, docHtml = null }) {
+  const finalHtml = docHtml || invoiceA4({ invoice, issuer, client, printSettings });
   try {
     invoice.lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
     invoice.items = invoice.lines;
     toastOk('جارٍ تجهيز ملف PDF للمشاركة...');
-    const docHtml = invoiceA4({ invoice, issuer, client, printSettings });
-    const blob = await fetchInvoicePdfBlob(invoice.id, docHtml);
+    let blob = null;
+    try {
+      blob = await fetchInvoicePdfBlob(invoice.id, finalHtml);
+    } catch { }
+
     if (blob) {
       const filename = `فاتورة_${invoice.invoice_number}.pdf`;
       const file = new File([blob], filename, { type: 'application/pdf' });
@@ -138,19 +167,31 @@ export async function shareInvoicePdfFile({ invoice, issuer, client, text, print
         toastOk('تمت مشاركة ملف الفاتورة PDF بنجاح');
         return true;
       }
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 6000);
+      toastOk('تم تحميل ملف الفاتورة PDF بنجاح');
+      return true;
     }
+
+    printDoc(finalHtml);
+    toastOk('تم فتح حوار الطباعة / الحفظ كملف PDF للمشاركة');
+    return true;
   } catch (err) {
     if (err.name === 'AbortError') return false;
     console.warn('Share file fallback:', err);
+    printDoc(finalHtml);
+    return false;
   }
-
-  // Fallback: download file directly to user device
-  await downloadInvoicePdf({ invoice, issuer, client, printSettings });
-  toastOk('تم تنزيل ملف PDF الفاتورة، يمكنك إرساله ومشاركته الآن مباشرة');
-  return false;
 }
 
-export function openDownloadModal({ invoice, issuer, client, printSettings = null }) {
+export function openDownloadModal({ invoice, issuer, client, printSettings = null, docHtml = null }) {
   const m = modal({
     title: `تحميل الفاتورة: ${invoice.invoice_number}`,
     slim: true,
@@ -201,17 +242,17 @@ export function openDownloadModal({ invoice, issuer, client, printSettings = nul
 
   $('#dl-pdf-file-opt', m.el).addEventListener('click', async () => {
     m.close();
-    await downloadInvoicePdf({ invoice, issuer, client, printSettings });
+    await downloadInvoicePdf({ invoice, issuer, client, printSettings, docHtml });
   });
 
   $('#dl-print-opt', m.el).addEventListener('click', () => {
     m.close();
-    printDoc(invoiceA4({ invoice, issuer, client, printSettings }));
+    printDoc(docHtml || invoiceA4({ invoice, issuer, client, printSettings }));
   });
 
   $('#dl-html-opt', m.el).addEventListener('click', () => {
     m.close();
-    const doc = invoiceA4({ invoice, issuer, client, printSettings });
+    const doc = docHtml || invoiceA4({ invoice, issuer, client, printSettings });
     download(`فاتورة_${invoice.invoice_number}.html`, doc, 'text/html;charset=utf-8');
     toastOk('تم تحميل مستند الفاتورة');
   });
@@ -224,7 +265,7 @@ export function openDownloadModal({ invoice, issuer, client, printSettings = nul
   });
 }
 
-export function openShareModal({ invoice, issuer, client, printSettings = null }) {
+export function openShareModal({ invoice, issuer, client, printSettings = null, docHtml = null }) {
   const m = modal({
     title: `مشاركة الفاتورة: ${invoice.invoice_number}`,
     slim: true,
@@ -259,14 +300,38 @@ export function openShareModal({ invoice, issuer, client, printSettings = null }
     footer: `<button class="btn" data-close type="button">إغلاق</button>`,
   });
 
+  // إرسال الفاتورة عبر واتساب مباشرة للعميل
+  $('#btn-send-whatsapp', m.el)?.addEventListener('click', () => {
+    const rawPhone = $('#share-phone-input', m.el)?.value?.trim() || '';
+    const cleanPhone = formatSaudiPhone(rawPhone);
+    if (!cleanPhone) {
+      toastErr('يرجى إدخال رقم جوال صالح للعميل (مثال: 0501234567)');
+      return;
+    }
+    const grandTotalStr = typeof invoice.grand_total === 'number' ? invoice.grand_total.toFixed(2) : (invoice.grand_total || '0.00');
+    const msg = [
+      `مرحباً ${client.name || 'عميلنا العزيز'}،`,
+      `مرفق لكم تفاصيل الفاتورة الضريبية رقم: *${invoice.invoice_number}*`,
+      issuer.name_ar ? `الصادرة من: *${issuer.name_ar}*` : '',
+      `تاريخ الإصدار: ${invoice.issue_date || ''}`,
+      `المبلغ الإجمالي: *${grandTotalStr} ريال*`,
+      invoice.payment_label ? `طريقة الدفع: ${invoice.payment_label}` : '',
+      `\nشكراً لتعاملكم معنا.`
+    ].filter(Boolean).join('\n');
+
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+    toastOk('تم فتح محادثة واتساب لإرسال الفاتورة 💬');
+  });
+
   // مشاركة ملف PDF مباشرة عبر النظام (يدعم ويندوز وتطبيقات الهاتف)
   $('#btn-share-pdf-direct', m.el).addEventListener('click', async () => {
-    await shareInvoicePdfFile({ invoice, issuer, client });
+    await shareInvoicePdfFile({ invoice, issuer, client, printSettings, docHtml });
   });
 
   // تنزيل ملف PDF للجهاز
-  $('#btn-dl-pdf-direct', m.el).addEventListener('click', async () => {
-    await downloadInvoicePdf({ invoice, issuer, client });
+  $('#btn-dl-pdf-direct', m.el)?.addEventListener('click', async () => {
+    await downloadInvoicePdf({ invoice, issuer, client, printSettings, docHtml });
   });
 }
 
@@ -304,14 +369,16 @@ export async function render(view, ctx) {
       return {
         ...issuerPrintCfg,
         template_style: selectedTplStyle,
-        headers: tpl?.headers || [],
-        header_fill: tpl?.style_meta?.header_fill || tpl?.color_hex,
-        banner_text: tpl?.style_meta?.banner_text || '',
-        banner_fill: tpl?.style_meta?.banner_fill || '',
-        footer_text: tpl?.style_meta?.footer_text || '',
-        has_signatures: tpl?.style_meta?.has_signatures || false,
+        headers: tpl?.headers || issuerPrintCfg.headers || [],
+        alignments: tpl?.style_meta?.alignments || issuerPrintCfg.alignments || [],
+        header_fill: tpl?.style_meta?.header_fill || tpl?.color_hex || issuerPrintCfg.header_fill,
+        banner_text: tpl?.style_meta?.banner_text || issuerPrintCfg.banner_text || '',
+        banner_fill: tpl?.style_meta?.banner_fill || issuerPrintCfg.banner_fill || '',
+        footer_text: tpl?.style_meta?.footer_text || issuerPrintCfg.footer_text || '',
+        has_signatures: tpl?.style_meta?.has_signatures || issuerPrintCfg.has_signatures || false,
         primary_color: tpl?.color_hex || issuerPrintCfg.primary_color || '#0d9488',
-        template_title: tpl?.name_ar || '',
+        light_color: tpl?.style_meta?.light_color || issuerPrintCfg.light_color || '',
+        template_title: tpl?.name_ar || issuerPrintCfg.template_title || '',
       };
     };
 
@@ -517,17 +584,37 @@ export async function render(view, ctx) {
         </div>
       </div>`;
 
-    function updateInvoicePreview() {
+    let currentInvoiceDocHtml = '';
+
+    async function updateInvoicePreview() {
       const iframe = $('#inv-iframe', view);
       if (!iframe) return;
-      const docHtml = invoiceA4({
+      const printSettings = getPrintSettings();
+      const tplId = selectedTplStyle || printSettings?.template_style;
+
+      // 1. Initial immediate render with invoiceA4
+      currentInvoiceDocHtml = invoiceA4({
         invoice,
         issuer,
         client,
-        printSettings: getPrintSettings(),
+        printSettings,
         autoPrint: false,
       });
-      iframe.srcdoc = docHtml;
+      iframe.srcdoc = currentInvoiceDocHtml;
+
+      // 2. If an Excel template is selected or active, fetch the real filled Excel template HTML!
+      if (tplId && tplId !== 'standard' && tplId !== 'modern' && tplId !== 'classic' && tplId !== 'compact') {
+        try {
+          const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/render-html?style=${encodeURIComponent(tplId)}`);
+          if (res.ok) {
+            const filledHtml = await res.text();
+            if (filledHtml && filledHtml.length > 500 && iframe) {
+              currentInvoiceDocHtml = filledHtml;
+              iframe.srcdoc = filledHtml;
+            }
+          }
+        } catch { }
+      }
     }
 
     function fitZoom() {
@@ -571,7 +658,7 @@ export async function render(view, ctx) {
 
     // فتح المعاينة في شاشة كاملة
     $('#btn-fullscreen-inv', view)?.addEventListener('click', () => {
-      const docHtml = invoiceA4({
+      const docHtml = currentInvoiceDocHtml || invoiceA4({
         invoice,
         issuer,
         client,
@@ -621,19 +708,20 @@ export async function render(view, ctx) {
     $('#download-invoice', view).addEventListener('click', async (e) => {
       e.target.disabled = true;
       try {
-        await downloadInvoicePdf({ invoice, issuer, client, printSettings: getPrintSettings() });
+        await downloadInvoicePdf({ invoice, issuer, client, printSettings: getPrintSettings(), docHtml: currentInvoiceDocHtml });
       } finally {
         e.target.disabled = false;
       }
     });
 
-    $('#share-invoice', view).addEventListener('click', async (e) => {
-      e.target.disabled = true;
-      try {
-        await shareInvoicePdfFile({ invoice, issuer, client, printSettings: getPrintSettings() });
-      } finally {
-        e.target.disabled = false;
-      }
+    $('#share-invoice', view).addEventListener('click', () => {
+      openShareModal({
+        invoice,
+        issuer,
+        client,
+        printSettings: getPrintSettings(),
+        docHtml: currentInvoiceDocHtml,
+      });
     });
 
     $('#print-more', view).addEventListener('click', () => {
@@ -650,11 +738,11 @@ export async function render(view, ctx) {
       });
       $('#pm-a4', pm.el).addEventListener('click', () => {
         pm.close();
-        printDoc(invoiceA4({ invoice, issuer, client, printSettings: getPrintSettings() }));
+        printDoc(currentInvoiceDocHtml || invoiceA4({ invoice, issuer, client, printSettings: getPrintSettings() }));
       });
       $('#pm-copies', pm.el).addEventListener('click', () => {
         pm.close();
-        printDoc(invoiceA4({ invoice, issuer, client, copies: 2, printSettings: getPrintSettings() }));
+        printDoc(currentInvoiceDocHtml || invoiceA4({ invoice, issuer, client, copies: 2, printSettings: getPrintSettings() }));
       });
     });
 

@@ -3,7 +3,7 @@
 // ==========================================================================
 import { api } from '../core/api.js';
 import { store } from '../core/store.js';
-import { html, raw, esc, toastOk, toastErr, $, $$ } from '../core/util.js';
+import { html, raw, esc, toastOk, toastErr, $, $$, sarSvg } from '../core/util.js';
 
 // ─── Color Themes ─────────────────────────────────────────────────────────
 const THEMES = [
@@ -108,6 +108,18 @@ function parseRange(rangeStr) {
   };
 }
 
+function formatCellHtml(val, cellData) {
+  if (val === undefined || val === null) return '';
+  let s = esc(String(val));
+  if (!s) return '';
+  if (s.includes('﷼') || s.includes('ر.س')) {
+    const sz = Math.max(12, Math.min(24, (cellData?.size || 11) + 2));
+    const iconHtml = `<span class="tb-sar-sym" contenteditable="false" style="display:inline-block;vertical-align:-0.15em;margin:0 2px;color:currentColor;" title="ريال سعودي">${sarSvg({ size: sz })}</span>`;
+    s = s.replaceAll('﷼', iconHtml).replaceAll('ر.س', iconHtml);
+  }
+  return s;
+}
+
 /**
  * تحويل نتيجة فحص ملف Excel القادمة من الخادم إلى gridState جاهز للتحرير
  */
@@ -173,14 +185,13 @@ function getTaxInvoicePreset(primary = '#059669') {
     { width: 14 }, // E: الضريبة
     { width: 16 }, // F: الإجمالي
   ];
-  const rows = Array.from({ length: 24 }, (_, i) => {
+  const rows = Array.from({ length: 23 }, (_, i) => {
     if (i === 0) return { height: 42 };
     if (i === 1) return { height: 24 };
     if (i === 2) return { height: 32 };
     if (i === 5) return { height: 8 };
     if (i === 6) return { height: 30 };
     if (i === 20) return { height: 30 };
-    if (i === 23) return { height: 55 };
     return { height: 23 };
   });
 
@@ -222,10 +233,6 @@ function getTaxInvoicePreset(primary = '#059669') {
 
     'A22': { v: 'المبلغ كتابةً: {amount_in_words}', bg: '#f8fafc', color: '#475569', bold: false, size: 10, align: 'right' },
     'A23': { v: 'الملاحظات والشروط: {notes}', bg: '#ffffff', color: '#475569', bold: false, size: 10, align: 'right' },
-
-    'A24': { v: 'توقيع المستلم:\n....................', bg: '#ffffff', color: '#64748b', bold: false, size: 10, align: 'center' },
-    'C24': { v: 'المحاسب المسؤول:\n....................', bg: '#ffffff', color: '#64748b', bold: false, size: 10, align: 'center' },
-    'E24': { v: 'اعتماد الإدارة:\n....................', bg: '#ffffff', color: '#64748b', bold: false, size: 10, align: 'center' },
   };
 
   const merges = [
@@ -236,7 +243,6 @@ function getTaxInvoicePreset(primary = '#059669') {
     'A20:D20', 'E20:F20',
     'A21:D21', 'E21:F21',
     'A22:F22', 'A23:F23',
-    'A24:B24', 'C24:D24', 'E24:F24',
   ];
 
   return { cols, rows, cells, merges };
@@ -298,9 +304,6 @@ function getReceiptVoucherPreset(primary = '#059669') {
 
     'A17': { v: 'إجمالي المبالغ المقبوضة:', bg: primary, color: '#ffffff', bold: true, size: 11, align: 'right' },
     'F17': { v: '{total}', bg: primary, color: '#ffffff', bold: true, size: 12, align: 'center' },
-
-    'A19': { v: 'توقيع المستلم:\n....................', bg: '#ffffff', color: '#64748b', bold: false, size: 10, align: 'center' },
-    'D19': { v: 'اعتماد الإدارة والمحاسبة:\n....................', bg: '#ffffff', color: '#64748b', bold: false, size: 10, align: 'center' },
   };
 
   const merges = [
@@ -311,7 +314,6 @@ function getReceiptVoucherPreset(primary = '#059669') {
     'A7:C7', 'D7:F7',
     'A8:F8',
     'A17:E17',
-    'A19:C19', 'D19:F19',
   ];
 
   return { cols, rows, cells, merges };
@@ -506,16 +508,15 @@ function renderGridTable() {
       const rowResizer = `<div class="tb-cell-row-resizer" data-row="${rowTarget}" title="اسحب أو انقر لضبط ارتفاع الصف (${rowTarget})"></div>`;
       const cornerResizer = isActive ? `<div class="tb-cell-corner-resizer" data-col="${colTarget}" data-row="${rowTarget}" title="اسحب لتكبير/تصغير أبعاد الخلية معاً"></div>` : '';
 
-      // Compute sample display value (replace {tags} with realistic sample data)
-      let displayVal = val;
-      if (val && val.includes('{')) {
-        Object.entries(SAMPLE_MAP).forEach(([tag, sample]) => {
-          displayVal = displayVal.replaceAll(tag, sample);
-        });
-      }
-      const hasSample = displayVal !== val;
+      // Smart tag & Item tag detection
+      const hasSmartTag = Boolean(val && val.includes('{'));
+      const isItemTag = Boolean(val && /\{(?:item_|quantity|unit_price|line_tax|total_line|discount|tax_rate|unit)/.test(val));
 
-      rowCells += `<td class="tb-grid-cell${isActive ? ' tb-cell-active' : ''}${img?.src ? ' tb-cell-has-image' : ''}"
+      // Always show real smart tags in interactive editor so user can focus on them
+      const displayVal = val;
+      const itemBadgeHtml = isItemTag ? `<span class="tb-cell-item-badge" title="وسم بند متكرر">بند صنف</span>` : '';
+
+      rowCells += `<td class="tb-grid-cell${isActive ? ' tb-cell-active' : ''}${img?.src ? ' tb-cell-has-image' : ''}${hasSmartTag ? ' tb-cell-has-tag' : ''}${isItemTag ? ' tb-cell-item-tag' : ''}"
         data-ref="${pos}"
         data-col="${colTarget}"
         data-row="${rowTarget}"
@@ -523,7 +524,8 @@ function renderGridTable() {
         style="${bg}${color}${bold}${size}${align}${borderStyle}height:${h}px;"
         tabindex="0">
         ${imgHtml}
-        <div class="tb-cell-val${hasSample ? ' tb-val-sampled' : ''}" contenteditable="true" spellcheck="false" dir="auto" data-ref="${pos}" data-raw="${esc(val)}" style="${wrapStyle}">${esc(displayVal)}</div>
+        ${itemBadgeHtml}
+        <div class="tb-cell-val" contenteditable="true" spellcheck="false" dir="auto" data-ref="${pos}" data-raw="${esc(val)}" style="${wrapStyle}">${formatCellHtml(displayVal, cellData)}</div>
         ${colResizer}
         ${rowResizer}
         ${cornerResizer}
@@ -613,7 +615,7 @@ function renderPrintPreview() {
       const imgHtml = img?.src ? `<img src="${esc(img.src)}" style="display:block;max-width:100%;max-height:${Math.min(img.height || 80, 120)}px;object-fit:contain;margin:2px auto;" alt="" />` : '';
       if (img?.src) hasContent = true;
 
-      rowCells += `<td ${cs}${rs} style="${bg}${color}${bold}${size}${align}padding:4px 8px;border:1px solid #cbd5e1;white-space:pre-wrap;">${imgHtml}${esc(val)}</td>`;
+      rowCells += `<td ${cs}${rs} style="${bg}${color}${bold}${size}${align}padding:4px 8px;border:1px solid #cbd5e1;white-space:pre-wrap;">${imgHtml}${formatCellHtml(val, cellData)}</td>`;
     }
 
     if (hasContent || r <= 15) {
@@ -997,7 +999,7 @@ function renderView() {
 
           <!-- Section 3.5: Number Formats & Text Wrap (تنسيقات إكسل الرقمية) -->
           <div class="tb-ribbon-group" title="تنسيقات الأرقام والعملات">
-            <button type="button" class="tb-tool-btn" id="btn-fmt-currency" title="تنسيق العملة السعودية (ر.س)" style="font-weight:800;font-size:0.72rem;">ر.س</button>
+            <button type="button" class="tb-tool-btn" id="btn-fmt-currency" title="تنسيق العملة السعودية (ريال سعودي ﷼)" style="display:inline-flex;align-items:center;justify-content:center;padding:0 6px;">${raw(sarSvg({ size: 14 }))}</button>
             <button type="button" class="tb-tool-btn" id="btn-fmt-percent" title="نسبة مئوية (%)" style="font-weight:800;font-size:0.78rem;">%</button>
             <button type="button" class="tb-tool-btn" id="btn-fmt-comma" title="فاصلة الآلاف (,000)" style="font-weight:800;font-size:0.75rem;">,00</button>
             <button type="button" class="tb-tool-btn${activeCellData.wrap === false ? '' : ' active'}" id="btn-tool-wrap" title="التفاف النص التلقائي (Wrap Text)">
@@ -1171,6 +1173,36 @@ function renderView() {
       /* Sample data display mode — shows realistic values instead of {tags} */
       .tb-val-sampled { opacity: 0.88; }
       .tb-val-sampled:not(:focus) { cursor: cell; }
+
+      /* Smart Tags & Item Tags Highlighting */
+      .tb-cell-has-tag .tb-cell-val {
+        font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace, sans-serif;
+        font-weight: 600;
+        letter-spacing: -0.2px;
+      }
+      .tb-cell-item-tag {
+        background-color: rgba(13, 148, 136, 0.09) !important;
+        box-shadow: inset 0 0 0 1.5px #0d9488 !important;
+      }
+      .tb-cell-item-tag .tb-cell-val {
+        color: #0f766e !important;
+        font-weight: 700;
+      }
+      .tb-cell-item-badge {
+        position: absolute;
+        top: 2px;
+        left: 4px;
+        font-size: 8px;
+        font-weight: 700;
+        background: #0d9488;
+        color: #fff;
+        padding: 0 4px;
+        border-radius: 3px;
+        pointer-events: none;
+        letter-spacing: 0.2px;
+        z-index: 4;
+        opacity: 0.85;
+      }
       .tb-cell-img { display: block; margin: 2px auto; object-fit: contain; pointer-events: none; }
       .tb-cell-has-image .tb-cell-val { position: absolute; inset: 0; padding-top: 4px; }
       .tb-dim-badge { background: rgba(255,255,255,.08); border: 1px solid var(--line); color: var(--primary); font-weight: 700; font-size: 0.75rem; padding: 2px 7px; border-radius: 4px; min-width: 34px; text-align: center; font-family: monospace; }
@@ -1469,7 +1501,7 @@ function attachEvents() {
     });
   });
 
-  // Number Formatting: Currency (ر.س)
+  // Number Formatting: Currency (﷼)
   $('#btn-fmt-currency', view)?.addEventListener('click', () => {
     if (!activeCell || !cfg.gridState) return toastErr('اختر خلية أولاً');
     if (!cfg.gridState.cells[activeCell]) cfg.gridState.cells[activeCell] = { v: '' };
@@ -1479,14 +1511,14 @@ function attachEvents() {
     const num = parseFloat(curVal.replace(/[^0-9.-]/g, ''));
     let formatted = curVal;
     if (!isNaN(num) && !curVal.includes('{')) {
-      formatted = num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ر.س';
-    } else if (!curVal.includes('ر.س')) {
-      formatted = curVal ? `${curVal} ر.س` : '0.00 ر.س';
+      formatted = num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ﷼';
+    } else if (!curVal.includes('﷼') && !curVal.includes('ر.س')) {
+      formatted = curVal ? `${curVal} ﷼` : '0.00 ﷼';
     }
     updateActiveCellValue(formatted);
     const fi = $('#tb-formula-input', view);
     if (fi) fi.value = formatted;
-    toastOk('تم تطبيق تنسيق العملة السعودية (ر.س)');
+    toastOk('تم تطبيق تنسيق العملة السعودية (﷼)');
   });
 
   // Number Formatting: Percentage (%)
@@ -1770,39 +1802,50 @@ function attachEvents() {
     if (nameBox) nameBox.textContent = ref;
   });
 
-  // FocusIn: when user clicks cell to edit — restore raw {tag} values
+  // FocusIn: when user clicks cell to edit
   table?.addEventListener('focusin', e => {
     const valEl = e.target.closest('.tb-cell-val');
     if (!valEl) return;
     const ref = valEl.dataset.ref;
     const rawVal = cfg.gridState?.cells?.[ref]?.v ?? (valEl.dataset.raw || '');
-    // Only switch if currently showing sample data (differs from raw)
-    if (valEl.innerText !== rawVal) {
-      valEl.innerText = rawVal;
-    }
-    valEl.classList.remove('tb-val-sampled');
     // Update formula bar with raw value
     const fi = $('#tb-formula-input', view);
     if (fi) fi.value = rawVal;
+    const nameBox = $('#tb-active-cell-ref', view);
+    if (nameBox) nameBox.textContent = ref;
   });
 
-  // FocusOut: when user leaves cell — show sample data again
+  // FocusOut: save value into gridState
   table?.addEventListener('focusout', e => {
     const valEl = e.target.closest('.tb-cell-val');
     if (!valEl) return;
     const ref = valEl.dataset.ref;
-    const rawVal = cfg.gridState?.cells?.[ref]?.v || '';
-    valEl.dataset.raw = rawVal;
-    // Replace tags with sample data for display
-    let displayVal = rawVal;
-    if (rawVal && rawVal.includes('{')) {
-      Object.entries(SAMPLE_MAP).forEach(([tag, sample]) => {
-        displayVal = displayVal.replaceAll(tag, sample);
-      });
+    if (!ref || !cfg.gridState) return;
+    const currentVal = valEl.innerText.trim();
+    if (!cfg.gridState.cells[ref]) {
+      cfg.gridState.cells[ref] = { v: '', size: 11, align: 'right' };
     }
-    if (displayVal !== rawVal) {
-      valEl.innerText = displayVal;
-      valEl.classList.add('tb-val-sampled');
+    cfg.gridState.cells[ref].v = currentVal;
+    valEl.dataset.raw = currentVal;
+    const cellData = cfg.gridState.cells[ref];
+    valEl.innerHTML = formatCellHtml(currentVal, cellData);
+
+    const td = valEl.closest('td');
+    if (td) {
+      const isItem = /\{(?:item_|quantity|unit_price|line_tax|total_line|discount|tax_rate|unit)/.test(currentVal);
+      const hasTag = currentVal.includes('{');
+      td.classList.toggle('tb-cell-has-tag', hasTag);
+      td.classList.toggle('tb-cell-item-tag', isItem);
+      let badge = td.querySelector('.tb-cell-item-badge');
+      if (isItem && !badge) {
+        badge = document.createElement('span');
+        badge.className = 'tb-cell-item-badge';
+        badge.title = 'وسم بند متكرر';
+        badge.textContent = 'بند صنف';
+        td.prepend(badge);
+      } else if (!isItem && badge) {
+        badge.remove();
+      }
     }
   });
 
@@ -2609,7 +2652,11 @@ function updateActiveCellValue(newVal) {
   const td = $(`[data-ref="${activeCell}"]`, view);
   if (td) {
     const valDiv = td.querySelector('.tb-cell-val');
-    if (valDiv) valDiv.textContent = newVal;
+    if (valDiv) {
+      valDiv.dataset.raw = newVal;
+      const cellData = cfg.gridState.cells[activeCell];
+      valDiv.innerHTML = formatCellHtml(newVal, cellData);
+    }
   }
 }
 

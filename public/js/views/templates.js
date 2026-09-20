@@ -968,7 +968,7 @@ export async function render(view) {
 
     const { issuerToUse, clientToUse, invToRender } = resolvePreviewEntities(tpl);
 
-    const docHtml = invoicePreviewDoc({
+    let docHtml = invoicePreviewDoc({
       invoice: invToRender,
       issuer: issuerToUse,
       client: clientToUse,
@@ -977,6 +977,17 @@ export async function render(view) {
     });
 
     iframe.srcdoc = docHtml;
+
+    if (tpl && tpl.id) {
+      fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html`)
+        .then((r) => r.ok ? r.text() : null)
+        .then((realHtml) => {
+          if (realHtml && iframe) {
+            iframe.srcdoc = realHtml;
+          }
+        })
+        .catch(() => {});
+    }
   }
 
   function openFullscreenPreview(tplOverride = null) {
@@ -996,7 +1007,7 @@ export async function render(view) {
 
     const { issuerToUse, clientToUse, invToRender } = resolvePreviewEntities(tpl);
 
-    const docHtml = invoicePreviewDoc({
+    let docHtml = invoicePreviewDoc({
       invoice: invToRender,
       issuer: issuerToUse,
       client: clientToUse,
@@ -1032,6 +1043,18 @@ export async function render(view) {
 
     const fIframe = $('#fullscreen-iframe', m.el);
     if (fIframe) fIframe.srcdoc = docHtml;
+
+    if (tpl && tpl.id) {
+      fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html`)
+        .then((r) => r.ok ? r.text() : null)
+        .then((realHtml) => {
+          if (realHtml && fIframe) {
+            docHtml = realHtml;
+            fIframe.srcdoc = realHtml;
+          }
+        })
+        .catch(() => {});
+    }
 
     $('#btn-modal-print', m.el)?.addEventListener('click', () => {
       printDoc(docHtml);
@@ -1916,6 +1939,7 @@ export async function render(view) {
           printCfg.banner_fill = tpl.style_meta?.banner_fill || tpl.style_meta?.header_fill || '';
           printCfg.primary_color = tpl.color_hex || printCfg.primary_color || '#0d9488';
           printCfg.dark_color = tpl.style_meta?.header_fill || tpl.color_hex;
+          printCfg.light_color = tpl.style_meta?.light_color || tpl.style_meta?.banner_fill || '';
           printCfg.template_title = tpl.name_ar || tpl.name;
         }
         try {
