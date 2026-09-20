@@ -178,7 +178,8 @@ a:hover {
   inset-block: 0;
   inset-inline-start: 0;
   z-index: 40;
-  transition: transform .25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width .25s cubic-bezier(0.16, 1, 0.3, 1), transform .25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: visible;
   border-inline-end: 1px solid var(--line);
 }
 
@@ -189,6 +190,7 @@ a:hover {
   padding: 1rem 1.2rem;
   border-bottom: 1px solid var(--line);
   min-height: var(--topbar-height);
+  overflow: hidden;
 }
 
 .sidebar-logo {
@@ -217,6 +219,7 @@ a:hover {
 .nav {
   padding: .8rem .65rem 2rem;
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
@@ -3395,16 +3398,51 @@ html[data-theme="light"] .sidebar-desk-toggle:hover {
   border-color: var(--brand);
 }
 
-/* سلوك طي الشريط الجانبي في شاشات الكمبيوتر / سطح المكتب */
+/* سلوك طي الشريط الجانبي في شاشات الكمبيوتر / سطح المكتب (إبقاء الأيقونات فقط) */
 @media (min-width: 901px) {
+  .layout.sidebar-collapsed {
+    --sidebar-width: 68px;
+  }
   .layout.sidebar-collapsed .sidebar {
-    transform: translateX(100%);
+    width: 68px;
+    transform: none;
+    overflow: visible;
   }
   .layout.sidebar-collapsed .main {
-    margin-inline-start: 0;
+    margin-inline-start: 68px;
+  }
+  .layout.sidebar-collapsed .sidebar-head {
+    justify-content: center;
+    padding: 1rem 0;
+  }
+  .layout.sidebar-collapsed .sidebar-head > div:not(.sidebar-logo),
+  .layout.sidebar-collapsed .sidebar-title,
+  .layout.sidebar-collapsed .sidebar-sub {
+    display: none !important;
+  }
+  .layout.sidebar-collapsed .nav {
+    padding: 0.8rem 0.35rem 2rem;
+  }
+  .layout.sidebar-collapsed .nav-group-label {
+    display: none !important;
+  }
+  .layout.sidebar-collapsed .nav-item {
+    justify-content: center;
+    padding: 0.65rem 0;
+    gap: 0;
+    transform: none;
+  }
+  .layout.sidebar-collapsed .nav-item:hover {
+    transform: scale(1.06);
+  }
+  .layout.sidebar-collapsed .nav-item span:not(.ico) {
+    display: none !important;
+  }
+  .layout.sidebar-collapsed .nav-badge {
+    display: none !important;
   }
   .layout.sidebar-collapsed .sidebar-edge-toggle {
-    inset-inline-end: -26px;
+    inset-inline-end: -14px;
   }
 }
 

@@ -102,8 +102,8 @@ export async function render(view, ctx) {
     print_after: true,
     header_discount_percent: editInvoice.discount_percent || 0,
     zatca_phase: editInvoice.zatca_phase || 'PHASE1',
-    lines: (editInvoice.lines && editInvoice.lines.length)
-      ? editInvoice.lines.map((l) => ({
+    lines: ((editInvoice.items || editInvoice.lines) && (editInvoice.items || editInvoice.lines).length)
+      ? (editInvoice.items || editInvoice.lines).map((l) => ({
         key: Math.random().toString(36).slice(2),
         item_id: l.item_id || '',
         item_code: l.item_code || '',
@@ -496,7 +496,8 @@ export async function render(view, ctx) {
         });
         m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
           const values = formValues(m.body);
-          if (!values.name) return toastErr('اسم العميل مطلوب');
+          if (!values.name || !values.name.trim()) return toastErr('اسم العميل مطلوب');
+          values.is_active = 1;
           e.target.disabled = true;
           try {
             const created = await api.post('/api/clients', values);

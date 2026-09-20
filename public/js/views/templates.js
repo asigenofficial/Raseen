@@ -9,7 +9,7 @@ import {
 } from '../core/util.js';
 import {
   invoiceA4, invoiceThermal, invoicePreviewDoc, INVOICE_TEMPLATES,
-} from '../print/templates.js';
+} from '../print/templates.js?v=5';
 import { PRESET_LOGOS } from '../print/logos.js';
 
 const PALETTES = [
@@ -29,103 +29,70 @@ function buildMockInvoice(issuer, phase = 'PHASE1') {
   const cur = issuer.currency || 'SAR';
   const isPhase2 = phase === 'PHASE2';
   return {
-    id: 'mock-inv-1',
-    invoice_number: `${issuer.invoice_prefix || 'INV'}-00108`,
+    id: 'preview-inv',
+    invoice_number: `${issuer.invoice_prefix || 'INV'}-0001`,
     invoice_type: 'STANDARD',
     issue_date: new Date().toISOString().slice(0, 10),
-    issue_time: '14:30:00',
+    issue_time: '12:00:00',
     currency: cur,
-    subtotal: 3850,
-    discount_amount: 150,
-    taxable_amount: 3700,
-    tax_amount: 555,
-    grand_total: 4255,
-    paid_amount: 2000,
-    remaining_amount: 2255,
-    status: 'PARTIAL',
-    status_label: 'مسددة جزئياً',
-    payment_method: 'TRANSFER',
-    payment_label: 'تحويل بنكي',
+    subtotal: 1000,
+    discount_amount: 0,
+    taxable_amount: 1000,
+    tax_amount: 150,
+    grand_total: 1150,
+    paid_amount: 1150,
+    remaining_amount: 0,
+    status: 'PAID',
+    status_label: 'مسددة',
+    payment_method: 'CASH',
+    payment_label: 'نقدي',
     zatca_phase: phase,
     signature_mode: isPhase2 ? 'LOCAL' : 'NONE',
-    seller_name: issuer.name_ar,
-    seller_name_en: issuer.name_en || 'Raseen Digital Solutions Ltd',
-    seller_tax_number: issuer.tax_number || '300000000000003',
-    seller_cr: issuer.commercial_register || '1010000000',
-    seller_address: [issuer.building_no, issuer.street, issuer.district, issuer.city].filter(Boolean).join(' - ') || 'الرياض - المملكة العربية السعودية',
-    seller_address_en: issuer.address_en || 'Riyadh - Kingdom of Saudi Arabia',
-    buyer_name: 'شركة آفاق المستقبل للتجارة والمقاولات',
-    buyer_tax_number: '310998877600003',
-    buyer_cr: '1010887766',
-    buyer_address: '2418 - طريق الملك فهد - حي العليا - الرياض - 12214',
-    qr_payload: isPhase2
-      ? 'AQtaU3lzdGVtIFNBBA8zMDAwMDAwMDAwMDAwMDMFEzIwMjYtMDktMDZUMTQ6MzA6MDBaBgQ0MjU1BwM1NTUGICRhMWIyYzNkNGU1ZjY3ODkwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYw'
-      : 'AQtaU3lzdGVtIFNBBA8zMDAwMDAwMDAwMDAwMDMFEzIwMjYtMDktMDZUMTQ6MzA6MDBaBgQ0MjU1BwM1NTU=',
-    invoice_hash: 'a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0',
-    notes: 'يتم السداد خلال 15 يوماً من تاريخ استلام الفاتورة الرسمية.',
+    seller_name: issuer.name_ar || '',
+    seller_name_en: issuer.name_en || '',
+    seller_tax_number: issuer.tax_number || '',
+    seller_cr: issuer.commercial_register || '',
+    seller_address: [issuer.building_no, issuer.street, issuer.district, issuer.city].filter(Boolean).join(' - '),
+    seller_address_en: issuer.address_en || '',
+    buyer_name: 'العميل',
+    buyer_tax_number: '',
+    buyer_cr: '',
+    buyer_address: '',
+    qr_payload: '',
+    invoice_hash: '',
+    notes: '',
     lines: [
       {
         line_no: 1,
-        item_code: 'SRV-01',
-        item_name: 'خدمات استشارية تقنية وتطوير نظم رقمية',
-        unit: 'خدمة',
-        quantity: 2,
-        unit_price: 1200,
-        discount: 100,
-        taxable: 2300,
-        tax_rate: 15,
-        tax_amount: 345,
-        total_line: 2645,
-        batch_no: 'BATCH-2026-A',
-        warehouse: 'المستودع الرئيسي',
-        cost_center: 'المركز العام',
-        project: 'مشروع التحول الرقمي',
-        serial_no: 'SN-998877',
-        brand: 'رسين',
-        origin: 'المملكة العربية السعودية',
-        po_number: 'PO-2026-101',
-        tracking_no: 'WB-99120',
-      },
-      {
-        line_no: 2,
-        item_code: 'LIC-ERP',
-        item_name: 'اشتراك سنوي ترخيص المنظومة السحابية',
-        unit: 'سنة',
+        item_code: 'ITM-01',
+        item_name: 'بند الفاتورة',
+        unit: 'حبة',
         quantity: 1,
-        unit_price: 1450,
-        discount: 50,
-        taxable: 1400,
+        unit_price: 1000,
+        discount: 0,
+        taxable: 1000,
         tax_rate: 15,
-        tax_amount: 210,
-        total_line: 1610,
-        batch_no: 'BATCH-2026-B',
-        warehouse: 'المستودع السحابي',
-        cost_center: 'تقنية المعلومات',
-        project: 'مشروع التحول الرقمي',
-        serial_no: 'SN-998878',
-        brand: 'رسين كولاب',
-        origin: 'المملكة العربية السعودية',
-        po_number: 'PO-2026-101',
-        tracking_no: 'WB-99121',
+        tax_amount: 150,
+        total_line: 1150,
       },
     ],
   };
 }
 
 const mockClient = {
-  id: 'mock-client-1',
-  name: 'شركة آفاق المستقبل للتجارة والمقاولات',
-  client_code: 'C-0008',
-  tax_number: '310998877600003',
-  building_no: '2418',
-  street: 'طريق الملك فهد',
-  district: 'حي العليا',
-  city: 'الرياض',
-  postal_code: '12214',
-  country: 'المملكة العربية السعودية',
-  address: '2418 - طريق الملك فهد - حي العليا - الرياض - 12214',
-  mobile: '0501234567',
-  phone: '0112345678',
+  id: '',
+  name: 'العميل',
+  client_code: '',
+  tax_number: '',
+  building_no: '',
+  street: '',
+  district: '',
+  city: '',
+  postal_code: '',
+  country: '',
+  address: '',
+  mobile: '',
+  phone: '',
 };
 
 function formatBytes(bytes) {
@@ -250,28 +217,22 @@ export async function render(view) {
   function getDynamicPreviewInvoice() {
     if (liveInvoices.length > 0) {
       const realInv = liveInvoices[0];
+      const matchedClient = liveClients.find((c) => c.id === realInv.client_id) || liveClients[0] || {};
       return {
-        ...buildMockInvoice(activeIssuer, activeZatcaPhase),
-        id: realInv.id,
-        invoice_number: realInv.invoice_number,
-        issue_date: realInv.issue_date || new Date().toISOString().slice(0, 10),
-        issue_time: realInv.issue_time || '12:00:00',
+        ...realInv,
         currency: realInv.currency || activeIssuer.currency || 'SAR',
-        subtotal: realInv.subtotal,
-        discount_amount: realInv.discount_amount || 0,
-        taxable_amount: realInv.taxable_amount || realInv.subtotal,
-        tax_amount: realInv.tax_amount,
-        grand_total: realInv.grand_total,
-        paid_amount: realInv.paid_amount,
-        remaining_amount: realInv.remaining_amount,
-        status: realInv.status,
+        seller_name: activeIssuer.name_ar || '',
+        seller_name_en: activeIssuer.name_en || '',
+        seller_tax_number: activeIssuer.tax_number || '',
+        seller_cr: activeIssuer.commercial_register || '',
+        seller_address: [activeIssuer.building_no, activeIssuer.street, activeIssuer.district, activeIssuer.city].filter(Boolean).join(' - '),
+        seller_address_en: activeIssuer.address_en || '',
+        buyer_name: realInv.client_name || matchedClient.name || 'العميل',
+        buyer_tax_number: realInv.client_tax_number || matchedClient.tax_number || '',
+        buyer_cr: matchedClient.commercial_register || '',
+        buyer_address: realInv.client_address || matchedClient.address || '',
         status_label: realInv.status_label || (realInv.status === 'PAID' ? 'مسددة' : 'معتمدة'),
-        payment_method: realInv.payment_method || 'TRANSFER',
-        payment_label: realInv.payment_label || 'تحويل بنكي',
-        buyer_name: realInv.client_name || (liveClients[0]?.name) || 'عميل معتمد',
-        buyer_tax_number: realInv.client_tax_number || (liveClients[0]?.tax_number) || '',
-        buyer_cr: liveClients[0]?.commercial_register || '',
-        buyer_address: realInv.client_address || (liveClients[0]?.address) || '',
+        payment_label: realInv.payment_label || 'نقدي',
         lines: realInv.lines && realInv.lines.length ? realInv.lines : buildMockInvoice(activeIssuer, activeZatcaPhase).lines,
       };
     }
@@ -997,12 +958,12 @@ export async function render(view) {
 
     const tpl = excelTemplates.find((t) => t.id === printCfg.template_style);
     if (tpl) {
+      printCfg.template_title = tpl.name_ar || tpl.name;
       printCfg.headers = tpl.headers || [];
       printCfg.header_fill = tpl.style_meta?.header_fill || tpl.color_hex;
       printCfg.banner_text = tpl.style_meta?.banner_text || '';
       printCfg.banner_fill = tpl.style_meta?.banner_fill || tpl.style_meta?.header_fill || '';
       printCfg.primary_color = tpl.color_hex || printCfg.primary_color || '#0d9488';
-      printCfg.template_title = tpl.name_ar || tpl.name;
     }
 
     const { issuerToUse, clientToUse, invToRender } = resolvePreviewEntities(tpl);
@@ -1023,6 +984,7 @@ export async function render(view) {
     const previewPrintCfg = { ...printCfg };
     if (tpl) {
       previewPrintCfg.template_style = tpl.id;
+      previewPrintCfg.template_title = tpl.name_ar || tpl.name;
       previewPrintCfg.headers = tpl.headers || [];
       previewPrintCfg.alignments = tpl.style_meta?.alignments || [];
       previewPrintCfg.header_fill = tpl.style_meta?.header_fill || tpl.color_hex;
@@ -1030,7 +992,6 @@ export async function render(view) {
       previewPrintCfg.banner_fill = tpl.style_meta?.banner_fill || tpl.style_meta?.header_fill || '';
       previewPrintCfg.primary_color = tpl.color_hex || previewPrintCfg.primary_color || '#0d9488';
       previewPrintCfg.dark_color = tpl.style_meta?.header_fill || tpl.color_hex;
-      previewPrintCfg.template_title = tpl.name_ar || tpl.name;
     }
 
     const { issuerToUse, clientToUse, invToRender } = resolvePreviewEntities(tpl);
@@ -1104,37 +1065,28 @@ export async function render(view) {
       if (!headers.length) {
         headers = ['رقم السند', 'تاريخ الإصدار', 'اسم العميل', 'المبلغ (ر.س)', 'طريقة الدفع', 'المخصص للفواتير', 'البيان'];
       }
-      const sampleVouchers = items && items.length ? items : [
-        { voucher_number: 'REC-00101', issue_date: '2026-09-15', client_name: 'شركة آفاق المستقبل للتجارة', amount: 4255, payment_method_label: 'تحويل بنكي', allocated_amount: 4255, notes: 'سداد دفعة الفاتورة' },
-        { voucher_number: 'REC-00102', issue_date: '2026-09-14', client_name: 'مؤسسة النخبة للمقاولات', amount: 8500, payment_method_label: 'نقدي', allocated_amount: 8500, notes: 'دفعة مقدمة' },
-        { voucher_number: 'REC-00103', issue_date: '2026-09-12', client_name: 'شركة المدى الدولية', amount: 3100, payment_method_label: 'شبكة (مدى)', allocated_amount: 3100, notes: 'سداد كامل' },
-      ];
+      const voucherList = Array.isArray(items) ? items : [];
       let sumAmount = 0;
-      rows = sampleVouchers.map((v, idx) => {
+      rows = voucherList.map((v, idx) => {
         sumAmount += Number(v.amount || 0);
         return [
-          v.voucher_number || `REC-00${100 + idx}`,
-          v.issue_date || '2026-09-15',
-          v.client_name || 'عميل تجريبي',
+          v.voucher_number || `REC-${idx + 1}`,
+          v.issue_date || '',
+          v.client_name || '',
           Number(v.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
-          v.payment_method_label || v.payment_method || 'تحويل بنكي',
+          v.payment_method_label || v.payment_method || '',
           Number(v.allocated_amount || v.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }),
-          v.notes || 'سداد معتمد',
+          v.notes || '',
         ];
       });
-      totals = { count: sampleVouchers.length, total: sumAmount };
+      totals = { count: voucherList.length, total: sumAmount };
     } else {
       if (!headers.length) {
         headers = ['رقم الفاتورة', 'تاريخ الإصدار', 'العميل', 'الرقم الضريبي للعميل', 'قبل الضريبة', 'الخصم', 'ضريبة 15%', 'الإجمالي شامل الضريبة', 'المسدد', 'المتبقي', 'الحالة'];
       }
-      const sampleInvoices = items && items.length ? items : [
-        { invoice_number: `${issuer.invoice_prefix || 'INV'}-00108`, issue_date: '2026-09-16', client_name: 'شركة آفاق المستقبل للتجارة والمقاولات', client_tax_number: '310998877600003', subtotal: 3850, discount_amount: 150, tax_amount: 555, grand_total: 4255, paid_amount: 2000, remaining_amount: 2255, status_label: 'مسددة جزئياً' },
-        { invoice_number: `${issuer.invoice_prefix || 'INV'}-00107`, issue_date: '2026-09-15', client_name: 'مؤسسة النخبة للمقاولات العامة', client_tax_number: '300123456700003', subtotal: 7500, discount_amount: 0, tax_amount: 1125, grand_total: 8625, paid_amount: 8625, remaining_amount: 0, status_label: 'مسددة بالكامل' },
-        { invoice_number: `${issuer.invoice_prefix || 'INV'}-00106`, issue_date: '2026-09-14', client_name: 'شركة المدى المتطورة للخدمات', client_tax_number: '311987654300003', subtotal: 2600, discount_amount: 100, tax_amount: 375, grand_total: 2875, paid_amount: 2875, remaining_amount: 0, status_label: 'مسددة بالكامل' },
-        { invoice_number: `${issuer.invoice_prefix || 'INV'}-00105`, issue_date: '2026-09-12', client_name: 'شركة الشرق للمواد الإنشائية', client_tax_number: '302345678900003', subtotal: 12000, discount_amount: 500, tax_amount: 1725, grand_total: 13225, paid_amount: 5000, remaining_amount: 8225, status_label: 'مسددة جزئياً' },
-      ];
+      const invList = Array.isArray(items) ? items : [];
       let sumSubtotal = 0, sumTax = 0, sumTotal = 0;
-      rows = sampleInvoices.map((inv) => {
+      rows = invList.map((inv) => {
         sumSubtotal += Number(inv.subtotal || 0);
         sumTax += Number(inv.tax_amount || 0);
         sumTotal += Number(inv.grand_total || 0);
@@ -1152,7 +1104,7 @@ export async function render(view) {
           inv.status_label || inv.status || 'معتمدة',
         ];
       });
-      totals = { count: sampleInvoices.length, subtotal: sumSubtotal, tax: sumTax, total: sumTotal };
+      totals = { count: invList.length, subtotal: sumSubtotal, tax: sumTax, total: sumTotal };
     }
 
     return `<!DOCTYPE html>
@@ -1280,7 +1232,7 @@ export async function render(view) {
   <div class="sheet-head">
     <div class="sheet-title">
       <h1>${esc(tpl.name_ar || tpl.name)}</h1>
-      <p>المنشأة: <b>${esc(issuer.name_ar)}</b> — الرقم الضريبي: <span style="direction:ltr; display:inline-block;">${esc(issuer.tax_number || '300000000000003')}</span></p>
+      <p>المنشأة: <b>${esc(issuer.name_ar)}</b> — الرقم الضريبي: <span style="direction:ltr; display:inline-block;">${esc(issuer.tax_number || '')}</span></p>
     </div>
     <div class="sheet-meta">
       <div><b>Raseen Document Report</b></div>
@@ -1319,11 +1271,17 @@ export async function render(view) {
       </tr>
     </thead>
     <tbody>
-      ${rows.map((r) => `
+      ${rows.length > 0 ? rows.map((r) => `
         <tr>
           ${r.map((cell, cIdx) => `<td class="${cIdx >= 3 && !isNaN(String(cell).replace(/,/g, '')) ? 'num' : ''}">${esc(cell)}</td>`).join('')}
         </tr>
-      `).join('')}
+      `).join('') : `
+        <tr>
+          <td colspan="${headers.length}" style="text-align: center; padding: 24px; color: #94a3b8;">
+            لا توجد سجلات مسجلة حالياً لعرضها في هذا التقرير
+          </td>
+        </tr>
+      `}
     </tbody>
   </table>
 

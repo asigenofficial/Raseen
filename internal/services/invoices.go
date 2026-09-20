@@ -179,76 +179,10 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 	if _, ok := invoicePaymentLabels[paymentMethod]; !ok { return nil,errors.New("طريقة السداد غير صالحة") }
 	if zatcaPhase != "PHASE1" && zatcaPhase != "PHASE2" { return nil,errors.New("مرحلة الفوترة غير صالحة") }
 
-	// Compute lines
-	type computedLine struct {
-		models.InvoiceItem
-		taxRateDisplay string
+	computedLines, subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor, err := computeInvoiceLines(input.Lines, input.PricesIncludeTax, issuer.DefaultTaxRate)
+	if err != nil {
+		return nil, err
 	}
-	var computedLines []computedLine
-	var subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor int64
-
-	for idx, l := range input.Lines {
-		qty := l.Quantity
-		if !validAmount(qty) || qty <= 0 || qty > 1e6 || strings.TrimSpace(l.ItemName) == "" || !validAmount(l.UnitPrice) || !validAmount(l.Discount) || !validAmount(l.DiscountPercent) || l.DiscountPercent > 100 { return nil,fmt.Errorf("بيانات البند %d غير صالحة",idx+1) }
-		taxRate := l.TaxRate
-		if l.taxRateMissing {
-			taxRate = issuer.DefaultTaxRate
-		}
-		if !validAmount(taxRate) || taxRate > 100 || qty*l.UnitPrice > 1e12 { return nil,errors.New("قيمة البند أو نسبة الضريبة غير صالحة") }
-
-		unitPriceMinor := models.ToMinor(l.UnitPrice)
-		if input.PricesIncludeTax {
-			unitPriceMinor = models.NetFromInclusive(unitPriceMinor, taxRate)
-		}
-
-		gross := models.MulQty(qty, unitPriceMinor)
-		discountMinor := models.ToMinor(l.Discount)
-		if input.PricesIncludeTax && discountMinor > 0 {
-			discountMinor = models.NetFromInclusive(discountMinor, taxRate)
-		}
-		if l.DiscountPercent > 0 {
-			discountMinor = models.Pct(gross, l.DiscountPercent)
-		}
-		if discountMinor > gross {
-			return nil,errors.New("الخصم يتجاوز قيمة البند")
-		}
-
-		taxable := gross - discountMinor
-		taxAmount := models.Pct(taxable, taxRate)
-		totalLine := taxable + taxAmount
-
-		subtotalMinor += gross
-		discountTotalMinor += discountMinor
-		taxableTotalMinor += taxable
-		taxTotalMinor += taxAmount
-
-		unit := l.Unit
-		if unit == "" {
-			unit = "حبة"
-		}
-
-		cl := computedLine{
-			InvoiceItem: models.InvoiceItem{
-				ID:         crypto.UUID(),
-				ItemID:     l.ItemID,
-				LineNo:     idx + 1,
-				ItemCode:   l.ItemCode,
-				ItemName:   l.ItemName,
-				Unit:       unit,
-				Quantity:   qty,
-				UnitPrice:  unitPriceMinor,
-				Discount:   discountMinor,
-				TaxRate:    taxRate,
-				Taxable:    taxable,
-				TaxAmount:  taxAmount,
-				TotalLine:  totalLine,
-			},
-			taxRateDisplay: fmt.Sprintf("%.2f", taxRate),
-		}
-		computedLines = append(computedLines, cl)
-	}
-
-	grandTotalMinor := taxableTotalMinor + taxTotalMinor
 
 	// Allocate serial and ICV
 	invoiceNumber := input.InvoiceNumber
@@ -1007,4 +941,292 @@ func (s *InvoiceService) GetOpenInvoices(clientID, issuerID string) ([]OpenInvoi
 		}
 	}
 	return items, nil
+}
+
+type computedInvoiceLine struct {
+	models.InvoiceItem
+	taxRateDisplay string
+}
+
+func computeInvoiceLines(lines []CreateInvoiceLineInput, pricesIncludeTax bool, defaultTaxRate float64) ([]computedInvoiceLine, int64, int64, int64, int64, int64, error) {
+	var computedLines []computedInvoiceLine
+	var subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor int64
+
+	for idx, l := range lines {
+		qty := l.Quantity
+		if !validAmount(qty) || qty <= 0 || qty > 1e6 || strings.TrimSpace(l.ItemName) == "" || !validAmount(l.UnitPrice) || !validAmount(l.Discount) || !validAmount(l.DiscountPercent) || l.DiscountPercent > 100 {
+			return nil, 0, 0, 0, 0, 0, fmt.Errorf("بيانات البند %d غير صالحة", idx+1)
+		}
+		taxRate := l.TaxRate
+		if l.taxRateMissing {
+			taxRate = defaultTaxRate
+		}
+		if !validAmount(taxRate) || taxRate > 100 || qty*l.UnitPrice > 1e12 {
+			return nil, 0, 0, 0, 0, 0, errors.New("قيمة البند أو نسبة الضريبة غير صالحة")
+		}
+
+		unitPriceMinor := models.ToMinor(l.UnitPrice)
+		if pricesIncludeTax {
+			unitPriceMinor = models.NetFromInclusive(unitPriceMinor, taxRate)
+		}
+
+		gross := models.MulQty(qty, unitPriceMinor)
+		discountMinor := models.ToMinor(l.Discount)
+		if pricesIncludeTax && discountMinor > 0 {
+			discountMinor = models.NetFromInclusive(discountMinor, taxRate)
+		}
+		if l.DiscountPercent > 0 {
+			discountMinor = models.Pct(gross, l.DiscountPercent)
+		}
+		if discountMinor > gross {
+			return nil, 0, 0, 0, 0, 0, errors.New("الخصم يتجاوز قيمة البند")
+		}
+
+		taxable := gross - discountMinor
+		taxAmount := models.Pct(taxable, taxRate)
+		totalLine := taxable + taxAmount
+
+		subtotalMinor += gross
+		discountTotalMinor += discountMinor
+		taxableTotalMinor += taxable
+		taxTotalMinor += taxAmount
+
+		unit := l.Unit
+		if unit == "" {
+			unit = "حبة"
+		}
+
+		cl := computedInvoiceLine{
+			InvoiceItem: models.InvoiceItem{
+				ID:         crypto.UUID(),
+				ItemID:     l.ItemID,
+				LineNo:     idx + 1,
+				ItemCode:   l.ItemCode,
+				ItemName:   l.ItemName,
+				Unit:       unit,
+				Quantity:   qty,
+				UnitPrice:  unitPriceMinor,
+				Discount:   discountMinor,
+				TaxRate:    taxRate,
+				Taxable:    taxable,
+				TaxAmount:  taxAmount,
+				TotalLine:  totalLine,
+			},
+			taxRateDisplay: fmt.Sprintf("%.2f", taxRate),
+		}
+		computedLines = append(computedLines, cl)
+	}
+
+	grandTotalMinor := taxableTotalMinor + taxTotalMinor
+	return computedLines, subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor, nil
+}
+
+func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, actor, ip string) (*InvoiceView, error) {
+	inv, err := s.GetInvoice(id)
+	if err != nil {
+		return nil, err
+	}
+	if inv.PaidAmount > 0 || inv.Status != "UNPAID" {
+		return nil, errors.New("لا يمكن تعديل فاتورة مسددة أو ملغاة")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	issuerID := input.IssuerID
+	if issuerID == "" {
+		issuerID = inv.IssuerID
+	}
+	issuer, err := getIssuer(tx, issuerID)
+	if err != nil {
+		return nil, fmt.Errorf("المنشأة غير موجودة: %w", err)
+	}
+
+	clientID := input.ClientID
+	if clientID == "" {
+		clientID = inv.ClientID
+	}
+	var client models.Client
+	err = tx.QueryRow(`
+		SELECT id, client_code, name, COALESCE(tax_number,''), COALESCE(commercial_register,''),
+		       COALESCE(address,''), COALESCE(street,''), COALESCE(building_no,''),
+		       COALESCE(district,''), COALESCE(city,''), COALESCE(postal_code,''), COALESCE(country,'SA'),
+		       COALESCE(payment_terms_days, 0)
+		FROM clients WHERE id = ?
+	`, clientID).Scan(
+		&client.ID, &client.ClientCode, &client.Name, &client.TaxNumber, &client.CommercialRegister,
+		&client.Address, &client.Street, &client.BuildingNo, &client.District, &client.City,
+		&client.PostalCode, &client.Country, &client.PaymentTermsDays,
+	)
+	if err != nil {
+		return nil, errors.New("العميل غير موجود")
+	}
+
+	issueDate := input.IssueDate
+	if issueDate == "" {
+		issueDate = inv.IssueDate
+	}
+	issueTime := input.IssueTime
+	if issueTime == "" {
+		issueTime = inv.IssueTime
+	}
+	if len(issueTime) == 5 {
+		issueTime += ":00"
+	}
+	issuedAt, err := time.ParseInLocation("2006-01-02T15:04:05", issueDate+"T"+issueTime, time.Local)
+	if err != nil {
+		return nil, errors.New("تاريخ أو وقت الفاتورة غير صالح")
+	}
+	issueDatetime := issuedAt.Format(time.RFC3339)
+
+	invoiceType := input.InvoiceType
+	if invoiceType == "" {
+		invoiceType = inv.InvoiceType
+	}
+	zatcaPhase := input.ZatcaPhase
+	if zatcaPhase == "" {
+		zatcaPhase = inv.ZatcaPhase
+	}
+	paymentMethod := input.PaymentMethod
+	if paymentMethod == "" {
+		paymentMethod = inv.PaymentMethod
+	}
+	if invoiceType != "STANDARD" && invoiceType != "SIMPLIFIED" {
+		return nil, errors.New("نوع الفاتورة غير صالح")
+	}
+	if _, ok := invoicePaymentLabels[paymentMethod]; !ok {
+		return nil, errors.New("طريقة السداد غير صالحة")
+	}
+	if zatcaPhase != "PHASE1" && zatcaPhase != "PHASE2" {
+		return nil, errors.New("مرحلة الفوترة غير صالحة")
+	}
+
+	computedLines, subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor, err := computeInvoiceLines(input.Lines, input.PricesIncludeTax, issuer.DefaultTaxRate)
+	if err != nil {
+		return nil, err
+	}
+
+	sellerAddr := strings.TrimSpace(strings.Join([]string{issuer.BuildingNo, issuer.Street, issuer.District, issuer.City, issuer.PostalCode, issuer.Country}, " - "))
+	buyerAddr := strings.TrimSpace(strings.Join([]string{client.BuildingNo, client.Street, client.District, client.City, client.PostalCode, client.Country}, " - "))
+	if buyerAddr == "" {
+		buyerAddr = client.Address
+	}
+
+	qrPayload := zatca.BuildQrPayload(zatca.QrParams{
+		SellerName: issuer.NameAr,
+		VatNumber:  issuer.TaxNumber,
+		Timestamp:  issueDatetime,
+		Total:      models.FmtMoney(grandTotalMinor),
+		VatTotal:   models.FmtMoney(taxTotalMinor),
+	})
+
+	pricesIncInt := 0
+	if input.PricesIncludeTax {
+		pricesIncInt = 1
+	}
+	nowIso := db.NowIso()
+
+	_, err = tx.Exec(`
+		UPDATE invoices SET
+			client_id = ?, invoice_type = ?, zatca_phase = ?,
+			issue_date = ?, issue_time = ?, issue_datetime = ?,
+			subtotal = ?, discount_amount = ?, taxable_amount = ?, tax_amount = ?, grand_total = ?,
+			remaining_amount = ?, payment_method = ?,
+			due_date = ?, cheque_date = ?, cheque_no = ?, prices_include_tax = ?,
+			seller_name = ?, seller_tax_number = ?, seller_cr = ?, seller_address = ?, seller_address_en = ?,
+			buyer_name = ?, buyer_tax_number = ?, buyer_cr = ?, buyer_address = ?,
+			qr_payload = ?, notes = ?, updated_at = ?
+		WHERE id = ?
+	`,
+		client.ID, invoiceType, zatcaPhase,
+		issueDate, issueTime, issueDatetime,
+		subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor,
+		grandTotalMinor, paymentMethod,
+		input.DueDate, input.ChequeDate, input.ChequeNo, pricesIncInt,
+		issuer.NameAr, issuer.TaxNumber, issuer.CommercialRegister, sellerAddr, issuer.AddressEn,
+		client.Name, client.TaxNumber, client.CommercialRegister, buyerAddr,
+		qrPayload, input.Notes, nowIso, id,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update invoice: %w", err)
+	}
+
+	if _, err := tx.Exec("DELETE FROM invoice_items WHERE invoice_id = ?", id); err != nil {
+		return nil, fmt.Errorf("failed to delete old invoice items: %w", err)
+	}
+
+	for _, cl := range computedLines {
+		_, err = tx.Exec(`
+			INSERT INTO invoice_items (
+				id, invoice_id, item_id, line_no, item_code, item_name, unit,
+				quantity, unit_price, discount, tax_rate, taxable, tax_amount, total_line
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`,
+			crypto.UUID(), id, cl.ItemID, cl.LineNo, cl.ItemCode, cl.ItemName, cl.Unit,
+			cl.Quantity, cl.UnitPrice, cl.Discount, cl.TaxRate, cl.Taxable, cl.TaxAmount, cl.TotalLine,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert invoice line: %w", err)
+		}
+	}
+
+	// Update client ledger
+	_, err = tx.Exec(`
+		UPDATE client_ledger SET
+			client_id = ?, debit = ?, transaction_date = ?, description = ?
+		WHERE doc_id = ? AND doc_type = 'INVOICE'
+	`, client.ID, grandTotalMinor, issueDate, fmt.Sprintf("فاتورة رقم %s", inv.InvoiceNumber), id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update ledger: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	s.db.Audit(actor, "INVOICE_UPDATE", "invoice", id, issuer.ID, map[string]any{
+		"invoice_number": inv.InvoiceNumber,
+		"grand_total":    models.FmtMoney(grandTotalMinor),
+	}, ip)
+
+	return s.GetInvoice(id)
+}
+
+func (s *InvoiceService) VerifyChain(issuerID string) (map[string]any, error) {
+	rows, err := s.db.Query(`
+		SELECT id, sequence_no, invoice_hash, previous_invoice_hash
+		FROM invoices
+		WHERE issuer_id = ? AND status <> 'CANCELLED'
+		ORDER BY sequence_no ASC
+	`, issuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	count := 0
+	prevHash := zatca.GenesisPIH
+	valid := true
+
+	for rows.Next() {
+		var id string
+		var seq int64
+		var invHash, pih string
+		if err := rows.Scan(&id, &seq, &invHash, &pih); err != nil {
+			return nil, err
+		}
+		count++
+		if pih != prevHash {
+			valid = false
+		}
+		prevHash = invHash
+	}
+
+	return map[string]any{
+		"ok":               valid,
+		"invoices_checked": count,
+	}, nil
 }

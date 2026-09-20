@@ -1,9 +1,12 @@
 package services
 
 import (
+	"crypto/x509"
 	"database/sql"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"strings"
 
 	"raseen/internal/crypto"
 	"raseen/internal/db"
@@ -291,4 +294,160 @@ func (s *IssuerService) GenerateKeys(issuerID string, masterKey []byte) (*zatca.
 	}
 
 	return kp, nil
+}
+
+type CertificateInfo struct {
+	Subject string `json:"subject"`
+	Issuer  string `json:"issuer"`
+	ValidTo string `json:"valid_to"`
+}
+
+type IssuerCredentialsView struct {
+	HasPrivateKey        bool             `json:"has_private_key"`
+	HasCertificate       bool             `json:"has_certificate"`
+	HasComplianceCsid    bool             `json:"has_compliance_csid"`
+	ComplianceCsidMasked string           `json:"compliance_csid_masked"`
+	HasProductionCsid    bool             `json:"has_production_csid"`
+	ProductionCsidMasked string           `json:"production_csid_masked"`
+	UpdatedAt            string           `json:"updated_at"`
+	CertificateInfo      *CertificateInfo `json:"certificate_info,omitempty"`
+}
+
+type UpdateCredentialsInput struct {
+	ComplianceCsid string `json:"compliance_csid"`
+	ProductionCsid string `json:"production_csid"`
+	Secret         string `json:"secret"`
+	CertificatePem string `json:"certificate_pem"`
+}
+
+func maskSecret(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if len(s) <= 8 {
+		return "****"
+	}
+	return "****" + s[len(s)-4:]
+}
+
+func (s *IssuerService) GetCredentials(issuerID string, masterKey []byte) (*IssuerCredentialsView, error) {
+	row := s.db.QueryRow(`
+		SELECT COALESCE(compliance_csid_enc, ''),
+		       COALESCE(production_csid_enc, ''),
+		       COALESCE(private_key_enc, ''),
+		       COALESCE(certificate_enc, ''),
+		       COALESCE(updated_at, '')
+		FROM issuer_credentials WHERE issuer_id = ?
+	`, issuerID)
+
+	var compEnc, prodEnc, privEnc, certEnc, updatedAt string
+	err := row.Scan(&compEnc, &prodEnc, &privEnc, &certEnc, &updatedAt)
+	if err == sql.ErrNoRows {
+		return &IssuerCredentialsView{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	view := &IssuerCredentialsView{
+		HasPrivateKey:  privEnc != "",
+		HasCertificate: certEnc != "",
+		UpdatedAt:      updatedAt,
+	}
+
+	if compEnc != "" {
+		if plain, err := crypto.DecryptSecret(compEnc, masterKey); err == nil && plain != "" {
+			view.HasComplianceCsid = true
+			view.ComplianceCsidMasked = maskSecret(plain)
+		}
+	}
+
+	if prodEnc != "" {
+		if plain, err := crypto.DecryptSecret(prodEnc, masterKey); err == nil && plain != "" {
+			view.HasProductionCsid = true
+			view.ProductionCsidMasked = maskSecret(plain)
+		}
+	}
+
+	if certEnc != "" {
+		if plainCert, err := crypto.DecryptSecret(certEnc, masterKey); err == nil && plainCert != "" {
+			block, _ := pem.Decode([]byte(plainCert))
+			if block != nil {
+				if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
+					subj := cert.Subject.CommonName
+					if subj == "" {
+						subj = cert.Subject.String()
+					}
+					iss := cert.Issuer.CommonName
+					if iss == "" {
+						iss = cert.Issuer.String()
+					}
+					view.CertificateInfo = &CertificateInfo{
+						Subject: subj,
+						Issuer:  iss,
+						ValidTo: cert.NotAfter.Format("2006-01-02 15:04:05"),
+					}
+				}
+			}
+		}
+	}
+
+	return view, nil
+}
+
+func (s *IssuerService) UpdateCredentials(issuerID string, input UpdateCredentialsInput, masterKey []byte) error {
+	now := db.NowIso()
+
+	// Ensure row exists
+	_, err := s.db.Exec(`
+		INSERT INTO issuer_credentials (issuer_id, updated_at)
+		VALUES (?, ?)
+		ON CONFLICT(issuer_id) DO NOTHING
+	`, issuerID, now)
+	if err != nil {
+		return err
+	}
+
+	if input.ComplianceCsid != "" {
+		enc, err := crypto.EncryptSecret(input.ComplianceCsid, masterKey)
+		if err != nil {
+			return err
+		}
+		if _, err := s.db.Exec("UPDATE issuer_credentials SET compliance_csid_enc = ?, updated_at = ? WHERE issuer_id = ?", enc, now, issuerID); err != nil {
+			return err
+		}
+	}
+
+	if input.ProductionCsid != "" {
+		enc, err := crypto.EncryptSecret(input.ProductionCsid, masterKey)
+		if err != nil {
+			return err
+		}
+		if _, err := s.db.Exec("UPDATE issuer_credentials SET production_csid_enc = ?, updated_at = ? WHERE issuer_id = ?", enc, now, issuerID); err != nil {
+			return err
+		}
+	}
+
+	if input.Secret != "" {
+		enc, err := crypto.EncryptSecret(input.Secret, masterKey)
+		if err != nil {
+			return err
+		}
+		if _, err := s.db.Exec("UPDATE issuer_credentials SET secret_enc = ?, updated_at = ? WHERE issuer_id = ?", enc, now, issuerID); err != nil {
+			return err
+		}
+	}
+
+	if input.CertificatePem != "" {
+		enc, err := crypto.EncryptSecret(input.CertificatePem, masterKey)
+		if err != nil {
+			return err
+		}
+		if _, err := s.db.Exec("UPDATE issuer_credentials SET certificate_enc = ?, updated_at = ? WHERE issuer_id = ?", enc, now, issuerID); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

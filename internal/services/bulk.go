@@ -162,11 +162,16 @@ func (s *BulkService) SaveDraft(input SaveDraftInput) (*BulkDraftDetail, error) 
 	totalMinor := models.ToMinor(totalAmount)
 	now := db.NowIso()
 
+	var clientID any
+	if input.ClientID != "" {
+		clientID = input.ClientID
+	}
+
 	if isNew {
 		_, err := s.db.Exec(`
 			INSERT INTO bulk_drafts (id, title, issuer_id, client_id, status, params, payload, invoice_count, grand_total, created_at, updated_at)
 			VALUES (?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?)
-		`, id, input.Title, input.IssuerID, input.ClientID, string(paramsJSON), string(payloadJSON), len(input.Invoices), totalMinor, now, now)
+		`, id, input.Title, input.IssuerID, clientID, string(paramsJSON), string(payloadJSON), len(input.Invoices), totalMinor, now, now)
 		if err != nil {
 			return nil, err
 		}
@@ -174,7 +179,7 @@ func (s *BulkService) SaveDraft(input SaveDraftInput) (*BulkDraftDetail, error) 
 		result, err := s.db.Exec(`
 			UPDATE bulk_drafts SET title = ?, issuer_id = ?, client_id = ?, params = ?, payload = ?, invoice_count = ?, grand_total = ?, updated_at = ?
 			WHERE id = ? AND status = 'DRAFT'
-		`, input.Title, input.IssuerID, input.ClientID, string(paramsJSON), string(payloadJSON), len(input.Invoices), totalMinor, now, id)
+		`, input.Title, input.IssuerID, clientID, string(paramsJSON), string(payloadJSON), len(input.Invoices), totalMinor, now, id)
 		if err != nil {
 			return nil, err
 		}

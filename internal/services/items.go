@@ -64,6 +64,41 @@ func (s *ItemService) CreateCategory(c *models.ItemCategory) error {
 	return err
 }
 
+func (s *ItemService) UpdateCategory(id string, c *models.ItemCategory) error {
+	if c.Name == "" {
+		return errors.New("اسم المجموعة مطلوب")
+	}
+	res, err := s.db.Exec(`
+		UPDATE item_categories SET name = ?, parent_id = ?, description = ?
+		WHERE id = ?
+	`, c.Name, c.ParentID, c.Description, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return errors.New("المجموعة غير موجودة")
+	}
+	return nil
+}
+
+func (s *ItemService) DeleteCategory(id string) error {
+	var count int
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM items WHERE category_id = ?", id).Scan(&count)
+	if count > 0 {
+		return errors.New("لا يمكن حذف المجموعة لوجود أصناف مرتبطة بها")
+	}
+	res, err := s.db.Exec("DELETE FROM item_categories WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return errors.New("المجموعة غير موجودة")
+	}
+	return nil
+}
+
 type ItemListItem struct {
 	models.Item
 	CostPriceMajor float64 `json:"cost_price"`

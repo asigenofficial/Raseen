@@ -134,8 +134,8 @@ export function formValues(root) {
   $$('[name]', root).forEach((el) => {
     const key = el.getAttribute('name');
     if (el.type === 'checkbox') out[key] = el.checked;
-    else if (el.type === 'number') out[key] = el.value === '' ? '' : Number(el.value);
-    else out[key] = el.value;
+    else if (el.type === 'number') out[key] = el.value === '' ? null : Number(el.value);
+    else out[key] = typeof el.value === 'string' ? el.value.trim() : el.value;
   });
   return out;
 }

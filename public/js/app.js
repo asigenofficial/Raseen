@@ -45,9 +45,9 @@ const VIEWS = {
   vouchers: () => import('./views/vouchers.js'),
   statement: () => import('./views/statement.js'),
   issuers: () => import('./views/issuers.js'),
-  templates: () => import('./views/templates.js'),
+  templates: () => import('./views/templates.js?v=' + Date.now()),
   'template-builder': () => import('./views/template-builder.js?v=' + Date.now()),
-  'doc-reports': () => import('./views/templates.js'),
+  'doc-reports': () => import('./views/templates.js?v=' + Date.now()),
   clients: () => import('./views/clients.js'),
   items: () => import('./views/items.js'),
   reports: () => import('./views/reports.js'),
@@ -113,7 +113,7 @@ function navHtml() {
       pendingGroup = null;
     }
     const active = current === entry.name || (current === 'invoice-view' && entry.name === 'invoices');
-    parts.push(`<a class="nav-item ${active ? 'active' : ''}" href="#/${entry.name}">
+    parts.push(`<a class="nav-item ${active ? 'active' : ''}" href="#/${entry.name}" title="${esc(entry.label)}">
         ${entry.icon ? `<span class="ico">${entry.icon}</span>` : ''}<span>${esc(entry.label)}</span></a>`);
   }
   return parts.join('');

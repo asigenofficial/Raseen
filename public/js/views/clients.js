@@ -74,6 +74,10 @@ function openClientModal(client, onSaved) {
   m.el.querySelector('[data-save]').addEventListener('click', async (e) => {
     const values = formValues(m.body);
     if (!values.name) return toastErr('اسم العميل مطلوب');
+    values.is_active = values.is_active ? 1 : 0;
+    values.opening_balance = Number(values.opening_balance) || 0;
+    values.credit_limit = Number(values.credit_limit) || 0;
+    values.payment_terms_days = parseInt(values.payment_terms_days, 10) || 0;
     e.target.disabled = true;
     try {
       if (isNew) await api.post('/api/clients', values);

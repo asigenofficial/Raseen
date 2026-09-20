@@ -15,6 +15,10 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+
 	"raseen/internal/crypto"
 	"raseen/internal/db"
 )
@@ -905,17 +909,306 @@ func (s *TemplateService) GetFilePath(id string) (string, error) {
 func (s *TemplateService) GetBuilderConfig(id string) (map[string]any, error) {
 	var val string
 	err := s.db.QueryRow("SELECT value FROM meta WHERE key = ?", "tpl_builder_config_"+id).Scan(&val)
-	if err != nil {
-		// Return empty default config
-		return map[string]any{
-			"id":       id,
-			"sections": []any{},
-			"styles":   map[string]any{},
-		}, nil
+	if err == nil {
+		var res map[string]any
+		if err := json.Unmarshal([]byte(val), &res); err == nil {
+			if _, hasBc := res["builder_config"]; !hasBc {
+				bc := make(map[string]any, len(res))
+				for k, v := range res {
+					bc[k] = v
+				}
+				res["builder_config"] = bc
+			}
+			return res, nil
+		}
 	}
-	var res map[string]any
-	_ = json.Unmarshal([]byte(val), &res)
-	return res, nil
+
+	// Fallback to excel_templates table if config isn't in meta
+	var nameAr, category, colorHex string
+	errTpl := s.db.QueryRow("SELECT name_ar, category, color_hex FROM excel_templates WHERE id = ?", id).Scan(&nameAr, &category, &colorHex)
+	if errTpl == nil {
+		res := map[string]any{
+			"id":        id,
+			"name_ar":   nameAr,
+			"category":  category,
+			"color_hex": colorHex,
+		}
+		res["builder_config"] = res
+		return res, nil
+	}
+
+	return map[string]any{
+		"id":             id,
+		"builder_config": map[string]any{},
+	}, nil
+}
+
+func colIndexToLetter(idx int) string {
+	name := ""
+	n := idx
+	for {
+		name = string(rune('A'+(n%26))) + name
+		n = n/26 - 1
+		if n < 0 {
+			break
+		}
+	}
+	return name
+}
+
+func (s *TemplateService) GenerateExcelFromBuilder(category, id string, cfgMap map[string]any) error {
+	gridState, ok := cfgMap["gridState"].(map[string]any)
+	if !ok || gridState == nil {
+		return nil
+	}
+
+	f := excelize.NewFile()
+	sheet := "Sheet1"
+
+	rtl := true
+	_ = f.SetSheetView(sheet, 0, &excelize.ViewOptions{
+		RightToLeft: &rtl,
+	})
+
+	// 1. Column Widths
+	if cols, ok := gridState["cols"].([]any); ok {
+		for i, c := range cols {
+			if colMap, ok := c.(map[string]any); ok {
+				if w, ok := colMap["width"].(float64); ok && w > 0 {
+					letter := colIndexToLetter(i)
+					_ = f.SetColWidth(sheet, letter, letter, w)
+				}
+			}
+		}
+	}
+
+	// 2. Row Heights
+	if rows, ok := gridState["rows"].([]any); ok {
+		for i, r := range rows {
+			if rowMap, ok := r.(map[string]any); ok {
+				if h, ok := rowMap["height"].(float64); ok && h > 0 {
+					_ = f.SetRowHeight(sheet, i+1, h*0.75)
+				}
+			}
+		}
+	}
+
+	// 3. Merged Cells
+	if merges, ok := gridState["merges"].([]any); ok {
+		for _, m := range merges {
+			if mStr, ok := m.(string); ok && strings.Contains(mStr, ":") {
+				parts := strings.Split(mStr, ":")
+				if len(parts) == 2 {
+					_ = f.MergeCell(sheet, strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
+				}
+			}
+		}
+	}
+
+	// 4. Cells, Styles and Images
+	if cells, ok := gridState["cells"].(map[string]any); ok {
+		styleCache := make(map[string]int)
+
+		for ref, cellVal := range cells {
+			cellMap, ok := cellVal.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			// Cell value
+			if v, exists := cellMap["v"]; exists && v != nil {
+				_ = f.SetCellValue(sheet, ref, v)
+			}
+
+			// Style creation and caching
+			bold, _ := cellMap["bold"].(bool)
+			size, _ := cellMap["size"].(float64)
+			if size <= 0 {
+				size = 11
+			}
+			align, _ := cellMap["align"].(string)
+			color, _ := cellMap["color"].(string)
+			bg, _ := cellMap["bg"].(string)
+			borderType, _ := cellMap["border"].(string)
+			numFmt, _ := cellMap["numFmt"].(string)
+			wrapVal, hasWrap := cellMap["wrap"].(bool)
+			wrapText := true
+			if hasWrap {
+				wrapText = wrapVal
+			}
+
+			styleKey := fmt.Sprintf("%v_%v_%v_%v_%v_%v_%v_%v", bold, size, align, color, bg, borderType, numFmt, wrapText)
+			styleID, found := styleCache[styleKey]
+			if !found {
+				style := &excelize.Style{
+					Alignment: &excelize.Alignment{
+						Vertical: "center",
+						WrapText: wrapText,
+					},
+				}
+
+				// Borders configuration (Excel styles)
+				switch borderType {
+				case "none":
+					style.Border = []excelize.Border{}
+				case "all":
+					style.Border = []excelize.Border{
+						{Type: "left", Color: "334155", Style: 1},
+						{Type: "top", Color: "334155", Style: 1},
+						{Type: "right", Color: "334155", Style: 1},
+						{Type: "bottom", Color: "334155", Style: 1},
+					}
+				case "outer":
+					style.Border = []excelize.Border{
+						{Type: "left", Color: "0F172A", Style: 2},
+						{Type: "top", Color: "0F172A", Style: 2},
+						{Type: "right", Color: "0F172A", Style: 2},
+						{Type: "bottom", Color: "0F172A", Style: 2},
+					}
+				case "bottom":
+					style.Border = []excelize.Border{
+						{Type: "left", Color: "CBD5E1", Style: 1},
+						{Type: "top", Color: "CBD5E1", Style: 1},
+						{Type: "right", Color: "CBD5E1", Style: 1},
+						{Type: "bottom", Color: "0F172A", Style: 2},
+					}
+				case "double_bottom":
+					style.Border = []excelize.Border{
+						{Type: "left", Color: "CBD5E1", Style: 1},
+						{Type: "top", Color: "0F172A", Style: 1},
+						{Type: "right", Color: "CBD5E1", Style: 1},
+						{Type: "bottom", Color: "0F172A", Style: 6}, // Double bottom line (Accounting)
+					}
+				case "top_bottom":
+					style.Border = []excelize.Border{
+						{Type: "left", Color: "CBD5E1", Style: 1},
+						{Type: "top", Color: "0F172A", Style: 1},
+						{Type: "right", Color: "CBD5E1", Style: 1},
+						{Type: "bottom", Color: "0F172A", Style: 1},
+					}
+				default:
+					style.Border = []excelize.Border{
+						{Type: "left", Color: "CBD5E1", Style: 1},
+						{Type: "top", Color: "CBD5E1", Style: 1},
+						{Type: "right", Color: "CBD5E1", Style: 1},
+						{Type: "bottom", Color: "CBD5E1", Style: 1},
+					}
+				}
+
+				// Number formatting
+				if numFmt != "" {
+					switch numFmt {
+					case "currency":
+						cStr := `#,##0.00 "ر.س"`
+						style.CustomNumFmt = &cStr
+					case "percent":
+						pStr := `0.00%`
+						style.CustomNumFmt = &pStr
+					case "comma":
+						cmStr := `#,##0.00`
+						style.CustomNumFmt = &cmStr
+					}
+				}
+				switch align {
+				case "center":
+					style.Alignment.Horizontal = "center"
+				case "left":
+					style.Alignment.Horizontal = "left"
+				default:
+					style.Alignment.Horizontal = "right"
+				}
+
+				font := &excelize.Font{
+					Bold: bold,
+					Size: size,
+				}
+				if color != "" && color != "#000000" {
+					font.Color = strings.TrimPrefix(color, "#")
+				}
+				style.Font = font
+
+				if bg != "" && !strings.EqualFold(bg, "#ffffff") {
+					style.Fill = excelize.Fill{
+						Type:    "pattern",
+						Pattern: 1,
+						Color:   []string{strings.TrimPrefix(bg, "#")},
+					}
+				}
+
+				var errStyle error
+				styleID, errStyle = f.NewStyle(style)
+				if errStyle == nil {
+					styleCache[styleKey] = styleID
+				}
+			}
+
+			if styleID > 0 {
+				_ = f.SetCellStyle(sheet, ref, ref, styleID)
+			}
+
+			// Cell Image
+			if imgMap, ok := cellMap["image"].(map[string]any); ok {
+				if src, ok := imgMap["src"].(string); ok && strings.HasPrefix(src, "data:image/") {
+					commaIdx := strings.Index(src, ",")
+					if commaIdx != -1 {
+						imgBytes, errDec := base64.StdEncoding.DecodeString(src[commaIdx+1:])
+						if errDec == nil && len(imgBytes) > 0 {
+							ext := ".png"
+							if strings.HasPrefix(src, "data:image/jpeg") || strings.HasPrefix(src, "data:image/jpg") {
+								ext = ".jpg"
+							}
+							_ = f.AddPictureFromBytes(sheet, ref, &excelize.Picture{
+								Extension: ext,
+								File:      imgBytes,
+								Format: &excelize.GraphicOptions{
+									LockAspectRatio: true,
+									AutoFit:         true,
+									OffsetX:         4,
+									OffsetY:         4,
+								},
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 5. Logo in Header (if provided)
+	if logoData, ok := cfgMap["logo_data"].(string); ok && strings.HasPrefix(logoData, "data:image/") {
+		commaIdx := strings.Index(logoData, ",")
+		if commaIdx != -1 {
+			imgBytes, errDec := base64.StdEncoding.DecodeString(logoData[commaIdx+1:])
+			if errDec == nil && len(imgBytes) > 0 {
+				ext := ".png"
+				if strings.HasPrefix(logoData, "data:image/jpeg") || strings.HasPrefix(logoData, "data:image/jpg") {
+					ext = ".jpg"
+				}
+				logoCell := "A1"
+				pos, _ := cfgMap["logo_position"].(string)
+				if pos == "center" {
+					logoCell = "C1"
+				} else if pos == "left" {
+					logoCell = "F1"
+				}
+				_ = f.AddPictureFromBytes(sheet, logoCell, &excelize.Picture{
+					Extension: ext,
+					File:      imgBytes,
+					Format: &excelize.GraphicOptions{
+						LockAspectRatio: true,
+						AutoFit:         true,
+						OffsetX:         6,
+						OffsetY:         6,
+					},
+				})
+			}
+		}
+	}
+
+	outDir := filepath.Join(s.dataDir, "templates", category)
+	_ = os.MkdirAll(outDir, 0755)
+	filePath := filepath.Join(outDir, id+".xlsx")
+	return f.SaveAs(filePath)
 }
 
 func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
@@ -923,6 +1216,44 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 	if err != nil {
 		return err
 	}
+
+	var cfgMap map[string]any
+	_ = json.Unmarshal(b, &cfgMap)
+
+	category := "invoices"
+	if t, ok := cfgMap["type"].(string); ok && t == "documents" {
+		category = "documents"
+	}
+
+	nameAr := "قالب مخصص"
+	if n, ok := cfgMap["name_ar"].(string); ok && strings.TrimSpace(n) != "" {
+		nameAr = strings.TrimSpace(n)
+	}
+
+	primaryColor := "#059669"
+	if c, ok := cfgMap["primary_color"].(string); ok && strings.TrimSpace(c) != "" {
+		primaryColor = strings.TrimSpace(c)
+	}
+
+	// 1. Generate real .xlsx file on disk if gridState exists
+	if _, ok := cfgMap["gridState"].(map[string]any); ok {
+		_ = s.GenerateExcelFromBuilder(category, id, cfgMap)
+	}
+
+	// 2. Register / Update in excel_templates catalog
+	relPath := filepath.Join("data", "templates", category, id+".xlsx")
+	_, _ = s.db.Exec(`
+		INSERT INTO excel_templates (id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, style_meta, is_active, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+		ON CONFLICT(id) DO UPDATE SET
+			name_ar = excluded.name_ar,
+			category = excluded.category,
+			file_path = excluded.file_path,
+			color_hex = excluded.color_hex,
+			updated_at = CURRENT_TIMESTAMP
+	`, id, nameAr, id, "قالب مخصص تم إنشاؤه عبر محرر القوالب", "مخصص", category, relPath, primaryColor, "[]", "{}")
+
+	// 3. Save full builder config into meta table
 	_, err = s.db.Exec(`
 		INSERT INTO meta (key, value) VALUES (?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value

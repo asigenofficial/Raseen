@@ -180,11 +180,16 @@ function openIssuerModal(issuer, onSaved) {
   m.el.querySelector('[data-save]').addEventListener('click', async (e) => {
     const values = formValues(m.body);
     if (!values.code || !values.name_ar) return toastErr('كود الشركة والاسم بالعربية مطلوبان');
-    values.qr_settings = {
+    values.is_active = values.is_active ? 1 : 0;
+    values.qr_settings = JSON.stringify({
       show_a4: $('#qr_show_a4', m.body) ? $('#qr_show_a4', m.body).checked : true,
       show_thermal: $('#qr_show_thermal', m.body) ? $('#qr_show_thermal', m.body).checked : true,
       size: $('[name=qr_size]', m.body) ? $('[name=qr_size]', m.body).value : 'normal',
-    };
+    });
+    values.default_tax_rate = Number(values.default_tax_rate) || 15;
+    values.invoice_next_no = parseInt(values.invoice_next_no, 10) || 1;
+    values.invoice_pad = parseInt(values.invoice_pad, 10) || 5;
+    values.voucher_next_no = parseInt(values.voucher_next_no, 10) || 1;
     e.target.disabled = true;
     try {
       if (isNew) await api.post('/api/issuers', values);

@@ -16,7 +16,7 @@ const THEMES = [
 // ─── Categorized Smart Variables ──────────────────────────────────────────
 const VARIABLE_CATEGORIES = [
   {
-    category: '📄 الفاتورة والسند',
+    category: 'الفاتورة والسند',
     items: [
       { tag: '{invoice_number}', label: 'رقم الفاتورة', sample: 'INV-2026-0842' },
       { tag: '{date}', label: 'تاريخ المستند', sample: '2026-09-16' },
@@ -27,7 +27,7 @@ const VARIABLE_CATEGORIES = [
     ]
   },
   {
-    category: '🏢 الشركة المصدرة',
+    category: 'الشركة المصدرة',
     items: [
       { tag: '{company_name}', label: 'اسم الشركة', sample: 'شركة الأفق الحديث للأنظمة التقنية' },
       { tag: '{tax_number}', label: 'الرقم الضريبي', sample: '310123456700003' },
@@ -36,20 +36,34 @@ const VARIABLE_CATEGORIES = [
     ]
   },
   {
-    category: '👤 العميل / المستلم',
+    category: 'العميل / المستلم',
     items: [
-      { tag: '{client_name}', label: 'اسم العميل', sample: 'مؤسسة النخبة للمقاولات العامة' },
+      { tag: '{client_name}', label: 'اسم العميل', sample: 'شركة العميل' },
       { tag: '{client_tax}', label: 'ضريبي العميل', sample: '300987654300003' },
       { tag: '{client_address}', label: 'عنوان العميل', sample: 'جدة - حي الروضة' },
     ]
   },
   {
-    category: '💰 المبالغ والضرائب',
+    category: 'المبالغ والضرائب',
     items: [
       { tag: '{subtotal}', label: 'المجموع قبل الضريبة', sample: '10,000.00' },
       { tag: '{tax_amount}', label: 'مبلغ الضريبة 15%', sample: '1,500.00' },
       { tag: '{total}', label: 'الإجمالي النهائي', sample: '11,500.00' },
       { tag: '{amount_in_words}', label: 'المبلغ كتابةً', sample: 'أحد عشر ألفاً وخمسمائة ريال سعودي فقط لا غير' },
+    ]
+  },
+  {
+    category: 'بنود الجدول (صفوف الفاتورة)',
+    items: [
+      { tag: '{item_no}', label: 'رقم البند', sample: '1' },
+      { tag: '{item_name}', label: 'اسم الصنف / الخدمة', sample: 'خدمة استشارية تقنية' },
+      { tag: '{quantity}', label: 'الكمية', sample: '5' },
+      { tag: '{unit_price}', label: 'سعر الوحدة', sample: '2,000.00' },
+      { tag: '{discount}', label: 'الخصم', sample: '0.00' },
+      { tag: '{tax_rate}', label: 'نسبة الضريبة', sample: '15%' },
+      { tag: '{line_tax}', label: 'ضريبة البند', sample: '1,500.00' },
+      { tag: '{total_line}', label: 'الإجمالي شامل الضريبة', sample: '11,500.00' },
+      { tag: '{unit}', label: 'الوحدة', sample: 'ساعة' },
     ]
   }
 ];
@@ -190,12 +204,12 @@ function getTaxInvoicePreset(primary = '#059669') {
     'E7': { v: 'ضريبة القيمة المضافة', bg: primary, color: '#ffffff', bold: true, size: 11, align: 'center' },
     'F7': { v: 'الإجمالي شامل الضريبة', bg: primary, color: '#ffffff', bold: true, size: 11, align: 'center' },
 
-    'A8': { v: '1', bg: '#ffffff', color: '#64748b', bold: false, size: 10, align: 'center' },
-    'B8': { v: 'تقديم خدمات استشارية وتطوير برمجيات', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'right' },
-    'C8': { v: '1', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
-    'D8': { v: '1000.00', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
-    'E8': { v: '150.00', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
-    'F8': { v: '1150.00', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
+    'A8': { v: '{item_no}', bg: '#ffffff', color: '#64748b', bold: false, size: 10, align: 'center' },
+    'B8': { v: '{item_name}', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'right' },
+    'C8': { v: '{quantity}', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
+    'D8': { v: '{unit_price}', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
+    'E8': { v: '{tax_amount}', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
+    'F8': { v: '{total_line}', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
 
     'A19': { v: 'المجموع قبل الضريبة (الخاضع للضريبة):', bg: lt, color: '#1e293b', bold: true, size: 10, align: 'right' },
     'E19': { v: '{subtotal}', bg: lt, color: primary, bold: true, size: 11, align: 'center' },
@@ -275,12 +289,12 @@ function getReceiptVoucherPreset(primary = '#059669') {
     'E10': { v: 'طريقة الدفع', bg: primary, color: '#ffffff', bold: true, size: 11, align: 'center' },
     'F10': { v: 'المبلغ المسدد', bg: primary, color: '#ffffff', bold: true, size: 11, align: 'center' },
 
-    'A11': { v: '1', bg: '#ffffff', color: '#64748b', bold: false, size: 10, align: 'center' },
-    'B11': { v: 'INV-2026-001', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
-    'C11': { v: '2026-09-16', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
-    'D11': { v: 'شركة النخبة للتجارة', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'right' },
-    'E11': { v: 'حوالة بنكية', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
-    'F11': { v: '5,000.00', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
+    'A11': { v: '{item_no}', bg: '#ffffff', color: '#64748b', bold: false, size: 10, align: 'center' },
+    'B11': { v: '{invoice_number}', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
+    'C11': { v: '{date}', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
+    'D11': { v: '{client_name}', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'right' },
+    'E11': { v: '{payment_method}', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
+    'F11': { v: '{amount}', bg: '#ffffff', color: '#334155', bold: false, size: 10, align: 'center' },
 
     'A17': { v: 'إجمالي المبالغ المقبوضة:', bg: primary, color: '#ffffff', bold: true, size: 11, align: 'right' },
     'F17': { v: '{total}', bg: primary, color: '#ffffff', bold: true, size: 12, align: 'center' },
@@ -320,25 +334,20 @@ function getInvoicePresetVariant(kind, primary = '#059669') {
     grid.cells.B7.v = 'وصف الخدمة / نطاق العمل';
     grid.cells.C7.v = 'الساعات';
     grid.cells.D7.v = 'سعر الساعة';
-    grid.cells.B8.v = 'خدمات مهنية واستشارية حسب نطاق العمل المعتمد';
     grid.cells.A3.v = 'فاتورة خدمات مهنية — PROFESSIONAL SERVICES';
   } else if (kind === 'retail') {
     grid.cols = [{ width: 5 }, { width: 28 }, { width: 9 }, { width: 12 }, { width: 12 }, { width: 15 }];
     grid.cells.B7.v = 'المنتج / الباركود';
-    grid.cells.B8.v = 'منتج تجريبي — SKU-1001';
     grid.cells.A3.v = 'فاتورة مبيعات وتجزئة — RETAIL INVOICE';
   } else if (kind === 'contracting') {
     grid.cols = [{ width: 5 }, { width: 34 }, { width: 10 }, { width: 12 }, { width: 13 }, { width: 16 }];
     grid.cells.B7.v = 'وصف أعمال المقاولات / البند التعاقدي';
-    grid.cells.B8.v = 'أعمال البناء حسب الكميات الجدولية المعتمدة';
-    grid.cells.B9.v = 'رقم أمر الشراء / العقد: {notes}';
     grid.cells.A3.v = 'فاتورة مقاولات وأعمال إنشائية — CONTRACTING INVOICE';
   } else if (kind === 'logistics') {
     grid.cols = [{ width: 5 }, { width: 30 }, { width: 11 }, { width: 12 }, { width: 12 }, { width: 16 }];
     grid.cells.B7.v = 'وصف الشحنة / الخدمة اللوجستية';
     grid.cells.C7.v = 'الكمية / الوزن';
     grid.cells.D7.v = 'سعر الوحدة';
-    grid.cells.B8.v = 'خدمات نقل وتخزين وتوزيع داخل المملكة';
     grid.cells.A3.v = 'فاتورة خدمات لوجستية ونقل — LOGISTICS INVOICE';
   }
   return grid;
@@ -358,6 +367,7 @@ const READY_TEMPLATES = [
 
 function buildReadyTemplate(t) {
   cfg.type = t.type;
+  cfg.name_ar = t.name;
   cfg.primary_color = t.primary;
   cfg.accent_color = lightenHex(t.primary, 0.15);
   if (t.kind === 'receipt') {
@@ -394,6 +404,7 @@ let editingId = null;
 let saving = false;
 let view = null;
 let zoomLevel = 100;
+let showA4Guide = true;
 
 // ─── Spreadsheet Table Render ─────────────────────────────────────────────
 function renderGridTable() {
@@ -420,6 +431,14 @@ function renderGridTable() {
     return null;
   }
 
+  // Colgroup for instant hardware-accelerated column resizing across all rows
+  let colgroupHtml = '<colgroup><col style="width:38px;min-width:38px;">';
+  for (let c = 0; c < numCols; c++) {
+    const w = grid.cols[c]?.width || 14;
+    colgroupHtml += `<col class="tb-col-def" data-col="${c}" style="width:${w * 10}px;min-width:${w * 10}px;">`;
+  }
+  colgroupHtml += '</colgroup>';
+
   // Header row with letters
   let thCells = `<th class="tb-corner-th" title="تحديد ورقة العمل">⊞</th>`;
   for (let c = 0; c < numCols; c++) {
@@ -437,9 +456,7 @@ function renderGridTable() {
   for (let r = 1; r <= numRows; r++) {
     const rIdx = r - 1;
     const h = grid.rows[rIdx]?.height || 24;
-    let rowCells = `<th class="tb-row-th" data-row="${r}">
-      <span>${r}</span>
-    </th>`;
+    let rowCells = '';
 
     for (let c = 0; c < numCols; c++) {
       const mergeInfo = checkMerge(r, c);
@@ -456,19 +473,60 @@ function renderGridTable() {
       const size = cellData.size ? `font-size:${cellData.size}px;` : 'font-size:11px;';
       const align = cellData.align ? `text-align:${cellData.align};` : 'text-align:right;';
 
+      // Cell Borders (Excel style)
+      let borderStyle = '';
+      const b = cellData.border;
+      if (b === 'none') {
+        borderStyle = 'border:1px dashed rgba(203,213,225,0.4);';
+      } else if (b === 'all') {
+        borderStyle = 'border:1px solid #334155;';
+      } else if (b === 'outer') {
+        borderStyle = 'border:2px solid #0f172a;';
+      } else if (b === 'bottom') {
+        borderStyle = 'border:1px solid #cbd5e1;border-bottom:2px solid #0f172a;';
+      } else if (b === 'double_bottom') {
+        borderStyle = 'border:1px solid #cbd5e1;border-top:1px solid #0f172a;border-bottom:3px double #0f172a;';
+      } else if (b === 'top_bottom') {
+        borderStyle = 'border:1px solid #cbd5e1;border-top:1px solid #0f172a;border-bottom:1px solid #0f172a;';
+      }
+
+      const wrapStyle = cellData.wrap === false ? 'white-space:nowrap;' : 'white-space:pre-wrap;';
+
       const cs = mergeInfo?.isOrigin && mergeInfo.colspan > 1 ? ` colspan="${mergeInfo.colspan}"` : '';
       const rs = mergeInfo?.isOrigin && mergeInfo.rowspan > 1 ? ` rowspan="${mergeInfo.rowspan}"` : '';
 
       const img = cellData.image;
       const imgHtml = img?.src ? `<img src="${esc(img.src)}" class="tb-cell-img" style="max-width:${Math.min(img.width || 80, (grid.cols[c]?.width || 14) * 10 - 8)}px;max-height:${Math.min(img.height || 60, h - 8)}px;" alt="صورة" />` : '';
 
+      // In-cell interactive resizers on borders
+      const colTarget = mergeInfo?.isOrigin && mergeInfo.colspan > 1 ? (c + mergeInfo.colspan - 1) : c;
+      const rowTarget = mergeInfo?.isOrigin && mergeInfo.rowspan > 1 ? (r + mergeInfo.rowspan - 1) : r;
+
+      const colResizer = `<div class="tb-cell-col-resizer" data-col="${colTarget}" title="اسحب أو انقر لضبط عرض العمود (${colLetter(colTarget)})"></div>`;
+      const rowResizer = `<div class="tb-cell-row-resizer" data-row="${rowTarget}" title="اسحب أو انقر لضبط ارتفاع الصف (${rowTarget})"></div>`;
+      const cornerResizer = isActive ? `<div class="tb-cell-corner-resizer" data-col="${colTarget}" data-row="${rowTarget}" title="اسحب لتكبير/تصغير أبعاد الخلية معاً"></div>` : '';
+
+      // Compute sample display value (replace {tags} with realistic sample data)
+      let displayVal = val;
+      if (val && val.includes('{')) {
+        Object.entries(SAMPLE_MAP).forEach(([tag, sample]) => {
+          displayVal = displayVal.replaceAll(tag, sample);
+        });
+      }
+      const hasSample = displayVal !== val;
+
       rowCells += `<td class="tb-grid-cell${isActive ? ' tb-cell-active' : ''}${img?.src ? ' tb-cell-has-image' : ''}"
         data-ref="${pos}"
+        data-col="${colTarget}"
+        data-row="${rowTarget}"
         ${cs}${rs}
-        style="${bg}${color}${bold}${size}${align}height:${h}px;"
+        style="${bg}${color}${bold}${size}${align}${borderStyle}height:${h}px;"
         tabindex="0">
         ${imgHtml}
-        <div class="tb-cell-val" contenteditable="true" spellcheck="false" dir="auto" data-ref="${pos}">${esc(val)}</div>
+        <div class="tb-cell-val${hasSample ? ' tb-val-sampled' : ''}" contenteditable="true" spellcheck="false" dir="auto" data-ref="${pos}" data-raw="${esc(val)}" style="${wrapStyle}">${esc(displayVal)}</div>
+        ${colResizer}
+        ${rowResizer}
+        ${cornerResizer}
       </td>`;
     }
 
@@ -477,13 +535,19 @@ function renderGridTable() {
         <span>${r}</span>
         <div class="tb-row-resizer" data-row="${r}" title="اسحب أو انقر لضبط الارتفاع"></div>
       </th>
-      ${rowCells.replace(`<th class="tb-row-th" data-row="${r}">\n      <span>${r}</span>\n    </th>`, '')}
+      ${rowCells}
     </tr>`;
   }
   tbodyHtml += '</tbody>';
 
-  return `<div class="tb-grid-viewport" style="transform:scale(${zoomLevel / 100});transform-origin:top right;">
+  return `<div class="tb-grid-viewport" style="transform:scale(${zoomLevel / 100});transform-origin:top right;position:relative;">
+    ${showA4Guide ? `
+      <div class="tb-a4-boundary-line" id="tb-a4-boundary-line" title="الحد الأقصى لصفحة الطباعة A4 المعتمدة (760px)">
+        <div class="tb-a4-boundary-tag">حدود صفحة A4</div>
+      </div>
+    ` : ''}
     <table class="tb-main-table" id="tb-grid-table">
+      ${colgroupHtml}
       ${theadHtml}
       ${tbodyHtml}
     </table>
@@ -563,10 +627,10 @@ function renderPrintPreview() {
       <div class="tb-preview-toggles">
         <span style="font-size:0.85rem;color:var(--text-muted);font-weight:700;">وضع المعاينة:</span>
         <button type="button" class="btn btn-sm tb-prev-mode-btn${previewMode === 'sample' ? ' active' : ''}" data-pmode="sample">
-          ✨ بيانات واقعية ونموذجية
+          بيانات واقعية ونموذجية
         </button>
         <button type="button" class="btn btn-sm tb-prev-mode-btn${previewMode === 'tags' ? ' active' : ''}" data-pmode="tags">
-          🏷️ الوسوم الذكية الخام
+          الوسوم الذكية الخام
         </button>
       </div>
 
@@ -622,10 +686,10 @@ function renderSettingsTab() {
           <label>نوع القالب وتصنيفه</label>
           <div style="display:flex;gap:10px;">
             <button type="button" class="btn tb-settings-type${cfg.type === 'invoices' ? ' active' : ''}" data-type="invoices" style="flex:1;">
-              📄 فاتورة مبيعات وضريبة (Invoices)
+              فاتورة مبيعات وضريبة (Invoices)
             </button>
             <button type="button" class="btn tb-settings-type${cfg.type === 'documents' ? ' active' : ''}" data-type="documents" style="flex:1;">
-              🧾 سند قبض ومستندات (Vouchers)
+              سند قبض ومستندات (Vouchers)
             </button>
           </div>
         </div>
@@ -666,7 +730,7 @@ function renderGalleryTab() {
       <div class="tb-gallery-badge" style="background:${t.primary};"></div>
       <div class="tb-gallery-content">
         <div class="tb-gallery-header">
-          <span class="tb-gallery-type">${t.type === 'documents' ? '🧾 سند' : '📄 فاتورة'}</span>
+          <span class="tb-gallery-type">${t.type === 'documents' ? 'سند' : 'فاتورة'}</span>
           <span class="tb-gallery-ext tb-ext-new">جديد</span>
         </div>
         <h4 class="tb-gallery-name">${esc(t.name)}</h4>
@@ -712,7 +776,7 @@ function renderGalleryTab() {
       <div class="tb-gallery-badge" style="background:${pc};"></div>
       <div class="tb-gallery-content">
         <div class="tb-gallery-header">
-          <span class="tb-gallery-type">${t.category === 'documents' ? '🧾 سند قبض' : '📄 فاتورة ضريبية'}</span>
+          <span class="tb-gallery-type">${t.category === 'documents' ? 'سند قبض' : 'فاتورة ضريبية'}</span>
           <span class="tb-gallery-ext">.XLSX</span>
         </div>
         <h4 class="tb-gallery-name">${esc(t.name_ar || t.id)}</h4>
@@ -787,16 +851,16 @@ function renderView() {
       <!-- Studio Navigation Tabs -->
       <div class="tb-tabs-nav">
         <button type="button" class="tb-tab-btn${activeTab === 'editor' ? ' active' : ''}" data-tab="editor">
-          📊 محرر الخلايا التفاعلي
+          محرر الخلايا التفاعلي
         </button>
         <button type="button" class="tb-tab-btn${activeTab === 'preview' ? ' active' : ''}" data-tab="preview">
-          📄 معاينة A4 الحية
+          معاينة A4 الحية
         </button>
         <button type="button" class="tb-tab-btn${activeTab === 'settings' ? ' active' : ''}" data-tab="settings">
-          ⚙️ الهوية والسمة
+          الهوية والسمة
         </button>
         <button type="button" class="tb-tab-btn${activeTab === 'gallery' ? ' active' : ''}" data-tab="gallery">
-          📁 القوالب المحفوظة (${existingTemplates.length})
+          القوالب المحفوظة (${existingTemplates.length})
         </button>
       </div>
 
@@ -805,22 +869,22 @@ function renderView() {
         <!-- Preset Dropdown Button -->
         <div class="tb-dropdown-wrap">
           <button type="button" class="btn btn-sm tb-dropdown-trigger" id="btn-presets-menu">
-            <span>✨ قوالب أساسية</span>
+            <span>قوالب أساسية</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
           <div class="tb-dropdown-menu" id="tb-presets-dropdown">
             <button type="button" class="tb-dropdown-item tb-preset-select" data-preset="tax_invoice">
-              📄 فاتورة ضريبية معتمدة (ZATCA)
+              فاتورة ضريبية معتمدة (ZATCA)
             </button>
-            <button type="button" class="tb-dropdown-item tb-preset-select" data-preset="services_invoice">🧑‍💼 فاتورة خدمات مهنية</button>
-            <button type="button" class="tb-dropdown-item tb-preset-select" data-preset="retail_invoice">🛒 فاتورة مبيعات وتجزئة</button>
-            <button type="button" class="tb-dropdown-item tb-preset-select" data-preset="compact_invoice">📑 فاتورة ضريبية مختصرة</button>
+            <button type="button" class="tb-dropdown-item tb-preset-select" data-preset="services_invoice">فاتورة خدمات مهنية</button>
+            <button type="button" class="tb-dropdown-item tb-preset-select" data-preset="retail_invoice">فاتورة مبيعات وتجزئة</button>
+            <button type="button" class="tb-dropdown-item tb-preset-select" data-preset="compact_invoice">فاتورة ضريبية مختصرة</button>
             <button type="button" class="tb-dropdown-item tb-preset-select" data-preset="receipt_voucher">
-              🧾 سند قبض مالي رسمي
+              سند قبض مالي رسمي
             </button>
             <div class="tb-dropdown-divider"></div>
             <button type="button" class="tb-dropdown-item tb-preset-select" data-preset="blank">
-              📋 جدول فارغ من الصفر
+              جدول فارغ من الصفر
             </button>
           </div>
         </div>
@@ -894,6 +958,27 @@ function renderView() {
 
           <div class="tb-ribbon-divider"></div>
 
+          <!-- Section 2.5: Borders Picker (قائمة الحدود مثل إكسل) -->
+          <div class="tb-dropdown-wrap">
+            <button type="button" class="btn btn-sm tb-dropdown-trigger tb-ribbon-btn" id="btn-borders-menu" title="تطبيق حدود الخلية (مثل Excel)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="3" y1="12" x2="21" y2="12"/></svg>
+              <span>حدود</span>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="tb-dropdown-menu" id="tb-borders-dropdown" style="min-width:215px;">
+              <button type="button" class="tb-dropdown-item tb-border-item" data-border="all">▦ كافة الحدود (All Borders)</button>
+              <button type="button" class="tb-dropdown-item tb-border-item" data-border="outer">▢ إطار خارجي عريض (Thick Box)</button>
+              <button type="button" class="tb-dropdown-item tb-border-item" data-border="double_bottom">‗ خط سفلي مزدوج للإجمالي (Top & Double Bottom)</button>
+              <button type="button" class="tb-dropdown-item tb-border-item" data-border="top_bottom">☱ خط علوي وسفلي (Top & Bottom)</button>
+              <button type="button" class="tb-dropdown-item tb-border-item" data-border="bottom">━ حد سفلي فقط (Bottom Border)</button>
+              <div class="tb-dropdown-divider"></div>
+              <button type="button" class="tb-dropdown-item tb-border-item" data-border="none">⧄ بلا حدود (No Borders)</button>
+              <button type="button" class="tb-dropdown-item tb-border-item" data-border="default">⊞ إعادة ضبط الحدود الافتراضية</button>
+            </div>
+          </div>
+
+          <div class="tb-ribbon-divider"></div>
+
           <!-- Section 3: Colors -->
           <div class="tb-ribbon-group">
             <label class="tb-color-picker-wrap" title="لون تعبئة الخلية">
@@ -906,6 +991,18 @@ function renderView() {
               <span style="font-size:0.75rem;">لون الخط</span>
               <input type="color" id="inp-cell-color" value="${activeCellData.color || '#000000'}" />
             </label>
+          </div>
+
+          <div class="tb-ribbon-divider"></div>
+
+          <!-- Section 3.5: Number Formats & Text Wrap (تنسيقات إكسل الرقمية) -->
+          <div class="tb-ribbon-group" title="تنسيقات الأرقام والعملات">
+            <button type="button" class="tb-tool-btn" id="btn-fmt-currency" title="تنسيق العملة السعودية (ر.س)" style="font-weight:800;font-size:0.72rem;">ر.س</button>
+            <button type="button" class="tb-tool-btn" id="btn-fmt-percent" title="نسبة مئوية (%)" style="font-weight:800;font-size:0.78rem;">%</button>
+            <button type="button" class="tb-tool-btn" id="btn-fmt-comma" title="فاصلة الآلاف (,000)" style="font-weight:800;font-size:0.75rem;">,00</button>
+            <button type="button" class="tb-tool-btn${activeCellData.wrap === false ? '' : ' active'}" id="btn-tool-wrap" title="التفاف النص التلقائي (Wrap Text)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M3 12h15a3 3 0 0 1 0 6h-4"/><polyline points="16 16 14 18 16 20"/><path d="M3 18h7"/></svg>
+            </button>
           </div>
 
           <div class="tb-ribbon-divider"></div>
@@ -947,7 +1044,7 @@ function renderView() {
           <!-- Section 7: Smart Variables Dropdown -->
           <div class="tb-dropdown-wrap">
             <button type="button" class="btn btn-sm tb-ribbon-btn" id="btn-vars-menu" style="background:rgba(6,182,212,.1);border-color:var(--primary);color:var(--primary);font-weight:700;">
-              🏷️ إدراج وسم ذكي
+              إدراج وسم ذكي
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="tb-vars-dropdown" id="tb-vars-dropdown">
@@ -955,13 +1052,14 @@ function renderView() {
             </div>
           </div>
 
-          <!-- Section 8: Zoom -->
+          <!-- Section 8: Zoom & A4 Guide -->
           <div class="tb-ribbon-group" style="margin-right:auto;">
+            <button type="button" class="tb-tool-btn${showA4Guide ? ' active' : ''}" id="btn-toggle-a4-guide" title="إظهار / إخفاء خط حدود صفحة A4 (760px)">A4</button>
             <button type="button" class="tb-tool-btn" id="btn-zoom-out" title="تصغير (Ctrl -)">-</button>
             <span style="font-size:0.75rem;min-width:38px;text-align:center;" id="tb-zoom-label">${zoomLevel}%</span>
             <button type="button" class="tb-tool-btn" id="btn-zoom-in" title="تكبير (Ctrl +)">+</button>
             <button type="button" class="tb-tool-btn" id="btn-zoom-reset" title="إعادة تعيين الزوم (Ctrl+0)">100%</button>
-            <button type="button" class="tb-tool-btn" id="btn-fit-a4" title="ملاءمة عرض A4">A4</button>
+            <button type="button" class="tb-tool-btn" id="btn-fit-a4" title="ملاءمة عرض A4">ملاءمة</button>
           </div>
         </div>
 
@@ -977,13 +1075,14 @@ function renderView() {
           ${renderGridTable()}
         </div>
 
-        <!-- Professional Status Bar -->
+        <!-- Professional Status Bar with A4 Width indicator -->
         <div class="tb-status-bar">
           <div class="tb-status-item">الخلية النشطة: <b>${esc(activeCell)}</b></div>
           <div class="tb-status-item">أبعاد الورقة: <b>${cfg.gridState?.cols?.length || 6} أعمدة × ${cfg.gridState?.rows?.length || 24} صف</b></div>
           <div class="tb-status-item">الدمج: <b>${cfg.gridState?.merges?.length || 0} نطاق مدمج</b></div>
+          <div class="tb-status-item">عرض الجدول: <b>${(cfg.gridState?.cols || []).reduce((sum, col) => sum + ((col?.width || 14) * 10), 0) + 38}px</b> ${((cfg.gridState?.cols || []).reduce((sum, col) => sum + ((col?.width || 14) * 10), 0) + 38) <= 760 ? '<span style="color:#10b981;font-weight:700;">(ضمن A4)</span>' : '<span style="color:#f59e0b;font-weight:700;">(يتجاوز A4)</span>'}</div>
           <div class="tb-status-item" style="margin-right:auto;color:var(--text-muted);">
-            💡 انقر نقراً مزدوجاً على أي خلية للتعديل المباشر أو استخدم شريط الصيغ أعلاه.
+            انقر نقراً مزدوجاً على أي خلية للتعديل المباشر أو استخدم شريط الصيغ أعلاه.
           </div>
         </div>
       `) : ''}
@@ -996,16 +1095,16 @@ function renderView() {
 
     <!-- Context Menu for Cell Operations -->
     <div class="tb-context-menu" id="tb-context-menu" style="display:none;">
-      <button type="button" class="tb-ctx-item" data-act="copy">📋 نسخ المحتوى</button>
-      <button type="button" class="tb-ctx-item" data-act="paste">📝 لصق</button>
+      <button type="button" class="tb-ctx-item" data-act="copy">نسخ المحتوى</button>
+      <button type="button" class="tb-ctx-item" data-act="paste">لصق</button>
       <div class="tb-ctx-divider"></div>
-      <button type="button" class="tb-ctx-item" data-act="add-row">➕ إدراج صف أسفل</button>
-      <button type="button" class="tb-ctx-item" data-act="del-row">❌ حذف الصف الحالي</button>
-      <button type="button" class="tb-ctx-item" data-act="add-col">➕ إدراج عمود</button>
-      <button type="button" class="tb-ctx-item" data-act="del-col">❌ حذف العمود</button>
+      <button type="button" class="tb-ctx-item" data-act="add-row">إدراج صف أسفل</button>
+      <button type="button" class="tb-ctx-item" data-act="del-row">حذف الصف الحالي</button>
+      <button type="button" class="tb-ctx-item" data-act="add-col">إدراج عمود</button>
+      <button type="button" class="tb-ctx-item" data-act="del-col">حذف العمود</button>
       <div class="tb-ctx-divider"></div>
-      <button type="button" class="tb-ctx-item" data-act="merge">⛶ دمج / فك دمج</button>
-      <button type="button" class="tb-ctx-item" data-act="clear">🧹 مسح الخلية</button>
+      <button type="button" class="tb-ctx-item" data-act="merge">دمج / فك دمج</button>
+      <button type="button" class="tb-ctx-item" data-act="clear">مسح الخلية</button>
     </div>
 
     <!-- Styles -->
@@ -1053,7 +1152,7 @@ function renderView() {
 
       /* Main Sheet Workspace */
       .tb-sheet-workspace { flex: 1; min-height: 520px; max-height: 650px; overflow: auto; background: #0f172a; padding: 16px; display: flex; justify-content: center; }
-      .tb-grid-viewport { background: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.3); border-radius: 4px; overflow: hidden; height: fit-content; transition: transform .15s; }
+      .tb-grid-viewport { background: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.3); border-radius: 4px; overflow: visible; height: fit-content; transition: transform .15s; }
       .tb-main-table { border-collapse: collapse; direction: rtl; table-layout: fixed; width: max-content; }
 
       .tb-corner-th { width: 38px; min-width: 38px; background: #f8fafc; border: 1px solid #cbd5e1; color: #64748b; font-size: 11px; text-align: center; user-select: none; }
@@ -1064,16 +1163,114 @@ function renderView() {
 
       .tb-row-th { width: 38px; min-width: 38px; background: #f8fafc; border: 1px solid #cbd5e1; color: #64748b; font-size: 11px; font-weight: 700; text-align: center; padding: 2px; user-select: none; position: relative; }
 
-      .tb-grid-cell { border: 1px solid #cbd5e1; padding: 0; cursor: cell; position: relative; user-select: none; vertical-align: middle; }
+      .tb-grid-cell { border: 1px solid #cbd5e1; padding: 0; cursor: cell; position: relative; user-select: none; vertical-align: middle; overflow: visible; }
       .tb-grid-cell:hover { background-color: rgba(6,182,212,0.08) !important; }
       .tb-grid-cell.tb-cell-active { outline: 2.5px solid #059669 !important; outline-offset: -1px; z-index: 10; }
       .tb-cell-val { width: 100%; height: 100%; min-height: 24px; padding: 4px 8px; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: pre-wrap; word-break: break-word; outline: none; cursor: text; user-select: text; }
       .tb-cell-val:focus { background: rgba(37,99,235,0.06); }
+      /* Sample data display mode — shows realistic values instead of {tags} */
+      .tb-val-sampled { opacity: 0.88; }
+      .tb-val-sampled:not(:focus) { cursor: cell; }
       .tb-cell-img { display: block; margin: 2px auto; object-fit: contain; pointer-events: none; }
       .tb-cell-has-image .tb-cell-val { position: absolute; inset: 0; padding-top: 4px; }
       .tb-dim-badge { background: rgba(255,255,255,.08); border: 1px solid var(--line); color: var(--primary); font-weight: 700; font-size: 0.75rem; padding: 2px 7px; border-radius: 4px; min-width: 34px; text-align: center; font-family: monospace; }
-      .tb-row-resizer { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: row-resize; user-select: none; z-index: 5; }
-      .tb-row-resizer:hover, .tb-row-resizer.resizing { background: var(--primary); }
+      .tb-row-resizer { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; cursor: row-resize; user-select: none; z-index: 15; }
+      .tb-row-resizer:hover, .tb-row-resizer.resizing { background: var(--primary); opacity: 0.85; }
+
+      /* In-cell Column Resizer (Left edge of cell in RTL) */
+      .tb-cell-col-resizer {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 8px;
+        cursor: col-resize !important;
+        user-select: none;
+        z-index: 15;
+        background: transparent;
+        transition: background .1s ease;
+      }
+      .tb-grid-cell:hover .tb-cell-col-resizer {
+        background: rgba(5, 150, 105, 0.25);
+      }
+      .tb-cell-col-resizer:hover,
+      .tb-cell-col-resizer.resizing {
+        background: #059669 !important;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4), 0 0 8px rgba(5,150,105,0.6);
+      }
+
+      /* In-cell Row Resizer (Bottom edge of cell) */
+      .tb-cell-row-resizer {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 8px;
+        cursor: row-resize !important;
+        user-select: none;
+        z-index: 15;
+        background: transparent;
+        transition: background .1s ease;
+      }
+      .tb-grid-cell:hover .tb-cell-row-resizer {
+        background: rgba(5, 150, 105, 0.25);
+      }
+      .tb-cell-row-resizer:hover,
+      .tb-cell-row-resizer.resizing {
+        background: #059669 !important;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4), 0 0 8px rgba(5,150,105,0.6);
+      }
+
+      /* In-cell Corner Resizer (Bottom-left handle of active cell) */
+      .tb-cell-corner-resizer {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        width: 10px;
+        height: 10px;
+        background: var(--primary, #059669);
+        border: 2px solid #ffffff;
+        border-radius: 2px;
+        cursor: nwse-resize !important;
+        user-select: none;
+        z-index: 20;
+        box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+        transition: transform .1s ease;
+      }
+      .tb-cell-corner-resizer:hover,
+      .tb-cell-corner-resizer.resizing {
+        transform: scale(1.4);
+        background: #047857 !important;
+        box-shadow: 0 0 10px rgba(5,150,105,0.7);
+      }
+
+      /* A4 Boundary Line Guide */
+      .tb-a4-boundary-line {
+        position: absolute;
+        right: 760px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        border-left: 2px dashed #059669;
+        z-index: 30;
+        pointer-events: none;
+        transition: opacity .15s ease;
+      }
+      .tb-a4-boundary-tag {
+        position: sticky;
+        top: 6px;
+        background: #059669;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 4px;
+        white-space: nowrap;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        transform: translateX(50%);
+      }
+      .tb-border-item { font-size: 0.8rem; padding: 7px 10px; }
+      .tb-border-item:hover { background: rgba(5,150,105,0.12) !important; color: var(--primary) !important; }
 
       /* Status Bar */
       .tb-status-bar { display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: rgba(0,0,0,0.3); border-top: 1px solid var(--line); font-size: 0.74rem; color: var(--text-muted); }
@@ -1223,6 +1420,142 @@ function attachEvents() {
       wrap.classList.toggle('open');
     });
   }
+
+  // Borders Dropdown Button (Excel style)
+  const btnBorders = $('#btn-borders-menu', view);
+  if (btnBorders) {
+    btnBorders.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wrap = btnBorders.closest('.tb-dropdown-wrap');
+      wrap.classList.toggle('open');
+    });
+  }
+
+  // Apply Border Style to Active Cell
+  $$('.tb-border-item', view).forEach(btn => {
+    btn.addEventListener('click', () => {
+      const bType = btn.dataset.border;
+      if (!activeCell || !cfg.gridState) return toastErr('اختر خلية أولاً لتطبيق الحدود');
+      if (!cfg.gridState.cells[activeCell]) {
+        cfg.gridState.cells[activeCell] = { v: '', size: 11, align: 'right' };
+      }
+      cfg.gridState.cells[activeCell].border = bType;
+
+      const td = $(`[data-ref="${activeCell}"]`, view);
+      if (td) {
+        if (bType === 'none') {
+          td.style.border = '1px dashed rgba(203,213,225,0.4)';
+        } else if (bType === 'all') {
+          td.style.border = '1px solid #334155';
+        } else if (bType === 'outer') {
+          td.style.border = '2px solid #0f172a';
+        } else if (bType === 'bottom') {
+          td.style.border = '1px solid #cbd5e1';
+          td.style.borderBottom = '2px solid #0f172a';
+        } else if (bType === 'double_bottom') {
+          td.style.border = '1px solid #cbd5e1';
+          td.style.borderTop = '1px solid #0f172a';
+          td.style.borderBottom = '3px double #0f172a';
+        } else if (bType === 'top_bottom') {
+          td.style.border = '1px solid #cbd5e1';
+          td.style.borderTop = '1px solid #0f172a';
+          td.style.borderBottom = '1px solid #0f172a';
+        } else {
+          td.style.border = '1px solid #cbd5e1';
+        }
+      }
+      $$('.tb-dropdown-wrap', view).forEach(w => w.classList.remove('open'));
+      toastOk(`تم تطبيق نمط الحدود على الخلية ${activeCell}`);
+    });
+  });
+
+  // Number Formatting: Currency (ر.س)
+  $('#btn-fmt-currency', view)?.addEventListener('click', () => {
+    if (!activeCell || !cfg.gridState) return toastErr('اختر خلية أولاً');
+    if (!cfg.gridState.cells[activeCell]) cfg.gridState.cells[activeCell] = { v: '' };
+    const curVal = String(cfg.gridState.cells[activeCell].v || '').trim();
+    cfg.gridState.cells[activeCell].numFmt = 'currency';
+
+    const num = parseFloat(curVal.replace(/[^0-9.-]/g, ''));
+    let formatted = curVal;
+    if (!isNaN(num) && !curVal.includes('{')) {
+      formatted = num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ر.س';
+    } else if (!curVal.includes('ر.س')) {
+      formatted = curVal ? `${curVal} ر.س` : '0.00 ر.س';
+    }
+    updateActiveCellValue(formatted);
+    const fi = $('#tb-formula-input', view);
+    if (fi) fi.value = formatted;
+    toastOk('تم تطبيق تنسيق العملة السعودية (ر.س)');
+  });
+
+  // Number Formatting: Percentage (%)
+  $('#btn-fmt-percent', view)?.addEventListener('click', () => {
+    if (!activeCell || !cfg.gridState) return toastErr('اختر خلية أولاً');
+    if (!cfg.gridState.cells[activeCell]) cfg.gridState.cells[activeCell] = { v: '' };
+    const curVal = String(cfg.gridState.cells[activeCell].v || '').trim();
+    cfg.gridState.cells[activeCell].numFmt = 'percent';
+
+    const num = parseFloat(curVal.replace(/[^0-9.-]/g, ''));
+    let formatted = curVal;
+    if (!isNaN(num) && !curVal.includes('{')) {
+      formatted = `${num}%`;
+    } else if (!curVal.includes('%')) {
+      formatted = curVal ? `${curVal}%` : '15%';
+    }
+    updateActiveCellValue(formatted);
+    const fi = $('#tb-formula-input', view);
+    if (fi) fi.value = formatted;
+    toastOk('تم تطبيق تنسيق النسبة المئوية (%)');
+  });
+
+  // Number Formatting: Comma separator (,000)
+  $('#btn-fmt-comma', view)?.addEventListener('click', () => {
+    if (!activeCell || !cfg.gridState) return toastErr('اختر خلية أولاً');
+    if (!cfg.gridState.cells[activeCell]) cfg.gridState.cells[activeCell] = { v: '' };
+    const curVal = String(cfg.gridState.cells[activeCell].v || '').trim();
+    cfg.gridState.cells[activeCell].numFmt = 'comma';
+
+    const num = parseFloat(curVal.replace(/[^0-9.-]/g, ''));
+    let formatted = curVal;
+    if (!isNaN(num) && !curVal.includes('{')) {
+      formatted = num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    updateActiveCellValue(formatted);
+    const fi = $('#tb-formula-input', view);
+    if (fi) fi.value = formatted;
+    toastOk('تم تطبيق فاصلة الآلاف والكسور');
+  });
+
+  // Text Wrap Toggle (Wrap Text)
+  $('#btn-tool-wrap', view)?.addEventListener('click', () => {
+    if (!activeCell || !cfg.gridState) return toastErr('اختر خلية أولاً');
+    if (!cfg.gridState.cells[activeCell]) cfg.gridState.cells[activeCell] = { v: '' };
+    const curWrap = cfg.gridState.cells[activeCell].wrap !== false;
+    cfg.gridState.cells[activeCell].wrap = !curWrap;
+
+    const td = $(`[data-ref="${activeCell}"]`, view);
+    if (td) {
+      const valDiv = td.querySelector('.tb-cell-val');
+      if (valDiv) valDiv.style.whiteSpace = !curWrap ? 'pre-wrap' : 'nowrap';
+    }
+    $('#btn-tool-wrap', view)?.classList.toggle('active', !curWrap);
+    toastOk(!curWrap ? 'تم تفعيل التفاف النص (Wrap Text)' : 'تم إلغاء التفاف النص');
+  });
+
+  // Toggle A4 Boundary Guide
+  $('#btn-toggle-a4-guide', view)?.addEventListener('click', () => {
+    showA4Guide = !showA4Guide;
+    const guideEl = $('#tb-a4-boundary-line', view);
+    if (guideEl) {
+      guideEl.style.display = showA4Guide ? 'block' : 'none';
+    } else {
+      renderView();
+      attachEvents();
+    }
+    $('#btn-toggle-a4-guide', view)?.classList.toggle('active', showA4Guide);
+    toastOk(showA4Guide ? 'تم إظهار خط حدود صفحة A4' : 'تم إخفاء خط حدود صفحة A4');
+  });
 
   // Global click to close dropdowns & context menu
   document.addEventListener('click', (e) => {
@@ -1425,13 +1758,52 @@ function attachEvents() {
     if (!cfg.gridState.cells[ref]) {
       cfg.gridState.cells[ref] = { v: '', size: 11, align: 'right' };
     }
-    cfg.gridState.cells[ref].v = valEl.innerText;
+    // Save the raw typed value (user is in edit mode, so innerText = raw tags)
+    const rawTyped = valEl.innerText;
+    cfg.gridState.cells[ref].v = rawTyped;
+    valEl.dataset.raw = rawTyped;
 
     // Update formula bar synchronously
     const fi = $('#tb-formula-input', view);
-    if (fi) fi.value = valEl.innerText;
+    if (fi) fi.value = rawTyped;
     const nameBox = $('#tb-active-cell-ref', view);
     if (nameBox) nameBox.textContent = ref;
+  });
+
+  // FocusIn: when user clicks cell to edit — restore raw {tag} values
+  table?.addEventListener('focusin', e => {
+    const valEl = e.target.closest('.tb-cell-val');
+    if (!valEl) return;
+    const ref = valEl.dataset.ref;
+    const rawVal = cfg.gridState?.cells?.[ref]?.v ?? (valEl.dataset.raw || '');
+    // Only switch if currently showing sample data (differs from raw)
+    if (valEl.innerText !== rawVal) {
+      valEl.innerText = rawVal;
+    }
+    valEl.classList.remove('tb-val-sampled');
+    // Update formula bar with raw value
+    const fi = $('#tb-formula-input', view);
+    if (fi) fi.value = rawVal;
+  });
+
+  // FocusOut: when user leaves cell — show sample data again
+  table?.addEventListener('focusout', e => {
+    const valEl = e.target.closest('.tb-cell-val');
+    if (!valEl) return;
+    const ref = valEl.dataset.ref;
+    const rawVal = cfg.gridState?.cells?.[ref]?.v || '';
+    valEl.dataset.raw = rawVal;
+    // Replace tags with sample data for display
+    let displayVal = rawVal;
+    if (rawVal && rawVal.includes('{')) {
+      Object.entries(SAMPLE_MAP).forEach(([tag, sample]) => {
+        displayVal = displayVal.replaceAll(tag, sample);
+      });
+    }
+    if (displayVal !== rawVal) {
+      valEl.innerText = displayVal;
+      valEl.classList.add('tb-val-sampled');
+    }
   });
 
   table?.addEventListener('keydown', e => {
@@ -1453,12 +1825,28 @@ function attachEvents() {
     if (!cfg.gridState) return;
     if (!cfg.gridState.cols[colIdx]) cfg.gridState.cols[colIdx] = { width: 14 };
     cfg.gridState.cols[colIdx].width = Math.max(4, Math.min(80, newW));
+    const px = cfg.gridState.cols[colIdx].width * 10;
 
+    // 1. Update <col class="tb-col-def"> in <colgroup> for entire table column
+    const colDef = view.querySelector(`col.tb-col-def[data-col="${colIdx}"]`);
+    if (colDef) {
+      colDef.style.width = `${px}px`;
+      colDef.style.minWidth = `${px}px`;
+    }
+
+    // 2. Update <th> header
     const th = view.querySelector(`th.tb-col-th[data-col="${colIdx}"]`);
     if (th) {
-      th.style.width = `${cfg.gridState.cols[colIdx].width * 10}px`;
-      th.style.minWidth = `${cfg.gridState.cols[colIdx].width * 10}px`;
+      th.style.width = `${px}px`;
+      th.style.minWidth = `${px}px`;
     }
+
+    // 3. Update all unmerged cells in this column directly
+    view.querySelectorAll(`td.tb-grid-cell[data-col="${colIdx}"]:not([colspan])`).forEach(td => {
+      td.style.width = `${px}px`;
+      td.style.minWidth = `${px}px`;
+    });
+
     const badge = $('#tb-col-width-lbl', view);
     if (badge) badge.textContent = cfg.gridState.cols[colIdx].width;
   }
@@ -1468,17 +1856,20 @@ function attachEvents() {
     const rIdx = rowNum - 1;
     if (!cfg.gridState.rows[rIdx]) cfg.gridState.rows[rIdx] = { height: 24 };
     cfg.gridState.rows[rIdx].height = Math.max(16, Math.min(180, newH));
+    const h = cfg.gridState.rows[rIdx].height;
 
     const tbody = view.querySelector('#tb-grid-table tbody');
     if (tbody && tbody.children[rIdx]) {
       const tr = tbody.children[rIdx];
-      tr.style.height = `${cfg.gridState.rows[rIdx].height}px`;
+      tr.style.height = `${h}px`;
+      const rowTh = tr.querySelector('th.tb-row-th');
+      if (rowTh) rowTh.style.height = `${h}px`;
       tr.querySelectorAll('td.tb-grid-cell').forEach(td => {
-        td.style.height = `${cfg.gridState.rows[rIdx].height}px`;
+        td.style.height = `${h}px`;
       });
     }
     const badge = $('#tb-row-height-lbl', view);
-    if (badge) badge.textContent = `${cfg.gridState.rows[rIdx].height}px`;
+    if (badge) badge.textContent = `${h}px`;
   }
 
   // Column Width Grow / Shrink (Instant)
@@ -1517,87 +1908,140 @@ function attachEvents() {
     toastOk(`ارتفاع الصف ${parsed.row}: ${cfg.gridState.rows[rIdx].height}px`);
   });
 
-  // Draggable Column & Row Resizers
-  $$('.tb-col-resizer', view).forEach(resizer => {
-    let dragHappened = false;
-    resizer.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dragHappened = false;
-      const colIdx = Number(resizer.dataset.col);
-      const startX = e.clientX;
-      const initialWidth = cfg.gridState.cols[colIdx]?.width || 14;
-      resizer.classList.add('resizing');
+  // Draggable Column, Row, and Corner Resizers (Header + In-Cell)
+  const gridTable = $('#tb-grid-table', view);
+  if (gridTable) {
+    gridTable.addEventListener('mousedown', (e) => {
+      // 1. Column Resizer (Header or inside any cell)
+      const colResizer = e.target.closest('.tb-col-resizer, .tb-cell-col-resizer');
+      if (colResizer) {
+        e.preventDefault();
+        e.stopPropagation();
+        const colIdx = Number(colResizer.dataset.col);
+        const startX = e.clientX;
+        const initialWidth = cfg.gridState?.cols[colIdx]?.width || 14;
+        colResizer.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
 
-      const onMouseMove = (moveEv) => {
-        dragHappened = true;
-        // In RTL table, moving mouse to left (decreasing clientX) enlarges column
-        const diffPx = startX - moveEv.clientX;
-        const newW = Math.max(4, Math.round(initialWidth + diffPx / 10));
+        const onMouseMove = (moveEv) => {
+          // In RTL table, moving mouse to left enlarges column
+          const diffPx = startX - moveEv.clientX;
+          const newW = Math.max(4, Math.round(initialWidth + diffPx / 10));
+          applyColWidth(colIdx, newW);
+        };
+
+        const onMouseUp = () => {
+          colResizer.classList.remove('resizing');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        return;
+      }
+
+      // 2. Row Resizer (Row index header or inside any cell)
+      const rowResizer = e.target.closest('.tb-row-resizer, .tb-cell-row-resizer');
+      if (rowResizer) {
+        e.preventDefault();
+        e.stopPropagation();
+        const rowNum = Number(rowResizer.dataset.row);
+        const rIdx = rowNum - 1;
+        const startY = e.clientY;
+        const initialHeight = cfg.gridState?.rows[rIdx]?.height || 24;
+        rowResizer.classList.add('resizing');
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+
+        const onMouseMove = (moveEv) => {
+          const diffPx = moveEv.clientY - startY;
+          const newH = Math.max(16, Math.round(initialHeight + diffPx));
+          applyRowHeight(rowNum, newH);
+        };
+
+        const onMouseUp = () => {
+          rowResizer.classList.remove('resizing');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        return;
+      }
+
+      // 3. Corner Resizer (Active cell bottom-left handle)
+      const cornerResizer = e.target.closest('.tb-cell-corner-resizer');
+      if (cornerResizer) {
+        e.preventDefault();
+        e.stopPropagation();
+        const colIdx = Number(cornerResizer.dataset.col);
+        const rowNum = Number(cornerResizer.dataset.row);
+        const rIdx = rowNum - 1;
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const initialWidth = cfg.gridState?.cols[colIdx]?.width || 14;
+        const initialHeight = cfg.gridState?.rows[rIdx]?.height || 24;
+        cornerResizer.classList.add('resizing');
+        document.body.style.cursor = 'nwse-resize';
+        document.body.style.userSelect = 'none';
+
+        const onMouseMove = (moveEv) => {
+          const diffX = startX - moveEv.clientX;
+          const newW = Math.max(4, Math.round(initialWidth + diffX / 10));
+          applyColWidth(colIdx, newW);
+
+          const diffY = moveEv.clientY - startY;
+          const newH = Math.max(16, Math.round(initialHeight + diffY));
+          applyRowHeight(rowNum, newH);
+        };
+
+        const onMouseUp = () => {
+          cornerResizer.classList.remove('resizing');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        return;
+      }
+    });
+
+    // Double-click to toggle preset sizes
+    gridTable.addEventListener('dblclick', (e) => {
+      const colResizer = e.target.closest('.tb-col-resizer, .tb-cell-col-resizer');
+      if (colResizer) {
+        e.stopPropagation();
+        const colIdx = Number(colResizer.dataset.col);
+        const curW = cfg.gridState?.cols[colIdx]?.width || 14;
+        const newW = curW >= 28 ? 12 : (curW <= 12 ? 22 : 30);
         applyColWidth(colIdx, newW);
-      };
+        toastOk(`تم ضبط عرض العمود ${colLetter(colIdx)} إلى ${newW}`);
+        return;
+      }
 
-      const onMouseUp = () => {
-        resizer.classList.remove('resizing');
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-      };
-
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
-    });
-
-    resizer.addEventListener('click', (e) => {
-      if (dragHappened) return;
-      e.stopPropagation();
-      const colIdx = Number(resizer.dataset.col);
-      const curW = cfg.gridState.cols[colIdx]?.width || 14;
-      const newW = curW >= 28 ? 10 : (curW <= 12 ? 22 : 30);
-      applyColWidth(colIdx, newW);
-      toastOk(`تم ضبط عرض العمود ${colLetter(colIdx)} إلى ${newW}`);
-    });
-  });
-
-  $$('.tb-row-resizer', view).forEach(resizer => {
-    let dragHappened = false;
-    resizer.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dragHappened = false;
-      const rowNum = Number(resizer.dataset.row);
-      const rIdx = rowNum - 1;
-      const startY = e.clientY;
-      const initialHeight = cfg.gridState.rows[rIdx]?.height || 24;
-      resizer.classList.add('resizing');
-
-      const onMouseMove = (moveEv) => {
-        dragHappened = true;
-        const diffPx = moveEv.clientY - startY;
-        const newH = Math.max(16, Math.round(initialHeight + diffPx));
+      const rowResizer = e.target.closest('.tb-row-resizer, .tb-cell-row-resizer');
+      if (rowResizer) {
+        e.stopPropagation();
+        const rowNum = Number(rowResizer.dataset.row);
+        const rIdx = rowNum - 1;
+        const curH = cfg.gridState?.rows[rIdx]?.height || 24;
+        const newH = curH >= 48 ? 24 : 48;
         applyRowHeight(rowNum, newH);
-      };
-
-      const onMouseUp = () => {
-        resizer.classList.remove('resizing');
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-      };
-
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
+        toastOk(`تم ضبط ارتفاع الصف ${rowNum} إلى ${newH}px`);
+        return;
+      }
     });
-
-    resizer.addEventListener('click', (e) => {
-      if (dragHappened) return;
-      e.stopPropagation();
-      const rowNum = Number(resizer.dataset.row);
-      const rIdx = rowNum - 1;
-      const curH = cfg.gridState.rows[rIdx]?.height || 24;
-      const newH = curH >= 48 ? 24 : (curH <= 24 ? 48 : 24);
-      applyRowHeight(rowNum, newH);
-      toastOk(`تم ضبط ارتفاع الصف ${rowNum} إلى ${newH}px`);
-    });
-  });
+  }
 
   // Bold Button
   $('#btn-tool-bold', view)?.addEventListener('click', () => {
@@ -1891,7 +2335,44 @@ function attachEvents() {
   $$('.tb-ctx-item', view).forEach(btn => {
     btn.addEventListener('click', () => {
       const act = btn.dataset.act;
-      if (act === 'add-row') $('#btn-add-row', view)?.click();
+      if (act === 'copy') {
+        const val = cfg.gridState?.cells?.[activeCell]?.v || '';
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(val).then(() => {
+            toastOk(`تم نسخ محتوى الخلية (${activeCell})`);
+          }).catch(() => {
+            toastOk(`تم نسخ المحتوى: ${val}`);
+          });
+        } else {
+          toastOk(`محتوى الخلية: ${val}`);
+        }
+      } else if (act === 'paste') {
+        if (navigator.clipboard?.read) {
+          navigator.clipboard.read().then(async items => {
+            for (const item of items) {
+              const imgType = item.types.find(t => t.startsWith('image/'));
+              if (imgType) {
+                const blob = await item.getType(imgType);
+                const reader = new FileReader();
+                reader.onload = () => handleImagePaste(String(reader.result || ''));
+                reader.readAsDataURL(blob);
+                return;
+              }
+            }
+            const text = await navigator.clipboard.readText();
+            if (text) {
+              updateActiveCellValue(text);
+              const fi = $('#tb-formula-input', view);
+              if (fi) fi.value = text;
+              toastOk('تم لصق النص في الخلية');
+            }
+          }).catch(() => {
+            toastErr('استخدم Ctrl+V للصق المباشر في الخلية');
+          });
+        } else {
+          toastErr('استخدم Ctrl+V للصق في الخلية');
+        }
+      } else if (act === 'add-row') $('#btn-add-row', view)?.click();
       else if (act === 'del-row') $('#btn-del-row', view)?.click();
       else if (act === 'add-col') $('#btn-add-col', view)?.click();
       else if (act === 'del-col') $('#btn-del-col', view)?.click();
@@ -1899,12 +2380,78 @@ function attachEvents() {
       else if (act === 'clear') {
         if (cfg.gridState?.cells?.[activeCell]) {
           cfg.gridState.cells[activeCell].v = '';
+          delete cfg.gridState.cells[activeCell].image;
           updateActiveCellValue('');
+          renderView();
+          attachEvents();
         }
       }
       const ctx = $('#tb-context-menu', view);
       if (ctx) ctx.style.display = 'none';
     });
+  });
+
+  // Helper for pasting or inserting an image into the active cell
+  function handleImagePaste(dataUrl) {
+    if (!activeCell || !cfg.gridState) return;
+    const img = new Image();
+    img.onload = () => {
+      const maxW = 200, maxH = 160;
+      let w = img.width, h = img.height;
+      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+      if (h > maxH) { w = Math.round(w * maxH / h); h = maxH; }
+      if (!cfg.gridState.cells[activeCell]) {
+        cfg.gridState.cells[activeCell] = { v: '', size: 11, align: 'right' };
+      }
+      cfg.gridState.cells[activeCell].image = {
+        src: dataUrl,
+        width: w,
+        height: h,
+        position: 'center',
+      };
+      const parsed = parseCellRef(activeCell);
+      if (parsed) {
+        fitColToContent(parsed.col);
+        fitRowToContent(parsed.row);
+      }
+      renderView();
+      attachEvents();
+      toastOk('تم لصق الصورة في الخلية بنجاح!');
+    };
+    img.src = dataUrl;
+  }
+
+  // Direct Ctrl+V paste on active cell (supports clipboard images and text)
+  view.addEventListener('paste', e => {
+    if (activeTab !== 'editor' || !activeCell || !cfg.gridState) return;
+
+    // 1. Check for image in clipboard
+    const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+    if (items) {
+      for (const item of items) {
+        if (item.type && item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (!file) continue;
+          const reader = new FileReader();
+          reader.onload = () => handleImagePaste(String(reader.result || ''));
+          reader.readAsDataURL(file);
+          return;
+        }
+      }
+    }
+
+    // 2. Text paste if not inside contenteditable already
+    if (!e.target.closest('.tb-cell-val') && !e.target.closest('#tb-formula-input')) {
+      const text = e.clipboardData?.getData('text/plain');
+      if (text) {
+        e.preventDefault();
+        updateActiveCellValue(text);
+        const fi = $('#tb-formula-input', view);
+        if (fi) fi.value = text;
+        toastOk('تم لصق النص في الخلية');
+      }
+    }
   });
 
   // Save / Update Template
@@ -2071,8 +2618,22 @@ function selectCell(ref) {
   activeCell = ref;
 
   $$('.tb-grid-cell', view).forEach(el => el.classList.remove('tb-cell-active'));
+  $$('.tb-cell-corner-resizer', view).forEach(el => el.remove());
+
   const targetTd = $(`[data-ref="${ref}"]`, view);
-  if (targetTd) targetTd.classList.add('tb-cell-active');
+  if (targetTd) {
+    targetTd.classList.add('tb-cell-active');
+    const colTarget = targetTd.dataset.col;
+    const rowTarget = targetTd.dataset.row;
+    if (colTarget !== undefined && rowTarget !== undefined) {
+      const corner = document.createElement('div');
+      corner.className = 'tb-cell-corner-resizer';
+      corner.dataset.col = colTarget;
+      corner.dataset.row = rowTarget;
+      corner.title = 'اسحب لتكبير/تصغير أبعاد الخلية معاً';
+      targetTd.appendChild(corner);
+    }
+  }
 
   const refBadge = $('#tb-active-cell-ref', view);
   if (refBadge) refBadge.textContent = ref;
@@ -2093,6 +2654,9 @@ function selectCell(ref) {
   $$('[data-align]', view).forEach(b => {
     b.classList.toggle('active', b.dataset.align === al);
   });
+
+  const btnWrap = $('#btn-tool-wrap', view);
+  if (btnWrap) btnWrap.classList.toggle('active', cellData.wrap !== false);
 
   const parsed = parseCellRef(ref);
   if (parsed && cfg.gridState) {

@@ -249,6 +249,32 @@ type UpdateUserInput struct {
 	IsActive    *bool    `json:"is_active"`
 }
 
+func (u *UpdateUserInput) UnmarshalJSON(data []byte) error {
+	type Alias UpdateUserInput
+	var aux struct {
+		Alias
+		IsActive any `json:"is_active"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*u = UpdateUserInput(aux.Alias)
+	if aux.IsActive != nil {
+		switch v := aux.IsActive.(type) {
+		case bool:
+			u.IsActive = &v
+		case float64:
+			b := v != 0
+			u.IsActive = &b
+		case string:
+			clean := strings.TrimSpace(v)
+			b := clean != "0" && !strings.EqualFold(clean, "false")
+			u.IsActive = &b
+		}
+	}
+	return nil
+}
+
 func (s *AuthService) UpdateUser(id string, input UpdateUserInput) (*models.User, error) {
 	var current models.User
 	err := s.db.QueryRow(`

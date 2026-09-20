@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"math"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -383,7 +384,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		var iss models.Issuer
 		if err := json.NewDecoder(r.Body).Decode(&iss); err != nil {
-			s.err(w, 400, "بيانات غير صالحة")
+			s.err(w, 400, "بيانات المنشأة غير صالحة: "+err.Error())
 			return
 		}
 		if err := s.issuers.CreateIssuer(&iss); err != nil {
@@ -402,7 +403,7 @@ func (s *Server) Handler() http.Handler {
 		id := r.PathValue("id")
 		var iss models.Issuer
 		if err := json.NewDecoder(r.Body).Decode(&iss); err != nil {
-			s.err(w, 400, "بيانات غير صالحة")
+			s.err(w, 400, "بيانات المنشأة غير صالحة: "+err.Error())
 			return
 		}
 		if err := s.issuers.UpdateIssuer(id, &iss); err != nil {
@@ -424,6 +425,52 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		s.json(w, 200, map[string]any{"ok": true})
+	})
+
+	mux.HandleFunc("POST /api/issuers/{id}/generate-key", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		kp, err := s.issuers.GenerateKeys(id, s.masterKey)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{
+			"public_key_pem": kp.PublicKeyPem,
+		})
+	})
+
+	mux.HandleFunc("GET /api/issuers/{id}/credentials", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		creds, err := s.issuers.GetCredentials(id, s.masterKey)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, creds)
+	})
+
+	mux.HandleFunc("PUT /api/issuers/{id}/credentials", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		var input services.UpdateCredentialsInput
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		if err := s.issuers.UpdateCredentials(id, input, s.masterKey); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{"ok": true})
+	})
+
+	mux.HandleFunc("GET /api/issuers/{id}/verify-chain", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		res, err := s.invoices.VerifyChain(id)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, res)
 	})
 
 	// ---------------------------------------------------- العملاء
@@ -463,7 +510,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		var c models.Client
 		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
-			s.err(w, 400, "بيانات غير صالحة")
+			s.err(w, 400, "بيانات العميل غير صالحة: "+err.Error())
 			return
 		}
 		if err := s.clients.CreateClient(&c); err != nil {
@@ -482,7 +529,7 @@ func (s *Server) Handler() http.Handler {
 		id := r.PathValue("id")
 		var c models.Client
 		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
-			s.err(w, 400, "بيانات غير صالحة")
+			s.err(w, 400, "بيانات العميل غير صالحة: "+err.Error())
 			return
 		}
 		if err := s.clients.UpdateClient(id, &c); err != nil {
@@ -597,6 +644,30 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		s.json(w, 200, cat)
+	})
+
+	mux.HandleFunc("PUT /api/categories/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		var cat models.ItemCategory
+		if err := json.NewDecoder(r.Body).Decode(&cat); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		if err := s.items.UpdateCategory(id, &cat); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		cat.ID = id
+		s.json(w, 200, cat)
+	})
+
+	mux.HandleFunc("DELETE /api/categories/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if err := s.items.DeleteCategory(id); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{"ok": true})
 	})
 
 	mux.HandleFunc("GET /api/items", func(w http.ResponseWriter, r *http.Request) {
@@ -778,6 +849,26 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		inv, err := s.invoices.CreateInvoice(input, actor, s.clientIP(r))
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, inv)
+	})
+
+	mux.HandleFunc("PUT /api/invoices/{id}", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		actor := "system"
+		if u != nil {
+			actor = u.Username
+		}
+		id := r.PathValue("id")
+		var input services.CreateInvoiceInput
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			s.err(w, 400, "بيانات الفاتورة غير صالحة")
+			return
+		}
+		inv, err := s.invoices.UpdateInvoice(id, input, actor, s.clientIP(r))
 		if err != nil {
 			s.err(w, 400, err.Error())
 			return
@@ -1692,6 +1783,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			s.err(w, 404, "المسار غير موجود")
+			return
+		}
+
+		if strings.HasPrefix(r.URL.Path, "/data/templates/") {
+			rel := strings.TrimPrefix(r.URL.Path, "/data/templates/")
+			rel = filepath.Clean(rel)
+			targetFile := filepath.Join(s.cfg.DataDir, "templates", rel)
+			if fi, errStat := os.Stat(targetFile); errStat == nil && !fi.IsDir() {
+				w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(targetFile)))
+				http.ServeFile(w, r, targetFile)
+				return
+			}
+			http.NotFound(w, r)
 			return
 		}
 
