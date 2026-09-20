@@ -56,6 +56,7 @@ function openItemModal(item, categories, onSaved) {
   m.el.querySelector('[data-save]').addEventListener('click', async (e) => {
     const values = formValues(m.body);
     if (!values.name_ar) return toastErr('اسم الصنف مطلوب');
+    if (!values.category_id) values.category_id = null;
     e.target.disabled = true;
     try {
       if (isNew) await api.post('/api/items', values);
@@ -92,6 +93,7 @@ function openCategoryModal(category, categories, onSaved) {
   m.el.querySelector('[data-save]').addEventListener('click', async (e) => {
     const values = formValues(m.body);
     if (!values.name) return toastErr('اسم المجموعة مطلوب');
+    if (!values.parent_id) values.parent_id = null;
     e.target.disabled = true;
     try {
       if (isNew) await api.post('/api/categories', values);

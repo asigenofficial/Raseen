@@ -55,6 +55,9 @@ func (s *ItemService) CreateCategory(c *models.ItemCategory) error {
 		_ = s.db.QueryRow("SELECT COUNT(*) + 1 FROM item_categories").Scan(&count)
 		c.Code = fmt.Sprintf("CAT-%03d", count)
 	}
+	if c.ParentID != nil && strings.TrimSpace(*c.ParentID) == "" {
+		c.ParentID = nil
+	}
 	c.CreatedAt = db.NowIso()
 
 	_, err := s.db.Exec(`
@@ -67,6 +70,9 @@ func (s *ItemService) CreateCategory(c *models.ItemCategory) error {
 func (s *ItemService) UpdateCategory(id string, c *models.ItemCategory) error {
 	if c.Name == "" {
 		return errors.New("اسم المجموعة مطلوب")
+	}
+	if c.ParentID != nil && strings.TrimSpace(*c.ParentID) == "" {
+		c.ParentID = nil
 	}
 	res, err := s.db.Exec(`
 		UPDATE item_categories SET name = ?, parent_id = ?, description = ?
@@ -211,6 +217,9 @@ func (s *ItemService) CreateItem(item *models.Item) error {
 	if item.TaxRate <= 0 {
 		item.TaxRate = 15.0
 	}
+	if item.CategoryID != nil && strings.TrimSpace(*item.CategoryID) == "" {
+		item.CategoryID = nil
+	}
 
 	now := db.NowIso()
 	item.CreatedAt = now
@@ -238,6 +247,9 @@ func (s *ItemService) CreateItem(item *models.Item) error {
 func (s *ItemService) UpdateItem(id string, item *models.Item) error {
 	now := db.NowIso()
 	item.UpdatedAt = now
+	if item.CategoryID != nil && strings.TrimSpace(*item.CategoryID) == "" {
+		item.CategoryID = nil
+	}
 
 	_, err := s.db.Exec(`
 		UPDATE items SET
