@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/skip2/go-qrcode"
@@ -25,6 +26,11 @@ import (
 )
 
 const SarSymbolSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1124.14 1256.39" width="0.92em" height="0.92em" class="sar-sym-svg" style="vertical-align:-0.14em;display:inline-block;fill:currentColor;margin:0 2px;" aria-label="ريال سعودي" title="ريال سعودي" role="img"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg>`
+
+var (
+	moneySarRegex1 = regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)\s*(?:ر\.س|ر\.\s*س|﷼|SAR)`)
+	moneySarRegex2 = regexp.MustCompile(`(?:ر\.س|ر\.\s*س|﷼|SAR)\s*([0-9]+(?:\.[0-9]+)?)`)
+)
 
 type TemplateService struct {
 	db      *db.DB
@@ -1165,7 +1171,22 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 	}
 
 	// 3. Scan and replace metadata / placeholders in the sheet
-	maxCol := 16
+	maxCol := 1
+	for _, r := range rawRows {
+		if len(r) > maxCol {
+			maxCol = len(r)
+		}
+	}
+	sheetMerges, _ := f.GetMergeCells(sheet)
+	for _, m := range sheetMerges {
+		endCol, _, _ := excelize.CellNameToCoordinates(m.GetEndAxis())
+		if endCol > maxCol {
+			maxCol = endCol
+		}
+	}
+	if maxCol < 40 {
+		maxCol = 40
+	}
 	qrInserted := false
 	logoInserted := false
 
@@ -1210,9 +1231,9 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 				}
 			}
 
-			// QR placement (only once)
-			if !qrInserted && (strings.EqualFold(valTrim, "QR") || strings.Contains(valTrim, "باركود") || strings.Contains(valTrim, "{{qr}}")) {
-				if inv.QrPayload != "" {
+			// QR placement (handles single or merged QR placeholder cells)
+			if strings.EqualFold(valTrim, "QR") || strings.Contains(strings.ToUpper(valTrim), "QR") || strings.Contains(valTrim, "باركود") || strings.Contains(valTrim, "{{qr}}") {
+				if !qrInserted && inv.QrPayload != "" {
 					qrBytes, errQr := qrcode.Encode(inv.QrPayload, qrcode.Medium, 170)
 					if errQr == nil {
 						_ = f.AddPictureFromBytes(sheet, axis, &excelize.Picture{
@@ -1225,16 +1246,16 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 								OffsetY:         2,
 							},
 						})
-						_ = f.SetCellValue(sheet, axis, "")
 						qrInserted = true
 					}
 				}
+				_ = f.SetCellValue(sheet, axis, "")
 				continue
 			}
 
-			// Logo placement (only once)
-			if !logoInserted && (strings.EqualFold(valTrim, "الشعار") || strings.EqualFold(valTrim, "LOGO") || strings.Contains(valTrim, "{{logo}}")) {
-				if inv.IssuerSnapshot != nil && inv.IssuerSnapshot.LogoData != nil && strings.HasPrefix(*inv.IssuerSnapshot.LogoData, "data:image/") {
+			// Logo placement (handles single or merged logo placeholder cells)
+			if strings.EqualFold(valTrim, "الشعار") || strings.Contains(valTrim, "الشعار") || strings.EqualFold(valTrim, "LOGO") || strings.Contains(strings.ToLower(valTrim), "logo") || strings.Contains(valTrim, "{{logo}}") {
+				if !logoInserted && inv.IssuerSnapshot != nil && inv.IssuerSnapshot.LogoData != nil && strings.HasPrefix(*inv.IssuerSnapshot.LogoData, "data:image/") {
 					logoData := *inv.IssuerSnapshot.LogoData
 					commaIdx := strings.Index(logoData, ",")
 					if commaIdx != -1 {
@@ -1253,11 +1274,11 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 									OffsetY:         4,
 								},
 							})
-							_ = f.SetCellValue(sheet, axis, "")
 							logoInserted = true
 						}
 					}
 				}
+				_ = f.SetCellValue(sheet, axis, "")
 				continue
 			}
 
@@ -1504,9 +1525,11 @@ func ConvertExcelFileToHTML(f *excelize.File) (string, error) {
 	sb.WriteString("  * { box-sizing: border-box; }\n")
 	sb.WriteString("  html, body { margin: 0; padding: 0; background: #fff; font-family: Tahoma, 'Cairo', 'Segoe UI', Arial, sans-serif; color: #111; }\n")
 	sb.WriteString("  .excel-container { width: 100%; max-width: 210mm; margin: 0 auto; background: #fff; padding: 2mm 0; }\n")
-	sb.WriteString("  table.excel-sheet { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 9pt; }\n")
 	sb.WriteString("  table.excel-sheet td { padding: 3px 5px; overflow: hidden; word-break: break-word; }\n")
-	sb.WriteString("  .cell-img { max-width: 100%; max-height: 100%; display: block; margin: 0 auto; object-fit: contain; }\n")
+	sb.WriteString("  .cell-img { max-width: 100%; max-height: 105px; height: auto; width: auto; display: block; margin: 0 auto; object-fit: contain; }\n")
+	sb.WriteString("  .money-box { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; direction: rtl; white-space: nowrap; }\n")
+	sb.WriteString("  .money-box .num { direction: ltr; }\n")
+	sb.WriteString("  .money-box .cur-sym { display: inline-flex; align-items: center; }\n")
 	sb.WriteString("  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }\n")
 	sb.WriteString("</style>\n</head>\n<body>\n")
 	sb.WriteString("<div class=\"excel-container\">\n")
@@ -1656,14 +1679,20 @@ func ConvertExcelFileToHTML(f *excelize.File) (string, error) {
 			cellContent := val
 			if cellContent != "" {
 				cellContent = strings.ReplaceAll(cellContent, "\n", "<br/>")
-				cellContent = strings.ReplaceAll(cellContent, "ر.س", SarSymbolSVG)
-				cellContent = strings.ReplaceAll(cellContent, "ر. س", SarSymbolSVG)
-				cellContent = strings.ReplaceAll(cellContent, "﷼", SarSymbolSVG)
-				if strings.TrimSpace(cellContent) == "SAR" {
-					cellContent = SarSymbolSVG
+				if moneySarRegex1.MatchString(cellContent) || moneySarRegex2.MatchString(cellContent) {
+					replacement := `<span class="money-box"><span class="num">$1</span> <span class="cur-sym">` + SarSymbolSVG + `</span></span>`
+					cellContent = moneySarRegex1.ReplaceAllString(cellContent, replacement)
+					cellContent = moneySarRegex2.ReplaceAllString(cellContent, replacement)
 				} else {
-					cellContent = strings.ReplaceAll(cellContent, " SAR", " "+SarSymbolSVG)
-					cellContent = strings.ReplaceAll(cellContent, "SAR ", SarSymbolSVG+" ")
+					cellContent = strings.ReplaceAll(cellContent, "ر.س", SarSymbolSVG)
+					cellContent = strings.ReplaceAll(cellContent, "ر. س", SarSymbolSVG)
+					cellContent = strings.ReplaceAll(cellContent, "﷼", SarSymbolSVG)
+					if strings.TrimSpace(cellContent) == "SAR" {
+						cellContent = SarSymbolSVG
+					} else {
+						cellContent = strings.ReplaceAll(cellContent, " SAR", " "+SarSymbolSVG)
+						cellContent = strings.ReplaceAll(cellContent, "SAR ", SarSymbolSVG+" ")
+					}
 				}
 			}
 			if imgTags != "" {

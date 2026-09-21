@@ -952,6 +952,55 @@ export async function render(view) {
     return { issuerToUse, clientToUse, invToRender };
   }
 
+  const templateHtmlCache = new Map();
+
+  function getTemplateLoadingHtml(title = 'جارٍ تحميل وتجهيز قالب الفاتورة...') {
+    return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      margin: 0;
+      min-height: 297mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", sans-serif;
+      background: #ffffff;
+      color: #334155;
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3.5px solid #e2e8f0;
+      border-top-color: #0d9488;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .title {
+      margin-top: 16px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .sub {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="spinner"></div>
+  <div class="title">${title}</div>
+  <div class="sub">يتم تجهيز المستند وفق قالب Excel المعتمد الحقيقي...</div>
+</body>
+</html>`;
+  }
+
   function updateLivePreview() {
     const iframe = $('#preview-iframe', view);
     if (!iframe) return;
@@ -968,7 +1017,7 @@ export async function render(view) {
 
     const { issuerToUse, clientToUse, invToRender } = resolvePreviewEntities(tpl);
 
-    let docHtml = invoicePreviewDoc({
+    const fallbackHtml = () => invoicePreviewDoc({
       invoice: invToRender,
       issuer: issuerToUse,
       client: clientToUse,
@@ -976,17 +1025,27 @@ export async function render(view) {
       qrSettings: qrCfg,
     });
 
-    iframe.srcdoc = docHtml;
-
     if (tpl && tpl.id) {
+      if (templateHtmlCache.has(tpl.id)) {
+        iframe.srcdoc = templateHtmlCache.get(tpl.id);
+        return;
+      }
+      iframe.srcdoc = getTemplateLoadingHtml(`جارٍ تحميل قالب: ${tpl.name_ar || tpl.name}`);
       fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html`)
         .then((r) => r.ok ? r.text() : null)
         .then((realHtml) => {
           if (realHtml && iframe) {
+            templateHtmlCache.set(tpl.id, realHtml);
             iframe.srcdoc = realHtml;
+          } else if (iframe) {
+            iframe.srcdoc = fallbackHtml();
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          if (iframe) iframe.srcdoc = fallbackHtml();
+        });
+    } else {
+      iframe.srcdoc = fallbackHtml();
     }
   }
 
@@ -1007,7 +1066,8 @@ export async function render(view) {
 
     const { issuerToUse, clientToUse, invToRender } = resolvePreviewEntities(tpl);
 
-    let docHtml = invoicePreviewDoc({
+    let docHtml = '';
+    const fallbackHtml = () => invoicePreviewDoc({
       invoice: invToRender,
       issuer: issuerToUse,
       client: clientToUse,
@@ -1042,18 +1102,32 @@ export async function render(view) {
     });
 
     const fIframe = $('#fullscreen-iframe', m.el);
-    if (fIframe) fIframe.srcdoc = docHtml;
-
     if (tpl && tpl.id) {
-      fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html`)
-        .then((r) => r.ok ? r.text() : null)
-        .then((realHtml) => {
-          if (realHtml && fIframe) {
-            docHtml = realHtml;
-            fIframe.srcdoc = realHtml;
-          }
-        })
-        .catch(() => {});
+      if (templateHtmlCache.has(tpl.id)) {
+        docHtml = templateHtmlCache.get(tpl.id);
+        if (fIframe) fIframe.srcdoc = docHtml;
+      } else {
+        if (fIframe) fIframe.srcdoc = getTemplateLoadingHtml(`جارٍ تحميل ومعاينة قالب: ${tpl.name_ar || tpl.name}`);
+        fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html`)
+          .then((r) => r.ok ? r.text() : null)
+          .then((realHtml) => {
+            if (realHtml && fIframe) {
+              templateHtmlCache.set(tpl.id, realHtml);
+              docHtml = realHtml;
+              fIframe.srcdoc = realHtml;
+            } else if (fIframe) {
+              docHtml = fallbackHtml();
+              fIframe.srcdoc = docHtml;
+            }
+          })
+          .catch(() => {
+            docHtml = fallbackHtml();
+            if (fIframe) fIframe.srcdoc = docHtml;
+          });
+      }
+    } else {
+      docHtml = fallbackHtml();
+      if (fIframe) fIframe.srcdoc = docHtml;
     }
 
     $('#btn-modal-print', m.el)?.addEventListener('click', () => {
@@ -1823,6 +1897,7 @@ export async function render(view) {
               if (chosenCategory === 'vouchers') activeHubTab = 'vouchers';
               else activeHubTab = 'invoices';
 
+              templateHtmlCache.clear();
               await loadTemplates();
               renderView();
             } catch (err) {

@@ -394,7 +394,7 @@ export async function render(view, ctx) {
           ${raw(invoice.status !== 'CANCELLED' && invoice.remaining_amount > 0 && can('vouchers.create')
       ? `<button class="btn btn-primary" id="pay" type="button">${icon.receipt({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}سند قبض</button>` : '')}
           ${raw(invoice.status !== 'CANCELLED' && can('invoices.edit') ? `<a class="btn" href="#/invoice?edit=${esc(invoice.id)}" title="تعديل الفاتورة يدوياً">${icon.edit({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}تعديل الفاتورة</a>` : '')}
-          ${raw(invoice.status !== 'CANCELLED' && can('invoices.edit') ? `<button class="btn btn-danger" id="cancel" type="button">${icon.invoiceX({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}إلغاء الفاتورة</button>` : '')}
+          <button class="btn btn-danger" id="btn-delete-invoice" type="button" title="حذف الفاتورة نهائياً">${icon.trash({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}حذف الفاتورة</button>
           <a class="btn" href="#/invoices">${raw(icon.arrowRight({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}القائمة</a>
         </div>
       </div>
@@ -571,14 +571,87 @@ export async function render(view, ctx) {
       </div>`;
 
     let currentInvoiceDocHtml = '';
+    const tplHtmlCache = new Map();
+
+    function getLoadingPreviewHtml(title = 'جارٍ تحميل وتجهيز قالب الفاتورة...') {
+      return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      margin: 0;
+      min-height: 297mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", sans-serif;
+      background: #ffffff;
+      color: #334155;
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3.5px solid #e2e8f0;
+      border-top-color: #0d9488;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .title {
+      margin-top: 16px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .sub {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="spinner"></div>
+  <div class="title">${title}</div>
+  <div class="sub">يتم تجهيز المستند وفق قالب Excel المعتمد الحقيقي...</div>
+</body>
+</html>`;
+    }
 
     async function updateInvoicePreview() {
       const iframe = $('#inv-iframe', view);
       if (!iframe) return;
       const printSettings = getPrintSettings();
       const tplId = selectedTplStyle || printSettings?.template_style;
+      const isExcelTpl = tplId && tplId !== 'standard' && tplId !== 'modern' && tplId !== 'classic' && tplId !== 'compact';
 
-      // 1. Initial immediate render with invoiceA4
+      if (isExcelTpl) {
+        const cacheKey = `${invoice.id}_${tplId}`;
+        if (tplHtmlCache.has(cacheKey)) {
+          currentInvoiceDocHtml = tplHtmlCache.get(cacheKey);
+          iframe.srcdoc = currentInvoiceDocHtml;
+          return;
+        }
+
+        // إظهار مؤشر تحميل نظيف بدلاً من وميض قالب قديم غير مرغوب
+        iframe.srcdoc = getLoadingPreviewHtml('جارٍ تجهيز قالب الفاتورة الحقيقي...');
+
+        try {
+          const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/render-html?style=${encodeURIComponent(tplId)}`);
+          if (res.ok) {
+            const filledHtml = await res.text();
+            if (filledHtml && filledHtml.length > 500 && iframe) {
+              tplHtmlCache.set(cacheKey, filledHtml);
+              currentInvoiceDocHtml = filledHtml;
+              iframe.srcdoc = filledHtml;
+              return;
+            }
+          }
+        } catch { }
+      }
+
       currentInvoiceDocHtml = invoiceA4({
         invoice,
         issuer,
@@ -587,20 +660,6 @@ export async function render(view, ctx) {
         autoPrint: false,
       });
       iframe.srcdoc = currentInvoiceDocHtml;
-
-      // 2. If an Excel template is selected or active, fetch the real filled Excel template HTML!
-      if (tplId && tplId !== 'standard' && tplId !== 'modern' && tplId !== 'classic' && tplId !== 'compact') {
-        try {
-          const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/render-html?style=${encodeURIComponent(tplId)}`);
-          if (res.ok) {
-            const filledHtml = await res.text();
-            if (filledHtml && filledHtml.length > 500 && iframe) {
-              currentInvoiceDocHtml = filledHtml;
-              iframe.srcdoc = filledHtml;
-            }
-          }
-        } catch { }
-      }
     }
 
     function fitZoom() {
@@ -765,6 +824,28 @@ export async function render(view, ctx) {
           toastOk('تم إلغاء الفاتورة');
           draw();
         } catch { /* تنبيه تلقائي */ }
+      });
+    }
+
+    const deleteBtn = $('#btn-delete-invoice', view);
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', async () => {
+        const ok = await confirmDialog({
+          title: `حذف الفاتورة ${invoice.invoice_number}`,
+          message: `هل أنت متأكد من حذف الفاتورة ${invoice.invoice_number} نهائياً؟ سيتم حذف بنودها وقيدها المرتبط. لا يمكن التراجع عن هذه العملية.`,
+          danger: true,
+          okText: 'حذف نهائياً',
+        });
+        if (!ok) return;
+        deleteBtn.disabled = true;
+        try {
+          await api.del(`/api/invoices/${invoice.id}`);
+          toastOk(`تم حذف الفاتورة ${invoice.invoice_number} بنجاح`);
+          router.go('invoices');
+        } catch (err) {
+          toastErr('فشل حذف الفاتورة: ' + (err.message || err));
+          deleteBtn.disabled = false;
+        }
       });
     }
 

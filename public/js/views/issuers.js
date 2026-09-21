@@ -309,7 +309,7 @@ export async function render(view) {
             <!-- ترويسة البطاقة المصغرة -->
             <div style="display:flex; align-items:center; gap:8px;">
               <div style="width:34px; height:34px; border-radius:6px; background:rgba(6,182,212,0.1); display:grid; place-items:center; overflow:hidden; flex:none; border:1px solid rgba(6,182,212,0.2)">
-                ${i.has_logo ? `<img src="/api/issuers/${esc(i.id)}/logo" alt="logo" style="width:100%;height:100%;object-fit:contain" />` : icon.building({ size: 18, stroke: 'var(--brand)' })}
+                ${i.logo_data ? `<img src="${esc(i.logo_data)}" alt="logo" style="width:100%;height:100%;object-fit:contain" />` : icon.building({ size: 18, stroke: 'var(--brand)' })}
               </div>
               <div style="flex:1; min-width:0;">
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:4px;">

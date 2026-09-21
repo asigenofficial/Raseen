@@ -542,6 +542,15 @@ func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 		if err := json.Unmarshal([]byte(issuerJSON),&view.IssuerSnapshot); err != nil { return nil,err }
 		if err := json.Unmarshal([]byte(clientJSON),&view.ClientSnapshot); err != nil { return nil,err }
 	}
+	if view.IssuerSnapshot == nil || view.IssuerSnapshot.LogoData == nil || *view.IssuerSnapshot.LogoData == "" {
+		var lData sql.NullString
+		if err := s.db.QueryRow("SELECT logo_data FROM issuers WHERE id = ?", inv.IssuerID).Scan(&lData); err == nil && lData.Valid && lData.String != "" {
+			if view.IssuerSnapshot == nil {
+				view.IssuerSnapshot = &models.Issuer{}
+			}
+			view.IssuerSnapshot.LogoData = &lData.String
+		}
+	}
 	return view, nil
 }
 

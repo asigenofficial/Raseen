@@ -248,13 +248,26 @@ func (s *ClientService) UpdateClient(id string, c *models.Client) error {
 }
 
 func (s *ClientService) DeleteClient(id string) error {
-	var count int
-	_ = s.db.QueryRow("SELECT COUNT(*) FROM invoices WHERE client_id = ?", id).Scan(&count)
-	if count > 0 {
-		return errors.New("لا يمكن حذف العميل لوجود فواتير مسجلة باسمه")
+	var invCount int
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM invoices WHERE client_id = ?", id).Scan(&invCount)
+	if invCount > 0 {
+		return fmt.Errorf("لا يمكن حذف العميل: توجد (%d) فاتورة مسجلة باسمه، يرجى حذف فواتيره أولاً", invCount)
 	}
+
+	var voucherCount int
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM receipt_vouchers WHERE client_id = ?", id).Scan(&voucherCount)
+	if voucherCount > 0 {
+		return fmt.Errorf("لا يمكن حذف العميل: توجد (%d) سندات قبض مسجلة باسمه، يرجى حذف سندات القبض أولاً", voucherCount)
+	}
+
+	_, _ = s.db.Exec("UPDATE bulk_drafts SET client_id = NULL WHERE client_id = ?", id)
+	_, _ = s.db.Exec("DELETE FROM client_ledger WHERE client_id = ?", id)
+
 	_, err := s.db.Exec("DELETE FROM clients WHERE id = ?", id)
-	return err
+	if err != nil {
+		return fmt.Errorf("فشل حذف العميل: %w", err)
+	}
+	return nil
 }
 
 type StatementParams struct {

@@ -6,7 +6,7 @@ import { store, loadClients, can, getFilterState, setFilterState, clearFilterSta
 import {
   html, raw, esc, money, num, dateAr, statusBadge, monthStart, today, toastOk,
   $, delegate, debounce, exportCsv, exportExcel, parseSpreadsheetText, printDoc, modal, toastErr, formValues,
-  icon, downloadPdfFromHtml, amount, sarSvg,
+  confirmDialog, icon, downloadPdfFromHtml, amount, sarSvg,
 } from '../core/util.js';
 import { invoiceA4 } from '../print/templates.js';
 import { downloadInvoicePdf, shareInvoicePdfFile } from './invoice-view.js';
@@ -126,6 +126,7 @@ export async function render(view, ctx) {
           ${icon.share({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}مشاركة</button>
         ${i.status !== 'CANCELLED' && i.remaining_amount > 0 && can('vouchers.create')
     ? `<button class="btn btn-sm" data-act="pay" data-id="${esc(i.id)}" type="button" title="سند قبض">${icon.receipt({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}سند</button>` : ''}
+        <button class="btn btn-sm btn-danger" data-act="del" data-id="${esc(i.id)}" data-no="${esc(i.invoice_number)}" type="button" title="حذف الفاتورة">${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}حذف</button>
       </td>
     </tr>`).join('');
   };
@@ -592,6 +593,24 @@ export async function render(view, ctx) {
           } catch { ev.target.disabled = false; }
           return undefined;
         });
+      } else if (btn.dataset.act === 'del') {
+        const invNo = btn.dataset.no || '';
+        const ok = await confirmDialog({
+          title: `حذف الفاتورة ${invNo}`,
+          message: `هل أنت متأكد من حذف الفاتورة ${invNo} نهائياً؟ سيتم حذف بنودها وقيدها المرتبط.`,
+          danger: true,
+          okText: 'حذف نهائياً',
+        });
+        if (!ok) return;
+        btn.disabled = true;
+        try {
+          await api.del(`/api/invoices/${id}`);
+          toastOk(`تم حذف الفاتورة ${invNo} بنجاح`);
+          await reload();
+        } catch (err) {
+          toastErr('فشل حذف الفاتورة: ' + (err.message || err));
+          btn.disabled = false;
+        }
       }
     });
   };

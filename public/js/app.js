@@ -38,13 +38,13 @@ const NAV = [
 
 const VIEWS = {
   dashboard: () => import('./views/dashboard.js'),
-  invoices: () => import('./views/invoices.js'),
-  invoice: () => import('./views/invoice-editor.js'),
-  'invoice-view': () => import('./views/invoice-view.js'),
+  invoices: () => import('./views/invoices.js?v=' + Date.now()),
+  invoice: () => import('./views/invoice-editor.js?v=' + Date.now()),
+  'invoice-view': () => import('./views/invoice-view.js?v=' + Date.now()),
   bulk: () => import('./views/bulk.js'),
   vouchers: () => import('./views/vouchers.js'),
   statement: () => import('./views/statement.js'),
-  issuers: () => import('./views/issuers.js'),
+  issuers: () => import('./views/issuers.js?v=' + Date.now()),
   templates: () => import('./views/templates.js?v=' + Date.now()),
   'template-builder': () => import('./views/template-builder.js?v=' + Date.now()),
   'doc-reports': () => import('./views/templates.js?v=' + Date.now()),
