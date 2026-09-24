@@ -5,8 +5,69 @@
 import { api } from '../core/api.js';
 import { store, can } from '../core/store.js';
 import {
-  html, raw, esc, printDoc, modal, toastOk, toastErr, $, $$, exportExcel, downloadPdfFromHtml, fillDynamicTemplateHtml,
+  html, raw, esc, printDoc, modal, toastOk, toastErr, $, $$, exportExcel, downloadPdfFromHtml,
 } from '../core/util.js';
+import * as _coreUtil from '../core/util.js';
+
+// دالة تعبئة وسوم القوالب مع حماية من كاش المتصفح القديم
+const fillDynamicTemplateHtml = _coreUtil.fillDynamicTemplateHtml || function(rawHtml, { issuer = {}, client = {}, voucher = null, invoice = null, extra = {} } = {}) {
+  if (!rawHtml) return '';
+  const doc = voucher || invoice || {};
+  const addr = [issuer.building_no, issuer.street, issuer.district, issuer.city].filter(Boolean).join(' - ') || issuer.address || issuer.city || '';
+  const clientAddr = [client.building_no, client.street, client.district, client.city].filter(Boolean).join(' - ') || client.address || client.city || '';
+  const docTotal = Number(voucher?.total_amount ?? invoice?.grand_total ?? 0);
+  const docDate = voucher?.voucher_date || invoice?.issue_date || new Date().toISOString().slice(0, 10);
+  const docNumber = voucher?.voucher_number || invoice?.invoice_number || '';
+  const partyName = client.name || voucher?.client_name || invoice?.client_name || '';
+
+  const resolveTagValue = (rawKey) => {
+    const k = rawKey.trim().toLowerCase();
+    if (extra[rawKey] !== undefined) return String(extra[rawKey]);
+    if (extra[k] !== undefined) return String(extra[k]);
+    if (k === 'seller_name' || k === 'issuer_name' || k === 'company_name' || k === 'seller' || k === 'receiver_name') return issuer.name_ar || issuer.name || '';
+    if (k === 'seller_name_en' || k === 'issuer_name_en') return issuer.name_en || '';
+    if (k === 'seller_tax' || k === 'seller_vat' || k === 'tax_number' || k === 'vat_number') return issuer.tax_number || '';
+    if (k === 'seller_cr' || k === 'cr_number' || k === 'commercial_register') return issuer.commercial_register || '';
+    if (k === 'seller_address' || k === 'issuer_address' || k === 'company_address') return addr;
+    if (k === 'seller_phone' || k === 'company_phone' || k === 'phone') return issuer.phone || issuer.mobile || '';
+    if (k === 'seller_email' || k === 'company_email' || k === 'email') return issuer.email || '';
+    if (k === 'seller_iban' || k === 'iban' || k === 'bank_account') return issuer.iban || '';
+    if (k === 'bank_name' || k === 'seller_bank') return issuer.bank_name || '';
+    if (k === 'buyer_name' || k === 'client_name' || k === 'customer_name' || k === 'received_from' || k === 'client') return partyName;
+    if (k === 'buyer_tax' || k === 'client_tax' || k === 'buyer_vat') return client.tax_number || '';
+    if (k === 'buyer_cr' || k === 'client_cr') return client.commercial_register || '';
+    if (k === 'buyer_address' || k === 'client_address') return clientAddr;
+    if (k === 'buyer_phone' || k === 'client_phone') return client.phone || client.mobile || '';
+    if (k === 'invoice_number' || k === 'voucher_number' || k === 'doc_number' || k === 'number' || k === 'reference') return docNumber;
+    if (k === 'issue_date' || k === 'voucher_date' || k === 'invoice_date' || k === 'date') return docDate;
+    if (k === 'amount' || k === 'grand_total' || k === 'total' || k === 'total_amount' || k === 'net_amount') {
+      const rawAmt = voucher?.total_amount ?? invoice?.grand_total;
+      if (rawAmt !== undefined && rawAmt !== null && isNaN(Number(rawAmt))) return String(rawAmt);
+      return docTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (k === 'subtotal' || k === 'taxable' || k === 'taxable_amount') return Number(invoice?.subtotal ?? docTotal).toLocaleString('en-US', { minimumFractionDigits: 2 });
+    if (k === 'tax_amount' || k === 'vat_amount' || k === 'vat') return Number(invoice?.tax_amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
+    if (k === 'paid_amount' || k === 'paid') return Number(invoice?.paid_amount ?? docTotal).toLocaleString('en-US', { minimumFractionDigits: 2 });
+    if (k === 'amount_in_words' || k === 'tafqeet' || k === 'total_in_words') {
+      if (doc?.amount_in_words) return String(doc.amount_in_words);
+      if (docTotal > 0) return Math.floor(docTotal).toLocaleString('ar-SA') + ' ريال سعودي';
+      return '';
+    }
+    if (k === 'amount_halala' || k === 'halala') return String(Math.round((docTotal % 1) * 100)).padStart(2, '0');
+    if (k === 'amount_riyal' || k === 'riyal') return Math.floor(docTotal).toLocaleString('en-US');
+    if (k === 'notes' || k === 'description') return doc.notes || '';
+    if (k === 'reference_no' || k === 'cheque_no') return voucher?.reference_no || '';
+    if (doc[rawKey] !== undefined) return String(doc[rawKey]);
+    if (issuer[rawKey] !== undefined) return String(issuer[rawKey]);
+    if (client[rawKey] !== undefined) return String(client[rawKey]);
+    return '';
+  };
+
+  return rawHtml.replace(/\{\{\s*([a-zA-Z0-9_\-\.]+)\s*\}\}/g, (match, key) => {
+    const val = resolveTagValue(key);
+    return val !== undefined ? val : match;
+  });
+};
 import {
   invoiceA4, invoiceThermal, invoicePreviewDoc, INVOICE_TEMPLATES,
   VOUCHER_TEMPLATES, voucherPrint,

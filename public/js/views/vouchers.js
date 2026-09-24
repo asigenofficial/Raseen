@@ -6,8 +6,10 @@ import { store, loadClients, can, currencyLabel, getFilterState, setFilterState,
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, today, monthStart, toastOk, toastErr,
   $, $$, delegate, debounce, modal, formValues, confirmDialog, exportCsv, exportExcel, printDoc, toNum,
-  icon, downloadPdfFromHtml, amount, sarSvg, fillDynamicTemplateHtml,
+  icon, downloadPdfFromHtml, amount, sarSvg,
 } from '../core/util.js';
+import * as _coreUtil from '../core/util.js';
+const fillDynamicTemplateHtml = _coreUtil.fillDynamicTemplateHtml || ((html) => html);
 import { voucherPrint, VOUCHER_TEMPLATES } from '../print/templates.js';
 
 const PAGE = 50;
