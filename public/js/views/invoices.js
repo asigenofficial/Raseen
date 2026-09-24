@@ -2,7 +2,10 @@
 //  قائمة الفواتير: بحث وتصفية شاملة، إجماليات، طباعة، تصدير.
 // ==========================================================================
 import { api, qs } from '../core/api.js';
-import { store, loadClients, can, getFilterState, setFilterState, clearFilterState, onSync, syncNotify } from '../core/store.js';
+import { store, loadClients, can, getFilterState, setFilterState, clearFilterState } from '../core/store.js';
+
+const syncNotify = (entity, action, payload) => (typeof store.syncNotify === 'function' ? store.syncNotify(entity, action, payload) : null);
+const onSync = (cb) => (typeof store.onSync === 'function' ? store.onSync(cb) : () => {});
 import {
   html, raw, esc, money, num, dateAr, statusBadge, monthStart, today, toastOk,
   $, delegate, debounce, exportCsv, exportExcel, parseSpreadsheetText, printDoc, modal, toastErr, formValues,

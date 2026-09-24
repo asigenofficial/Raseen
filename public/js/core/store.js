@@ -134,6 +134,10 @@ export function onSync(callback) {
   return () => window.removeEventListener('raseen:sync', handler);
 }
 
+// ربط المزامنة بكائن المتجر لضمان التوافق المطلق مع أي كاش قديم
+store.syncNotify = syncNotify;
+store.onSync = onSync;
+
 export function clientName(id) {
   const c = store.clients.find((x) => x.id === id);
   return c ? c.name : '';

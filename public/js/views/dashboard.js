@@ -2,7 +2,9 @@
 //  لوحة المعلومات
 // ==========================================================================
 import { api, qs } from '../core/api.js';
-import { store, activeIssuer, currencyLabel, onSync } from '../core/store.js';
+import { store, activeIssuer, currencyLabel } from '../core/store.js';
+
+const onSync = (cb) => (typeof store.onSync === 'function' ? store.onSync(cb) : () => {});
 import { html, raw, esc, money, num, dateAr, statusBadge, icon, amount, sarSvg } from '../core/util.js';
 
 function stat(iconContent, cls, value, label, sub) {

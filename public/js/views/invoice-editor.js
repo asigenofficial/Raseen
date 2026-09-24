@@ -2,8 +2,10 @@
 //  محرر الفاتورة (إصدار فاتورة جديدة)
 // ==========================================================================
 import { api } from '../core/api.js';
-import { store, loadClients, loadItems, can, invalidate, syncNotify } from '../core/store.js';
+import { store, loadClients, loadItems, can, invalidate } from '../core/store.js';
 import * as router from '../core/router.js';
+
+const syncNotify = (entity, action, payload) => (typeof store.syncNotify === 'function' ? store.syncNotify(entity, action, payload) : null);
 import {
   html, raw, esc, money, toNum, today, nowTime, toastOk, toastErr,
   $, $$, delegate, modal, formValues, confirmDialog, icon,

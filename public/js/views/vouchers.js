@@ -2,7 +2,10 @@
 //  سندات القبض: قائمة، سند مجمّع بتوزيع على عدة فواتير، عرض وطباعة وإلغاء.
 // ==========================================================================
 import { api, qs } from '../core/api.js';
-import { store, loadClients, can, currencyLabel, getFilterState, setFilterState, clearFilterState, onSync, syncNotify } from '../core/store.js';
+import { store, loadClients, can, currencyLabel, getFilterState, setFilterState, clearFilterState } from '../core/store.js';
+
+const syncNotify = (entity, action, payload) => (typeof store.syncNotify === 'function' ? store.syncNotify(entity, action, payload) : null);
+const onSync = (cb) => (typeof store.onSync === 'function' ? store.onSync(cb) : () => {});
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, today, monthStart, toastOk, toastErr,
   $, $$, delegate, debounce, modal, formValues, confirmDialog, exportCsv, exportExcel, printDoc, toNum,
