@@ -9,7 +9,6 @@ import {
   confirmDialog, icon, downloadPdfFromHtml, amount, sarSvg,
 } from '../core/util.js';
 import { invoiceA4 } from '../print/templates.js';
-import { downloadInvoicePdf, shareInvoicePdfFile } from './invoice-view.js';
 
 const PAGE = 50;
 
@@ -536,6 +535,7 @@ export async function render(view, ctx) {
             api.get(`/api/issuers/${invoice.issuer_id}`),
             api.get(`/api/clients/${invoice.client_id}`),
           ]);
+          const { downloadInvoicePdf } = await import('./invoice-view.js?v=' + Date.now());
           await downloadInvoicePdf({ invoice, issuer, client });
         } finally {
           btn.disabled = false;
@@ -548,6 +548,7 @@ export async function render(view, ctx) {
             api.get(`/api/issuers/${invoice.issuer_id}`),
             api.get(`/api/clients/${invoice.client_id}`),
           ]);
+          const { shareInvoicePdfFile } = await import('./invoice-view.js?v=' + Date.now());
           await shareInvoicePdfFile({ invoice, issuer, client });
         } finally {
           btn.disabled = false;

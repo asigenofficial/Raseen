@@ -9,7 +9,6 @@ import {
   amount, sarSvg,
 } from '../core/util.js';
 import { statementPrint } from '../print/templates.js';
-import { voucherWizard } from './vouchers.js';
 
 export async function render(view, ctx) {
   await loadClients();
@@ -206,11 +205,14 @@ export async function render(view, ctx) {
 
     const payBtn = $('#pay', view);
     if (payBtn) {
-      payBtn.addEventListener('click', () => voucherWizard({
-        clientId: state.client_id,
-        issuerId: state.issuer_id || store.activeIssuerId,
-        onDone: async () => { toastOk('تم تحديث كشف الحساب'); await reload(); },
-      }));
+      payBtn.addEventListener('click', async () => {
+        const { voucherWizard } = await import('./vouchers.js?v=' + Date.now());
+        voucherWizard({
+          clientId: state.client_id,
+          issuerId: state.issuer_id || store.activeIssuerId,
+          onDone: async () => { toastOk('تم تحديث كشف الحساب'); await reload(); },
+        });
+      });
     }
   };
 
