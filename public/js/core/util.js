@@ -671,7 +671,29 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       return issuer.currency || 'SAR';
     }
 
-    // 7. الجداول والرموز الخاصة
+    // 7. الشعار والباركود والرموز الخاصة
+    if (k === 'logo' || k === 'seller_logo' || k === 'company_logo') {
+      const logoSrc = issuer?.logo_data || issuer?.logo;
+      if (logoSrc) {
+        return `<img src="${logoSrc}" alt="شعار المنشأة" class="doc-logo-img" style="max-height:75px; max-width:200px; object-fit:contain; display:block;" />`;
+      }
+      return `<div class="doc-logo-placeholder" style="display:inline-flex; align-items:center; justify-content:center; padding:8px 16px; border:1.5px dashed #94a3b8; border-radius:6px; font-weight:700; color:#64748b; font-size:12px;">شعار المنشأة</div>`;
+    }
+
+    if (k === 'qr_code' || k === 'barcode' || k === 'qr' || k === 'zatca_qr') {
+      const qrPayload = invoice?.qr_payload || invoice?.qr_code || '';
+      if (qrPayload) {
+        const svg = qrSvg(qrPayload, { scale: 3, margin: 1 });
+        return `<div class="zatca-qr-container" style="display:inline-block; line-height:0;">${svg}</div>`;
+      }
+      // في المعاينة نولد رمز QR تجريبي مطابق لهيئة الزكاة والضريبة
+      if (globalThis.ZQR && typeof globalThis.ZQR.svg === 'function') {
+        const sampleQr = globalThis.ZQR.svg('ZATCA-SAMPLE-INVOICE-PREVIEW', { ecl: 'M', margin: 1, scale: 3 });
+        return `<div class="zatca-qr-container" style="display:inline-block; line-height:0;">${sampleQr}</div>`;
+      }
+      return `<div style="width:90px; height:90px; border:1px solid #0f172a; display:inline-flex; align-items:center; justify-content:center; font-family:monospace; font-size:10px; font-weight:700;">ZATCA QR</div>`;
+    }
+
     if (k === 'items_table') {
       const lines = invoice?.lines || [];
       if (!lines.length) {
@@ -680,39 +702,29 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       return `
         <table style="width:100%; border-collapse:collapse; font-size:12px; margin:10px 0;" dir="rtl">
           <thead>
-            <tr style="background:#059669; color:#fff;">
-              <th style="padding:6px 8px; text-align:right; border:1px solid #cbd5e1;">#</th>
-              <th style="padding:6px 8px; text-align:right; border:1px solid #cbd5e1;">الصنف / الخدمة</th>
-              <th style="padding:6px 8px; text-align:center; border:1px solid #cbd5e1;">الكمية</th>
-              <th style="padding:6px 8px; text-align:right; border:1px solid #cbd5e1;">سعر الوحدة</th>
-              <th style="padding:6px 8px; text-align:right; border:1px solid #cbd5e1;">الضريبة</th>
-              <th style="padding:6px 8px; text-align:right; border:1px solid #cbd5e1;">الإجمالي</th>
+            <tr style="background:#0f172a; color:#fff;">
+              <th style="padding:7px 8px; text-align:center; border:1px solid #cbd5e1; width:36px;">#</th>
+              <th style="padding:7px 8px; text-align:right; border:1px solid #cbd5e1;">الصنف / الخدمة</th>
+              <th style="padding:7px 8px; text-align:center; border:1px solid #cbd5e1; width:70px;">الكمية</th>
+              <th style="padding:7px 8px; text-align:right; border:1px solid #cbd5e1; width:95px;">سعر الوحدة</th>
+              <th style="padding:7px 8px; text-align:right; border:1px solid #cbd5e1; width:85px;">الضريبة</th>
+              <th style="padding:7px 8px; text-align:right; border:1px solid #cbd5e1; width:110px;">الإجمالي</th>
             </tr>
           </thead>
           <tbody>
             ${lines.map((l, idx) => `
-              <tr style="background:${idx % 2 === 1 ? '#f0fdf4' : '#fff'};">
-                <td style="padding:5px 8px; border:1px solid #e2e8f0; text-align:center;">${idx + 1}</td>
-                <td style="padding:5px 8px; border:1px solid #e2e8f0;">${l.item_name || l.name || ''}</td>
-                <td style="padding:5px 8px; border:1px solid #e2e8f0; text-align:center;">${Number(l.quantity || 1).toFixed(2)}</td>
-                <td style="padding:5px 8px; border:1px solid #e2e8f0;">${Number(l.unit_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                <td style="padding:5px 8px; border:1px solid #e2e8f0;">${Number(l.tax_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                <td style="padding:5px 8px; border:1px solid #e2e8f0; font-weight:700;">${Number(l.total_line || l.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              <tr style="background:${idx % 2 === 1 ? '#f8fafc' : '#fff'};">
+                <td style="padding:6px 8px; border:1px solid #e2e8f0; text-align:center;">${idx + 1}</td>
+                <td style="padding:6px 8px; border:1px solid #e2e8f0; font-weight:600;">${l.item_name || l.name || ''}</td>
+                <td style="padding:6px 8px; border:1px solid #e2e8f0; text-align:center;">${Number(l.quantity || 1).toFixed(2)}</td>
+                <td style="padding:6px 8px; border:1px solid #e2e8f0;">${Number(l.unit_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                <td style="padding:6px 8px; border:1px solid #e2e8f0;">${Number(l.tax_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                <td style="padding:6px 8px; border:1px solid #e2e8f0; font-weight:700;">${Number(l.total_line || l.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
       `;
-    }
-    if (k === 'qr_code') {
-      const qr = invoice?.qr_payload || invoice?.qr_code || '';
-      if (qr) {
-        return `<div style="display:inline-block; border:1px solid #cbd5e1; border-radius:6px; padding:6px; background:#fff; text-align:center; font-size:10px; color:#475569;">
-          <div style="font-weight:700; margin-bottom:4px;">رمز ZATCA</div>
-          <div style="width:90px; height:90px; background:#f8fafc; border:1px dashed #cbd5e1; display:flex; align-items:center; justify-content:center; font-family:monospace; font-size:9px;">QR Code</div>
-        </div>`;
-      }
-      return '';
     }
 
     // 8. بحث ديناميكي في حقول الكائن المباشرة
