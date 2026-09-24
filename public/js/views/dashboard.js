@@ -2,7 +2,7 @@
 //  لوحة المعلومات
 // ==========================================================================
 import { api, qs } from '../core/api.js';
-import { store, activeIssuer, currencyLabel } from '../core/store.js';
+import { store, activeIssuer, currencyLabel, onSync } from '../core/store.js';
 import { html, raw, esc, money, num, dateAr, statusBadge, icon, amount, sarSvg } from '../core/util.js';
 
 function stat(iconContent, cls, value, label, sub) {
@@ -179,5 +179,12 @@ export async function render(view) {
         </table>
       </div>
     </div>`;
-  return undefined;
+
+  const unsubSync = onSync((ev) => {
+    if (ev.entity === 'invoices' || ev.entity === 'vouchers' || ev.entity === 'issuers') {
+      render(view);
+    }
+  });
+
+  return () => { unsubSync(); };
 }

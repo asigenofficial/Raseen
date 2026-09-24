@@ -105,6 +105,33 @@ export async function loadLookups(force = false) {
 export function invalidate(key) {
   if (key) store.loaded[key] = false;
   else Object.keys(store.loaded).forEach((k) => { store.loaded[k] = false; });
+  emit();
+}
+
+// ------------------------------------------------------------- مزامنة فورية (Real-Time Sync)
+const syncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('raseen_sync_channel') : null;
+if (syncChannel) {
+  syncChannel.onmessage = (ev) => {
+    if (ev.data && ev.data.entity) {
+      invalidate(ev.data.entity);
+      window.dispatchEvent(new CustomEvent('raseen:sync', { detail: ev.data }));
+    }
+  };
+}
+
+export function syncNotify(entity, action = 'update', payload = null) {
+  invalidate(entity);
+  const detail = { entity, action, payload, time: Date.now() };
+  if (syncChannel) {
+    try { syncChannel.postMessage(detail); } catch { /* ignore */ }
+  }
+  window.dispatchEvent(new CustomEvent('raseen:sync', { detail }));
+}
+
+export function onSync(callback) {
+  const handler = (e) => callback(e.detail);
+  window.addEventListener('raseen:sync', handler);
+  return () => window.removeEventListener('raseen:sync', handler);
 }
 
 export function clientName(id) {

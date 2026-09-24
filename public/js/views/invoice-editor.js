@@ -2,7 +2,7 @@
 //  محرر الفاتورة (إصدار فاتورة جديدة)
 // ==========================================================================
 import { api } from '../core/api.js';
-import { store, loadClients, loadItems, can, invalidate } from '../core/store.js';
+import { store, loadClients, loadItems, can, invalidate, syncNotify } from '../core/store.js';
 import * as router from '../core/router.js';
 import {
   html, raw, esc, money, toNum, today, nowTime, toastOk, toastErr,
@@ -674,9 +674,9 @@ export async function render(view, ctx) {
           lines,
         });
         toastOk(`تم حفظ وتحديث الفاتورة ${invoice.invoice_number} بنجاح`);
-        invalidate('issuers');
-        invalidate('clients');
-        invalidate('invoices');
+        syncNotify('invoices', 'update', invoice);
+        syncNotify('clients', 'update', invoice.client_id);
+        syncNotify('issuers', 'update', invoice.issuer_id);
         router.go(`invoice-view/${invoice.id}`);
         return undefined;
       }
@@ -697,7 +697,10 @@ export async function render(view, ctx) {
       });
       clearDraft();
       toastOk(`تم إصدار الفاتورة ${invoice.invoice_number} بمبلغ ${money(invoice.grand_total)}`);
-      invalidate('issuers');
+      syncNotify('invoices', 'create', invoice);
+      syncNotify('clients', 'update', invoice.client_id);
+      syncNotify('issuers', 'update', invoice.issuer_id);
+      if (state.auto_receipt) syncNotify('vouchers', 'create');
       if (state.print_after) {
         router.go(`invoice-view/${invoice.id}`);
       } else {

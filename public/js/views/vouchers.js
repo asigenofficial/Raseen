@@ -2,7 +2,7 @@
 //  سندات القبض: قائمة، سند مجمّع بتوزيع على عدة فواتير، عرض وطباعة وإلغاء.
 // ==========================================================================
 import { api, qs } from '../core/api.js';
-import { store, loadClients, can, currencyLabel, getFilterState, setFilterState, clearFilterState } from '../core/store.js';
+import { store, loadClients, can, currencyLabel, getFilterState, setFilterState, clearFilterState, onSync, syncNotify } from '../core/store.js';
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, today, monthStart, toastOk, toastErr,
   $, $$, delegate, debounce, modal, formValues, confirmDialog, exportCsv, exportExcel, printDoc, toNum,
@@ -168,6 +168,8 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
         allocations,
       });
       toastOk(`تم تسجيل السند ${voucher.voucher_number}`);
+      syncNotify('vouchers', 'create', voucher);
+      syncNotify('invoices', 'update');
       m.close();
       if (onDone) onDone(voucher);
       showVoucher(voucher.id, onDone);
@@ -671,7 +673,13 @@ export async function render(view, ctx) {
     });
   };
 
+  const unsubSync = onSync((ev) => {
+    if (ev.entity === 'vouchers' || ev.entity === 'invoices') {
+      reload();
+    }
+  });
+
   await load();
   draw();
-  return undefined;
+  return () => { unsubSync(); };
 }

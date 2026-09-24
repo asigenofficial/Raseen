@@ -2,7 +2,7 @@
 //  قائمة الفواتير: بحث وتصفية شاملة، إجماليات، طباعة، تصدير.
 // ==========================================================================
 import { api, qs } from '../core/api.js';
-import { store, loadClients, can, getFilterState, setFilterState, clearFilterState } from '../core/store.js';
+import { store, loadClients, can, getFilterState, setFilterState, clearFilterState, onSync, syncNotify } from '../core/store.js';
 import {
   html, raw, esc, money, num, dateAr, statusBadge, monthStart, today, toastOk,
   $, delegate, debounce, exportCsv, exportExcel, parseSpreadsheetText, printDoc, modal, toastErr, formValues,
@@ -607,6 +607,7 @@ export async function render(view, ctx) {
         try {
           await api.del(`/api/invoices/${id}`);
           toastOk(`تم حذف الفاتورة ${invNo} بنجاح`);
+          syncNotify('invoices', 'delete', id);
           await reload();
         } catch (err) {
           toastErr('فشل حذف الفاتورة: ' + (err.message || err));
@@ -616,7 +617,13 @@ export async function render(view, ctx) {
     });
   };
 
+  const unsubSync = onSync((ev) => {
+    if (ev.entity === 'invoices' || ev.entity === 'vouchers') {
+      reload();
+    }
+  });
+
   await load();
   draw();
-  return undefined;
+  return () => { unsubSync(); };
 }
