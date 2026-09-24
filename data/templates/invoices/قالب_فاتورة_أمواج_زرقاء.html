@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="utf-8" />
+  <title>فاتورة ضريبية — {{invoice_number}}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 12px;
+      color: #0f172a;
+      background: #e2e8f0;
+      padding: 16px 0;
+      direction: rtl;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .invoice-container {
+      position: relative;
+      background: #ffffff;
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 26px 30px;
+      box-shadow: 0 4px 25px rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* ─── خلفية الأمواج الانسيابية العلوية والسفلية ─── */
+    .corner-waves-top {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 260px;
+      height: 200px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .corner-waves-bottom {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 260px;
+      height: 180px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* ─── الترويسة العلوية ─── */
+    .header-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 14px;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* الجهة اليسرى: مربع الشعار وعنوان فاتورة ضريبية */
+    .header-left-col {
+      width: 48%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .logo-row-flanked {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .flank-line {
+      flex: 1;
+      height: 2px;
+      background: #0284c7;
+      max-width: 45px;
+    }
+
+    .logo-container {
+      width: 200px;
+      height: 84px;
+      background: #f0f9ff;
+      border: 1px solid #e0f2fe;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      font-weight: 900;
+      color: #0369a1;
+      letter-spacing: 1.5px;
+      overflow: hidden;
+    }
+
+    .logo-container img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .invoice-title-text {
+      color: #0369a1;
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    /* الجهة اليمنى: اسم الشركة وبيانات الاتصال */
+    .header-right-col {
+      width: 48%;
+      text-align: right;
+      padding-top: 2px;
+    }
+
+    .company-title {
+      font-size: 27px;
+      font-weight: 900;
+      color: #0c4a6e;
+      margin-bottom: 8px;
+      line-height: 1.2;
+    }
+
+    .company-meta-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 13px;
+      color: #0f172a;
+      font-weight: 700;
+    }
+
+    .company-meta-item {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+    }
+
+    .meta-icon-svg {
+      width: 18px;
+      height: 18px;
+      color: #0284c7;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .meta-lbl-text {
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .meta-val-text {
+      font-weight: 600;
+      color: #334155;
+    }
+
+    /* ─── بيانات الفاتورة والعميل ─── */
+    .info-boxes-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.35fr;
+      gap: 14px;
+      margin-bottom: 14px;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* عمود بيانات الفاتورة: 3 كبسولات مع مربع أيقونة أزرق على اليسار */
+    .doc-meta-col {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      justify-content: space-between;
+    }
+
+    .doc-meta-pill {
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 6px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 800;
+      color: #0369a1;
+      overflow: hidden;
+      padding: 0 10px;
+    }
+
+    .pill-icon-box {
+      width: 26px;
+      height: 26px;
+      background: #0284c7;
+      color: #ffffff;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    .pill-lbl {
+      white-space: nowrap;
+      margin-right: 8px;
+      margin-left: 6px;
+      font-weight: 800;
+      color: #0c4a6e;
+    }
+
+    .pill-val {
+      font-family: Tahoma, Arial, sans-serif;
+      font-weight: 700;
+      margin-left: auto;
+      direction: ltr;
+      color: #0369a1;
+    }
+
+    /* صندوق بيانات العميل (4 أسطر بإطار أزرق سماوي مطابق للصورة) */
+    .client-meta-box {
+      border: 1px solid #bae6fd;
+      border-radius: 6px;
+      background: #f0f9ff;
+      overflow: hidden;
+      font-size: 12.5px;
+    }
+
+    .client-meta-row {
+      display: flex;
+      border-bottom: 1px solid #e0f2fe;
+      padding: 4.5px 12px;
+      align-items: center;
+      min-height: 27px;
+    }
+
+    .client-meta-row:last-child {
+      border-bottom: none;
+    }
+
+    .client-meta-lbl {
+      width: 105px;
+      font-weight: 800;
+      color: #0c4a6e;
+      flex-shrink: 0;
+    }
+
+    .client-meta-val {
+      flex: 1;
+      font-weight: 600;
+      color: #0369a1;
+    }
+
+    /* ─── جدول الأصناف والبنود الرئيسي (9 أعمدة مطابقة تماماً) ─── */
+    .items-table-container {
+      width: 100%;
+      margin-bottom: 14px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .items-main-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      text-align: center;
+      border: 1px solid #0284c7;
+    }
+
+    .items-main-table th {
+      background: #0284c7 !important;
+      color: #ffffff !important;
+      font-weight: 800;
+      padding: 6px 4px;
+      border: 1px solid #0369a1;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .items-main-table td {
+      border: 1px solid #bae6fd;
+      padding: 5px 4px;
+      color: #0f172a;
+      height: 25px;
+      font-size: 11.5px;
+      background: #ffffff;
+    }
+
+    .items-main-table td.col-idx {
+      font-weight: 800;
+      width: 4%;
+    }
+
+    .items-main-table td.col-name {
+      text-align: right;
+      padding-right: 8px;
+      font-weight: 700;
+      width: 26%;
+    }
+
+    .items-main-table td.col-unit {
+      width: 8%;
+    }
+
+    .items-main-table td.col-qty {
+      width: 8%;
+      font-weight: 700;
+      direction: ltr;
+    }
+
+    .items-main-table td.col-price {
+      width: 10%;
+      direction: ltr;
+    }
+
+    .items-main-table td.col-sub {
+      width: 11%;
+      direction: ltr;
+    }
+
+    .items-main-table td.col-disc {
+      width: 9%;
+      direction: ltr;
+    }
+
+    .items-main-table td.col-vat {
+      width: 9%;
+      direction: ltr;
+    }
+
+    .items-main-table td.col-total {
+      width: 15%;
+      font-weight: 800;
+      direction: ltr;
+    }
+
+    /* ─── القسم السفلي: ملاحظات + جدول الإجماليات + رمز QR (مطابق للصورة) ─── */
+    .summary-section {
+      display: grid;
+      grid-template-columns: 1.35fr 1.25fr 135px;
+      gap: 12px;
+      align-items: stretch;
+      margin-bottom: 12px;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* صندوق الملاحظات على اليسار */
+    .notes-box {
+      border: 1px solid #bae6fd;
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: #f0f9ff;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .notes-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #0c4a6e;
+      margin-bottom: 5px;
+    }
+
+    .notes-text {
+      font-size: 11.5px;
+      color: #334155;
+      line-height: 1.5;
+      flex: 1;
+    }
+
+    /* جدول الإجماليات في المنتصف */
+    .totals-table-wrap {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .totals-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #bae6fd;
+      border-radius: 6px;
+      overflow: hidden;
+      font-size: 12px;
+    }
+
+    .totals-table td {
+      border: 1px solid #bae6fd;
+      padding: 6px 10px;
+      height: 31px;
+    }
+
+    .totals-table td.lbl {
+      font-weight: 800;
+      color: #0c4a6e;
+      width: 58%;
+      text-align: right;
+      background: #ffffff;
+    }
+
+    .totals-table td.val {
+      font-weight: 800;
+      color: #0369a1;
+      width: 42%;
+      text-align: left;
+      direction: ltr;
+      font-family: Tahoma, Arial, sans-serif;
+    }
+
+    /* رمز الاستجابة السريعة QR على اليمين */
+    .qr-box-wrap {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+    }
+
+    .qr-img-placeholder {
+      width: 120px;
+      height: 120px;
+      background: #ffffff;
+      border: 1px solid #bae6fd;
+      border-radius: 6px;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .qr-img-placeholder svg,
+    .qr-img-placeholder img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .qr-caption {
+      font-size: 10px;
+      font-weight: 800;
+      color: #0c4a6e;
+      margin-top: 5px;
+    }
+
+    /* رمز الريال السعودي المدمج */
+    .sar-sym {
+      display: inline-flex;
+      align-items: center;
+      vertical-align: middle;
+      margin-inline-end: 3px;
+    }
+
+    .sar-sym svg {
+      width: 11px;
+      height: 13px;
+      fill: currentColor;
+    }
+
+    /* ─── التذييل السفلي ─── */
+    .invoice-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #0c4a6e;
+      position: relative;
+      z-index: 2;
+    }
+
+    .footer-page-num {
+      direction: ltr;
+      font-weight: 900;
+      font-size: 13px;
+    }
+
+    .footer-location {
+      text-align: center;
+      margin: 0 auto;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
+      }
+
+      .invoice-container {
+        box-shadow: none;
+        width: 100%;
+        min-height: 100vh;
+        padding: 20px 24px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="invoice-container">
+
+    <!-- ── الأمواج الانسيابية الزرقاء في الزوايا العلوية والسفلية ── -->
+    <svg class="corner-waves-top" viewBox="0 0 300 240" fill="none" preserveAspectRatio="none">
+      <path d="M0,0 L300,0 C220,60 200,120 120,130 C60,138 30,190 0,240 Z" fill="#bae6fd" opacity="0.4" />
+      <path d="M0,0 L240,0 C170,45 150,90 90,105 C40,118 20,160 0,200 Z" fill="#7dd3fc" opacity="0.5" />
+      <path d="M0,0 L180,0 C120,35 100,75 50,85 C20,92 10,130 0,160 Z" fill="#0284c7" opacity="0.6" />
+    </svg>
+
+    <svg class="corner-waves-bottom" viewBox="0 0 300 220" fill="none" preserveAspectRatio="none">
+      <path d="M300,220 L0,220 C80,160 100,100 180,90 C240,82 270,30 300,0 Z" fill="#bae6fd" opacity="0.4" />
+      <path d="M300,220 L60,220 C130,175 150,130 210,115 C260,102 280,60 300,20 Z" fill="#7dd3fc" opacity="0.5" />
+      <path d="M300,220 L120,220 C180,185 200,145 250,135 C280,128 290,90 300,60 Z" fill="#0284c7" opacity="0.6" />
+    </svg>
+
+    <div>
+      <!-- ── الترويسة العلوية ── -->
+      <header class="header-section">
+        <!-- الجهة اليسرى: الشعار محاط بخطين + فاتورة ضريبية -->
+        <div class="header-left-col">
+          <div class="logo-row-flanked">
+            <div class="flank-line"></div>
+            <div class="logo-container">
+              <span>شعار</span>
+            </div>
+            <div class="flank-line"></div>
+          </div>
+          <div class="invoice-title-text">
+            فاتورة ضريبية
+          </div>
+        </div>
+
+        <!-- الجهة اليمنى: اسم الشركة والبيانات مع أيقونات فيكتور مطابقة للصورة وبدون إيموجي -->
+        <div class="header-right-col">
+          <div class="company-title">{{seller_name}}</div>
+          <div class="company-meta-list">
+            <!-- العنوان -->
+            <div class="company-meta-item">
+              <span class="meta-icon-svg">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#0284c7">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                </svg>
+              </span>
+              <span class="meta-lbl-text">العنوان :</span>
+              <span class="meta-val-text">{{seller_address}}</span>
+            </div>
+
+            <!-- الرقم الضريبي -->
+            <div class="company-meta-item">
+              <span class="meta-icon-svg">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#0284c7">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                </svg>
+              </span>
+              <span class="meta-lbl-text">الرقم الضريبي :</span>
+              <span class="meta-val-text">{{seller_tax}}</span>
+            </div>
+
+            <!-- السجل التجاري -->
+            <div class="company-meta-item">
+              <span class="meta-icon-svg">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#0284c7">
+                  <path d="M20 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm-11 4c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm3 8H6v-.5c0-1 2-1.5 3-1.5s3 .5 3 1.5v.5zm7-2h-5v-1.5h5V14zm0-3h-5v-1.5h5V11zm0-3h-5V6.5h5V8z" />
+                </svg>
+              </span>
+              <span class="meta-lbl-text">السجل التجاري :</span>
+              <span class="meta-val-text">{{seller_cr}}</span>
+            </div>
+
+            <!-- رقم الهاتف -->
+            <div class="company-meta-item">
+              <span class="meta-icon-svg">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#0284c7">
+                  <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+                </svg>
+              </span>
+              <span class="meta-lbl-text">رقم الهاتف :</span>
+              <span class="meta-val-text">{{seller_phone}}</span>
+            </div>
+
+            <!-- البريد الإلكتروني -->
+            <div class="company-meta-item">
+              <span class="meta-icon-svg">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#0284c7">
+                  <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" />
+                </svg>
+              </span>
+              <span class="meta-lbl-text">البريد الإلكتروني :</span>
+              <span class="meta-val-text">{{seller_email}}</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- ── بيانات الفاتورة + بيانات العميل ── -->
+      <section class="info-boxes-grid">
+        <!-- عمود بيانات الفاتورة: 3 كبسولات مع مربع أيقونة أزرق على اليسار -->
+        <div class="doc-meta-col">
+          <!-- رقم الفاتورة -->
+          <div class="doc-meta-pill">
+            <span class="pill-lbl">رقم الفاتورة :</span>
+            <span class="pill-val">{{invoice_number}}</span>
+            <span class="pill-icon-box">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#ffffff">
+                <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+              </svg>
+            </span>
+          </div>
+
+          <!-- التاريخ -->
+          <div class="doc-meta-pill">
+            <span class="pill-lbl">التاريخ :</span>
+            <span class="pill-val">{{issue_date}}</span>
+            <span class="pill-icon-box">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#ffffff">
+                <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z" />
+                <rect x="7" y="12" width="2" height="2" fill="#0284c7" />
+                <rect x="11" y="12" width="2" height="2" fill="#0284c7" />
+                <rect x="15" y="12" width="2" height="2" fill="#0284c7" />
+                <rect x="7" y="15" width="2" height="2" fill="#0284c7" />
+                <rect x="11" y="15" width="2" height="2" fill="#0284c7" />
+                <rect x="15" y="15" width="2" height="2" fill="#0284c7" />
+              </svg>
+            </span>
+          </div>
+
+          <!-- العميل -->
+          <div class="doc-meta-pill">
+            <span class="pill-lbl">العميل :</span>
+            <span class="pill-val">{{buyer_name}}</span>
+            <span class="pill-icon-box">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#ffffff">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+              </svg>
+            </span>
+          </div>
+        </div>
+
+        <!-- صندوق بيانات العميل (4 أسطر مطابقة تماماً للصورة) -->
+        <div class="client-meta-box">
+          <div class="client-meta-row">
+            <div class="client-meta-lbl">اسم العميل :</div>
+            <div class="client-meta-val">{{buyer_name}}</div>
+          </div>
+          <div class="client-meta-row">
+            <div class="client-meta-lbl">عنوان العميل :</div>
+            <div class="client-meta-val">{{buyer_address}}</div>
+          </div>
+          <div class="client-meta-row">
+            <div class="client-meta-lbl">رقم العميل :</div>
+            <div class="client-meta-val">{{buyer_code}}</div>
+          </div>
+          <div class="client-meta-row">
+            <div class="client-meta-lbl">الرقم الضريبي :</div>
+            <div class="client-meta-val">{{buyer_tax}}</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── جدول الأصناف والبنود (9 أعمدة و 10 أسطر مطابقة للصورة) ── -->
+      <section class="items-table-container">
+        <table class="items-main-table">
+          <thead>
+            <tr>
+              <th style="width:4%;">#</th>
+              <th style="width:26%;">الصنف</th>
+              <th style="width:8%;">الوحدة</th>
+              <th style="width:8%;">الكمية</th>
+              <th style="width:10%;">سعر الوحدة</th>
+              <th style="width:11%;">الإجمالي</th>
+              <th style="width:9%;">الخصم</th>
+              <th style="width:9%;">الضريبة</th>
+              <th style="width:15%;">الإجمالي بعد الضريبة</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="col-idx">1</td>
+              <td class="col-name"></td>
+              <td class="col-unit"></td>
+              <td class="col-qty"></td>
+              <td class="col-price"></td>
+              <td class="col-sub"></td>
+              <td class="col-disc"></td>
+              <td class="col-vat"></td>
+              <td class="col-total"></td>
+            </tr>
+            <tr>
+              <td class="col-idx">2</td>
+              <td class="col-name"></td>
+              <td class="col-unit"></td>
+              <td class="col-qty"></td>
+              <td class="col-price"></td>
+              <td class="col-sub"></td>
+              <td class="col-disc"></td>
+              <td class="col-vat"></td>
+              <td class="col-total"></td>
+            </tr>
+            <tr>
+              <td class="col-idx">3</td>
+              <td class="col-name"></td>
+              <td class="col-unit"></td>
+              <td class="col-qty"></td>
+              <td class="col-price"></td>
+              <td class="col-sub"></td>
+              <td class="col-disc"></td>
+              <td class="col-vat"></td>
+              <td class="col-total"></td>
+            </tr>
+            <tr>
+              <td class="col-idx">4</td>
+              <td class="col-name"></td>
+              <td class="col-unit"></td>
+              <td class="col-qty"></td>
+              <td class="col-price"></td>
+              <td class="col-sub"></td>
+              <td class="col-disc"></td>
+              <td class="col-vat"></td>
+              <td class="col-total"></td>
+            </tr>
+            <tr>
+              <td class="col-idx">5</td>
+              <td class="col-name"></td>
+              <td class="col-unit"></td>
+              <td class="col-qty"></td>
+              <td class="col-price"></td>
+              <td class="col-sub"></td>
+              <td class="col-disc"></td>
+              <td class="col-vat"></td>
+              <td class="col-total"></td>
+            </tr>
+            <tr>
+              <td class="col-idx">6</td>
+              <td class="col-name"></td>
+              <td class="col-unit"></td>
+              <td class="col-qty"></td>
+              <td class="col-price"></td>
+              <td class="col-sub"></td>
+              <td class="col-disc"></td>
+              <td class="col-vat"></td>
+              <td class="col-total"></td>
+            </tr>
+            <tr>
+              <td class="col-idx">7</td>
+              <td class="col-name"></td>
+              <td class="col-unit"></td>
+              <td class="col-qty"></td>
+              <td class="col-price"></td>
+              <td class="col-sub"></td>
+              <td class="col-disc"></td>
+              <td class="col-vat"></td>
+              <td class="col-total"></td>
+            </tr>
+            <tr>
+              <td class="col-idx">8</td>
+              <td class="col-name"></td>
+              <td class="col-unit"></td>
+              <td class="col-qty"></td>
+              <td class="col-price"></td>
+              <td class="col-sub"></td>
+              <td class="col-disc"></td>
+              <td class="col-vat"></td>
+              <td class="col-total"></td>
+            </tr>
+            <tr>
+              <td class="col-idx">9</td>
+              <td class="col-name"></td>
+              <td class="col-unit"></td>
+              <td class="col-qty"></td>
+              <td class="col-price"></td>
+              <td class="col-sub"></td>
+              <td class="col-disc"></td>
+              <td class="col-vat"></td>
+              <td class="col-total"></td>
+            </tr>
+            <tr>
+              <td class="col-idx">10</td>
+              <td class="col-name"></td>
+              <td class="col-unit"></td>
+              <td class="col-qty"></td>
+              <td class="col-price"></td>
+              <td class="col-sub"></td>
+              <td class="col-disc"></td>
+              <td class="col-vat"></td>
+              <td class="col-total"></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ── القسم السفلي: ملاحظات + جدول الإجماليات + رمز الاستجابة QR (مطابق للصورة) ── -->
+      <section class="summary-section">
+        <!-- صندوق الملاحظات على اليسار -->
+        <div class="notes-box">
+          <div class="notes-title">ملاحظات :</div>
+          <div class="notes-text">
+            {{notes}}
+          </div>
+        </div>
+
+        <!-- جدول الإجماليات في المنتصف -->
+        <div class="totals-table-wrap">
+          <table class="totals-table">
+            <tr>
+              <td class="lbl">الإجمالي</td>
+              <td class="val"><span class="sar-sym"><svg viewBox="0 0 1124.14 1256.39"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg></span> {{subtotal}}</td>
+            </tr>
+            <tr>
+              <td class="lbl">الخصم</td>
+              <td class="val"><span class="sar-sym"><svg viewBox="0 0 1124.14 1256.39"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg></span> {{discount}}</td>
+            </tr>
+            <tr>
+              <td class="lbl">القيمة المضافة (VAT)</td>
+              <td class="val"><span class="sar-sym"><svg viewBox="0 0 1124.14 1256.39"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg></span> {{tax_amount}}</td>
+            </tr>
+            <tr style="background:#f0f9ff;">
+              <td class="lbl" style="font-weight:900; color:#0369a1;">الإجمالي شامل الضريبة</td>
+              <td class="val" style="font-weight:900; color:#0284c7;"><span class="sar-sym"><svg viewBox="0 0 1124.14 1256.39"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg></span> {{grand_total}}</td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- رمز QR المربع على اليمين -->
+        <div class="qr-box-wrap">
+          <div class="qr-img-placeholder">
+            <svg viewBox="0 0 100 100" width="95" height="95">
+              <rect x="0" y="0" width="30" height="30" fill="#0284c7" />
+              <rect x="5" y="5" width="20" height="20" fill="#fff" />
+              <rect x="10" y="10" width="10" height="10" fill="#0284c7" />
+
+              <rect x="70" y="0" width="30" height="30" fill="#0284c7" />
+              <rect x="75" y="5" width="20" height="20" fill="#fff" />
+              <rect x="80" y="10" width="10" height="10" fill="#0284c7" />
+
+              <rect x="0" y="70" width="30" height="30" fill="#0284c7" />
+              <rect x="5" y="75" width="20" height="20" fill="#fff" />
+              <rect x="10" y="80" width="10" height="10" fill="#0284c7" />
+
+              <rect x="35" y="10" width="10" height="15" fill="#0284c7" />
+              <rect x="50" y="5" width="15" height="10" fill="#0284c7" />
+              <rect x="40" y="35" width="20" height="20" fill="#0284c7" />
+              <rect x="45" y="40" width="10" height="10" fill="#fff" />
+              <rect x="70" y="45" width="15" height="15" fill="#0284c7" />
+              <rect x="15" y="45" width="15" height="15" fill="#0284c7" />
+              <rect x="35" y="75" width="15" height="10" fill="#0284c7" />
+              <rect x="55" y="70" width="10" height="20" fill="#0284c7" />
+              <rect x="75" y="75" width="20" height="15" fill="#0284c7" />
+            </svg>
+          </div>
+          <div class="qr-caption">امسح للتحقق من الفاتورة</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ── التذييل السفلي ── -->
+    <footer class="invoice-footer">
+      <div style="width:30px;"></div>
+      <div class="footer-location">{{seller_city}} - {{seller_country}}</div>
+      <div style="width:30px;"></div>
+    </footer>
+
+  </div>
+</body>
+
+</html>

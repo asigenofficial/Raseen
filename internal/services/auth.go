@@ -350,7 +350,7 @@ func (s *AuthService) GetRolesAndPermissions() (map[string]string, map[string][]
 	}
 	rolePerms := map[string][]string{
 		"ADMIN":      {"*"},
-		"ACCOUNTANT": {"invoices.view", "invoices.create", "invoices.edit", "vouchers.view", "vouchers.create", "ledger.view", "clients.view", "clients.create", "clients.edit", "items.view", "items.create", "items.edit", "reports.view", "bulk.generate", "issuers.view"},
+		"ACCOUNTANT": {"invoices.view", "invoices.create", "invoices.edit", "invoices.cancel", "vouchers.view", "vouchers.create", "vouchers.cancel", "ledger.view", "clients.view", "clients.create", "clients.edit", "items.view", "items.create", "items.edit", "reports.view", "bulk.generate", "bulk.approve", "issuers.view", "export.pdf", "export.excel", "templates.write"},
 		"VIEWER":     {"invoices.view", "vouchers.view", "ledger.view", "clients.view", "items.view", "reports.view", "issuers.view"},
 	}
 

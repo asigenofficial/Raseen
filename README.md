@@ -98,7 +98,3 @@ go run .
 ```bash
 # بناء البرنامج كملف تنفيذي مصغّر
 go build -ldflags="-s -w" -o raseen.exe .
-
-# تشغيل الاختبارات
-go test -v ./test/...
-```

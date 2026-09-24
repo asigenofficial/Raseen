@@ -10,6 +10,7 @@ import {
   amount, sarSvg,
 } from '../core/util.js';
 import { invoiceA4, tafqeet, INVOICE_TEMPLATES } from '../print/templates.js';
+import { showVoucher } from './vouchers.js';
 
 async function loadContext(invoiceId) {
   const invoice = await api.get(`/api/invoices/${invoiceId}`);
@@ -63,6 +64,7 @@ function receiptModal(invoice, onDone) {
       toastOk(`تم تسجيل سند القبض ${voucher.voucher_number}`);
       m.close();
       onDone();
+      showVoucher(voucher.id, onDone);
     } catch { e.target.disabled = false; }
     return undefined;
   });

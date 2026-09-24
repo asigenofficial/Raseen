@@ -588,5 +588,78 @@ func (s *VoucherService) CancelVoucher(id, actor, ip string) error {
 	return nil
 }
 
+func (s *VoucherService) DeleteVoucher(id, actor, ip string) error {
+	v, err := s.GetVoucher(id)
+	if err != nil {
+		return err
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// If voucher is active, rollback allocations from invoices first
+	if v.Status == "ACTIVE" {
+		now := db.NowIso()
+		for _, a := range v.Allocations {
+			allocMinor := models.ToMinor(a.AllocatedAmount)
+			var grandTotal, paidAmount int64
+			var status string
+			if err := tx.QueryRow("SELECT grand_total, paid_amount, status FROM invoices WHERE id = ?", a.InvoiceID).Scan(&grandTotal, &paidAmount, &status); err != nil {
+				return err
+			}
+			newPaid := paidAmount - allocMinor
+			if newPaid < 0 {
+				newPaid = 0
+			}
+			newRem := grandTotal - newPaid
+			newStatus := "UNPAID"
+			if newPaid > 0 && newRem > 0 {
+				newStatus = "PARTIAL"
+			} else if newPaid >= grandTotal {
+				newStatus = "PAID"
+			}
+			if status == "CANCELLED" {
+				newStatus = "CANCELLED"
+			}
+			_, err = tx.Exec(`
+				UPDATE invoices SET paid_amount = ?, remaining_amount = ?, status = ?, updated_at = ?
+				WHERE id = ?
+			`, newPaid, newRem, newStatus, now, a.InvoiceID)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Remove ledger entries for this voucher (both RECEIPT and RECEIPT_CANCEL)
+	_, _ = tx.Exec("DELETE FROM client_ledger WHERE doc_id = ? AND doc_type IN ('RECEIPT', 'RECEIPT_CANCEL')", id)
+
+	// Remove allocations
+	_, _ = tx.Exec("DELETE FROM voucher_allocations WHERE voucher_id = ?", id)
+
+	// Delete voucher record completely from receipt_vouchers
+	result, err := tx.Exec("DELETE FROM receipt_vouchers WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+	if n, err := result.RowsAffected(); err != nil || n == 0 {
+		return errors.New("سند القبض غير موجود أو تم حذفه مسبقاً")
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	s.db.Audit(actor, "VOUCHER_DELETE", "voucher", id, v.IssuerID, map[string]any{
+		"voucher_number": v.VoucherNumber,
+		"amount":         v.TotalAmount,
+	}, ip)
+
+	return nil
+}
+
 // Bound monetary inputs before conversion, arithmetic and accumulation.
 func validAmount(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v,0) && v >= 0 && v <= 1e12 }

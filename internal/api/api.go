@@ -23,19 +23,19 @@ import (
 )
 
 type Server struct {
-	cfg        *config.Config
-	db         *db.DB
-	auth       *services.AuthService
-	issuers    *services.IssuerService
-	clients    *services.ClientService
-	items      *services.ItemService
-	invoices   *services.InvoiceService
-	vouchers   *services.VoucherService
-	reports    *services.ReportService
-	bulk       *services.BulkService
-	templates  *services.TemplateService
-	masterKey  []byte
-	publicFS   fs.FS
+	cfg       *config.Config
+	db        *db.DB
+	auth      *services.AuthService
+	issuers   *services.IssuerService
+	clients   *services.ClientService
+	items     *services.ItemService
+	invoices  *services.InvoiceService
+	vouchers  *services.VoucherService
+	reports   *services.ReportService
+	bulk      *services.BulkService
+	templates *services.TemplateService
+	masterKey []byte
+	publicFS  fs.FS
 }
 
 func NewServer(
@@ -92,7 +92,9 @@ func (s *Server) err(w http.ResponseWriter, status int, msg string) {
 }
 
 func (s *Server) getSessionUser(r *http.Request) *models.User {
-	if user, ok := r.Context().Value(sessionUserKey{}).(*models.User); ok { return user }
+	if user, ok := r.Context().Value(sessionUserKey{}).(*models.User); ok {
+		return user
+	}
 	c, err := r.Cookie("zs_session")
 	if err != nil || c.Value == "" {
 		return nil
@@ -622,7 +624,6 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, res)
 	})
 
-
 	// ---------------------------------------------------- الأصناف والمجموعات
 	mux.HandleFunc("GET /api/categories", func(w http.ResponseWriter, r *http.Request) {
 		list, err := s.items.ListCategories()
@@ -779,7 +780,6 @@ func (s *Server) Handler() http.Handler {
 		}
 		s.json(w, 200, res)
 	})
-
 
 	// ---------------------------------------------------- الفواتير
 	mux.HandleFunc("GET /api/invoices", func(w http.ResponseWriter, r *http.Request) {
@@ -1033,12 +1033,16 @@ func (s *Server) Handler() http.Handler {
 			style = q.Get("id")
 		}
 
-		// If a specific template style or ID is requested, stream that template's XLSX file
+		// If a specific template style or ID is requested, stream that template file
 		if style != "" {
 			filePath, err := s.templates.GetFilePath(style)
 			if err == nil && filePath != "" {
 				fileName := filepath.Base(filePath)
-				w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+				if strings.HasSuffix(strings.ToLower(filePath), ".html") || strings.HasSuffix(strings.ToLower(filePath), ".htm") {
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				} else {
+					w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+				}
 				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
 				http.ServeFile(w, r, filePath)
 				return
@@ -1501,6 +1505,20 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
+	mux.HandleFunc("DELETE /api/vouchers/{id}", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		actor := "system"
+		if u != nil {
+			actor = u.Username
+		}
+		id := r.PathValue("id")
+		if err := s.vouchers.DeleteVoucher(id, actor, s.clientIP(r)); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{"ok": true})
+	})
+
 	mux.HandleFunc("GET /api/vouchers/template", func(w http.ResponseWriter, r *http.Request) {
 		b, err := excel.GenerateVoucherTemplateExcel()
 		if err != nil {
@@ -1951,7 +1969,9 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		w.Header().Set("Referrer-Policy", "same-origin")
-		if !s.authorize(w, r, mux) { return }
+		if !s.authorize(w, r, mux) {
+			return
+		}
 		mux.ServeHTTP(w, r)
 	})
 }

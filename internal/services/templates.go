@@ -1,7 +1,6 @@
 package services
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -15,11 +14,6 @@ import (
 	"strings"
 
 	"github.com/skip2/go-qrcode"
-	"github.com/xuri/excelize/v2"
-
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
 
 	"raseen/internal/crypto"
 	"raseen/internal/db"
@@ -41,7 +35,6 @@ func NewTemplateService(d *db.DB, dataDir string) *TemplateService {
 	tplDir := filepath.Join(dataDir, "templates")
 	_ = os.MkdirAll(filepath.Join(tplDir, "invoices"), 0755)
 	_ = os.MkdirAll(filepath.Join(tplDir, "documents"), 0755)
-	_, _ = d.Exec("ALTER TABLE excel_templates ADD COLUMN style_meta TEXT DEFAULT '{}'")
 	s := &TemplateService{db: d, dataDir: dataDir}
 	_ = s.SyncDiskTemplates()
 	return s
@@ -67,361 +60,20 @@ type TemplateCatalogItem struct {
 
 var defaultTemplates = []TemplateCatalogItem{}
 
+// ─── Disk Sync ────────────────────────────────────────────────────────────────
 
-// findTableHeaders locates the items table header row purely by layout structure,
-// cell styling (fill color, bold font, borders), and repeating column count without any keyword dictionaries.
-func findTableHeaders(f *excelize.File, sheet string, rawRows [][]string) (int, []string, string, []string) {
-	bestRowIdx := -1
-	var bestHeaders []string
-	bestFill := ""
-	var bestAlignments []string
-	maxScore := -1
-
-	for rIdx, r := range rawRows {
-		lastIdx := -1
-		for i := len(r) - 1; i >= 0; i-- {
-			if strings.TrimSpace(r[i]) != "" {
-				lastIdx = i
-				break
-			}
-		}
-		if lastIdx < 2 {
-			continue
-		}
-		trimmed := r[:lastIdx+1]
-
-		distinct := make(map[string]bool)
-		for _, c := range trimmed {
-			s := strings.TrimSpace(c)
-			if s != "" {
-				distinct[s] = true
-			}
-		}
-		if len(distinct) < 3 {
-			continue
-		}
-
-		// Count how many cells in this row have a prominent fill color
-		coloredCols := 0
-		rowFill := ""
-		for cIdx := 0; cIdx <= lastIdx; cIdx++ {
-			axis, _ := excelize.CoordinatesToCellName(cIdx+1, rIdx+1)
-			styleID, _ := f.GetCellStyle(sheet, axis)
-			style, _ := f.GetStyle(styleID)
-			if style != nil && len(style.Fill.Color) > 0 && style.Fill.Color[0] != "" {
-				colHex := strings.ToUpper(style.Fill.Color[0])
-				if colHex != "FFFFFF" && colHex != "FFF2CC" && colHex != "F8FAFC" {
-					coloredCols++
-					if rowFill == "" {
-						rowFill = "#" + colHex
-					}
-				}
-			}
-		}
-
-		// Check for item table keywords vs metadata
-		itemKeywordScore := 0
-		for text := range distinct {
-			low := strings.ToLower(text)
-			if strings.Contains(low, "صنف") || strings.Contains(low, "وصف") || strings.Contains(low, "خدمة") || strings.Contains(low, "بيان") ||
-				strings.Contains(low, "كمية") || strings.Contains(low, "عدد") || strings.Contains(low, "سعر") || strings.Contains(low, "مفرد") ||
-				strings.Contains(low, "ضريبة") || strings.Contains(low, "vat") || strings.Contains(low, "tax") ||
-				strings.Contains(low, "إجمالي") || strings.Contains(low, "اجمالي") || strings.Contains(low, "مجموع") || strings.Contains(low, "total") ||
-				strings.Contains(low, "item") || strings.Contains(low, "desc") || strings.Contains(low, "qty") || strings.Contains(low, "price") ||
-				low == "م" || low == "#" {
-				itemKeywordScore += 50
-			}
-			if strings.Contains(low, "عنوان") || strings.Contains(low, "تواصل") || strings.Contains(low, "منشأة") || strings.Contains(low, "عميل") || strings.Contains(low, "سجل") {
-				itemKeywordScore -= 100
-			}
-		}
-
-		subsequentRowsCount := 0
-		for nextR := rIdx + 1; nextR < min(len(rawRows), rIdx+8); nextR++ {
-			if len(rawRows[nextR]) >= 2 {
-				subsequentRowsCount++
-			}
-		}
-
-		score := len(distinct)*2 + subsequentRowsCount*10 + itemKeywordScore
-		if coloredCols >= 3 {
-			score += 50
-		}
-
-		if score > maxScore {
-			maxScore = score
-			bestRowIdx = rIdx
-			bestFill = rowFill
-
-			// Clean and deduplicate consecutive merged cells
-			bestHeaders = []string{}
-			bestAlignments = []string{}
-			for cIdx := 0; cIdx <= lastIdx; cIdx++ {
-				val := strings.TrimSpace(trimmed[cIdx])
-				if val == "" {
-					continue
-				}
-				if len(bestHeaders) == 0 || bestHeaders[len(bestHeaders)-1] != val {
-					bestHeaders = append(bestHeaders, val)
-
-					axis, _ := excelize.CoordinatesToCellName(cIdx+1, rIdx+1)
-					colStyleID, _ := f.GetCellStyle(sheet, axis)
-					colStyle, _ := f.GetStyle(colStyleID)
-					align := "right"
-					if colStyle != nil && colStyle.Alignment != nil && colStyle.Alignment.Horizontal != "" {
-						align = colStyle.Alignment.Horizontal
-					}
-					bestAlignments = append(bestAlignments, align)
-				}
-			}
-		}
-	}
-
-	if len(bestHeaders) >= 2 {
-		firstIsTotal := false
-		lastIsItem := false
-		fLower := strings.ToLower(bestHeaders[0])
-		lLower := strings.ToLower(bestHeaders[len(bestHeaders)-1])
-		for _, kw := range []string{"إجمالي", "اجمالي", "مجموع", "total", "amount"} {
-			if strings.Contains(fLower, kw) {
-				firstIsTotal = true
-				break
-			}
-		}
-		for _, kw := range []string{"صنف", "وصف", "خدمة", "بيان", "item", "desc", "م", "#"} {
-			if strings.Contains(lLower, kw) {
-				lastIsItem = true
-				break
-			}
-		}
-		if firstIsTotal && lastIsItem {
-			for i, j := 0, len(bestHeaders)-1; i < j; i, j = i+1, j-1 {
-				bestHeaders[i], bestHeaders[j] = bestHeaders[j], bestHeaders[i]
-				bestAlignments[i], bestAlignments[j] = bestAlignments[j], bestAlignments[i]
-			}
-		}
-	}
-
-	return bestRowIdx, bestHeaders, bestFill, bestAlignments
-}
-
-func isLightHex(c string) bool {
-	if len(c) != 6 {
-		return false
-	}
-	var r, g, b int
-	fmt.Sscanf(c, "%02x%02x%02x", &r, &g, &b)
-	lum := (float64(r)*299 + float64(g)*587 + float64(b)*114) / 1000
-	return lum > 215
-}
-
-func findDominantColors(f *excelize.File, sheet string, rawRows [][]string) (accent string, lightBg string) {
-	colorCounts := make(map[string]int)
-	lightCounts := make(map[string]int)
-
-	rowCount := min(len(rawRows), 45)
-	for rIdx := 0; rIdx < rowCount; rIdx++ {
-		r := rawRows[rIdx]
-		for cIdx := range r {
-			axis, _ := excelize.CoordinatesToCellName(cIdx+1, rIdx+1)
-			sID, _ := f.GetCellStyle(sheet, axis)
-			if st, _ := f.GetStyle(sID); st != nil {
-				if len(st.Fill.Color) > 0 && st.Fill.Color[0] != "" {
-					c := strings.ToUpper(st.Fill.Color[0])
-					if c != "FFFFFF" && c != "000000" {
-						if isLightHex(c) {
-							lightCounts[c]++
-						} else {
-							colorCounts[c]++
-						}
-					}
-				}
-				if st.Font != nil && st.Font.Color != "" {
-					c := strings.ToUpper(st.Font.Color)
-					if c != "FFFFFF" && c != "000000" {
-						if !isLightHex(c) {
-							colorCounts[c] += 2
-						}
-					}
-				}
-			}
-		}
-	}
-
-	bestAccent := ""
-	bestAccentCount := 0
-	for c, count := range colorCounts {
-		if count > bestAccentCount {
-			bestAccentCount = count
-			bestAccent = c
-		}
-	}
-
-	bestLight := ""
-	bestLightCount := 0
-	for c, count := range lightCounts {
-		if count > bestLightCount {
-			bestLightCount = count
-			bestLight = c
-		}
-	}
-
-	if bestAccent != "" {
-		accent = "#" + bestAccent
-	}
-	if bestLight != "" {
-		lightBg = "#" + bestLight
-	}
-	return accent, lightBg
-}
-
-type ExtractedSheetMeta struct {
-	BannerText   string
-	BannerFill   string
-	HeaderFill   string
-	PrimaryColor string
-	HeaderRowIdx int
-	Headers      []string
-	Alignments   []string
-	SampleRows   [][]string
-	Seller       map[string]string
-	Buyer        map[string]string
-	Merges       []string
-	Fills        [][]string
-}
-
-// extractSheetProperties inspects an open Excel file purely from its XML sheets and style table,
-// returning native hex colors, headers, alignments, merged ranges, and sheet cell data.
-func extractSheetProperties(f *excelize.File, sheet string, rawRows [][]string) *ExtractedSheetMeta {
-	meta := &ExtractedSheetMeta{
-		Seller: make(map[string]string),
-		Buyer:  make(map[string]string),
-	}
-
-	// 1. Merged cells directly from excelize
-	if merges, err := f.GetMergeCells(sheet); err == nil {
-		for _, m := range merges {
-			meta.Merges = append(meta.Merges, fmt.Sprintf("%s:%s", m.GetStartAxis(), m.GetEndAxis()))
-		}
-	}
-
-	// 2. Banner text and fill from A1
-	if len(rawRows) > 0 && len(rawRows[0]) > 0 {
-		meta.BannerText = strings.TrimSpace(rawRows[0][0])
-		meta.BannerText = strings.ReplaceAll(meta.BannerText, "\n", " ")
-	}
-	bStyleID, _ := f.GetCellStyle(sheet, "A1")
-	if bStyle, _ := f.GetStyle(bStyleID); bStyle != nil && len(bStyle.Fill.Color) > 0 {
-		c := strings.ToUpper(bStyle.Fill.Color[0])
-		if c != "" && c != "FFFFFF" {
-			meta.BannerFill = "#" + c
-		}
-	}
-
-	// 3. Table header detection
-	hdrIdx, headers, hdrFill, aligns := findTableHeaders(f, sheet, rawRows)
-	meta.HeaderRowIdx = hdrIdx
-	meta.Headers = headers
-	meta.HeaderFill = hdrFill
-	meta.Alignments = aligns
-
-	// 4. Primary & Accent color resolution
-	accent, lightBg := findDominantColors(f, sheet, rawRows)
-	if accent != "" {
-		meta.PrimaryColor = accent
-	} else if meta.HeaderFill != "" && !isLightHex(strings.TrimPrefix(meta.HeaderFill, "#")) {
-		meta.PrimaryColor = meta.HeaderFill
-	} else if meta.BannerFill != "" && !isLightHex(strings.TrimPrefix(meta.BannerFill, "#")) {
-		meta.PrimaryColor = meta.BannerFill
-	} else {
-		meta.PrimaryColor = "#0d9488"
-	}
-
-	if meta.HeaderFill == "" || isLightHex(strings.TrimPrefix(meta.HeaderFill, "#")) {
-		meta.HeaderFill = meta.PrimaryColor
-	}
-	if lightBg != "" {
-		meta.BannerFill = lightBg
-	} else if meta.BannerFill == "" {
-		meta.BannerFill = meta.PrimaryColor
-	}
-
-	// 5. Extract label-value metadata pairs from rows above table header
-	maxPartyRow := hdrIdx
-	if maxPartyRow <= 0 || maxPartyRow > len(rawRows) {
-		maxPartyRow = min(14, len(rawRows))
-	}
-	for rIdx := 1; rIdx < maxPartyRow; rIdx++ {
-		r := rawRows[rIdx]
-		if len(r) < 2 {
-			continue
-		}
-		lbl := strings.TrimSpace(r[0])
-		val := ""
-		for cIdx := 1; cIdx < len(r); cIdx++ {
-			v := strings.TrimSpace(r[cIdx])
-			if v != "" && v != lbl {
-				val = v
-				break
-			}
-		}
-		if lbl != "" && val != "" {
-			if rIdx < 9 {
-				meta.Seller[lbl] = val
-			} else {
-				meta.Buyer[lbl] = val
-			}
-		}
-	}
-
-	// 6. Extract actual sample item rows from under the header in the sheet
-	if hdrIdx >= 0 && hdrIdx+1 < len(rawRows) {
-		for i := hdrIdx + 1; i < len(rawRows) && len(meta.SampleRows) < 5; i++ {
-			row := rawRows[i]
-			hasContent := false
-			for _, c := range row {
-				if strings.TrimSpace(c) != "" {
-					hasContent = true
-					break
-				}
-			}
-			if hasContent {
-				meta.SampleRows = append(meta.SampleRows, row)
-			}
-		}
-	}
-
-	// 7. Extract cell fills matrix for inspector / visual builder
-	rowCount := min(len(rawRows), 30)
-	for rIdx := 0; rIdx < rowCount; rIdx++ {
-		r := rawRows[rIdx]
-		fillRow := make([]string, len(r))
-		for cIdx := range r {
-			axis, _ := excelize.CoordinatesToCellName(cIdx+1, rIdx+1)
-			sID, _ := f.GetCellStyle(sheet, axis)
-			if st, _ := f.GetStyle(sID); st != nil && len(st.Fill.Color) > 0 && st.Fill.Color[0] != "" {
-				fillRow[cIdx] = "#" + strings.ToUpper(st.Fill.Color[0])
-			}
-		}
-		meta.Fills = append(meta.Fills, fillRow)
-	}
-
-	return meta
-}
-
-// SyncDiskTemplates scans data/templates/invoices and data/templates/documents
-// and populates excel_templates with headers and styles extracted directly via excelize.
+// SyncDiskTemplates scans data/templates/{invoices,documents} for *.html files
+// and registers them in the excel_templates catalog table.
 func (s *TemplateService) SyncDiskTemplates() error {
 	dirs := []struct {
 		relPath  string
 		category string
 		badge    string
 	}{
-		{relPath: filepath.Join(s.dataDir, "templates", "invoices"), category: "invoices", badge: "فاتورة Excel"},
-		{relPath: filepath.Join(s.dataDir, "templates", "documents"), category: "vouchers", badge: "سند Excel"},
+		{filepath.Join(s.dataDir, "templates", "invoices"), "invoices", "فاتورة HTML"},
+		{filepath.Join(s.dataDir, "templates", "documents"), "documents", "سند HTML"},
 	}
 
-	// Remove previously synced disk templates to avoid duplicate accumulation
 	_, _ = s.db.Exec(`DELETE FROM excel_templates WHERE file_path LIKE '%templates%invoices%' OR file_path LIKE '%templates%documents%'`)
 
 	for _, d := range dirs {
@@ -429,223 +81,135 @@ func (s *TemplateService) SyncDiskTemplates() error {
 		if err != nil {
 			continue
 		}
-
 		for _, entry := range entries {
-			if entry.IsDir() || (!strings.HasSuffix(strings.ToLower(entry.Name()), ".xlsx") && !strings.HasSuffix(strings.ToLower(entry.Name()), ".xls")) {
+			if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".html") {
 				continue
 			}
-
 			fullPath := filepath.Join(d.relPath, entry.Name())
 			fi, err := entry.Info()
 			if err != nil {
 				continue
 			}
 
-			baseName := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-			var id string
-			if baseName == "standard" {
-				id = "standard"
-			} else {
-				h := sha256.Sum256([]byte(d.category + "/" + entry.Name()))
-				id = "tpl_" + hex.EncodeToString(h[:4])
-			}
+			baseName := strings.TrimSuffix(entry.Name(), ".html")
+			h := sha256.Sum256([]byte(d.category + "/" + entry.Name()))
+			id := "tpl_" + hex.EncodeToString(h[:4])
+			nameAr := strings.ReplaceAll(baseName, "_", " ")
 
-			nameAr := baseName
-			if len(nameAr) > 3 && nameAr[2] == '_' {
-				nameAr = nameAr[3:]
-			}
-			nameAr = strings.ReplaceAll(nameAr, "_", " ")
-
-			var meta *ExtractedSheetMeta
-			f, err := excelize.OpenFile(fullPath)
-			if err == nil {
-				sheets := f.GetSheetList()
-				if len(sheets) > 0 {
-					rows, errRows := f.GetRows(sheets[0])
-					if errRows == nil {
-						meta = extractSheetProperties(f, sheets[0], rows)
-					}
-				}
-				_ = f.Close()
-			}
-			if meta == nil {
-				meta = &ExtractedSheetMeta{
-					PrimaryColor: "#06b6d4",
-					HeaderFill:   "#06b6d4",
-					BannerFill:   "#06b6d4",
-					Seller:       make(map[string]string),
-					Buyer:        make(map[string]string),
-				}
-				if d.category == "invoices" {
-					meta.Headers = []string{"#", "رمز الصنف", "السلعة أو الخدمة", "الكمية", "الوحدة", "سعر الوحدة", "خصم السطر", "الصافي قبل الضريبة", "فئة الضريبة", "نسبة الضريبة", "قيمة الضريبة", "الإجمالي شامل الضريبة"}
-				} else {
-					meta.Headers = []string{"#", "رقم السند", "تاريخ الإصدار", "اسم العميل", "المبلغ", "طريقة الدفع", "البيان", "ملاحظات"}
-				}
-			}
-
-			// Construct sample lines from native sample rows in sheet
-			sampleLines := make([]map[string]interface{}, 0)
-			for lIdx, sr := range meta.SampleRows {
-				lMap := map[string]interface{}{
-					"line_no": lIdx + 1,
-				}
-				for cIdx, val := range sr {
-					if cIdx < len(meta.Headers) {
-						lMap[meta.Headers[cIdx]] = val
-					}
-				}
-				sampleLines = append(sampleLines, lMap)
-			}
-
-			styleMeta := map[string]interface{}{
-				"banner_text":  meta.BannerText,
-				"header_fill":  meta.HeaderFill,
-				"banner_fill":  meta.BannerFill,
-				"accent_color": meta.PrimaryColor,
-				"light_color":  meta.BannerFill,
-				"alignments":   meta.Alignments,
-				"headers":      meta.Headers,
-				"merges":       meta.Merges,
-				"sample_rows":  meta.SampleRows,
-				"seller":       meta.Seller,
-				"buyer":        meta.Buyer,
-				"snapshot": map[string]interface{}{
-					"seller": meta.Seller,
-					"buyer":  meta.Buyer,
-					"invoice": map[string]interface{}{
-						"invoice_number": fmt.Sprintf("INV-%s-00108", strings.ToUpper(id[:min(3, len(id))])),
-						"issue_date":     "2026-09-18",
-						"payment_label":  "تحويل بنكي",
-						"lines":          sampleLines,
-					},
-				},
-			}
-
-			styleMetaJsonBytes, _ := json.Marshal(styleMeta)
-			headersJsonBytes, _ := json.Marshal(meta.Headers)
-			now := db.NowIso()
+			contentBytes, _ := os.ReadFile(fullPath)
+			tags := extractHtmlPlaceholders(string(contentBytes))
+			headersJson, _ := json.Marshal(tags)
 
 			_, _ = s.db.Exec(`
-				INSERT INTO excel_templates (id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, style_meta, is_active, updated_at)
-				VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, ?, 1, ?)
+				INSERT INTO excel_templates (id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, is_active, updated_at)
+				VALUES (?, ?, '', ?, ?, ?, ?, '#059669', ?, 1, ?)
 				ON CONFLICT(id) DO UPDATE SET
 					name_ar = excluded.name_ar,
 					file_path = excluded.file_path,
-					headers_json = excluded.headers_json,
-					color_hex = excluded.color_hex,
-					style_meta = excluded.style_meta,
 					category = excluded.category,
+					headers_json = excluded.headers_json,
 					updated_at = excluded.updated_at
-			`, id, nameAr, "قالب Excel معتمد مستخرج من القرص", d.badge, d.category, fullPath, meta.PrimaryColor, string(headersJsonBytes), string(styleMetaJsonBytes), now)
+			`, id, nameAr, "قالب HTML معتمد في النظام", d.badge, d.category, fullPath, string(headersJson), db.NowIso())
 			_ = fi
 		}
 	}
-
 	return nil
 }
 
+func extractHtmlPlaceholders(content string) []string {
+	tagRegex := regexp.MustCompile(`\{\{\s*([a-zA-Z0-9_\-\.]+)\s*\}\}`)
+	matches := tagRegex.FindAllString(content, -1)
+	seen := make(map[string]bool)
+	var list []string
+	for _, m := range matches {
+		clean := strings.TrimSpace(m)
+		if !seen[clean] {
+			seen[clean] = true
+			list = append(list, clean)
+		}
+	}
+	return list
+}
+
+// ─── List ─────────────────────────────────────────────────────────────────────
+
 func (s *TemplateService) List(typeFilter, categoryFilter string) ([]TemplateCatalogItem, error) {
+	_ = s.SyncDiskTemplates()
 	list := make([]TemplateCatalogItem, 0)
 
-	// Read custom and synced templates from excel_templates table
 	rows, err := s.db.Query(`
-		SELECT id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, is_active, COALESCE(style_meta, '{}')
+		SELECT id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, is_active
 		FROM excel_templates
 	`)
-	dbCount := 0
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			dbCount++
-			var tpl TemplateCatalogItem
-			var filePath, headersJson, styleMetaJson string
-			var isAct int
-			if err := rows.Scan(&tpl.ID, &tpl.NameAr, &tpl.NameEn, &tpl.Description, &tpl.Badge, &tpl.Category, &filePath, &tpl.ColorHex, &headersJson, &isAct, &styleMetaJson); err == nil {
-				tpl.IsActive = isAct == 1
-				tpl.IsDefault = (tpl.ID == "standard")
-				tpl.FilePath = filePath
+	if err != nil {
+		return list, nil
+	}
+	defer rows.Close()
 
-				if fi, errStat := os.Stat(filePath); errStat == nil {
-					tpl.FileSize = fi.Size()
-				}
+	for rows.Next() {
+		var tpl TemplateCatalogItem
+		var filePath, headersJson string
+		var isAct int
+		if err := rows.Scan(&tpl.ID, &tpl.NameAr, &tpl.NameEn, &tpl.Description, &tpl.Badge, &tpl.Category, &filePath, &tpl.ColorHex, &headersJson, &isAct); err != nil {
+			continue
+		}
+		tpl.IsActive = isAct == 1
+		tpl.IsDefault = tpl.ID == "standard"
+		tpl.FilePath = filePath
+		if fi, errStat := os.Stat(filePath); errStat == nil {
+			tpl.FileSize = fi.Size()
+		}
+		if headersJson != "" {
+			_ = json.Unmarshal([]byte(headersJson), &tpl.Headers)
+		}
+		if tpl.Headers == nil {
+			tpl.Headers = []string{}
+		}
+		tpl.TotalFields = len(tpl.Headers)
+		if tpl.TotalFields > 0 {
+			tpl.FieldsSummary = fmt.Sprintf("قالب HTML — تم اكتشاف %d وسم تلقائياً", tpl.TotalFields)
+		} else {
+			tpl.FieldsSummary = "قالب HTML معتمد"
+		}
 
-				var headers []string
-				if errJson := json.Unmarshal([]byte(headersJson), &headers); errJson == nil && len(headers) > 0 {
-					tpl.Headers = headers
-					tpl.TotalFields = len(headers)
-					tpl.FieldsSummary = fmt.Sprintf("تم اكتشاف %d أعمدة رئيسية من ملف القالب", len(headers))
-				} else {
-					tpl.TotalFields = 24
-					tpl.FieldsSummary = "قالب Excel مُكتشف آلياً"
-				}
-
-				var styleMeta map[string]interface{}
-				if errMeta := json.Unmarshal([]byte(styleMetaJson), &styleMeta); errMeta == nil && len(styleMeta) > 0 {
-					tpl.StyleMeta = styleMeta
-				}
-
-				if typeFilter != "" && typeFilter != "all" {
-					if typeFilter == "invoices" && tpl.Category != "invoices" {
-						continue
-					}
-					if (typeFilter == "vouchers" || typeFilter == "documents") && tpl.Category != "vouchers" && tpl.Category != "documents" {
-						continue
-					}
-				}
-				if categoryFilter != "" {
-					if categoryFilter == "invoices" && tpl.Category != "invoices" {
-						continue
-					}
-					if (categoryFilter == "documents" || categoryFilter == "vouchers") && tpl.Category != "vouchers" && tpl.Category != "documents" {
-						continue
-					}
-				}
-				list = append(list, tpl)
+		if typeFilter != "" && typeFilter != "all" {
+			if typeFilter == "invoices" && tpl.Category != "invoices" {
+				continue
+			}
+			if (typeFilter == "vouchers" || typeFilter == "documents") && tpl.Category != "vouchers" && tpl.Category != "documents" {
+				continue
 			}
 		}
-	}
-
-	// Fallback to default templates only if DB has no templates
-	if dbCount == 0 {
-		for _, tpl := range defaultTemplates {
-			if typeFilter != "" && typeFilter != "all" {
-				if typeFilter == "invoices" && tpl.Category != "invoices" {
-					continue
-				}
-				if (typeFilter == "vouchers" || typeFilter == "documents") && tpl.Category != "vouchers" {
-					continue
-				}
+		if categoryFilter != "" {
+			if categoryFilter == "invoices" && tpl.Category != "invoices" {
+				continue
 			}
-			if categoryFilter != "" {
-				if categoryFilter == "invoices" && tpl.Category != "invoices" {
-					continue
-				}
-				if (categoryFilter == "documents" || categoryFilter == "vouchers") && tpl.Category != "vouchers" {
-					continue
-				}
+			if (categoryFilter == "documents" || categoryFilter == "vouchers") && tpl.Category != "vouchers" && tpl.Category != "documents" {
+				continue
 			}
-			list = append(list, tpl)
 		}
+		list = append(list, tpl)
 	}
-
 	return list, nil
 }
 
+// ─── Inspect ──────────────────────────────────────────────────────────────────
+
 type InspectResult struct {
-	Valid                 bool                `json:"valid"`
-	DetectedType          string              `json:"detected_type"`
-	DetectedTitle         string              `json:"detectedTitle,omitempty"`
-	DetectedPlaceholders  []string            `json:"detected_placeholders"`
-	Sheets                []string            `json:"sheets"`
-	RowsCount             int                 `json:"rows_count"`
-	ColsCount             int                 `json:"cols_count"`
-	Headers               []string            `json:"headers"`
-	SampleRows            [][]string          `json:"sampleRows"`
-	LayoutGrid            [][]string          `json:"layoutGrid"`
-	LayoutFills           [][]string          `json:"layoutFills"`
-	LayoutMerges          []string            `json:"layoutMerges"`
-	Metadata              map[string]any      `json:"metadata"`
-	Message               string              `json:"message"`
+	Valid                bool           `json:"valid"`
+	DetectedType         string         `json:"detected_type"`
+	DetectedTitle        string         `json:"detectedTitle,omitempty"`
+	DetectedPlaceholders []string       `json:"detected_placeholders"`
+	Sheets               []string       `json:"sheets"`
+	RowsCount            int            `json:"rows_count"`
+	ColsCount            int            `json:"cols_count"`
+	Headers              []string       `json:"headers"`
+	SampleRows           [][]string     `json:"sampleRows"`
+	LayoutGrid           [][]string     `json:"layoutGrid"`
+	LayoutFills          [][]string     `json:"layoutFills"`
+	LayoutMerges         []string       `json:"layoutMerges"`
+	Metadata             map[string]any `json:"metadata"`
+	Message              string         `json:"message"`
 }
 
 func (s *TemplateService) Inspect(base64Content, filename string) (*InspectResult, error) {
@@ -653,100 +217,46 @@ func (s *TemplateService) Inspect(base64Content, filename string) (*InspectResul
 		return nil, errors.New("الملف فارغ أو غير صالح")
 	}
 
-	// Clean base64 header if present
 	idx := strings.Index(base64Content, ",")
 	if idx != -1 {
 		base64Content = base64Content[idx+1:]
 	}
-
 	data, err := base64.StdEncoding.DecodeString(base64Content)
-	if err != nil || len(data) < 100 {
-		return nil, errors.New("صيغة الملف غير مدعومة — يجب رفع ملف Excel بصيغة .xlsx")
-	}
-
-	f, err := excelize.OpenReader(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("تعذر قراءة ملف Excel: %w", err)
-	}
-	defer f.Close()
-
-	sheets := f.GetSheetList()
-	if len(sheets) == 0 {
-		return nil, errors.New("ملف Excel لا يحتوي على أي صفحات")
-	}
-
-	sheetName := sheets[0]
-	rawRows, err := f.GetRows(sheetName)
-	if err != nil {
-		return nil, fmt.Errorf("تعذر قراءة صفوف الصفحة: %w", err)
-	}
-
-	rowsCount := len(rawRows)
-	colsCount := 0
-	for _, r := range rawRows {
-		if len(r) > colsCount {
-			colsCount = len(r)
+	if err != nil || len(data) == 0 {
+		if strings.Contains(base64Content, "<") && strings.Contains(base64Content, ">") {
+			data = []byte(base64Content)
+		} else {
+			return nil, errors.New("صيغة الملف غير مدعومة")
 		}
 	}
 
-	meta := extractSheetProperties(f, sheetName, rawRows)
-
-	layoutGrid := make([][]string, 0, min(rowsCount, 50))
-	for i := 0; i < min(rowsCount, 50); i++ {
-		layoutGrid = append(layoutGrid, rawRows[i])
-	}
-
+	htmlContent := string(data)
 	detectedTitle := strings.TrimSuffix(filename, filepath.Ext(filename))
 	detectedTitle = strings.ReplaceAll(detectedTitle, "_", " ")
 
-	detectedType := "invoice"
-	lowerName := strings.ToLower(filename)
-	if strings.Contains(lowerName, "سند") || strings.Contains(lowerName, "voucher") || strings.Contains(lowerName, "قبض") {
-		detectedType = "voucher"
+	detectedType := "invoices"
+	lower := strings.ToLower(filename + htmlContent)
+	if strings.Contains(lower, "سند") || strings.Contains(lower, "voucher") || strings.Contains(lower, "قبض") {
+		detectedType = "documents"
 	}
 
-	placeholders := []string{
-		"{{invoice_number}}",
-		"{{issue_date}}",
-		"{{issue_time}}",
-		"{{seller_name}}",
-		"{{seller_tax_number}}",
-		"{{buyer_name}}",
-		"{{buyer_tax_number}}",
-		"{{subtotal}}",
-		"{{tax_amount}}",
-		"{{grand_total}}",
-		"{{qr_code}}",
-	}
-
-	metaMap := map[string]any{
-		"primary_color": meta.PrimaryColor,
-		"header_fill":   meta.HeaderFill,
-		"banner_fill":   meta.BannerFill,
-		"banner_text":   meta.BannerText,
-		"seller":        meta.Seller,
-		"buyer":         meta.Buyer,
-		"alignments":    meta.Alignments,
-		"merges":        meta.Merges,
-	}
+	// Find dynamic tags automatically
+	found := extractHtmlPlaceholders(htmlContent)
 
 	return &InspectResult{
 		Valid:                true,
 		DetectedType:         detectedType,
 		DetectedTitle:        detectedTitle,
-		DetectedPlaceholders: placeholders,
-		Sheets:               sheets,
-		RowsCount:            rowsCount,
-		ColsCount:            colsCount,
-		Headers:              meta.Headers,
-		SampleRows:           meta.SampleRows,
-		LayoutGrid:           layoutGrid,
-		LayoutFills:          meta.Fills,
-		LayoutMerges:         meta.Merges,
-		Metadata:             metaMap,
-		Message:              "تم فحص وتحليل القالب واستخراج الأعمدة والتنسيقات والخلايا المدمجة بنجاح من ملف Excel.",
+		DetectedPlaceholders: found,
+		Headers:              found,
+		Sheets:               []string{"HTML"},
+		RowsCount:            strings.Count(htmlContent, "\n"),
+		ColsCount:            len(found),
+		Message:              fmt.Sprintf("قالب HTML صالح — تم اكتشاف %d وسم ديناميكي تلقائياً.", len(found)),
 	}, nil
 }
+
+// ─── Upload ───────────────────────────────────────────────────────────────────
 
 type UploadTemplateInput struct {
 	NameAr      string `json:"name_ar"`
@@ -766,112 +276,50 @@ func (s *TemplateService) Upload(input UploadTemplateInput) (*TemplateCatalogIte
 		input.Category = "invoices"
 	}
 	if input.ColorHex == "" {
-		input.ColorHex = "#0d9488"
+		input.ColorHex = "#059669"
 	}
 
 	id := crypto.UUID()
-	targetDir := filepath.Join(s.dataDir, "templates", "invoices")
+	subDir := "invoices"
 	if input.Category == "vouchers" || input.Category == "documents" {
-		targetDir = filepath.Join(s.dataDir, "templates", "documents")
+		subDir = "documents"
+		input.Category = "documents"
 	}
+	targetDir := filepath.Join(s.dataDir, "templates", subDir)
 	_ = os.MkdirAll(targetDir, 0755)
 
-	fileName := fmt.Sprintf("tpl_%s.xlsx", id)
+	fileName := fmt.Sprintf("tpl_%s.html", id)
 	filePath := filepath.Join(targetDir, fileName)
 
-	// Save file to disk
-	var fileData []byte
-	if input.FileBase64 != "" {
-		idx := strings.Index(input.FileBase64, ",")
-		rawB64 := input.FileBase64
-		if idx != -1 {
-			rawB64 = rawB64[idx+1:]
-		}
-		if dec, err := base64.StdEncoding.DecodeString(rawB64); err == nil {
-			fileData = dec
-			_ = os.WriteFile(filePath, dec, 0644)
-		}
+	// Decode and save
+	rawB64 := input.FileBase64
+	if idx := strings.Index(rawB64, ","); idx != -1 {
+		rawB64 = rawB64[idx+1:]
 	}
-
-	var meta *ExtractedSheetMeta
-	if len(fileData) > 0 {
-		if f, err := excelize.OpenReader(bytes.NewReader(fileData)); err == nil {
-			sheets := f.GetSheetList()
-			if len(sheets) > 0 {
-				if rows, errRows := f.GetRows(sheets[0]); errRows == nil {
-					meta = extractSheetProperties(f, sheets[0], rows)
-				}
-			}
-			_ = f.Close()
-		}
-	}
-	if meta == nil {
-		meta = &ExtractedSheetMeta{
-			PrimaryColor: input.ColorHex,
-			HeaderFill:   input.ColorHex,
-			BannerFill:   input.ColorHex,
-			Seller:       make(map[string]string),
-			Buyer:        make(map[string]string),
-		}
-		if input.Category == "invoices" {
-			meta.Headers = []string{"#", "رمز الصنف", "السلعة أو الخدمة", "الكمية", "الوحدة", "سعر الوحدة", "خصم السطر", "الصافي قبل الضريبة", "فئة الضريبة", "نسبة الضريبة", "قيمة الضريبة", "الإجمالي شامل الضريبة"}
+	fileData, err := base64.StdEncoding.DecodeString(rawB64)
+	if err != nil || len(fileData) == 0 {
+		if strings.Contains(rawB64, "<") && strings.Contains(rawB64, ">") {
+			fileData = []byte(rawB64)
 		} else {
-			meta.Headers = []string{"#", "رقم السند", "تاريخ الإصدار", "اسم العميل", "المبلغ", "طريقة الدفع", "البيان", "ملاحظات"}
+			return nil, errors.New("بيانات الملف غير صالحة أو فارغة")
 		}
 	}
-
-	if input.ColorHex == "" || input.ColorHex == "#0d9488" {
-		input.ColorHex = meta.PrimaryColor
+	if err := os.WriteFile(filePath, fileData, 0644); err != nil {
+		return nil, fmt.Errorf("تعذر حفظ الملف: %w", err)
 	}
 
-	sampleLines := make([]map[string]interface{}, 0)
-	for lIdx, sr := range meta.SampleRows {
-		lMap := map[string]interface{}{
-			"line_no": lIdx + 1,
-		}
-		for cIdx, val := range sr {
-			if cIdx < len(meta.Headers) {
-				lMap[meta.Headers[cIdx]] = val
-			}
-		}
-		sampleLines = append(sampleLines, lMap)
-	}
-
-	styleMeta := map[string]interface{}{
-		"banner_text":  meta.BannerText,
-		"header_fill":  meta.HeaderFill,
-		"banner_fill":  meta.BannerFill,
-		"accent_color": input.ColorHex,
-		"alignments":   meta.Alignments,
-		"headers":      meta.Headers,
-		"merges":       meta.Merges,
-		"sample_rows":  meta.SampleRows,
-		"seller":       meta.Seller,
-		"buyer":        meta.Buyer,
-		"snapshot": map[string]interface{}{
-			"seller": meta.Seller,
-			"buyer":  meta.Buyer,
-			"invoice": map[string]interface{}{
-				"invoice_number": fmt.Sprintf("INV-%s-00108", strings.ToUpper(id[:min(3, len(id))])),
-				"issue_date":     "2026-09-18",
-				"payment_label":  "تحويل بنكي",
-				"lines":          sampleLines,
-			},
-		},
-	}
-	styleMetaJson, _ := json.Marshal(styleMeta)
-
-	headersJson, _ := json.Marshal(meta.Headers)
-	now := db.NowIso()
 	badge := "مخصص"
-	if input.Category == "vouchers" {
+	if input.Category == "documents" {
 		badge = "سند مخصص"
 	}
 
-	_, err := s.db.Exec(`
-		INSERT INTO excel_templates (id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, style_meta, is_active, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-	`, id, input.NameAr, input.NameEn, input.Description, badge, input.Category, filePath, input.ColorHex, string(headersJson), string(styleMetaJson), now)
+	tags := extractHtmlPlaceholders(string(fileData))
+	headersJson, _ := json.Marshal(tags)
+
+	_, err = s.db.Exec(`
+		INSERT INTO excel_templates (id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, is_active, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+	`, id, input.NameAr, input.NameEn, input.Description, badge, input.Category, filePath, input.ColorHex, string(headersJson), db.NowIso())
 	if err != nil {
 		return nil, err
 	}
@@ -885,29 +333,22 @@ func (s *TemplateService) Upload(input UploadTemplateInput) (*TemplateCatalogIte
 		Badge:         badge,
 		ColorHex:      input.ColorHex,
 		IsActive:      true,
-		IsDefault:     false,
-		Headers:       meta.Headers,
-		TotalFields:   len(meta.Headers),
-		FieldsSummary: fmt.Sprintf("قالب مخصص (%d أعمدة)", len(meta.Headers)),
 		FilePath:      filePath,
 		FileSize:      int64(len(fileData)),
-		StyleMeta:     styleMeta,
+		TotalFields:   len(tags),
+		Headers:       tags,
+		FieldsSummary: fmt.Sprintf("قالب HTML — تم اكتشاف %d وسم تلقائياً", len(tags)),
 	}, nil
 }
 
-func (s *TemplateService) Delete(id string) error {
-	for _, dt := range defaultTemplates {
-		if dt.ID == id {
-			return errors.New("لا يمكن حذف القوالب الأساسية المدمجة في النظام")
-		}
-	}
+// ─── Delete / Reset ───────────────────────────────────────────────────────────
 
+func (s *TemplateService) Delete(id string) error {
 	var filePath string
 	_ = s.db.QueryRow("SELECT file_path FROM excel_templates WHERE id = ?", id).Scan(&filePath)
 	if filePath != "" {
 		_ = os.Remove(filePath)
 	}
-
 	_, err := s.db.Exec("DELETE FROM excel_templates WHERE id = ?", id)
 	return err
 }
@@ -917,64 +358,54 @@ func (s *TemplateService) Reset() error {
 	return s.SyncDiskTemplates()
 }
 
+// ─── GetFilePath ──────────────────────────────────────────────────────────────
+
 func (s *TemplateService) GetFilePath(id string) (string, error) {
-	// Check in database first
 	var filePath string
-	err := s.db.QueryRow("SELECT file_path FROM excel_templates WHERE id = ?", id).Scan(&filePath)
-	if err == nil && filePath != "" {
-		normalized := filepath.FromSlash(strings.ReplaceAll(filePath, "\\", "/"))
-		if _, errStat := os.Stat(normalized); errStat == nil {
-			return normalized, nil
+	_ = s.db.QueryRow("SELECT file_path FROM excel_templates WHERE id = ?", id).Scan(&filePath)
+	if filePath != "" {
+		if _, errStat := os.Stat(filePath); errStat == nil {
+			return filePath, nil
 		}
-		// Also check by filename in s.dataDir templates
-		base := filepath.Base(normalized)
-		for _, sub := range []string{"invoices", "documents"} {
-			cand := filepath.Join(s.dataDir, "templates", sub, base)
-			if _, errStat := os.Stat(cand); errStat == nil {
-				return cand, nil
+	}
+
+	// Fallback: search by id in both dirs
+	for _, sub := range []string{"invoices", "documents"} {
+		for _, ext := range []string{".html"} {
+			p := filepath.Join(s.dataDir, "templates", sub, id+ext)
+			if _, errStat := os.Stat(p); errStat == nil {
+				return p, nil
 			}
 		}
-	}
-
-	// Check on disk by id or filename match
-	invoicesDir := filepath.Join(s.dataDir, "templates", "invoices")
-	docsDir := filepath.Join(s.dataDir, "templates", "documents")
-
-	candidates := []string{
-		filepath.Join(invoicesDir, id+".xlsx"),
-		filepath.Join(docsDir, id+".xlsx"),
-		filepath.Join(invoicesDir, "standard.xlsx"),
-	}
-
-	for _, p := range candidates {
-		if _, errStat := os.Stat(p); errStat == nil {
-			return p, nil
-		}
-	}
-
-	// Look for any file whose name matches id
-	for _, dir := range []string{invoicesDir, docsDir} {
-		entries, err := os.ReadDir(dir)
+		// any file containing id
+		entries, err := os.ReadDir(filepath.Join(s.dataDir, "templates", sub))
 		if err == nil {
 			for _, e := range entries {
 				if strings.Contains(strings.ToLower(e.Name()), strings.ToLower(id)) {
-					return filepath.Join(dir, e.Name()), nil
+					return filepath.Join(s.dataDir, "templates", sub, e.Name()), nil
 				}
 			}
 		}
 	}
-
 	return "", errors.New("لم يتم العثور على ملف القالب المطلوب")
 }
 
+// ─── Render ───────────────────────────────────────────────────────────────────
+
+// RenderTemplateHTML returns the raw HTML of a template file (for preview).
 func (s *TemplateService) RenderTemplateHTML(id string) (string, error) {
 	filePath, err := s.GetFilePath(id)
 	if err != nil {
 		return "", err
 	}
-	return ConvertExcelToHTML(filePath)
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("تعذر قراءة القالب: %w", err)
+	}
+	return string(data), nil
 }
 
+// RenderInvoiceHTML loads the HTML template and substitutes invoice data tags.
 func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (string, error) {
 	if style == "" || style == "default" {
 		if inv.IssuerSnapshot != nil && inv.IssuerSnapshot.PrintSettings != "" {
@@ -992,166 +423,21 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 
 	filePath, err := s.GetFilePath(style)
 	if err != nil || filePath == "" {
-		return "", fmt.Errorf("قالب Excel غير متوفر لهذا النمط: %s", style)
+		// Fallback: use built-in default template
+		return substituteInvoiceTags(defaultInvoiceHTMLTemplate(), inv), nil
 	}
 
-	f, err := excelize.OpenFile(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", fmt.Errorf("تعذر فتح ملف القالب: %w", err)
-	}
-	defer f.Close()
-
-	sheets := f.GetSheetList()
-	if len(sheets) == 0 {
-		return "", errors.New("ملف القالب لا يحتوي على صفحات")
-	}
-	sheet := sheets[0]
-
-	rawRows, err := f.GetRows(sheet)
-	if err != nil || len(rawRows) == 0 {
-		return "", errors.New("صفحات القالب فارغة")
+		return substituteInvoiceTags(defaultInvoiceHTMLTemplate(), inv), nil
 	}
 
-	// 1. Locate items header row
-	hdrRowIdx, _, _, _ := findTableHeaders(f, sheet, rawRows)
-	if hdrRowIdx < 0 {
-		hdrRowIdx = 17
-	}
+	return substituteInvoiceTags(string(data), inv), nil
+}
 
-	rawHdrRow := rawRows[hdrRowIdx]
-	colMap := make(map[string]int)
+// ─── Tag Substitution Engine ──────────────────────────────────────────────────
 
-	for c := 1; c <= len(rawHdrRow); c++ {
-		text := strings.TrimSpace(rawHdrRow[c-1])
-		if text == "" {
-			continue
-		}
-		tLower := strings.ToLower(text)
-		if strings.Contains(tLower, "صنف") || strings.Contains(tLower, "وصف") || strings.Contains(tLower, "خدمة") || strings.Contains(tLower, "بيان") {
-			if _, exists := colMap["desc"]; !exists {
-				colMap["desc"] = c
-			}
-		} else if strings.Contains(tLower, "كمية") || strings.Contains(tLower, "عدد") || strings.Contains(tLower, "qty") {
-			colMap["qty"] = c
-		} else if strings.Contains(tLower, "سعر") || strings.Contains(tLower, "price") || strings.Contains(tLower, "مفرد") {
-			if !strings.Contains(tLower, "قبل") && !strings.Contains(tLower, "شامل") {
-				colMap["price"] = c
-			}
-		} else if strings.Contains(tLower, "ضريب") || strings.Contains(tLower, "tax") || strings.Contains(tLower, "vat") {
-			if !strings.Contains(tLower, "شامل") && !strings.Contains(tLower, "نسبة") {
-				colMap["tax"] = c
-			}
-		} else if strings.Contains(tLower, "إجمالي") || strings.Contains(tLower, "اجمالي") || strings.Contains(tLower, "total") || strings.Contains(tLower, "مجموع") {
-			colMap["total"] = c
-		} else if text == "م" || text == "#" || strings.Contains(tLower, "تسلسل") {
-			colMap["idx"] = c
-		}
-	}
-
-	// 2. Populate item rows
-	startItemRow := hdrRowIdx + 2
-	if hdrRowIdx+1 < len(rawRows) {
-		sameAsHdr := true
-		for c := range rawRows[hdrRowIdx] {
-			if c < len(rawRows[hdrRowIdx+1]) && rawRows[hdrRowIdx][c] != rawRows[hdrRowIdx+1][c] {
-				sameAsHdr = false
-				break
-			}
-		}
-		if sameAsHdr && len(rawRows[hdrRowIdx]) > 0 {
-			startItemRow = hdrRowIdx + 3
-		}
-	}
-
-	lines := inv.Lines
-	if len(lines) == 0 {
-		lines = inv.Items
-	}
-
-	for i, l := range lines {
-		targetRow := startItemRow + i
-		if col, ok := colMap["idx"]; ok {
-			colName, _ := excelize.ColumnNumberToName(col)
-			_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName, targetRow), i+1)
-		}
-		if col, ok := colMap["desc"]; ok {
-			colName, _ := excelize.ColumnNumberToName(col)
-			_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName, targetRow), l.ItemName)
-		}
-		if col, ok := colMap["qty"]; ok {
-			colName, _ := excelize.ColumnNumberToName(col)
-			_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName, targetRow), l.Quantity)
-		}
-		if col, ok := colMap["price"]; ok {
-			colName, _ := excelize.ColumnNumberToName(col)
-			_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName, targetRow), l.UnitPriceMajor)
-		}
-		if col, ok := colMap["tax"]; ok {
-			colName, _ := excelize.ColumnNumberToName(col)
-			_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName, targetRow), l.TaxAmountMajor)
-		}
-		if col, ok := colMap["total"]; ok {
-			colName, _ := excelize.ColumnNumberToName(col)
-			tot := l.TotalLineMajor
-			if tot == 0 {
-				tot = l.Quantity*l.UnitPriceMajor + l.TaxAmountMajor
-			}
-			_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName, targetRow), tot)
-		}
-	}
-
-	// Clear remaining sample rows in table
-	for r := startItemRow + len(lines); r < startItemRow+25 && r <= len(rawRows); r++ {
-		isTotalsArea := false
-		for _, cellVal := range rawRows[r-1] {
-			cTrim := strings.TrimSpace(cellVal)
-			if strings.Contains(cTrim, "المجموع") || strings.Contains(cTrim, "الخصم") || strings.Contains(cTrim, "الإجمالي المستحق") || strings.Contains(cTrim, "QR") {
-				isTotalsArea = true
-				break
-			}
-		}
-		if isTotalsArea {
-			break
-		}
-		for _, col := range colMap {
-			colName, _ := excelize.ColumnNumberToName(col)
-			_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", colName, r), "")
-		}
-	}
-
-	sellerName := inv.SellerName
-	sellerTax := inv.SellerTaxNumber
-	sellerCR := inv.SellerCr
-	sellerAddress := inv.SellerAddress
-	if inv.IssuerSnapshot != nil {
-		if sellerName == "" {
-			sellerName = inv.IssuerSnapshot.NameAr
-		}
-		if sellerTax == "" {
-			sellerTax = inv.IssuerSnapshot.TaxNumber
-		}
-		if sellerCR == "" {
-			sellerCR = inv.IssuerSnapshot.CommercialRegister
-		}
-		if sellerAddress == "" {
-			parts := []string{inv.IssuerSnapshot.BuildingNo, inv.IssuerSnapshot.Street, inv.IssuerSnapshot.District, inv.IssuerSnapshot.City}
-			var clean []string
-			for _, p := range parts {
-				if strings.TrimSpace(p) != "" {
-					clean = append(clean, p)
-				}
-			}
-			sellerAddress = strings.Join(clean, " - ")
-			if inv.IssuerSnapshot.Phone != "" {
-				if sellerAddress != "" {
-					sellerAddress += " - " + inv.IssuerSnapshot.Phone
-				} else {
-					sellerAddress = inv.IssuerSnapshot.Phone
-				}
-			}
-		}
-	}
-
+func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 	buyerName := inv.BuyerName
 	buyerTax := inv.BuyerTaxNumber
 	buyerAddress := inv.BuyerAddress
@@ -1170,551 +456,106 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 		}
 	}
 
-	// 3. Scan and replace metadata / placeholders in the sheet
-	maxCol := 1
-	for _, r := range rawRows {
-		if len(r) > maxCol {
-			maxCol = len(r)
-		}
-	}
-	sheetMerges, _ := f.GetMergeCells(sheet)
-	for _, m := range sheetMerges {
-		endCol, _, _ := excelize.CellNameToCoordinates(m.GetEndAxis())
-		if endCol > maxCol {
-			maxCol = endCol
-		}
-	}
-	if maxCol < 40 {
-		maxCol = 40
-	}
-	qrInserted := false
-	logoInserted := false
-
-	// Helper to check if a row is a label/header row
-	isRowHeader := func(rowIdx int) bool {
-		if rowIdx-1 < 0 || rowIdx-1 >= len(rawRows) {
-			return false
-		}
-		for _, cell := range rawRows[rowIdx-1] {
-			cTrim := strings.TrimSpace(cell)
-			if strings.Contains(cTrim, "فاتورة") || strings.Contains(cTrim, "تاريخ") || strings.Contains(cTrim, "عميل") || strings.Contains(cTrim, "منشأة") || strings.Contains(cTrim, "سجل") || strings.Contains(cTrim, "دفع") || strings.Contains(cTrim, "مورد") || strings.Contains(cTrim, "مشتري") || strings.Contains(cTrim, "صنف") || strings.Contains(cTrim, "كمية") || strings.Contains(cTrim, "سعر") || strings.Contains(cTrim, "المجموع") || strings.Contains(cTrim, "الخصم") || strings.Contains(cTrim, "المستحق") || (strings.Contains(cTrim, "ضريب") && !strings.Contains(cTrim, "رقم")) {
-				return true
-			}
-		}
-		return false
-	}
-
-	for r := 1; r <= len(rawRows); r++ {
-		handledInRow := make(map[string]bool)
-
-		for c := 1; c <= maxCol; c++ {
-			axis, _ := excelize.CoordinatesToCellName(c, r)
-			val, _ := f.GetCellValue(sheet, axis)
-			valTrim := strings.TrimSpace(val)
-			if valTrim == "" {
-				continue
-			}
-
-			// In-cell placeholder replacement {{...}}
-			if strings.Contains(valTrim, "{{") {
-				newVal := valTrim
-				newVal = strings.ReplaceAll(newVal, "{{invoice_number}}", inv.InvoiceNumber)
-				newVal = strings.ReplaceAll(newVal, "{{date}}", inv.IssueDate)
-				newVal = strings.ReplaceAll(newVal, "{{seller_name}}", sellerName)
-				newVal = strings.ReplaceAll(newVal, "{{buyer_name}}", buyerName)
-				newVal = strings.ReplaceAll(newVal, "{{total}}", fmt.Sprintf("%.2f ر.س", inv.GrandTotalMajor))
-				newVal = strings.ReplaceAll(newVal, "{{tax}}", fmt.Sprintf("%.2f ر.س", inv.TaxAmountMajor))
-				newVal = strings.ReplaceAll(newVal, "{{subtotal}}", fmt.Sprintf("%.2f ر.س", inv.SubtotalMajor))
-				if newVal != valTrim {
-					_ = f.SetCellValue(sheet, axis, newVal)
-					continue
-				}
-			}
-
-			// QR placement (handles single or merged QR placeholder cells)
-			if strings.EqualFold(valTrim, "QR") || strings.Contains(strings.ToUpper(valTrim), "QR") || strings.Contains(valTrim, "باركود") || strings.Contains(valTrim, "{{qr}}") {
-				if !qrInserted && inv.QrPayload != "" {
-					qrBytes, errQr := qrcode.Encode(inv.QrPayload, qrcode.Medium, 170)
-					if errQr == nil {
-						_ = f.AddPictureFromBytes(sheet, axis, &excelize.Picture{
-							Extension: ".png",
-							File:      qrBytes,
-							Format: &excelize.GraphicOptions{
-								LockAspectRatio: true,
-								AutoFit:         true,
-								OffsetX:         2,
-								OffsetY:         2,
-							},
-						})
-						qrInserted = true
-					}
-				}
-				_ = f.SetCellValue(sheet, axis, "")
-				continue
-			}
-
-			// Logo placement (handles single or merged logo placeholder cells)
-			if strings.EqualFold(valTrim, "الشعار") || strings.Contains(valTrim, "الشعار") || strings.EqualFold(valTrim, "LOGO") || strings.Contains(strings.ToLower(valTrim), "logo") || strings.Contains(valTrim, "{{logo}}") {
-				if !logoInserted && inv.IssuerSnapshot != nil && inv.IssuerSnapshot.LogoData != nil && strings.HasPrefix(*inv.IssuerSnapshot.LogoData, "data:image/") {
-					logoData := *inv.IssuerSnapshot.LogoData
-					commaIdx := strings.Index(logoData, ",")
-					if commaIdx != -1 {
-						if imgBytes, errDec := base64.StdEncoding.DecodeString(logoData[commaIdx+1:]); errDec == nil && len(imgBytes) > 0 {
-							ext := ".png"
-							if strings.HasPrefix(logoData, "data:image/jpeg") || strings.HasPrefix(logoData, "data:image/jpg") {
-								ext = ".jpg"
-							}
-							_ = f.AddPictureFromBytes(sheet, axis, &excelize.Picture{
-								Extension: ext,
-								File:      imgBytes,
-								Format: &excelize.GraphicOptions{
-									LockAspectRatio: true,
-									AutoFit:         true,
-									OffsetX:         4,
-									OffsetY:         4,
-								},
-							})
-							logoInserted = true
-						}
-					}
-				}
-				_ = f.SetCellValue(sheet, axis, "")
-				continue
-			}
-
-			// Helper to find the adjacent value cell without overwriting the label
-			fillAdjacent := func(targetVal string) {
-				isTotalsLabel := strings.Contains(valTrim, "المجموع") || strings.Contains(valTrim, "الخصم") || strings.Contains(valTrim, "المستحق") || (strings.Contains(valTrim, "ضريب") && !strings.Contains(valTrim, "رقم")) || r >= hdrRowIdx
-
-				// 1. Check if row r+1 is an empty value row (vertical card pattern) for metadata
-				if !isTotalsLabel && r+1 <= len(rawRows) && !isRowHeader(r+1) {
-					belowAxis, _ := excelize.CoordinatesToCellName(c, r+1)
-					tv, _ := f.GetCellValue(sheet, belowAxis)
-					tvTrim := strings.TrimSpace(tv)
-					if tvTrim == "" || strings.HasPrefix(tvTrim, "{{") || tvTrim == "-" || tvTrim == "—" {
-						_ = f.SetCellValue(sheet, belowAxis, targetVal)
-						return
-					}
-				}
-
-				// 2. Look horizontally on the same row (RTL first, looking left)
-				leftCol := c
-				for leftCol > 1 {
-					prevAxis, _ := excelize.CoordinatesToCellName(leftCol-1, r)
-					pv, _ := f.GetCellValue(sheet, prevAxis)
-					if strings.TrimSpace(pv) == valTrim {
-						leftCol--
-					} else {
-						break
-					}
-				}
-
-				found := false
-				for off := 1; off <= 8 && leftCol-off >= 1; off++ {
-					targetCol := leftCol - off
-					colName, _ := excelize.ColumnNumberToName(targetCol)
-					w, _ := f.GetColWidth(sheet, colName)
-					// Skip narrow margin columns and border columns
-					if w <= 3.5 || (targetCol < 3 && maxCol >= 12) || (targetCol == 1 && len(rawRows[r-1]) >= 10) {
-						continue
-					}
-
-					tAxis, _ := excelize.CoordinatesToCellName(targetCol, r)
-					tv, _ := f.GetCellValue(sheet, tAxis)
-					tvTrim := strings.TrimSpace(tv)
-					if tvTrim == "" || strings.HasPrefix(tvTrim, "{{") || tvTrim == "-" || tvTrim == "—" || strings.HasPrefix(tvTrim, "INV") || strings.HasPrefix(tvTrim, "0") {
-						_ = f.SetCellValue(sheet, tAxis, targetVal)
-						found = true
-						break
-					}
-				}
-
-				// 3. If not found on left, try looking to the right (LTR layout)
-				if !found {
-					rightCol := c
-					for rightCol < maxCol {
-						nextAxis, _ := excelize.CoordinatesToCellName(rightCol+1, r)
-						nv, _ := f.GetCellValue(sheet, nextAxis)
-						if strings.TrimSpace(nv) == valTrim {
-							rightCol++
-						} else {
-							break
-						}
-					}
-					for off := 1; off <= 8 && rightCol+off <= maxCol; off++ {
-						targetCol := rightCol + off
-						colName, _ := excelize.ColumnNumberToName(targetCol)
-						w, _ := f.GetColWidth(sheet, colName)
-						if w <= 3.5 || (targetCol > maxCol-2 && maxCol >= 12) || (targetCol == maxCol && len(rawRows[r-1]) >= 10) {
-							continue
-						}
-
-						tAxis, _ := excelize.CoordinatesToCellName(targetCol, r)
-						tv, _ := f.GetCellValue(sheet, tAxis)
-						tvTrim := strings.TrimSpace(tv)
-						if tvTrim == "" || strings.HasPrefix(tvTrim, "{{") || tvTrim == "-" || tvTrim == "—" || strings.HasPrefix(tvTrim, "INV") || strings.HasPrefix(tvTrim, "0") {
-							_ = f.SetCellValue(sheet, tAxis, targetVal)
-							break
-						}
-					}
-				}
-			}
-
-			if (strings.Contains(valTrim, "رقم الفاتورة") || strings.Contains(valTrim, "invoice no")) && !handledInRow["inv_no"] {
-				handledInRow["inv_no"] = true
-				fillAdjacent(inv.InvoiceNumber)
-			} else if (strings.Contains(valTrim, "تاريخ الإصدار") || strings.Contains(valTrim, "issue date")) && !handledInRow["issue_date"] {
-				handledInRow["issue_date"] = true
-				fillAdjacent(inv.IssueDate)
-			} else if (strings.Contains(valTrim, "تاريخ الاستحقاق") || strings.Contains(valTrim, "due date")) && !handledInRow["due_date"] {
-				handledInRow["due_date"] = true
-				dueDate := inv.IssueDate
-				if inv.DueDate != nil && *inv.DueDate != "" {
-					dueDate = *inv.DueDate
-				}
-				fillAdjacent(dueDate)
-			} else if (strings.Contains(valTrim, "طريقة الدفع") || strings.Contains(valTrim, "payment method")) && !handledInRow["payment_method"] {
-				handledInRow["payment_method"] = true
-				fillAdjacent(inv.PaymentLabel)
-			} else if (strings.Contains(valTrim, "اسم المنشأة") || strings.Contains(valTrim, "المورد")) && !handledInRow["seller_name"] {
-				handledInRow["seller_name"] = true
-				fillAdjacent(sellerName)
-			} else if strings.Contains(valTrim, "تواصل") {
-				if !handledInRow["seller_addr"] {
-					handledInRow["seller_addr"] = true
-					fillAdjacent(sellerAddress)
-				}
-			} else if strings.Contains(valTrim, "الرقم الضريبي") && strings.Contains(valTrim, "العنوان") && !handledInRow["buyer_tax_addr"] {
-				handledInRow["buyer_tax_addr"] = true
-				comb := buyerTax
-				if buyerAddress != "" {
-					if comb != "" {
-						comb += " - " + buyerAddress
-					} else {
-						comb = buyerAddress
-					}
-				}
-				fillAdjacent(comb)
-			} else if strings.Contains(valTrim, "الرقم الضريبي") && r < hdrRowIdx && c > 5 && !handledInRow["seller_tax"] {
-				handledInRow["seller_tax"] = true
-				fillAdjacent(sellerTax)
-			} else if strings.Contains(valTrim, "السجل التجاري") && !handledInRow["seller_cr"] {
-				handledInRow["seller_cr"] = true
-				fillAdjacent(sellerCR)
-			} else if (strings.Contains(valTrim, "اسم العميل") || strings.Contains(valTrim, "المشتري")) && !handledInRow["buyer_name"] {
-				handledInRow["buyer_name"] = true
-				fillAdjacent(buyerName)
-			} else if strings.Contains(valTrim, "الرقم الضريبي") && r < hdrRowIdx && c <= 5 && !handledInRow["buyer_tax"] {
-				handledInRow["buyer_tax"] = true
-				fillAdjacent(buyerTax)
-			} else if strings.Contains(valTrim, "العنوان") && !strings.Contains(valTrim, "تواصل") && !strings.Contains(valTrim, "ضريب") && r < hdrRowIdx && r > 12 && !handledInRow["buyer_addr"] {
-				handledInRow["buyer_addr"] = true
-				fillAdjacent(buyerAddress)
-			} else if strings.Contains(valTrim, "المجموع") && r >= hdrRowIdx && !handledInRow["subtotal"] {
-				handledInRow["subtotal"] = true
-				fillAdjacent(fmt.Sprintf("%.2f ر.س", inv.SubtotalMajor))
-			} else if strings.Contains(valTrim, "الخصم") && r >= hdrRowIdx && !handledInRow["discount"] {
-				handledInRow["discount"] = true
-				fillAdjacent(fmt.Sprintf("%.2f ر.س", inv.DiscountAmountMajor))
-			} else if (strings.Contains(valTrim, "الضريبة") || strings.Contains(valTrim, "ضريبة")) && r >= hdrRowIdx && !strings.Contains(valTrim, "سعر") && !strings.Contains(valTrim, "رقم") && !handledInRow["tax"] {
-				handledInRow["tax"] = true
-				fillAdjacent(fmt.Sprintf("%.2f ر.س", inv.TaxAmountMajor))
-			} else if (strings.Contains(valTrim, "الإجمالي المستحق") || strings.Contains(valTrim, "المستحق")) && r >= hdrRowIdx && !handledInRow["grand_total"] {
-				handledInRow["grand_total"] = true
-				fillAdjacent(fmt.Sprintf("%.2f ر.س", inv.GrandTotalMajor))
-			}
+	buyerPhone := ""
+	if inv.ClientSnapshot != nil {
+		buyerPhone = inv.ClientSnapshot.Phone
+		if buyerPhone == "" {
+			buyerPhone = inv.ClientSnapshot.Mobile
 		}
 	}
 
-	return ConvertExcelFileToHTML(f)
+	sellerName, sellerTax, sellerAddress, sellerCR := "", "", "", ""
+	if inv.IssuerSnapshot != nil {
+		sellerName = inv.IssuerSnapshot.NameAr
+		sellerTax = inv.IssuerSnapshot.TaxNumber
+		sellerAddress = inv.IssuerSnapshot.Street + " " + inv.IssuerSnapshot.City
+		sellerCR = inv.IssuerSnapshot.CommercialRegister
+	}
+
+	qrB64 := ""
+	if inv.QrPayload != "" {
+		if qrPNG, err := qrcode.Encode(inv.QrPayload, qrcode.Medium, 120); err == nil {
+			qrB64 = `<img src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(qrPNG) + `" alt="QR" style="width:100px;height:100px;" />`
+		}
+	}
+
+	sellerPhone, sellerEmail := "", ""
+	if inv.IssuerSnapshot != nil {
+		sellerPhone = inv.IssuerSnapshot.Phone
+		sellerEmail = inv.IssuerSnapshot.Email
+	}
+
+	result := strings.NewReplacer(
+		"{{invoice_number}}", inv.InvoiceNumber,
+		"{{issue_date}}", inv.IssueDate,
+		"{{due_date}}", func() string {
+			if inv.DueDate != nil {
+				return *inv.DueDate
+			}
+			return ""
+		}(),
+		"{{issue_time}}", inv.IssueTime,
+		"{{seller_name}}", sellerName,
+		"{{seller_tax}}", sellerTax,
+		"{{seller_address}}", sellerAddress,
+		"{{seller_cr}}", sellerCR,
+		"{{seller_phone}}", sellerPhone,
+		"{{seller_email}}", sellerEmail,
+		"{{buyer_name}}", buyerName,
+		"{{buyer_tax}}", buyerTax,
+		"{{buyer_address}}", buyerAddress,
+		"{{buyer_phone}}", buyerPhone,
+		"{{subtotal}}", fmt.Sprintf("%.2f", inv.SubtotalMajor),
+		"{{discount}}", fmt.Sprintf("%.2f", inv.DiscountAmountMajor),
+		"{{tax_amount}}", fmt.Sprintf("%.2f", inv.TaxAmountMajor),
+		"{{grand_total}}", fmt.Sprintf("%.2f", inv.GrandTotalMajor),
+		"{{payment_method}}", inv.PaymentMethod,
+		"{{notes}}", inv.Notes,
+		"{{items_table}}", generateItemsTable(inv),
+		"{{qr_code}}", qrB64,
+		"{{voucher_number}}", inv.InvoiceNumber,
+		"{{voucher_date}}", inv.IssueDate,
+		"{{received_from}}", buyerName,
+		"{{amount}}", fmt.Sprintf("%.2f", inv.GrandTotalMajor),
+		"{{paid_for}}", inv.Notes,
+		"{{receiver_name}}", sellerName,
+		"{{currency_symbol}}", SarSymbolSVG,
+		"{{sar_symbol}}", SarSymbolSVG,
+		"{{currency}}", "SAR",
+	).Replace(tpl)
+
+	return result
 }
 
-type excelMergeInfo struct {
-	ColSpan int
-	RowSpan int
-}
-
-func ConvertExcelToHTML(filePath string) (string, error) {
-	f, err := excelize.OpenFile(filePath)
-	if err != nil {
-		return "", fmt.Errorf("تعذر فتح ملف القالب: %w", err)
-	}
-	defer f.Close()
-	return ConvertExcelFileToHTML(f)
-}
-
-func ConvertExcelFileToHTML(f *excelize.File) (string, error) {
-
-	sheets := f.GetSheetList()
-	if len(sheets) == 0 {
-		return "", errors.New("ملف القالب لا يحتوي على صفحات")
-	}
-	sheet := sheets[0]
-
-	// RTL View
-	dir := "rtl"
-	sheetView, errView := f.GetSheetView(sheet, 0)
-	if errView == nil && sheetView.RightToLeft != nil && !*sheetView.RightToLeft {
-		dir = "ltr"
-	}
-
-	// Merged Cells
-	merges, _ := f.GetMergeCells(sheet)
-	mergedStarts := make(map[string]excelMergeInfo)
-	mergedSkips := make(map[string]bool)
-
-	maxMergeCol := 1
-	maxMergeRow := 1
-
-	for _, m := range merges {
-		startCol, startRow, _ := excelize.CellNameToCoordinates(m.GetStartAxis())
-		endCol, endRow, _ := excelize.CellNameToCoordinates(m.GetEndAxis())
-		if endCol > maxMergeCol {
-			maxMergeCol = endCol
-		}
-		if endRow > maxMergeRow {
-			maxMergeRow = endRow
-		}
-		mergedStarts[m.GetStartAxis()] = excelMergeInfo{
-			ColSpan: endCol - startCol + 1,
-			RowSpan: endRow - startRow + 1,
-		}
-		for r := startRow; r <= endRow; r++ {
-			for c := startCol; c <= endCol; c++ {
-				axis, _ := excelize.CoordinatesToCellName(c, r)
-				if axis != m.GetStartAxis() {
-					mergedSkips[axis] = true
-				}
-			}
-		}
-	}
-
-	rawRows, _ := f.GetRows(sheet)
-	totalRows := len(rawRows)
-	if maxMergeRow > totalRows {
-		totalRows = maxMergeRow
-	}
-
-	totalCols := 1
-	for _, r := range rawRows {
-		if len(r) > totalCols {
-			totalCols = len(r)
-		}
-	}
-	if maxMergeCol > totalCols {
-		totalCols = maxMergeCol
-	}
-
-	colWidths := make([]float64, totalCols)
-	totalWidth := 0.0
-	for c := 1; c <= totalCols; c++ {
-		colName, _ := excelize.ColumnNumberToName(c)
-		w, _ := f.GetColWidth(sheet, colName)
-		if w <= 0 {
-			w = 10.0
-		}
-		colWidths[c-1] = w
-		totalWidth += w
-	}
-
+func generateItemsTable(inv *InvoiceView) string {
 	var sb strings.Builder
-	sb.WriteString("<!DOCTYPE html>\n")
-	sb.WriteString(fmt.Sprintf("<html lang=\"ar\" dir=\"%s\">\n<head>\n<meta charset=\"utf-8\" />\n", dir))
-	sb.WriteString("<style>\n")
-	sb.WriteString("  @page { size: A4 portrait; margin: 6mm; }\n")
-	sb.WriteString("  * { box-sizing: border-box; }\n")
-	sb.WriteString("  html, body { margin: 0; padding: 0; background: #fff; font-family: Tahoma, 'Cairo', 'Segoe UI', Arial, sans-serif; color: #111; }\n")
-	sb.WriteString("  .excel-container { width: 100%; max-width: 210mm; margin: 0 auto; background: #fff; padding: 2mm 0; }\n")
-	sb.WriteString("  table.excel-sheet td { padding: 3px 5px; overflow: hidden; word-break: break-word; }\n")
-	sb.WriteString("  .cell-img { max-width: 100%; max-height: 105px; height: auto; width: auto; display: block; margin: 0 auto; object-fit: contain; }\n")
-	sb.WriteString("  .money-box { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; direction: rtl; white-space: nowrap; }\n")
-	sb.WriteString("  .money-box .num { direction: ltr; }\n")
-	sb.WriteString("  .money-box .cur-sym { display: inline-flex; align-items: center; }\n")
-	sb.WriteString("  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }\n")
-	sb.WriteString("</style>\n</head>\n<body>\n")
-	sb.WriteString("<div class=\"excel-container\">\n")
-	sb.WriteString("<table class=\"excel-sheet\">\n")
-
-	sb.WriteString("  <colgroup>\n")
-	for c := 1; c <= totalCols; c++ {
-		pct := (colWidths[c-1] / totalWidth) * 100
-		sb.WriteString(fmt.Sprintf("    <col style=\"width: %.2f%%;\" />\n", pct))
+	sb.WriteString(`<table style="width:100%;border-collapse:collapse;font-size:12px;" dir="rtl">`)
+	sb.WriteString(`<thead><tr style="background:#059669;color:#fff;">`)
+	for _, h := range []string{"#", "الصنف / الخدمة", "الكمية", "سعر الوحدة", "الضريبة", "الإجمالي"} {
+		sb.WriteString(`<th style="padding:6px 8px;text-align:right;border:1px solid #ccc;">` + h + `</th>`)
 	}
-	sb.WriteString("  </colgroup>\n")
+	sb.WriteString(`</tr></thead><tbody>`)
 
-	sb.WriteString("  <tbody>\n")
-
-	for r := 1; r <= totalRows; r++ {
-		rH, _ := f.GetRowHeight(sheet, r)
-		rowStyle := ""
-		if rH > 0 {
-			rowStyle = fmt.Sprintf(" style=\"height: %.1fpt;\"", rH)
+	for i, item := range inv.Lines {
+		bg := "#fff"
+		if i%2 == 1 {
+			bg = "#f0fdf4"
 		}
-		sb.WriteString(fmt.Sprintf("    <tr%s>\n", rowStyle))
-
-		for c := 1; c <= totalCols; c++ {
-			axis, _ := excelize.CoordinatesToCellName(c, r)
-			if mergedSkips[axis] {
-				continue
-			}
-
-			val, _ := f.GetCellValue(sheet, axis)
-			calcVal, errCalc := f.CalcCellValue(sheet, axis)
-			if errCalc == nil && calcVal != "" {
-				val = calcVal
-			}
-
-			pics, _ := f.GetPictures(sheet, axis)
-			var imgTags string
-			for _, pic := range pics {
-				mime := "image/png"
-				if strings.HasSuffix(strings.ToLower(pic.Extension), "jpg") || strings.HasSuffix(strings.ToLower(pic.Extension), "jpeg") {
-					mime = "image/jpeg"
-				}
-				b64 := base64.StdEncoding.EncodeToString(pic.File)
-				imgTags += fmt.Sprintf("<img class=\"cell-img\" src=\"data:%s;base64,%s\" />", mime, b64)
-			}
-
-			sID, _ := f.GetCellStyle(sheet, axis)
-			st, _ := f.GetStyle(sID)
-
-			var styles []string
-			if st != nil {
-				if len(st.Fill.Color) > 0 && st.Fill.Color[0] != "" {
-					hex := strings.ToUpper(st.Fill.Color[0])
-					if hex != "FFFFFF" && hex != "00000000" {
-						if !strings.HasPrefix(hex, "#") {
-							hex = "#" + hex
-						}
-						styles = append(styles, fmt.Sprintf("background-color: %s", hex))
-					}
-				}
-				if st.Font != nil {
-					if st.Font.Bold {
-						styles = append(styles, "font-weight: 700")
-					}
-					if st.Font.Italic {
-						styles = append(styles, "font-style: italic")
-					}
-					if st.Font.Size > 0 {
-						styles = append(styles, fmt.Sprintf("font-size: %.1fpt", st.Font.Size))
-					}
-					if st.Font.Color != "" {
-						fColor := st.Font.Color
-						if !strings.HasPrefix(fColor, "#") {
-							fColor = "#" + fColor
-						}
-						styles = append(styles, fmt.Sprintf("color: %s", fColor))
-					}
-					if st.Font.Family != "" {
-						styles = append(styles, fmt.Sprintf("font-family: '%s', Tahoma, sans-serif", st.Font.Family))
-					}
-				}
-				if st.Alignment != nil {
-					if st.Alignment.Horizontal != "" {
-						hAlign := st.Alignment.Horizontal
-						if hAlign == "center" {
-							styles = append(styles, "text-align: center")
-						} else if hAlign == "right" {
-							styles = append(styles, "text-align: right")
-						} else if hAlign == "left" {
-							styles = append(styles, "text-align: left")
-						}
-					}
-					if st.Alignment.Vertical != "" {
-						vAlign := st.Alignment.Vertical
-						if vAlign == "center" {
-							styles = append(styles, "vertical-align: middle")
-						} else if vAlign == "top" {
-							styles = append(styles, "vertical-align: top")
-						} else if vAlign == "bottom" {
-							styles = append(styles, "vertical-align: bottom")
-						}
-					}
-					if st.Alignment.WrapText {
-						styles = append(styles, "white-space: pre-wrap")
-					}
-				}
-				for _, b := range st.Border {
-					bColor := "#D0D0D0"
-					if b.Color != "" {
-						bColor = b.Color
-						if !strings.HasPrefix(bColor, "#") {
-							bColor = "#" + bColor
-						}
-					}
-					bWidth := "1px"
-					bStyle := "solid"
-					if b.Style >= 2 {
-						bWidth = "2px"
-					}
-					switch strings.ToLower(b.Type) {
-					case "top":
-						styles = append(styles, fmt.Sprintf("border-top: %s %s %s", bWidth, bStyle, bColor))
-					case "bottom":
-						styles = append(styles, fmt.Sprintf("border-bottom: %s %s %s", bWidth, bStyle, bColor))
-					case "left":
-						styles = append(styles, fmt.Sprintf("border-left: %s %s %s", bWidth, bStyle, bColor))
-					case "right":
-						styles = append(styles, fmt.Sprintf("border-right: %s %s %s", bWidth, bStyle, bColor))
-					}
-				}
-			}
-
-			attrs := ""
-			if mInfo, isStart := mergedStarts[axis]; isStart {
-				if mInfo.ColSpan > 1 {
-					attrs += fmt.Sprintf(" colspan=\"%d\"", mInfo.ColSpan)
-				}
-				if mInfo.RowSpan > 1 {
-					attrs += fmt.Sprintf(" rowspan=\"%d\"", mInfo.RowSpan)
-				}
-			}
-
-			styleAttr := ""
-			if len(styles) > 0 {
-				styleAttr = fmt.Sprintf(" style=\"%s\"", strings.Join(styles, "; "))
-			}
-
-			cellContent := val
-			if cellContent != "" {
-				cellContent = strings.ReplaceAll(cellContent, "\n", "<br/>")
-				if moneySarRegex1.MatchString(cellContent) || moneySarRegex2.MatchString(cellContent) {
-					replacement := `<span class="money-box"><span class="num">$1</span> <span class="cur-sym">` + SarSymbolSVG + `</span></span>`
-					cellContent = moneySarRegex1.ReplaceAllString(cellContent, replacement)
-					cellContent = moneySarRegex2.ReplaceAllString(cellContent, replacement)
-				} else {
-					cellContent = strings.ReplaceAll(cellContent, "ر.س", SarSymbolSVG)
-					cellContent = strings.ReplaceAll(cellContent, "ر. س", SarSymbolSVG)
-					cellContent = strings.ReplaceAll(cellContent, "﷼", SarSymbolSVG)
-					if strings.TrimSpace(cellContent) == "SAR" {
-						cellContent = SarSymbolSVG
-					} else {
-						cellContent = strings.ReplaceAll(cellContent, " SAR", " "+SarSymbolSVG)
-						cellContent = strings.ReplaceAll(cellContent, "SAR ", SarSymbolSVG+" ")
-					}
-				}
-			}
-			if imgTags != "" {
-				if cellContent != "" {
-					cellContent = imgTags + "<br/>" + cellContent
-				} else {
-					cellContent = imgTags
-				}
-			}
-
-			sb.WriteString(fmt.Sprintf("      <td%s%s>%s</td>\n", attrs, styleAttr, cellContent))
-		}
-		sb.WriteString("    </tr>\n")
+		sb.WriteString(fmt.Sprintf(`<tr style="background:%s;">`, bg))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">%d</td>`, i+1))
+		sb.WriteString(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">` + item.ItemName + `</td>`)
+		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;text-align:center;">%.2f</td>`, item.Quantity))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">%.2f</td>`, item.UnitPriceMajor))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">%.2f</td>`, item.TaxAmountMajor))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;font-weight:700;">%.2f</td>`, item.TotalLineMajor))
+		sb.WriteString(`</tr>`)
 	}
 
-	sb.WriteString("  </tbody>\n")
-	sb.WriteString("</table>\n")
-	sb.WriteString("</div>\n")
-	sb.WriteString("</body>\n</html>\n")
-
-	return sb.String(), nil
+	sb.WriteString(`</tbody></table>`)
+	return sb.String()
 }
+
+// ─── Builder Config (Save / Load) ─────────────────────────────────────────────
 
 func (s *TemplateService) GetBuilderConfig(id string) (map[string]any, error) {
 	var val string
@@ -1722,305 +563,22 @@ func (s *TemplateService) GetBuilderConfig(id string) (map[string]any, error) {
 	if err == nil {
 		var res map[string]any
 		if err := json.Unmarshal([]byte(val), &res); err == nil {
+			// Normalise: wrap raw keys into builder_config if needed
 			if _, hasBc := res["builder_config"]; !hasBc {
 				bc := make(map[string]any, len(res))
 				for k, v := range res {
 					bc[k] = v
 				}
-				res["builder_config"] = bc
+				return map[string]any{"builder_config": bc}, nil
 			}
 			return res, nil
 		}
 	}
-
-	// Fallback to excel_templates table if config isn't in meta
-	var nameAr, category, colorHex string
-	errTpl := s.db.QueryRow("SELECT name_ar, category, color_hex FROM excel_templates WHERE id = ?", id).Scan(&nameAr, &category, &colorHex)
-	if errTpl == nil {
-		res := map[string]any{
-			"id":        id,
-			"name_ar":   nameAr,
-			"category":  category,
-			"color_hex": colorHex,
-		}
-		res["builder_config"] = res
-		return res, nil
-	}
-
-	return map[string]any{
-		"id":             id,
-		"builder_config": map[string]any{},
-	}, nil
+	return map[string]any{}, err
 }
 
-func colIndexToLetter(idx int) string {
-	name := ""
-	n := idx
-	for {
-		name = string(rune('A'+(n%26))) + name
-		n = n/26 - 1
-		if n < 0 {
-			break
-		}
-	}
-	return name
-}
-
-func (s *TemplateService) GenerateExcelFromBuilder(category, id string, cfgMap map[string]any) error {
-	gridState, ok := cfgMap["gridState"].(map[string]any)
-	if !ok || gridState == nil {
-		return nil
-	}
-
-	f := excelize.NewFile()
-	sheet := "Sheet1"
-
-	rtl := true
-	_ = f.SetSheetView(sheet, 0, &excelize.ViewOptions{
-		RightToLeft: &rtl,
-	})
-
-	// 1. Column Widths
-	if cols, ok := gridState["cols"].([]any); ok {
-		for i, c := range cols {
-			if colMap, ok := c.(map[string]any); ok {
-				if w, ok := colMap["width"].(float64); ok && w > 0 {
-					letter := colIndexToLetter(i)
-					_ = f.SetColWidth(sheet, letter, letter, w)
-				}
-			}
-		}
-	}
-
-	// 2. Row Heights
-	if rows, ok := gridState["rows"].([]any); ok {
-		for i, r := range rows {
-			if rowMap, ok := r.(map[string]any); ok {
-				if h, ok := rowMap["height"].(float64); ok && h > 0 {
-					_ = f.SetRowHeight(sheet, i+1, h*0.75)
-				}
-			}
-		}
-	}
-
-	// 3. Merged Cells
-	if merges, ok := gridState["merges"].([]any); ok {
-		for _, m := range merges {
-			if mStr, ok := m.(string); ok && strings.Contains(mStr, ":") {
-				parts := strings.Split(mStr, ":")
-				if len(parts) == 2 {
-					_ = f.MergeCell(sheet, strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
-				}
-			}
-		}
-	}
-
-	// 4. Cells, Styles and Images
-	if cells, ok := gridState["cells"].(map[string]any); ok {
-		styleCache := make(map[string]int)
-
-		for ref, cellVal := range cells {
-			cellMap, ok := cellVal.(map[string]any)
-			if !ok {
-				continue
-			}
-
-			// Cell value
-			if v, exists := cellMap["v"]; exists && v != nil {
-				_ = f.SetCellValue(sheet, ref, v)
-			}
-
-			// Style creation and caching
-			bold, _ := cellMap["bold"].(bool)
-			size, _ := cellMap["size"].(float64)
-			if size <= 0 {
-				size = 11
-			}
-			align, _ := cellMap["align"].(string)
-			color, _ := cellMap["color"].(string)
-			bg, _ := cellMap["bg"].(string)
-			borderType, _ := cellMap["border"].(string)
-			numFmt, _ := cellMap["numFmt"].(string)
-			wrapVal, hasWrap := cellMap["wrap"].(bool)
-			wrapText := true
-			if hasWrap {
-				wrapText = wrapVal
-			}
-
-			styleKey := fmt.Sprintf("%v_%v_%v_%v_%v_%v_%v_%v", bold, size, align, color, bg, borderType, numFmt, wrapText)
-			styleID, found := styleCache[styleKey]
-			if !found {
-				style := &excelize.Style{
-					Alignment: &excelize.Alignment{
-						Vertical: "center",
-						WrapText: wrapText,
-					},
-				}
-
-				// Borders configuration (Excel styles)
-				switch borderType {
-				case "none":
-					style.Border = []excelize.Border{}
-				case "all":
-					style.Border = []excelize.Border{
-						{Type: "left", Color: "334155", Style: 1},
-						{Type: "top", Color: "334155", Style: 1},
-						{Type: "right", Color: "334155", Style: 1},
-						{Type: "bottom", Color: "334155", Style: 1},
-					}
-				case "outer":
-					style.Border = []excelize.Border{
-						{Type: "left", Color: "0F172A", Style: 2},
-						{Type: "top", Color: "0F172A", Style: 2},
-						{Type: "right", Color: "0F172A", Style: 2},
-						{Type: "bottom", Color: "0F172A", Style: 2},
-					}
-				case "bottom":
-					style.Border = []excelize.Border{
-						{Type: "left", Color: "CBD5E1", Style: 1},
-						{Type: "top", Color: "CBD5E1", Style: 1},
-						{Type: "right", Color: "CBD5E1", Style: 1},
-						{Type: "bottom", Color: "0F172A", Style: 2},
-					}
-				case "double_bottom":
-					style.Border = []excelize.Border{
-						{Type: "left", Color: "CBD5E1", Style: 1},
-						{Type: "top", Color: "0F172A", Style: 1},
-						{Type: "right", Color: "CBD5E1", Style: 1},
-						{Type: "bottom", Color: "0F172A", Style: 6}, // Double bottom line (Accounting)
-					}
-				case "top_bottom":
-					style.Border = []excelize.Border{
-						{Type: "left", Color: "CBD5E1", Style: 1},
-						{Type: "top", Color: "0F172A", Style: 1},
-						{Type: "right", Color: "CBD5E1", Style: 1},
-						{Type: "bottom", Color: "0F172A", Style: 1},
-					}
-				default:
-					style.Border = []excelize.Border{
-						{Type: "left", Color: "CBD5E1", Style: 1},
-						{Type: "top", Color: "CBD5E1", Style: 1},
-						{Type: "right", Color: "CBD5E1", Style: 1},
-						{Type: "bottom", Color: "CBD5E1", Style: 1},
-					}
-				}
-
-				// Number formatting
-				if numFmt != "" {
-					switch numFmt {
-					case "currency":
-						cStr := `#,##0.00 "ر.س"`
-						style.CustomNumFmt = &cStr
-					case "percent":
-						pStr := `0.00%`
-						style.CustomNumFmt = &pStr
-					case "comma":
-						cmStr := `#,##0.00`
-						style.CustomNumFmt = &cmStr
-					}
-				}
-				switch align {
-				case "center":
-					style.Alignment.Horizontal = "center"
-				case "left":
-					style.Alignment.Horizontal = "left"
-				default:
-					style.Alignment.Horizontal = "right"
-				}
-
-				font := &excelize.Font{
-					Bold: bold,
-					Size: size,
-				}
-				if color != "" && color != "#000000" {
-					font.Color = strings.TrimPrefix(color, "#")
-				}
-				style.Font = font
-
-				if bg != "" && !strings.EqualFold(bg, "#ffffff") {
-					style.Fill = excelize.Fill{
-						Type:    "pattern",
-						Pattern: 1,
-						Color:   []string{strings.TrimPrefix(bg, "#")},
-					}
-				}
-
-				var errStyle error
-				styleID, errStyle = f.NewStyle(style)
-				if errStyle == nil {
-					styleCache[styleKey] = styleID
-				}
-			}
-
-			if styleID > 0 {
-				_ = f.SetCellStyle(sheet, ref, ref, styleID)
-			}
-
-			// Cell Image
-			if imgMap, ok := cellMap["image"].(map[string]any); ok {
-				if src, ok := imgMap["src"].(string); ok && strings.HasPrefix(src, "data:image/") {
-					commaIdx := strings.Index(src, ",")
-					if commaIdx != -1 {
-						imgBytes, errDec := base64.StdEncoding.DecodeString(src[commaIdx+1:])
-						if errDec == nil && len(imgBytes) > 0 {
-							ext := ".png"
-							if strings.HasPrefix(src, "data:image/jpeg") || strings.HasPrefix(src, "data:image/jpg") {
-								ext = ".jpg"
-							}
-							_ = f.AddPictureFromBytes(sheet, ref, &excelize.Picture{
-								Extension: ext,
-								File:      imgBytes,
-								Format: &excelize.GraphicOptions{
-									LockAspectRatio: true,
-									AutoFit:         true,
-									OffsetX:         4,
-									OffsetY:         4,
-								},
-							})
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// 5. Logo in Header (if provided)
-	if logoData, ok := cfgMap["logo_data"].(string); ok && strings.HasPrefix(logoData, "data:image/") {
-		commaIdx := strings.Index(logoData, ",")
-		if commaIdx != -1 {
-			imgBytes, errDec := base64.StdEncoding.DecodeString(logoData[commaIdx+1:])
-			if errDec == nil && len(imgBytes) > 0 {
-				ext := ".png"
-				if strings.HasPrefix(logoData, "data:image/jpeg") || strings.HasPrefix(logoData, "data:image/jpg") {
-					ext = ".jpg"
-				}
-				logoCell := "A1"
-				pos, _ := cfgMap["logo_position"].(string)
-				if pos == "center" {
-					logoCell = "C1"
-				} else if pos == "left" {
-					logoCell = "F1"
-				}
-				_ = f.AddPictureFromBytes(sheet, logoCell, &excelize.Picture{
-					Extension: ext,
-					File:      imgBytes,
-					Format: &excelize.GraphicOptions{
-						LockAspectRatio: true,
-						AutoFit:         true,
-						OffsetX:         6,
-						OffsetY:         6,
-					},
-				})
-			}
-		}
-	}
-
-	outDir := filepath.Join(s.dataDir, "templates", category)
-	_ = os.MkdirAll(outDir, 0755)
-	filePath := filepath.Join(outDir, id+".xlsx")
-	return f.SaveAs(filePath)
-}
-
+// SaveBuilderConfig saves the builder config, writes the HTML template to disk,
+// and registers it in the catalog.
 func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 	b, err := json.Marshal(config)
 	if err != nil {
@@ -2045,65 +603,39 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 		primaryColor = strings.TrimSpace(c)
 	}
 
-	// 1. Generate real .xlsx file on disk if gridState exists
+	// 1. Save HTML to disk
 	outDir := filepath.Join(s.dataDir, "templates", category)
 	_ = os.MkdirAll(outDir, 0755)
-	filePath := filepath.Join(outDir, id+".xlsx")
+	filePath := filepath.Join(outDir, id+".html")
 
-	if _, ok := cfgMap["gridState"].(map[string]any); ok {
-		_ = s.GenerateExcelFromBuilder(category, id, cfgMap)
+	htmlContent := ""
+	if h, ok := cfgMap["html_content"].(string); ok {
+		htmlContent = h
+	}
+	if htmlContent == "" {
+		// Generate a minimal default HTML template
+		htmlContent = buildDefaultHTMLFromConfig(cfgMap, category)
+	}
+	_ = os.WriteFile(filePath, []byte(htmlContent), 0644)
+
+	badge := "مخصص"
+	if category == "documents" {
+		badge = "سند مخصص"
 	}
 
-	var meta *ExtractedSheetMeta
-	if f, err := excelize.OpenFile(filePath); err == nil {
-		sheets := f.GetSheetList()
-		if len(sheets) > 0 {
-			if rows, errRows := f.GetRows(sheets[0]); errRows == nil {
-				meta = extractSheetProperties(f, sheets[0], rows)
-			}
-		}
-		_ = f.Close()
-	}
-
-	headersJson := "[]"
-	styleMetaJson := "{}"
-	if meta != nil {
-		if meta.PrimaryColor != "" && (primaryColor == "" || primaryColor == "#059669") {
-			primaryColor = meta.PrimaryColor
-		}
-		hBytes, _ := json.Marshal(meta.Headers)
-		headersJson = string(hBytes)
-		sMeta := map[string]interface{}{
-			"accent_color": primaryColor,
-			"header_fill":  meta.HeaderFill,
-			"banner_fill":  meta.BannerFill,
-			"light_color":  meta.BannerFill,
-			"alignments":   meta.Alignments,
-			"headers":      meta.Headers,
-			"merges":       meta.Merges,
-			"sample_rows":  meta.SampleRows,
-			"banner_text":  meta.BannerText,
-		}
-		smBytes, _ := json.Marshal(sMeta)
-		styleMetaJson = string(smBytes)
-	}
-
-	// 2. Register / Update in excel_templates catalog
-	relPath := filepath.Join("data", "templates", category, id+".xlsx")
+	// 2. Upsert in catalog
 	_, _ = s.db.Exec(`
-		INSERT INTO excel_templates (id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, style_meta, is_active, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+		INSERT INTO excel_templates (id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, is_active, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', 1, CURRENT_TIMESTAMP)
 		ON CONFLICT(id) DO UPDATE SET
 			name_ar = excluded.name_ar,
 			category = excluded.category,
 			file_path = excluded.file_path,
 			color_hex = excluded.color_hex,
-			headers_json = excluded.headers_json,
-			style_meta = excluded.style_meta,
 			updated_at = CURRENT_TIMESTAMP
-	`, id, nameAr, id, "قالب مخصص تم إنشاؤه عبر محرر القوالب", "مخصص", category, relPath, primaryColor, headersJson, styleMetaJson)
+	`, id, nameAr, id, "قالب HTML من محرر القوالب", badge, category, filePath, primaryColor)
 
-	// 3. Save full builder config into meta table
+	// 3. Save full builder config in meta table
 	_, err = s.db.Exec(`
 		INSERT INTO meta (key, value) VALUES (?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value
@@ -2111,7 +643,158 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 	return err
 }
 
-func init() {
-	var _ = sql.ErrNoRows
+// buildDefaultHTMLFromConfig generates a minimal invoice/voucher HTML template
+// from builder cfg when the user didn't provide html_content.
+func buildDefaultHTMLFromConfig(cfg map[string]any, category string) string {
+	color := "#059669"
+	if c, ok := cfg["primary_color"].(string); ok && c != "" {
+		color = c
+	}
+	name := "قالب مخصص"
+	if n, ok := cfg["name_ar"].(string); ok && n != "" {
+		name = n
+	}
+	if category == "documents" {
+		return defaultVoucherHTMLTemplate()
+	}
+	_ = name
+	_ = color
+	return defaultInvoiceHTMLTemplate()
 }
 
+// ─── Default Built-in HTML Templates ─────────────────────────────────────────
+
+func defaultInvoiceHTMLTemplate() string {
+	return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Tahoma, 'Cairo', Arial, sans-serif; font-size: 13px; color: #1e293b; background: #fff; margin: 0; padding: 10mm; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #059669; padding-bottom: 10px; margin-bottom: 14px; }
+  .header-title { font-size: 22px; font-weight: 900; color: #059669; }
+  .header-meta { font-size: 11px; line-height: 1.9; }
+  .section { margin-bottom: 12px; }
+  .section-title { font-weight: 700; font-size: 12px; color: #fff; background: #059669; padding: 4px 10px; border-radius: 4px; display: inline-block; margin-bottom: 6px; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; font-size: 12px; }
+  .info-row { display: flex; gap: 6px; }
+  .info-label { color: #64748b; font-size: 11px; min-width: 90px; }
+  .info-value { font-weight: 600; }
+  .totals { margin-top: 10px; border-top: 2px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: flex-end; }
+  .totals-table { font-size: 12px; border-collapse: collapse; min-width: 280px; }
+  .totals-table td { padding: 4px 10px; }
+  .totals-table tr:last-child td { font-weight: 900; font-size: 14px; color: #059669; border-top: 2px solid #059669; }
+  .footer { margin-top: 14px; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+  .qr-wrap { text-align: left; margin-top: 10px; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="header-title">{{seller_name}}</div>
+    <div style="font-size:11px;color:#64748b;">الرقم الضريبي: {{seller_tax}}</div>
+    <div style="font-size:11px;color:#64748b;">{{seller_address}}</div>
+  </div>
+  <div class="header-meta">
+    <div><strong>فاتورة ضريبية</strong></div>
+    <div>رقم الفاتورة: <strong>{{invoice_number}}</strong></div>
+    <div>تاريخ الإصدار: <strong>{{issue_date}}</strong></div>
+    <div>تاريخ الاستحقاق: <strong>{{due_date}}</strong></div>
+    <div>طريقة الدفع: <strong>{{payment_method}}</strong></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">بيانات العميل</div>
+  <div class="info-grid">
+    <div class="info-row"><span class="info-label">الاسم:</span><span class="info-value">{{buyer_name}}</span></div>
+    <div class="info-row"><span class="info-label">الرقم الضريبي:</span><span class="info-value">{{buyer_tax}}</span></div>
+    <div class="info-row"><span class="info-label">العنوان:</span><span class="info-value">{{buyer_address}}</span></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">الأصناف والخدمات</div>
+  {{items_table}}
+</div>
+
+<div class="totals">
+  <table class="totals-table">
+    <tr><td>المجموع قبل الضريبة</td><td style="text-align:left;">{{subtotal}} ر.س</td></tr>
+    <tr><td>الخصم</td><td style="text-align:left;">{{discount}} ر.س</td></tr>
+    <tr><td>ضريبة القيمة المضافة (15%)</td><td style="text-align:left;">{{tax_amount}} ر.س</td></tr>
+    <tr><td>الإجمالي المستحق</td><td style="text-align:left;">{{grand_total}} ر.س</td></tr>
+  </table>
+</div>
+
+<div class="qr-wrap">{{qr_code}}</div>
+
+<div class="footer">
+  {{notes}}<br/>
+  هذه الفاتورة صادرة إلكترونياً ولا تحتاج إلى توقيع يدوي
+</div>
+</body>
+</html>`
+}
+
+func defaultVoucherHTMLTemplate() string {
+	return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Tahoma, 'Cairo', Arial, sans-serif; font-size: 13px; color: #1e293b; background: #fff; margin: 0; padding: 10mm; }
+  .header { text-align: center; border-bottom: 3px solid #7c3aed; padding-bottom: 10px; margin-bottom: 16px; }
+  .header-title { font-size: 24px; font-weight: 900; color: #7c3aed; }
+  .voucher-box { border: 2px solid #7c3aed; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+  .info-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { color: #64748b; }
+  .info-value { font-weight: 700; }
+  .amount-box { text-align: center; background: #f5f3ff; border-radius: 6px; padding: 14px; margin: 14px 0; }
+  .amount-value { font-size: 28px; font-weight: 900; color: #7c3aed; }
+  .sig-row { display: flex; justify-content: space-between; margin-top: 30px; }
+  .sig-line { width: 40%; border-top: 1px solid #64748b; text-align: center; padding-top: 6px; font-size: 11px; color: #64748b; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-title">سند قبض</div>
+  <div style="font-size:12px;color:#64748b;">{{seller_name}} — الرقم الضريبي: {{seller_tax}}</div>
+</div>
+
+<div class="voucher-box">
+  <div class="info-row"><span class="info-label">رقم السند:</span><span class="info-value">{{invoice_number}}</span></div>
+  <div class="info-row"><span class="info-label">التاريخ:</span><span class="info-value">{{issue_date}}</span></div>
+  <div class="info-row"><span class="info-label">استلمنا من:</span><span class="info-value">{{buyer_name}}</span></div>
+  <div class="info-row"><span class="info-label">البيان:</span><span class="info-value">{{notes}}</span></div>
+  <div class="info-row"><span class="info-label">طريقة الدفع:</span><span class="info-value">{{payment_method}}</span></div>
+</div>
+
+<div class="amount-box">
+  <div style="font-size:13px;color:#64748b;margin-bottom:4px;">المبلغ المستلم</div>
+  <div class="amount-value">{{grand_total}} ر.س</div>
+</div>
+
+<div class="qr-wrap" style="text-align:left;">{{qr_code}}</div>
+
+<div class="sig-row">
+  <div class="sig-line">توقيع المستلم</div>
+  <div class="sig-line">توقيع المسلّم</div>
+</div>
+</body>
+</html>`
+}
+
+func init() {
+	var _ = sql.ErrNoRows
+	_ = moneySarRegex1
+	_ = moneySarRegex2
+	_ = SarSymbolSVG
+}

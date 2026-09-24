@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="utf-8" />
+  <title>سند قبض مالي أزرق — {{voucher_number}}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 12mm 14mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #1a3b5c;
+      background: #f1f5f9;
+      padding: 16px;
+      direction: rtl;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .receipt-card {
+      background: #ffffff;
+      border: 2px solid #1c5d94;
+      border-radius: 18px;
+      padding: 26px 30px 40px;
+      max-width: 210mm;
+      min-height: 285mm;
+      margin: 0 auto;
+      box-shadow: 0 8px 30px rgba(28, 93, 148, 0.12);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* ─── الترويسة العلوية ─── */
+    .receipt-header {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr 1.35fr;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    /* اليمين: عربي */
+    .header-col-right {
+      text-align: right;
+      direction: rtl;
+    }
+
+    .comp-name-ar {
+      font-size: 15px;
+      font-weight: 900;
+      color: #1c5d94;
+      line-height: 1.3;
+      margin-bottom: 5px;
+    }
+
+    .comp-meta-ar {
+      font-size: 11px;
+      font-weight: 700;
+      color: #55738d;
+      line-height: 1.5;
+    }
+
+    /* الوسط: عنوان السند */
+    .header-col-center {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .main-title-ar {
+      font-size: 26px;
+      font-weight: 900;
+      color: #185b93;
+      line-height: 1.2;
+    }
+
+    .sub-title-en {
+      font-size: 13px;
+      font-weight: 800;
+      color: #1c5d94;
+      margin-top: 2px;
+      font-family: Arial, 'Segoe UI', sans-serif;
+    }
+
+    /* اليسار: إنجليزي */
+    .header-col-left {
+      text-align: left;
+      direction: ltr;
+      font-family: Arial, 'Segoe UI', sans-serif;
+    }
+
+    .comp-name-en {
+      font-size: 14px;
+      font-weight: 900;
+      color: #1c5d94;
+      line-height: 1.3;
+      margin-bottom: 5px;
+    }
+
+    .comp-meta-en {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #55738d;
+      line-height: 1.5;
+    }
+
+    /* خط فاصل بعد الترويسة */
+    .header-divider-line {
+      border-top: 2px solid #1c5d94;
+      margin-bottom: 22px;
+    }
+
+    /* ─── الصندوق الداخلي الرئيسي ─── */
+    .inner-box {
+      border: 1.5px solid #7292ab;
+      border-radius: 12px;
+      padding: 18px 24px 34px;
+      background: #ffffff;
+      text-align: center;
+    }
+
+    /* شريط البيانات العلوي داخل الصندوق */
+    .box-meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #1c5d94;
+      margin-bottom: 24px;
+      font-size: 14px;
+      font-weight: 800;
+      color: #1c5d94;
+    }
+
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .meta-label {
+      color: #1c5d94;
+      font-weight: 900;
+    }
+
+    .meta-val {
+      color: #1c5d94;
+      font-weight: 900;
+      font-family: Tahoma, 'Cairo', sans-serif;
+    }
+
+    /* سطر استلمنا من */
+    .received-from-row {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1c5d94;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .received-name {
+      font-weight: 900;
+      color: #185b93;
+    }
+
+    /* صندوق المبلغ المنقط */
+    .amount-dashed-box {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1.5px dashed #7292ab;
+      border-radius: 6px;
+      padding: 12px 42px;
+      margin-bottom: 22px;
+      background: #ffffff;
+    }
+
+    .amount-text {
+      font-size: 28px;
+      font-weight: 900;
+      color: #185b93;
+      direction: ltr;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: Tahoma, Arial, sans-serif;
+    }
+
+    .sar-sym {
+      font-size: 0.9em;
+      font-family: 'Cairo', Arial, sans-serif;
+      font-weight: 900;
+    }
+
+    /* سطر التفقيط */
+    .tafqeet-text {
+      font-size: 13px;
+      font-weight: 800;
+      color: #20567f;
+      margin-bottom: 14px;
+    }
+
+    /* سطر البيان ومقابل الدفع */
+    .notes-text {
+      font-size: 13px;
+      font-weight: 800;
+      color: #20567f;
+    }
+
+    /* ─── قسم التواقيع ─── */
+    .signatures-section {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      margin-top: 36px;
+      padding: 0 20px;
+    }
+
+    .sig-column {
+      text-align: center;
+      width: 200px;
+    }
+
+    .sig-title {
+      font-size: 24px;
+      font-weight: 900;
+      color: #185b93;
+      margin-bottom: 12px;
+    }
+
+    .sig-line {
+      border-bottom: 2.5px solid #1c5d94;
+      width: 150px;
+      margin: 0 auto;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
+      }
+
+      .receipt-card {
+        box-shadow: none;
+        margin: 0;
+        max-width: 100%;
+        border: 2px solid #1c5d94 !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="receipt-card">
+
+    <div>
+      <!-- ── الترويسة ── -->
+      <header class="receipt-header">
+        <!-- اليمين: بالعربية -->
+        <div class="header-col-right">
+          <div class="comp-name-ar">{{seller_name}}</div>
+          <div class="comp-meta-ar">{{seller_meta_ar}}</div>
+        </div>
+
+        <!-- الوسط: عنوان السند -->
+        <div class="header-col-center">
+          <div class="main-title-ar">سند قبض</div>
+          <div class="sub-title-en">Receipt</div>
+        </div>
+
+        <!-- اليسار: بالإنجليزية -->
+        <div class="header-col-left">
+          <div class="comp-name-en">{{seller_name_en}}</div>
+          <div class="comp-meta-en">{{seller_meta_en}}</div>
+        </div>
+      </header>
+
+      <!-- خط فاصل تحت الترويسة -->
+      <div class="header-divider-line"></div>
+
+      <!-- ── الصندوق الداخلي ── -->
+      <main class="inner-box">
+
+        <!-- شريط البيانات العلوي داخل الصندوق -->
+        <div class="box-meta-row">
+          <!-- اليمين: رقم السند -->
+          <div class="meta-item">
+            <span class="meta-label">رقم السند</span>
+            <span class="meta-val">{{voucher_number}}</span>
+          </div>
+
+          <!-- اليسار: التاريخ -->
+          <div class="meta-item">
+            <span class="meta-label">التاريخ</span>
+            <span class="meta-val">{{voucher_date}}</span>
+          </div>
+        </div>
+
+        <!-- استلمنا من -->
+        <div class="received-from-row">
+          <span>استلمنا من:</span>
+          <span class="received-name">{{buyer_name}}</span>
+        </div>
+
+        <!-- صندوق المبلغ المنقط في المنتصف -->
+        <div class="amount-dashed-box">
+          <div class="amount-text">
+            <span>{{grand_total}}</span>
+            <span class="sar-sym">&#xFDFB;</span>
+          </div>
+        </div>
+
+        <!-- التفقيط -->
+        <div class="tafqeet-text">
+          فقط مبلغ وقدره {{amount_in_words}} لا غير
+        </div>
+
+        <!-- الملاحظات والبيان -->
+        <div class="notes-text">
+          وذلك مقابل: {{notes}}
+        </div>
+
+      </main>
+    </div>
+
+    <!-- ── قسم التواقيع السفلي ── -->
+    <footer class="signatures-section">
+      <!-- اليمين: الصندوق -->
+      <div class="sig-column">
+        <div class="sig-title">الصندوق</div>
+        <div class="sig-line"></div>
+      </div>
+
+      <!-- اليسار: المحاسب -->
+      <div class="sig-column">
+        <div class="sig-title">المحاسب</div>
+        <div class="sig-line"></div>
+      </div>
+    </footer>
+
+  </div>
+
+</body>
+
+</html>

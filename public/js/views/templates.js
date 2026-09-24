@@ -5,10 +5,11 @@
 import { api } from '../core/api.js';
 import { store, can } from '../core/store.js';
 import {
-  html, raw, esc, printDoc, modal, toastOk, toastErr, $, $$, exportExcel, downloadPdfFromHtml,
+  html, raw, esc, printDoc, modal, toastOk, toastErr, $, $$, exportExcel, downloadPdfFromHtml, fillDynamicTemplateHtml,
 } from '../core/util.js';
 import {
   invoiceA4, invoiceThermal, invoicePreviewDoc, INVOICE_TEMPLATES,
+  VOUCHER_TEMPLATES, voucherPrint,
 } from '../print/templates.js?v=5';
 import { PRESET_LOGOS } from '../print/logos.js';
 
@@ -135,20 +136,24 @@ export async function render(view) {
   }
   await loadTemplates();
 
-  // جلب فواتير وعملاء حقيقيين للمنشأة لتكون المعاينة ديناميكية بالكامل بدون بيانات ثابتة
+  // جلب فواتير وعملاء وسندات حقيقية للمنشأة لتكون المعاينة ديناميكية بالكامل بدون أي بيانات ثابتة
   let liveClients = [];
   let liveInvoices = [];
+  let liveVouchers = [];
   async function loadIssuerData() {
     try {
-      const [invRes, cliRes] = await Promise.all([
-        api.get(`/api/invoices?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=5`),
-        api.get(`/api/clients?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=5`),
+      const [invRes, cliRes, vouRes] = await Promise.all([
+        api.get(`/api/invoices?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=10`),
+        api.get(`/api/clients?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=10`),
+        api.get(`/api/vouchers?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=10`),
       ]);
       liveInvoices = Array.isArray(invRes) ? invRes : (invRes?.items || invRes?.data || []);
       liveClients = Array.isArray(cliRes) ? cliRes : (cliRes?.items || cliRes?.data || []);
+      liveVouchers = Array.isArray(vouRes) ? vouRes : (vouRes?.items || vouRes?.data || []);
     } catch {
       liveInvoices = [];
       liveClients = [];
+      liveVouchers = [];
     }
   }
   await loadIssuerData();
@@ -287,7 +292,7 @@ export async function render(view) {
   }
 
   function renderSearchBarHtml(activeTab) {
-    const uploadLabel = activeTab === 'vouchers' ? 'رفع قالب سند قبض جديد (.xlsx) ⤒' : 'رفع قالب فاتورة جديد (.xlsx) ⤒';
+    const uploadLabel = activeTab === 'vouchers' ? 'رفع قالب سند قبض جديد (.html) ⤒' : 'رفع قالب فاتورة جديد (.html) ⤒';
     return `
       <div class="card" style="padding:0.75rem 1rem; margin:0; background:rgba(255,255,255,0.02); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem;">
         <div style="position:relative; flex:1; min-width:240px; max-width:460px;">
@@ -298,7 +303,7 @@ export async function render(view) {
           <label class="btn btn-sm btn-primary" style="margin:0; cursor:pointer; display:inline-flex; align-items:center; gap:5px; font-size:0.8rem;">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
             ${uploadLabel}
-            <input type="file" class="file-upload-tab-specific" accept=".xlsx,.xls" style="display:none;" />
+            <input type="file" class="file-upload-tab-specific" accept=".html,.htm,.xlsx,.xls" style="display:none;" />
           </label>
         </div>
       </div>
@@ -321,7 +326,7 @@ export async function render(view) {
 
     const cards = reports.map((tpl) => {
       const headers = tpl.headers || [];
-      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip green"><span style="opacity:0.6;">#${i+1}</span> ${esc(h)}</span>`).join('');
+      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip green"><span style="opacity:0.6;">#${i + 1}</span> ${esc(h)}</span>`).join('');
       const moreChips = headers.length > 4 ? `<span class="doc-tpl-chip" style="font-size:0.68rem;">+${headers.length - 4} أعمدة</span>` : '';
       const sizeBadge = tpl.file_size ? `<span class="badge gray tiny" style="font-size:0.65rem;">${formatBytes(tpl.file_size)}</span>` : '';
 
@@ -382,7 +387,7 @@ export async function render(view) {
       return `
         <div class="doc-tpl-empty">
           <h3>لا توجد قوالب فواتير مطابقة</h3>
-          <p class="muted">ارفع قالب فواتير إكسل جديد (.xlsx) ليتم اكتشاف خلاياه تلقائياً.</p>
+          <p class="muted">ارفع قالب فواتير جديد (.html) ليتم اكتشاف وسومه وبياناته تلقائياً.</p>
         </div>
       `;
     }
@@ -391,7 +396,7 @@ export async function render(view) {
       const isActive = tpl.id === currentStyle;
       const tplColor = tpl.color_hex || '#06b6d4';
       const headers = tpl.headers || [];
-      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};"><span style="opacity:0.6;">#${i+1}</span> ${esc(h)}</span>`).join('');
+      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};"><span style="opacity:0.6;">#${i + 1}</span> ${esc(h)}</span>`).join('');
       const moreChips = headers.length > 4 ? `<span class="doc-tpl-chip" style="font-size:0.68rem;">+${headers.length - 4} أعمدة</span>` : '';
       const sizeBadge = tpl.file_size ? `<span class="badge gray tiny" style="font-size:0.65rem;">${formatBytes(tpl.file_size)}</span>` : '';
 
@@ -432,8 +437,8 @@ export async function render(view) {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 فحص
               </button>
-              <a class="btn btn-sm" href="/api/invoices/template?style=${esc(tpl.id)}&format=xlsx&issuer_id=${encodeURIComponent(activeIssuer.id)}" target="_blank" download="invoice_template_${esc(tpl.id)}.xlsx" title="تنزيل ملف القالب (.xlsx)" style="padding:4px 8px; font-size:0.76rem;">
-                تنزيل .xlsx
+              <a class="btn btn-sm" href="/api/invoices/template?style=${esc(tpl.id)}" target="_blank" download="invoice_template_${esc(tpl.id)}.html" title="تنزيل ملف القالب" style="padding:4px 8px; font-size:0.76rem;">
+                تنزيل القالب
               </a>
               <button type="button" class="btn btn-sm btn-danger btn-delete-tpl" data-tpl-id="${esc(tpl.id)}" data-tpl-name="${esc(tpl.name_ar || tpl.name)}" title="حذف القالب" style="padding:4px 7px;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -452,15 +457,22 @@ export async function render(view) {
       return `
         <div class="doc-tpl-empty">
           <h3>لا توجد قوالب سندات إضافية</h3>
-          <p class="muted">يمكنك رفع أي نموذج سند قبض بصيغة .xlsx وسيقوم النظام بتسجيله فوراً.</p>
+          <p class="muted">يمكنك رفع أي نموذج سند قبض بصيغة .html وسيقوم النظام بتسجيله فوراً.</p>
         </div>
       `;
     }
 
     const cards = vouchers.map((tpl) => {
       const tplColor = tpl.color_hex || '#7c3aed';
+      const isVoucherActive = (printCfg.voucher_template_style || '') === tpl.id;
       const headers = tpl.headers || [];
-      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};"><span style="opacity:0.6;">#${i+1}</span> ${esc(h)}</span>`).join('');
+      const isHtmlTpl = tpl.badge?.includes('HTML') || (tpl.file_path && tpl.file_path.endsWith('.html')) || headers.length === 0;
+      const chipsHtml = isHtmlTpl
+        ? `<span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};">بيانات المنشأة</span>
+           <span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};">بيانات العميل</span>
+           <span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};">المبالغ والسداد</span>
+           <span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};">طباعة A4</span>`
+        : headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};"><span style="opacity:0.6;">#${i + 1}</span> ${esc(h)}</span>`).join('');
       const sizeBadge = tpl.file_size ? `<span class="badge gray tiny" style="font-size:0.65rem;">${formatBytes(tpl.file_size)}</span>` : '';
 
       return `
@@ -472,31 +484,34 @@ export async function render(view) {
             <div class="doc-tpl-card-meta">
               <div class="doc-tpl-card-title">
                 <span style="font-weight:800;">${esc(tpl.name_ar || tpl.name)}</span>
-                <span class="badge tiny" style="background:${tplColor}15; color:${tplColor}; font-size:0.68rem;">${esc(tpl.badge || 'سند قبض إكسل')}</span>
+                ${isVoucherActive ? `<span class="badge tiny" style="background:${tplColor}22; color:${tplColor}; border:1px solid ${tplColor}55; font-weight:700;">القالب المعتمد النشط ✓</span>` : `<span class="badge tiny" style="background:${tplColor}15; color:${tplColor}; font-size:0.68rem;">${esc(tpl.badge || 'سند قبض')}</span>`}
                 ${sizeBadge}
               </div>
               <p class="doc-tpl-card-desc">${esc(tpl.description || 'قالب إيصال وسند قبض مالي معتمد')}</p>
               <div class="doc-tpl-card-chips">
-                <span class="tiny muted" style="font-size:0.7rem; font-weight:700;">الأعمدة (${headers.length}):</span>
+                <span class="tiny muted" style="font-size:0.7rem; font-weight:700;">${isHtmlTpl ? 'الحقول الديناميكية:' : `الأعمدة (${headers.length}):`}</span>
                 ${chipsHtml}
               </div>
             </div>
           </div>
           <div class="doc-tpl-card-foot">
             <div class="flex gap-xs" style="align-items:center; flex-wrap:wrap;">
-              <button type="button" class="btn btn-sm btn-info btn-visual-preview" data-tpl-id="${esc(tpl.id)}" style="display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:700; background:${tplColor}20; border:1px solid ${tplColor}55; color:${tplColor};" title="عرض ومعاينة السند بصرية كصورة ومستند رسمي">
+              <button type="button" class="btn btn-sm btn-info btn-visual-voucher-modal" data-tpl-id="${esc(tpl.id)}" style="display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:700; background:${tplColor}20; border:1px solid ${tplColor}55; color:${tplColor};" title="عرض ومعاينة السند بصرية كصورة ومستند رسمي">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                 عرض السند (صورة)
               </button>
-              <button type="button" class="btn btn-sm btn-success btn-generate-report" data-tpl-id="${esc(tpl.id)}" style="display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:700; background:linear-gradient(135deg, #059669, #047857); border-color:#34d399; color:#fff;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                تصدير إكسل
-              </button>
+              ${isVoucherActive ? `
+                <button type="button" class="btn btn-sm" disabled style="background:${tplColor}22; border:1px solid ${tplColor}55; color:${tplColor}; font-size:0.78rem; padding:4px 10px; font-weight:700;">معتمد للمنشأة ✓</button>
+              ` : `
+                <button type="button" class="btn btn-sm btn-primary btn-select-voucher-template" data-tpl-id="${esc(tpl.id)}" style="font-size:0.78rem; padding:4px 10px;">اعتماد القالب</button>
+              `}
             </div>
             <div class="doc-tpl-card-actions">
-              <button type="button" class="btn btn-sm btn-inspect-tpl" data-tpl-id="${esc(tpl.id)}" title="فحص خلايا القالب" style="padding:4px 8px; font-size:0.76rem;">فحص</button>
-              <a class="btn btn-sm" href="/api/invoices/template?style=${esc(tpl.id)}&format=xlsx" target="_blank" download="voucher_template_${esc(tpl.id)}.xlsx" style="padding:4px 8px; font-size:0.76rem;">تنزيل .xlsx</a>
-              <button type="button" class="btn btn-sm btn-danger btn-delete-tpl" data-tpl-id="${esc(tpl.id)}" data-tpl-name="${esc(tpl.name_ar || tpl.name)}" style="padding:4px 7px;">حذف</button>
+              ${tpl.is_builtin ? '' : `
+                <button type="button" class="btn btn-sm btn-inspect-tpl" data-tpl-id="${esc(tpl.id)}" title="فحص خلايا القالب" style="padding:4px 8px; font-size:0.76rem;">فحص</button>
+                <a class="btn btn-sm" href="/api/invoices/template?style=${esc(tpl.id)}" target="_blank" download="${esc(tpl.name_ar || tpl.name || 'voucher_template')}.html" style="padding:4px 8px; font-size:0.76rem;">تنزيل القالب</a>
+                <button type="button" class="btn btn-sm btn-danger btn-delete-tpl" data-tpl-id="${esc(tpl.id)}" data-tpl-name="${esc(tpl.name_ar || tpl.name)}" style="padding:4px 7px;">حذف</button>
+              `}
             </div>
           </div>
         </div>
@@ -599,8 +614,8 @@ export async function render(view) {
                 <div class="flex gap" style="align-items:center; margin-bottom:.8rem;">
                   <div id="logo-preview-box" style="width:72px; height:58px; border-radius:6px; border:1px solid var(--line); background:#fff; display:grid; place-items:center; overflow:hidden; flex-shrink:0; padding:3px; box-shadow:0 2px 6px rgba(0,0,0,0.15);">
                     ${activeIssuer.logo_data
-                      ? `<img src="${esc(activeIssuer.logo_data)}" alt="شعار" style="max-width:100%; max-height:100%; object-fit:contain;" />`
-                      : `<div style="font-size:.68rem; color:#64748b; text-align:center; font-weight:700; line-height:1.2;">بديل<br>الشعار</div>`}
+        ? `<img src="${esc(activeIssuer.logo_data)}" alt="شعار" style="max-width:100%; max-height:100%; object-fit:contain;" />`
+        : `<div style="font-size:.68rem; color:#64748b; text-align:center; font-weight:700; line-height:1.2;">بديل<br>الشعار</div>`}
                   </div>
                   <div style="flex:1;">
                     <div class="flex gap-sm" style="flex-wrap:wrap;">
@@ -756,8 +771,8 @@ export async function render(view) {
             </div>
             <label class="btn btn-primary" style="margin:0; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-              رفع قالب Excel جديد (.xlsx) ⤒
-              <input type="file" id="file-upload-global" accept=".xlsx,.xls" style="display:none;" />
+              رفع قالب جديد (.html) ⤒
+              <input type="file" id="file-upload-global" accept=".html,.htm,.xlsx,.xls" style="display:none;" />
             </label>
             <button class="btn" id="btn-reset-templates" title="إعادة فحص ومزامنة القوالب من القرص يدوياً" type="button">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom; margin-inline-end:5px;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>إعادة فحص القرص
@@ -823,13 +838,50 @@ export async function render(view) {
   }
 
   function resolvePreviewEntities(tpl) {
+    const isDocOrVoucher = tpl?.category === 'documents' || tpl?.category === 'vouchers' || (tpl?.badge && tpl.badge.includes('سند'));
+    if (isDocOrVoucher) {
+      return {
+        issuerToUse: {
+          name_ar: '',
+          name_en: '',
+          tax_number: '',
+          commercial_register: '',
+          building_no: '',
+          street: '',
+          district: '',
+          city: '',
+          address_en: '',
+          phone: '',
+          mobile: '',
+        },
+        clientToUse: {
+          name: '',
+          tax_number: '',
+          commercial_register: '',
+          address: '',
+          phone: '',
+        },
+        invToRender: {
+          voucher_number: '',
+          invoice_number: '',
+          voucher_date: '',
+          issue_date: '',
+          grand_total: '',
+          amount_in_words: '',
+          notes: '',
+          status: 'ISSUED',
+          status_label: '',
+        },
+      };
+    }
+
     let invStatus = currentInvoice.status;
     if (invoiceState === 'cancelled') invStatus = 'CANCELLED';
     else if (invoiceState === 'draft') invStatus = 'DRAFT';
 
     const snap = tpl?.style_meta?.snapshot;
     let issuerToUse = activeIssuer;
-    let clientToUse = mockClient;
+    let clientToUse = liveClients[0] || mockClient;
 
     let invToRender = {
       ...currentInvoice,
@@ -1035,8 +1087,14 @@ export async function render(view) {
         .then((r) => r.ok ? r.text() : null)
         .then((realHtml) => {
           if (realHtml && iframe) {
-            templateHtmlCache.set(tpl.id, realHtml);
-            iframe.srcdoc = realHtml;
+            const filledHtml = fillDynamicTemplateHtml(realHtml, {
+              issuer: issuerToUse,
+              client: clientToUse,
+              invoice: invToRender,
+              preview: true,
+            });
+            templateHtmlCache.set(tpl.id, filledHtml);
+            iframe.srcdoc = filledHtml;
           } else if (iframe) {
             iframe.srcdoc = fallbackHtml();
           }
@@ -1112,9 +1170,15 @@ export async function render(view) {
           .then((r) => r.ok ? r.text() : null)
           .then((realHtml) => {
             if (realHtml && fIframe) {
-              templateHtmlCache.set(tpl.id, realHtml);
-              docHtml = realHtml;
-              fIframe.srcdoc = realHtml;
+              const filledHtml = fillDynamicTemplateHtml(realHtml, {
+                issuer: issuerToUse,
+                client: clientToUse,
+                invoice: invToRender,
+                preview: true,
+              });
+              templateHtmlCache.set(tpl.id, filledHtml);
+              docHtml = filledHtml;
+              fIframe.srcdoc = filledHtml;
             } else if (fIframe) {
               docHtml = fallbackHtml();
               fIframe.srcdoc = docHtml;
@@ -1144,6 +1208,82 @@ export async function render(view) {
         e.currentTarget.disabled = false;
       }
     });
+  }
+
+  async function openVoucherFullscreenPreview(tplId) {
+    const tpl = excelTemplates.find((t) => t.id === tplId) || { id: tplId, name_ar: 'سند قبض' };
+
+    // استخدام سند حقيقي ومسجل فعلياً للمنشأة بدون أي بيانات أو أسماء وهمية ثابتة
+    const realVoucher = liveVouchers[0];
+    const voucherToUse = realVoucher ? {
+      ...realVoucher,
+      total_amount: Number(realVoucher.total_amount || 0),
+      allocated_amount: Number(realVoucher.allocated_total || realVoucher.allocated_amount || 0),
+      unallocated: Number(realVoucher.unallocated || 0),
+    } : {
+      voucher_number: `${activeIssuer.invoice_prefix || 'REC'}-${new Date().getFullYear()}-0001`,
+      voucher_date: new Date().toISOString().split('T')[0],
+      total_amount: 1000.00,
+      allocated_amount: 1000.00,
+      unallocated: 0.00,
+      payment_label: 'تحويل بنكي',
+      reference_no: '—',
+      notes: 'سداد دفعات مالية تحت الحساب',
+      created_by: 'النظام',
+      status: 'ACTIVE',
+    };
+
+    const clientToUse = liveClients.find((c) => c.id === voucherToUse.client_id)
+      || liveClients[0]
+      || { name: voucherToUse.client_name || 'العميل المعتمد', client_code: 'CLI-001' };
+
+    let docHtml = '';
+    try {
+      const res = await fetch(`/api/invoices/templates/${encodeURIComponent(tplId)}/render-html`);
+      if (res.ok) {
+        const rawHtml = await res.text();
+        if (rawHtml) {
+          docHtml = fillDynamicTemplateHtml(rawHtml, {
+            issuer: activeIssuer,
+            client: clientToUse,
+            voucher: voucherToUse,
+          });
+        }
+      }
+    } catch {}
+
+    if (!docHtml) {
+      docHtml = voucherPrint({ voucher: voucherToUse, issuer: activeIssuer, client: clientToUse, style: tplId });
+    }
+
+    const m = modal({
+      title: `معاينة سند القبض: ${tpl.name_ar || tpl.name || tplId}`,
+      wide: true,
+      body: html`
+        <div style="background:#0b101c; padding:1.5rem; border-radius:8px; display:flex; justify-content:center; overflow:auto; max-height:78vh;">
+          <div style="background:#fff; width:210mm; min-height:297mm; box-shadow:0 10px 40px rgba(0,0,0,0.6); border-radius:4px; overflow:hidden;">
+            <iframe id="fullscreen-voucher-iframe" style="width:100%; height:100%; min-height:850px; border:none; display:block; background:#fff;"></iframe>
+          </div>
+        </div>
+      `,
+      footer: html`
+        <div class="flex gap" style="justify-content:space-between; width:100%;">
+          <div class="flex gap-xs">
+            <button class="btn btn-primary" id="btn-modal-print-voucher" type="button" style="display:inline-flex;align-items:center;gap:4px;">
+              طباعة الآن
+            </button>
+            <button class="btn" id="btn-modal-pdf-voucher" type="button" style="display:inline-flex;align-items:center;gap:4px;">
+              PDF ⤓
+            </button>
+          </div>
+          <button class="btn" data-close type="button">إغلاق</button>
+        </div>
+      `,
+    });
+    const ifr = $('#fullscreen-voucher-iframe', m.el);
+    if (ifr) ifr.srcdoc = docHtml;
+    $('#btn-modal-print-voucher', m.el)?.addEventListener('click', () => printDoc(docHtml));
+    $('#btn-modal-pdf-voucher', m.el)?.addEventListener('click', () => downloadPdfFromHtml(docHtml, `معاينة-سند-${tplId}.pdf`));
   }
 
   // معاينة بصرية للتقرير كصورة ومستند رسمي A4
@@ -1489,6 +1629,7 @@ export async function render(view) {
 
   // نافذة فحص خلايا وأعمدة القالب
   function showTemplateInspectionModal(tpl, inspectionData = null) {
+    const isHtmlTpl = tpl.badge?.includes('HTML') || (tpl.file_path && tpl.file_path.endsWith('.html')) || (tpl.headers || []).length === 0;
     const headers = inspectionData?.headers || tpl.headers || [];
     const sampleRows = inspectionData?.samplePreviewRows || inspectionData?.sampleRows || tpl.style_meta?.sample_rows || [];
     const seller = inspectionData?.metadata?.seller || tpl.style_meta?.seller || tpl.style_meta?.snapshot?.seller || {};
@@ -1499,103 +1640,153 @@ export async function render(view) {
     const sellerEntries = Object.entries(seller).filter(([k, v]) => v && typeof v === 'string');
     const buyerEntries = Object.entries(buyer).filter(([k, v]) => v && typeof v === 'string');
 
-    const snapBoxHtml = (sellerEntries.length || buyerEntries.length) ? `
-      <div class="card" style="background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.3); border-radius:8px; padding:0.8rem; margin-bottom:1rem;">
-        <div style="font-size:0.88rem; font-weight:800; color:#38bdf8; margin-bottom:0.5rem; display:flex; align-items:center; gap:6px;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M8 14h.01"/><path d="M16 14h.01"/></svg>
-          البيانات الفعلية المكتشفة تلقائياً من ملف الإكسل
-        </div>
-        <div class="grid grid-2" style="gap:8px; font-size:0.8rem;">
-          <div style="background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:6px; border:1px solid var(--line);">
-            <b style="color:#e2e8f0; display:block; margin-bottom:4px; font-size:0.82rem;">بيانات المنشأة (البائع):</b>
-            ${sellerEntries.map(([k, v]) => `<div style="margin-bottom:3px;"><span class="tiny muted">${esc(k)}:</span> <b style="color:var(--primary); font-size:0.8rem;">${esc(v)}</b></div>`).join('') || '<span class="tiny muted">لا توجد بيانات</span>'}
+    let customDetailsHtml = '';
+    if (isHtmlTpl) {
+      // استخراج الحقول والوسوم الديناميكية المكتشفة تلقائياً من ملف القالب مباشرة
+      const rawDiscovered = (tpl.headers && tpl.headers.length)
+        ? tpl.headers
+        : (inspectionData?.detected_placeholders || inspectionData?.headers || []);
+
+      const detectedList = rawDiscovered.map((tag) => {
+        return String(tag).startsWith('{{') ? tag : `{{${tag}}}`;
+      });
+
+      customDetailsHtml = `
+        <div class="card" style="background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.3); border-radius:8px; padding:0.85rem; margin-bottom:1rem;">
+          <div style="font-size:0.9rem; font-weight:800; color:#38bdf8; margin-bottom:0.4rem; display:flex; align-items:center; gap:6px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            اكتشاف تلقائي كامل لوسوم وحقول القالب
           </div>
-          <div style="background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:6px; border:1px solid var(--line);">
-            <b style="color:#e2e8f0; display:block; margin-bottom:4px; font-size:0.82rem;">بيانات العميل (المشتري):</b>
-            ${buyerEntries.map(([k, v]) => `<div style="margin-bottom:3px;"><span class="tiny muted">${esc(k)}:</span> <b style="color:#38bdf8; font-size:0.8rem;">${esc(v)}</b></div>`).join('') || '<span class="tiny muted">لا توجد بيانات</span>'}
+          <div class="tiny muted" style="line-height:1.4;">
+            يقوم النظام بقراءة وتحليل ملف القالب برمجياً، واستخراج كافة المتغيرات والحقول الموجودة في كود القالب تلقائياً دون الحاجة لأي تعريف يدوي مسبق.
           </div>
         </div>
-      </div>
-    ` : '';
 
-    const headersChipsHtml = headers.map((h, i) => `
-      <div style="background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.3); padding:4px 9px; border-radius:6px; font-size:0.75rem; color:#e2e8f0; display:flex; align-items:center; gap:5px;">
-        <span style="opacity:0.6; font-size:0.68rem;">#${i + 1}</span>
-        <b>${esc(h)}</b>
-      </div>
-    `).join('');
-
-    const mergesHtml = merges.length ? `
-      <div style="margin-bottom:1rem;">
-        <b style="display:block; font-size:0.86rem; margin-bottom:0.4rem; color:#fff;">الخلايا المدمجة المكتشفة في القالب (${merges.length}):</b>
-        <div class="flex gap-xs" style="flex-wrap:wrap; max-height:100px; overflow-y:auto;">
-          ${merges.map(m => `<span class="badge tiny" style="background:rgba(148,163,184,0.12); border:1px solid rgba(148,163,184,0.3); color:#94a3b8; font-family:monospace;">${esc(m)}</span>`).join('')}
+        <div style="margin-bottom:1rem;">
+          <b style="display:block; font-size:0.86rem; margin-bottom:0.5rem; color:#fff;">الوسوم والمتغيرات المكتشفة تلقائياً من القالب (${detectedList.length}):</b>
+          ${detectedList.length ? `
+            <div class="grid grid-2" style="gap:6px;">
+              ${detectedList.map((tag) => `
+                <div style="background:rgba(255,255,255,0.03); border:1px solid var(--line); border-radius:6px; padding:7px 10px; display:flex; justify-content:space-between; align-items:center;">
+                  <span class="ltr font-mono" style="color:var(--primary); font-size:0.82rem; font-weight:700;">${esc(tag)}</span>
+                  <span class="tiny muted" style="color:#94a3b8;">حقل ديناميكي تلقائي</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<p class="tiny muted">لم يتم العثور على وسوم {{...}} في ملف القالب.</p>'}
         </div>
-      </div>
-    ` : '';
-
-    const sampleTableHtml = sampleRows && sampleRows.length ? `
-      <div style="margin-top:1rem;">
-        <b style="display:block; font-size:0.86rem; margin-bottom:0.4rem; color:#fff;">معاينة عينة من صفوف البنود (${sampleRows.length} صفوف):</b>
-        <div style="overflow-x:auto; border:1px solid var(--line); border-radius:6px;">
-          <table class="table tiny" style="margin:0;">
-            <thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
-            <tbody>
-              ${sampleRows.map((r) => `<tr>${r.map((cell) => `<td>${esc(cell || '')}</td>`).join('')}</tr>`).join('')}
-            </tbody>
-          </table>
+      `;
+    } else {
+      const snapBoxHtml = (sellerEntries.length || buyerEntries.length) ? `
+        <div class="card" style="background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.3); border-radius:8px; padding:0.8rem; margin-bottom:1rem;">
+          <div style="font-size:0.88rem; font-weight:800; color:#38bdf8; margin-bottom:0.5rem; display:flex; align-items:center; gap:6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M8 14h.01"/><path d="M16 14h.01"/></svg>
+            البيانات الفعلية المكتشفة تلقائياً من ملف الإكسل
+          </div>
+          <div class="grid grid-2" style="gap:8px; font-size:0.8rem;">
+            <div style="background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:6px; border:1px solid var(--line);">
+              <b style="color:#e2e8f0; display:block; margin-bottom:4px; font-size:0.82rem;">بيانات المنشأة (البائع):</b>
+              ${sellerEntries.map(([k, v]) => `<div style="margin-bottom:3px;"><span class="tiny muted">${esc(k)}:</span> <b style="color:var(--primary); font-size:0.8rem;">${esc(v)}</b></div>`).join('') || '<span class="tiny muted">لا توجد بيانات</span>'}
+            </div>
+            <div style="background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:6px; border:1px solid var(--line);">
+              <b style="color:#e2e8f0; display:block; margin-bottom:4px; font-size:0.82rem;">بيانات العميل (المشتري):</b>
+              ${buyerEntries.map(([k, v]) => `<div style="margin-bottom:3px;"><span class="tiny muted">${esc(k)}:</span> <b style="color:#38bdf8; font-size:0.8rem;">${esc(v)}</b></div>`).join('') || '<span class="tiny muted">لا توجد بيانات</span>'}
+            </div>
+          </div>
         </div>
-      </div>
-    ` : '';
+      ` : '';
 
-    modal({
-      title: `فحص واكتشاف خلايا القالب: ${tpl.name_ar || tpl.name || 'قالب Excel'}`,
+      const headersChipsHtml = headers.map((h, i) => `
+        <div style="background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.3); padding:4px 9px; border-radius:6px; font-size:0.75rem; color:#e2e8f0; display:flex; align-items:center; gap:5px;">
+          <span style="opacity:0.6; font-size:0.68rem;">#${i + 1}</span>
+          <b>${esc(h)}</b>
+        </div>
+      `).join('');
+
+      const mergesHtml = merges.length ? `
+        <div style="margin-bottom:1rem;">
+          <b style="display:block; font-size:0.86rem; margin-bottom:0.4rem; color:#fff;">الخلايا المدمجة المكتشفة في القالب (${merges.length}):</b>
+          <div class="flex gap-xs" style="flex-wrap:wrap; max-height:100px; overflow-y:auto;">
+            ${merges.map(m => `<span class="badge tiny" style="background:rgba(148,163,184,0.12); border:1px solid rgba(148,163,184,0.3); color:#94a3b8; font-family:monospace;">${esc(m)}</span>`).join('')}
+          </div>
+        </div>
+      ` : '';
+
+      const sampleTableHtml = sampleRows && sampleRows.length ? `
+        <div style="margin-top:1rem;">
+          <b style="display:block; font-size:0.86rem; margin-bottom:0.4rem; color:#fff;">معاينة عينة من صفوف البنود (${sampleRows.length} صفوف):</b>
+          <div style="overflow-x:auto; border:1px solid var(--line); border-radius:6px;">
+            <table class="table tiny" style="margin:0;">
+              <thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+              <tbody>
+                ${sampleRows.map((r) => `<tr>${r.map((cell) => `<td>${esc(cell || '')}</td>`).join('')}</tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ` : '';
+
+      customDetailsHtml = `
+        ${snapBoxHtml ? snapBoxHtml : ''}
+        <div style="margin-bottom:1rem;">
+          <b style="display:block; font-size:0.86rem; margin-bottom:0.5rem; color:#fff;">أعمدة الجدول المكتشفة تلقائياً (${headers.length}):</b>
+          ${headers.length ? `<div class="flex gap-xs" style="flex-wrap:wrap;">${headersChipsHtml}</div>` : '<p class="tiny muted">لا توجد أعمدة محددة أو الملف غير مهيأ.</p>'}
+        </div>
+        ${mergesHtml ? mergesHtml : ''}
+        ${sampleTableHtml ? sampleTableHtml : ''}
+      `;
+    }
+
+    const inspModal = modal({
+      title: `فحص واكتشاف تفاصيل القالب: ${tpl.name_ar || tpl.name || 'قالب'}`,
       wide: true,
       body: html`
         <div style="padding:0.4rem 0;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; background:rgba(255,255,255,0.03); padding:0.8rem; border-radius:8px; border:1px solid var(--line); flex-wrap:wrap; gap:0.5rem;">
             <div>
               <div style="font-size:0.95rem; font-weight:800; color:#fff;">${esc(tpl.name_ar || tpl.name)}</div>
-              <div class="tiny muted" style="margin-top:3px;">المسار الفعلي: <span class="ltr font-mono" style="color:var(--primary);">${esc(tpl.file_path || tpl.id + '.xlsx')}</span></div>
+              <div class="tiny muted" style="margin-top:3px;">المسار الفعلي: <span class="ltr font-mono" style="color:var(--primary);">${esc(tpl.file_path || tpl.id + (isHtmlTpl ? '.html' : '.xlsx'))}</span></div>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
               <span class="badge tiny" style="display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,0.05); border:1px solid var(--line);">
                 <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${color};"></span>
                 <span style="font-family:monospace; color:${color}; font-weight:700;">${color}</span>
               </span>
-              <span class="badge green" style="font-weight:700;">اكتشاف ذكي وتلقائي 100%</span>
+              <span class="badge green" style="font-weight:700;">جاهز للاستخدام ✓</span>
             </div>
           </div>
 
-          ${snapBoxHtml ? raw(snapBoxHtml) : ''}
-
-          <div style="margin-bottom:1rem;">
-            <b style="display:block; font-size:0.86rem; margin-bottom:0.5rem; color:#fff;">أعمدة الجدول المكتشفة تلقائياً (${headers.length}):</b>
-            ${headers.length ? raw(`<div class="flex gap-xs" style="flex-wrap:wrap;">${headersChipsHtml}</div>`) : '<p class="tiny muted">لا توجد أعمدة محددة أو الملف غير مهيأ.</p>'}
-          </div>
-
-          ${mergesHtml ? raw(mergesHtml) : ''}
-
-          ${sampleTableHtml ? raw(sampleTableHtml) : ''}
+          ${raw(customDetailsHtml)}
 
           <div class="card tiny mt" style="background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:6px; padding:0.6rem 0.8rem; margin-bottom:0;">
             <span style="color:#34d399; font-weight:700;">✓ نظام القوالب الديناميكي المباشر:</span>
-            <span class="muted"> يتم استخراج البيانات والخلايا مباشرة من ملف الإكسل بدون أي كود يدوي. أي قالب ترفعه أو تعدله على القرص ينعكس فورياً.</span>
+            <span class="muted"> يتم استخراج البيانات والقالب مباشرة من القرص بدون أي وسائط ثابتة. أي تعديل ينعكس فورياً.</span>
           </div>
         </div>
       `,
       footer: html`
-        <div class="flex gap" style="justify-content:flex-end; width:100%;">
+        <div class="flex gap" style="justify-content:space-between; width:100%;">
+          ${(tpl.category === 'documents' || tpl.category === 'vouchers') ? `
+            <button class="btn btn-sm btn-info" id="btn-insp-preview-voucher" type="button" style="display:inline-flex; align-items:center; gap:5px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              معاينة السند الآن
+            </button>
+          ` : '<div></div>'}
           <button class="btn btn-primary" data-close type="button">إغلاق</button>
         </div>
       `,
+    });
+
+    $('#btn-insp-preview-voucher', inspModal.el)?.addEventListener('click', () => {
+      inspModal.close();
+      openVoucherFullscreenPreview(tpl.id);
     });
   }
 
   // نافذة توليد وتصدير تقرير المستندات بالبيانات الحقيقية
   function openGenerateReportModal(tpl) {
     const isVouchers = tpl.category === 'vouchers' || tpl.id.includes('voucher');
-    const headersChipsHtml = (tpl.headers || []).map((h, i) => `<span class="doc-tpl-chip green"><span style="opacity:0.6;">#${i+1}</span> ${esc(h)}</span>`).join('');
+    const headersChipsHtml = (tpl.headers || []).map((h, i) => `<span class="doc-tpl-chip green"><span style="opacity:0.6;">#${i + 1}</span> ${esc(h)}</span>`).join('');
 
     const m = modal({
       title: `توليد وتصدير تقرير: ${tpl.name_ar || tpl.name}`,
@@ -1785,8 +1976,8 @@ export async function render(view) {
   // رفع القوالب الذكي
   async function handleExcelUpload(file, categoryHint = 'auto') {
     if (!file) return;
-    if (!/\.(xlsx|xls)$/i.test(file.name)) {
-      toastErr('يرجى اختيار ملف Excel بصيغة .xlsx أو .xls');
+    if (!/\.(html|htm|xlsx|xls)$/i.test(file.name)) {
+      toastErr('يرجى اختيار ملف قالب بصيغة .html أو .xlsx');
       return;
     }
 
@@ -2041,6 +2232,38 @@ export async function render(view) {
       });
     });
 
+    // اعتماد قالب سند قبض
+    $$('.btn-select-voucher-template', view).forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const tplId = btn.dataset.tplId;
+        const tpl = excelTemplates.find((t) => t.id === tplId);
+        printCfg.voucher_template_style = tplId;
+        try {
+          await api.put(`/api/issuers/${activeIssuer.id}`, {
+            ...activeIssuer,
+            print_settings: printCfg,
+            qr_settings: qrCfg,
+          });
+          activeIssuer.print_settings = printCfg;
+          toastOk(`تم اعتماد قالب «${tpl?.name_ar || tplId}» رسمياً لسندات القبض وحفظ الإعدادات بنجاح`);
+        } catch (err) {
+          toastErr('حدث خطأ أثناء حفظ اعتماد القالب: ' + err.message);
+        }
+        renderView();
+      });
+    });
+
+    // معاينة سند القبض في نافذة بصرية كصورة A4
+    $$('.btn-visual-voucher-modal', view).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tplId = btn.dataset.tplId;
+        openVoucherFullscreenPreview(tplId).catch((err) => {
+          console.error('Voucher preview error:', err);
+          toastErr('فشل عرض معاينة السند: ' + (err.message || err));
+        });
+      });
+    });
+
     // معاينة في استوديو الطباعة
     $$('.btn-preview-in-print', view).forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -2073,6 +2296,14 @@ export async function render(view) {
           if (printCfg.template_style === tplId) {
             printCfg.template_style = 'standard';
           }
+          if (printCfg.voucher_template_style === tplId) {
+            printCfg.voucher_template_style = '';
+          }
+          await api.put(`/api/issuers/${activeIssuer.id}`, {
+            ...activeIssuer,
+            print_settings: printCfg,
+            qr_settings: qrCfg,
+          }).catch(() => {});
           await loadTemplates();
           renderView();
         } catch (err) {
@@ -2317,6 +2548,7 @@ export async function render(view) {
         printCfg.custom_css = e.target.value;
         updateLivePreview();
       });
+
 
       // التكبير والتصغير
       $('#zoom-in', view)?.addEventListener('click', () => {

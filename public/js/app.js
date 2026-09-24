@@ -42,7 +42,7 @@ const VIEWS = {
   invoice: () => import('./views/invoice-editor.js?v=' + Date.now()),
   'invoice-view': () => import('./views/invoice-view.js?v=' + Date.now()),
   bulk: () => import('./views/bulk.js'),
-  vouchers: () => import('./views/vouchers.js'),
+  vouchers: () => import('./views/vouchers.js?v=' + Date.now()),
   statement: () => import('./views/statement.js'),
   issuers: () => import('./views/issuers.js?v=' + Date.now()),
   templates: () => import('./views/templates.js?v=' + Date.now()),

@@ -229,22 +229,54 @@ func (s *ClientService) UpdateClient(id string, c *models.Client) error {
 	now := db.NowIso()
 	c.UpdatedAt = now
 
-	_, err := s.db.Exec(`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`
 		UPDATE clients SET
 			name = ?, name_en = ?, phone = ?, mobile = ?, email = ?,
 			address = ?, building_no = ?, street = ?, district = ?,
 			city = ?, postal_code = ?, country = ?, tax_number = ?,
 			commercial_register = ?, client_type = ?, payment_terms_days = ?,
-			credit_limit = ?, notes = ?, is_active = ?, updated_at = ?
+			opening_balance = ?, credit_limit = ?, notes = ?, is_active = ?, updated_at = ?
 		WHERE id = ?
 	`,
 		c.Name, c.NameEn, c.Phone, c.Mobile, c.Email,
 		c.Address, c.BuildingNo, c.Street, c.District,
 		c.City, c.PostalCode, c.Country, c.TaxNumber,
 		c.CommercialRegister, c.ClientType, c.PaymentTermsDays,
-		c.CreditLimit, c.Notes, c.IsActive, now, id,
+		c.OpeningBalance, c.CreditLimit, c.Notes, c.IsActive, now, id,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	debit, credit := c.OpeningBalance, int64(0)
+	if debit < 0 {
+		credit, debit = -debit, 0
+	}
+	var obCount int
+	_ = tx.QueryRow("SELECT COUNT(*) FROM client_ledger WHERE client_id = ? AND doc_type = 'OPENING_BALANCE'", id).Scan(&obCount)
+	if obCount > 0 {
+		if c.OpeningBalance == 0 {
+			_, err = tx.Exec("DELETE FROM client_ledger WHERE client_id = ? AND doc_type = 'OPENING_BALANCE'", id)
+		} else {
+			_, err = tx.Exec("UPDATE client_ledger SET debit = ?, credit = ? WHERE client_id = ? AND doc_type = 'OPENING_BALANCE'", debit, credit, id)
+		}
+	} else if c.OpeningBalance != 0 {
+		_, err = tx.Exec(`
+			INSERT INTO client_ledger (id, client_id, issuer_id, doc_type, doc_id, doc_number, transaction_date, debit, credit, description, created_at)
+			VALUES (?, ?, NULL, 'OPENING_BALANCE', NULL, 'OPENING', ?, ?, ?, 'رصيد افتتاحي', ?)
+		`, crypto.UUID(), id, db.TodayIso(), debit, credit, now)
+	}
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (s *ClientService) DeleteClient(id string) error {

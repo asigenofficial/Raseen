@@ -245,8 +245,8 @@ export function promptDialog({ title = '', label = '', value = '', placeholder =
       slim: true,
       body: html`<div class="field"><label>${label}</label>
         ${raw(multiline
-    ? `<textarea name="v" placeholder="${esc(placeholder)}">${esc(value)}</textarea>`
-    : `<input type="text" name="v" value="${esc(value)}" placeholder="${esc(placeholder)}" />`)}</div>`,
+        ? `<textarea name="v" placeholder="${esc(placeholder)}">${esc(value)}</textarea>`
+        : `<input type="text" name="v" value="${esc(value)}" placeholder="${esc(placeholder)}" />`)}</div>`,
       footer: `<button class="btn" data-close type="button">إلغاء</button>
                <button class="btn btn-primary" data-ok type="button">حفظ</button>`,
       onClose: () => resolve(null),
@@ -491,7 +491,7 @@ export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
       try {
         a.remove();
         URL.revokeObjectURL(url);
-      } catch {}
+      } catch { }
     }, 60000);
     toastOk('تم تحميل ملف PDF بنجاح 📄');
     return blob;
@@ -501,4 +501,215 @@ export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
     toastOk('تم فتح حوار الطباعة / الحفظ كملف PDF');
     return null;
   }
+}
+
+
+/**
+ * محرك استبدال الوسوم الديناميكي الشامل لأي قالب HTML بدون أي قيود أو ثوابت.
+ * يكتشف الوسوم الموجودة في القالب برمجياً ويستبدلها بالقيم الحقيقية من المنشأة / العميل / الفاتورة / السند.
+ */
+export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, voucher = null, invoice = null, extra = {} } = {}) {
+  if (!rawHtml) return '';
+
+  const doc = voucher || invoice || {};
+  const addr = [issuer.building_no, issuer.street, issuer.district, issuer.city].filter(Boolean).join(' - ')
+    || issuer.address || issuer.city || '';
+  const clientAddr = [client.building_no, client.street, client.district, client.city].filter(Boolean).join(' - ')
+    || client.address || client.city || '';
+
+  const docTotal = Number(voucher?.total_amount ?? invoice?.grand_total ?? 0);
+  const docDate = voucher?.voucher_date || invoice?.issue_date || new Date().toISOString().slice(0, 10);
+  const docNumber = voucher?.voucher_number || invoice?.invoice_number || '';
+  const partyName = client.name || voucher?.client_name || invoice?.client_name || '';
+
+  const resolveTagValue = (rawKey) => {
+    const k = rawKey.trim().toLowerCase();
+
+    // 1. مخصص في extra
+    if (extra[rawKey] !== undefined) return String(extra[rawKey]);
+    if (extra[k] !== undefined) return String(extra[k]);
+
+    // 2. بيانات المنشأة المصدرة
+    if (k === 'seller_name' || k === 'issuer_name' || k === 'company_name' || k === 'seller' || k === 'receiver_name') {
+      return issuer.name_ar || issuer.name || '';
+    }
+    if (k === 'seller_name_en' || k === 'issuer_name_en') return issuer.name_en || '';
+    if (k === 'seller_tax' || k === 'seller_vat' || k === 'tax_number' || k === 'vat_number') {
+      return issuer.tax_number || '';
+    }
+    if (k === 'seller_cr' || k === 'cr_number' || k === 'commercial_register') {
+      return issuer.commercial_register || '';
+    }
+    if (k === 'seller_address' || k === 'issuer_address' || k === 'company_address') return addr;
+    if (k === 'seller_address_en') return issuer.address_en || '';
+    if (k === 'seller_phone' || k === 'company_phone' || k === 'phone') return issuer.phone || issuer.mobile || '';
+    if (k === 'seller_email' || k === 'company_email' || k === 'email') return issuer.email || '';
+    if (k === 'seller_iban' || k === 'iban' || k === 'bank_account') return issuer.iban || '';
+    if (k === 'bank_name' || k === 'seller_bank') return issuer.bank_name || '';
+
+    // ترويسات بيانات المنشأة الذكية - تظهر فقط القيم المتوفرة بدون ثوابت فارغة
+    if (k === 'seller_meta_ar') {
+      const parts = [];
+      if (addr) parts.push(addr);
+      if (issuer.tax_number) parts.push(`الرقم الضريبي: ${issuer.tax_number}`);
+      if (issuer.commercial_register) parts.push(`السجل التجاري: ${issuer.commercial_register}`);
+      if (issuer.phone || issuer.mobile) parts.push(`جوال: ${issuer.phone || issuer.mobile}`);
+      return parts.join('<br />');
+    }
+    if (k === 'seller_meta_en') {
+      const parts = [];
+      if (issuer.address_en) parts.push(issuer.address_en);
+      if (issuer.tax_number) parts.push(`TAX NO.: ${issuer.tax_number}`);
+      if (issuer.commercial_register) parts.push(`Commercial Record No : ${issuer.commercial_register}`);
+      if (issuer.phone || issuer.mobile) parts.push(`PHONE: ${issuer.phone || issuer.mobile}`);
+      return parts.join('<br />');
+    }
+
+    // 3. بيانات العميل / الطرف المستلم
+    if (k === 'buyer_name' || k === 'client_name' || k === 'customer_name' || k === 'received_from' || k === 'client') {
+      return partyName;
+    }
+    if (k === 'buyer_tax' || k === 'client_tax' || k === 'buyer_vat') return client.tax_number || '';
+    if (k === 'buyer_cr' || k === 'client_cr') return client.commercial_register || '';
+    if (k === 'buyer_address' || k === 'client_address') return clientAddr;
+    if (k === 'buyer_phone' || k === 'client_phone') return client.phone || client.mobile || '';
+    if (k === 'buyer_email' || k === 'client_email') return client.email || '';
+
+    // 4. أرقام وتواريخ المستند
+    if (k === 'invoice_number' || k === 'voucher_number' || k === 'doc_number' || k === 'number' || k === 'reference') {
+      return docNumber;
+    }
+    if (k === 'issue_date' || k === 'voucher_date' || k === 'invoice_date' || k === 'date') {
+      return docDate;
+    }
+    if (k === 'due_date') return invoice?.due_date || '';
+    if (k === 'issue_time' || k === 'time') return invoice?.issue_time || '12:00:00';
+
+    // 5. المبالغ المالية
+    if (k === 'amount' || k === 'grand_total' || k === 'total' || k === 'total_amount' || k === 'net_amount') {
+      return docTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (k === 'subtotal' || k === 'taxable' || k === 'taxable_amount') {
+      const sub = Number(invoice?.subtotal ?? docTotal);
+      return sub.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (k === 'tax_amount' || k === 'vat_amount' || k === 'vat') {
+      const tax = Number(invoice?.tax_amount ?? 0);
+      return tax.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (k === 'discount' || k === 'discount_amount') {
+      const d = Number(invoice?.discount_amount ?? 0);
+      return d.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (k === 'paid_amount' || k === 'paid') {
+      const p = Number(invoice?.paid_amount ?? docTotal);
+      return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (k === 'amount_in_words' || k === 'tafqeet' || k === 'total_in_words') {
+      if (doc?.amount_in_words) return String(doc.amount_in_words);
+      if (docTotal > 0) {
+        return Math.floor(docTotal).toLocaleString('ar-SA') + ' ريال سعودي';
+      }
+      return '';
+    }
+
+    // 6. طرق الدفع والبيان
+    if (k === 'amount_halala' || k === 'halala' || k === 'halalas') {
+      const h = Math.round((docTotal % 1) * 100);
+      return String(h).padStart(2, '0');
+    }
+    if (k === 'amount_riyal' || k === 'riyal' || k === 'riyals') {
+      return Math.floor(docTotal).toLocaleString('en-US');
+    }
+    if (k === 'is_cash') {
+      const p = (voucher?.payment_type || voucher?.payment_label || invoice?.payment_method || '').toLowerCase();
+      return (!p || p.includes('cash') || p.includes('نقد')) ? '✓' : '';
+    }
+    if (k === 'is_transfer' || k === 'is_bank') {
+      const p = (voucher?.payment_type || voucher?.payment_label || invoice?.payment_method || '').toLowerCase();
+      return (p.includes('transfer') || p.includes('تحويل') || p.includes('بنك')) ? '✓' : '';
+    }
+    if (k === 'is_check' || k === 'is_cheque') {
+      const p = (voucher?.payment_type || voucher?.payment_label || invoice?.payment_method || '').toLowerCase();
+      return (p.includes('check') || p.includes('cheque') || p.includes('شيك')) ? '✓' : '';
+    }
+    if (k === 'is_card' || k === 'is_pos') {
+      const p = (voucher?.payment_type || voucher?.payment_label || invoice?.payment_method || '').toLowerCase();
+      return (p.includes('card') || p.includes('pos') || p.includes('شبكة') || p.includes('مدى')) ? '✓' : '';
+    }
+    if (k === 'payment_method' || k === 'payment_type' || k === 'payment_label' || k === 'payment_mode') {
+      return voucher?.payment_label || voucher?.payment_type || invoice?.payment_label || invoice?.payment_method || 'نقداً';
+    }
+    if (k === 'notes' || k === 'paid_for' || k === 'description' || k === 'memo' || k === 'statement') {
+      return doc.notes || (voucher ? 'سداد دفعات مالية تحت الحساب' : '');
+    }
+    if (k === 'reference_no' || k === 'cheque_no' || k === 'ref_no' || k === 'check_number') {
+      return voucher?.reference_no || '—';
+    }
+    if (k === 'currency_symbol' || k === 'sar_symbol') {
+      return `<svg viewBox="0 0 1124.14 1256.39" width="0.88em" height="0.88em" class="sar-sym" style="vertical-align:-0.12em;display:inline-block;fill:currentColor;margin:0 2px;" aria-label="ريال سعودي" title="ريال سعودي"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg>`;
+    }
+    if (k === 'currency') {
+      return issuer.currency || 'SAR';
+    }
+
+    // 7. الجداول والرموز الخاصة
+    if (k === 'items_table') {
+      const lines = invoice?.lines || [];
+      if (!lines.length) {
+        return '<p style="text-align:center;color:#64748b;padding:12px;">لا توجد بنود مضافة</p>';
+      }
+      return `
+        <table style="width:100%; border-collapse:collapse; font-size:12px; margin:10px 0;" dir="rtl">
+          <thead>
+            <tr style="background:#059669; color:#fff;">
+              <th style="padding:6px 8px; text-align:right; border:1px solid #cbd5e1;">#</th>
+              <th style="padding:6px 8px; text-align:right; border:1px solid #cbd5e1;">الصنف / الخدمة</th>
+              <th style="padding:6px 8px; text-align:center; border:1px solid #cbd5e1;">الكمية</th>
+              <th style="padding:6px 8px; text-align:right; border:1px solid #cbd5e1;">سعر الوحدة</th>
+              <th style="padding:6px 8px; text-align:right; border:1px solid #cbd5e1;">الضريبة</th>
+              <th style="padding:6px 8px; text-align:right; border:1px solid #cbd5e1;">الإجمالي</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lines.map((l, idx) => `
+              <tr style="background:${idx % 2 === 1 ? '#f0fdf4' : '#fff'};">
+                <td style="padding:5px 8px; border:1px solid #e2e8f0; text-align:center;">${idx + 1}</td>
+                <td style="padding:5px 8px; border:1px solid #e2e8f0;">${l.item_name || l.name || ''}</td>
+                <td style="padding:5px 8px; border:1px solid #e2e8f0; text-align:center;">${Number(l.quantity || 1).toFixed(2)}</td>
+                <td style="padding:5px 8px; border:1px solid #e2e8f0;">${Number(l.unit_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                <td style="padding:5px 8px; border:1px solid #e2e8f0;">${Number(l.tax_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                <td style="padding:5px 8px; border:1px solid #e2e8f0; font-weight:700;">${Number(l.total_line || l.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+    if (k === 'qr_code') {
+      const qr = invoice?.qr_payload || invoice?.qr_code || '';
+      if (qr) {
+        return `<div style="display:inline-block; border:1px solid #cbd5e1; border-radius:6px; padding:6px; background:#fff; text-align:center; font-size:10px; color:#475569;">
+          <div style="font-weight:700; margin-bottom:4px;">رمز ZATCA</div>
+          <div style="width:90px; height:90px; background:#f8fafc; border:1px dashed #cbd5e1; display:flex; align-items:center; justify-content:center; font-family:monospace; font-size:9px;">QR Code</div>
+        </div>`;
+      }
+      return '';
+    }
+
+    // 8. بحث ديناميكي في حقول الكائن المباشرة
+    if (doc[rawKey] !== undefined) return String(doc[rawKey]);
+    if (doc[k] !== undefined) return String(doc[k]);
+    if (issuer[rawKey] !== undefined) return String(issuer[rawKey]);
+    if (issuer[k] !== undefined) return String(issuer[k]);
+    if (client[rawKey] !== undefined) return String(client[rawKey]);
+    if (client[k] !== undefined) return String(client[k]);
+
+    return '';
+  };
+
+  return rawHtml.replace(/\{\{\s*([a-zA-Z0-9_\-\.]+)\s*\}\}/g, (match, key) => {
+    const val = resolveTagValue(key);
+    return val !== undefined ? val : match;
+  });
 }

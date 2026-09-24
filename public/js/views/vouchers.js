@@ -6,7 +6,7 @@ import { store, loadClients, can, currencyLabel, getFilterState, setFilterState,
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, today, monthStart, toastOk, toastErr,
   $, $$, delegate, debounce, modal, formValues, confirmDialog, exportCsv, exportExcel, printDoc, toNum,
-  icon, downloadPdfFromHtml, amount, sarSvg,
+  icon, downloadPdfFromHtml, amount, sarSvg, fillDynamicTemplateHtml,
 } from '../core/util.js';
 import { voucherPrint, VOUCHER_TEMPLATES } from '../print/templates.js';
 
@@ -168,6 +168,7 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
       toastOk(`تم تسجيل السند ${voucher.voucher_number}`);
       m.close();
       if (onDone) onDone(voucher);
+      showVoucher(voucher.id, onDone);
     } catch { e.target.disabled = false; }
     return undefined;
   });
@@ -176,80 +177,116 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
   return m;
 }
 
-async function showVoucher(id, onChange) {
+export async function showVoucher(id, onChange) {
   const voucher = await api.get(`/api/vouchers/${id}`);
-  const [issuer, client] = await Promise.all([
+  const [issuer, client, templatesRes] = await Promise.all([
     api.get(`/api/issuers/${voucher.issuer_id}`),
     api.get(`/api/clients/${voucher.client_id}`),
+    api.get('/api/invoices/templates?type=documents').catch(() => []),
   ]);
+
+  const availableTemplates = Array.isArray(templatesRes) ? templatesRes : (templatesRes?.data || []);
+
+  const issuerPrintCfg = (typeof issuer.print_settings === 'string'
+    ? JSON.parse(issuer.print_settings || '{}')
+    : (issuer.print_settings || {})) || {};
+
+  let currentStyle = issuerPrintCfg.voucher_template_style || (availableTemplates[0]?.id || 'default');
+
+  async function renderDoc(style) {
+    let rawHtml = '';
+    const targetTpl = availableTemplates.find((t) => t.id === style) || availableTemplates[0];
+    if (targetTpl) {
+      try {
+        const r = await fetch(`/api/invoices/templates/${encodeURIComponent(targetTpl.id)}/render-html`);
+        if (r.ok) rawHtml = await r.text();
+      } catch {}
+    }
+
+    if (rawHtml) {
+      return fillDynamicTemplateHtml(rawHtml, { issuer, client, voucher });
+    }
+
+    return voucherPrint({ voucher, issuer, client, style });
+  }
+
+  let currentHtml = await renderDoc(currentStyle);
+
   const m = modal({
     title: `سند قبض ${voucher.voucher_number} ${voucher.status === 'CANCELLED' ? '(ملغى)' : ''}`,
     wide: true,
     body: html`
-      <div style="background:var(--card-bg, #f8fafc);border:1.5px solid var(--primary, #0d9488);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-        <div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px">
-          <span style="color:var(--primary, #0d9488)">قالب السند للطباعة والـ PDF:</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <select id="v-style-select" style="min-width:300px;font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid var(--border-color, #cbd5e1);background:var(--input-bg, #fff);font-weight:700">
-            ${raw(VOUCHER_TEMPLATES.map((t) => `<option value="${esc(t.id)}">${esc(t.name)} (${esc(t.badge)})</option>`).join(''))}
+      <div style="background:var(--card-bg, #1e293b);border:1px solid var(--border-color, #334155);border-radius:8px;padding:8px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-weight:700;font-size:13px;color:var(--primary, #0d9488)">قالب السند:</span>
+          <select id="v-style-select" style="min-width:280px;font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid var(--border-color, #475569);background:var(--card-bg, #0f172a);color:var(--text, #f8fafc);font-weight:700">
+            ${raw(availableTemplates.length
+              ? availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === currentStyle ? 'selected' : ''}>${esc(t.name_ar || t.name)} (${esc(t.badge || 'سند HTML')})</option>`).join('')
+              : '<option value="default">قالب سند قبض (سند HTML)</option>')}
           </select>
+          <button class="btn btn-sm" id="btn-adopt-voucher-tpl" type="button" style="font-size:12px;padding:5px 10px;background:rgba(13,148,136,0.15);border:1px solid var(--primary, #0d9488);color:var(--primary, #0d9488);font-weight:700" title="اعتماد هذا القالب كقالب افتراضي لجميع سندات المنشأة">
+            ⭐ اعتماد كقالب افتراضي للمنشأة
+          </button>
+        </div>
+        <div style="font-size:12px;color:var(--muted)">
+          ${voucher.client_name} — <b class="num">${amount(voucher.total_amount, 'SAR', { size: 13 })}</b>
         </div>
       </div>
-      <div class="grid grid-2">
-        <dl class="kv">
-          <dt>العميل</dt><dd>${voucher.client_name}</dd>
-          <dt>الشركة</dt><dd>${voucher.issuer_name}</dd>
-          <dt>التاريخ</dt><dd>${dateAr(voucher.voucher_date)}</dd>
-          <dt>طريقة السداد</dt><dd>${voucher.payment_label}</dd>
-          <dt>المرجع</dt><dd class="mono">${voucher.reference_no || '—'}</dd>
-        </dl>
-        <dl class="kv">
-          <dt>المبلغ</dt><dd class="num"><b>${amount(voucher.total_amount, 'SAR', { size: 14 })}</b></dd>
-          <dt>الموزّع على فواتير</dt><dd class="num">${amount(voucher.allocated_total)}</dd>
-          <dt>غير موزّع (رصيد دائن)</dt><dd class="num">${amount(voucher.unallocated)}</dd>
-          <dt>أنشئ بواسطة</dt><dd>${voucher.created_by}</dd>
-          <dt>وقت الإنشاء</dt><dd class="tiny">${dateTimeAr(voucher.created_at)}</dd>
-        </dl>
+      <div style="background:#0b101c;padding:16px;border-radius:8px;display:flex;justify-content:center;overflow:auto;max-height:75vh;border:1px solid var(--border-color, #334155)">
+        <div style="background:#fff;width:210mm;min-height:297mm;box-shadow:0 10px 30px rgba(0,0,0,0.5);border-radius:4px;overflow:hidden">
+          <iframe id="v-preview-iframe" style="width:100%;height:100%;min-height:850px;border:none;display:block;background:#fff"></iframe>
+        </div>
       </div>
-      ${raw(voucher.notes ? `<div class="alert alert-info tiny">${esc(voucher.notes)}</div>` : '')}
-      ${raw(voucher.allocations.length ? `<div class="table-wrap mt"><table class="tbl compact">
-        <thead><tr><th>الفاتورة</th><th>تاريخها</th><th class="text-end">إجمالي الفاتورة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
-          <th class="text-end">المخصص <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th class="text-end">المتبقي عليها <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th></th></tr></thead>
-        <tbody>${voucher.allocations.map((a) => `<tr>
-          <td class="mono">${esc(a.invoice_number)}</td>
-          <td class="tiny">${esc(dateAr(a.issue_date))}</td>
-          <td class="text-end num tiny">${amount(a.invoice_total)}</td>
-          <td class="text-end num"><b>${amount(a.allocated_amount)}</b></td>
-          <td class="text-end num">${amount(a.invoice_remaining)}</td>
-          <td class="actions"><a class="btn btn-sm" href="#/invoice-view/${esc(a.invoice_id)}">${icon.eye({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}عرض</a></td>
-        </tr>`).join('')}</tbody></table></div>`
-    : '<div class="alert alert-warn tiny mt">هذا السند غير موزّع على فواتير — كامل مبلغه رصيد دائن للعميل.</div>')}`,
-    footer: `<button class="btn" data-close type="button">إغلاق</button>
-             <a class="btn" href="/api/vouchers/${voucher.id}/pdf?style=voucher_saqr_slip" id="v-server-pdf" target="_blank" download="سند-${voucher.voucher_number}.pdf">${icon.download({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}تنزيل PDF مباشر</a>
-             <button class="btn btn-primary" data-pdf type="button">${icon.pdf({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}تحميل PDF</button>
-             <button class="btn" data-print type="button">${icon.printer({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}طباعة السند</button>
-             ${voucher.status === 'ACTIVE' && can('vouchers.create') ? `<button class="btn btn-danger" data-cancel type="button">${icon.trash({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}إلغاء السند</button>` : ''}`,
+    `,
+    footer: html`
+      <div class="flex gap" style="justify-content:space-between;width:100%">
+        <div class="flex gap-xs">
+          <button class="btn btn-primary" data-print type="button">${icon.printer({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}طباعة السند</button>
+          <button class="btn" data-pdf type="button">${icon.pdf({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}تحميل PDF</button>
+          <button class="btn btn-danger" data-delete type="button">${icon.trash({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}حذف نهائي</button>
+        </div>
+        <button class="btn" data-close type="button">إغلاق</button>
+      </div>
+    `,
   });
-  const getSelectedStyle = () => {
-    const sel = $('#v-style-select', m.body);
-    return sel ? sel.value : 'voucher_saqr_slip';
-  };
-  const serverPdfLink = $('#v-server-pdf', m.footer || m.el);
+
+  const iframe = $('#v-preview-iframe', m.body);
+  if (iframe) iframe.srcdoc = currentHtml;
+
   const styleSel = $('#v-style-select', m.body);
-  if (styleSel && serverPdfLink) {
-    styleSel.addEventListener('change', () => {
-      serverPdfLink.href = `/api/vouchers/${voucher.id}/pdf?style=${styleSel.value}`;
+  if (styleSel) {
+    styleSel.addEventListener('change', async () => {
+      currentStyle = styleSel.value;
+      currentHtml = await renderDoc(currentStyle);
+      if (iframe) iframe.srcdoc = currentHtml;
     });
   }
+
+  const adoptBtn = $('#btn-adopt-voucher-tpl', m.body);
+  if (adoptBtn) {
+    adoptBtn.addEventListener('click', async () => {
+      adoptBtn.disabled = true;
+      try {
+        issuerPrintCfg.voucher_template_style = currentStyle;
+        await api.put(`/api/issuers/${issuer.id}`, {
+          ...issuer,
+          print_settings: issuerPrintCfg,
+        });
+        toastOk('تم اعتماد القالب كافتراضي لجميع سندات المنشأة بنجاح ✓');
+      } catch (err) {
+        toastErr('فشل اعتماد القالب: ' + err.message);
+      } finally {
+        adoptBtn.disabled = false;
+      }
+    });
+  }
+
   const pdfBtn = m.el.querySelector('[data-pdf]');
   if (pdfBtn) {
     pdfBtn.addEventListener('click', async (e) => {
       e.target.disabled = true;
       try {
-        const style = getSelectedStyle();
-        const docHtml = voucherPrint({ voucher, issuer, client, style });
-        await downloadPdfFromHtml(docHtml, `سند-قبض-${voucher.voucher_number}.pdf`);
+        await downloadPdfFromHtml(currentHtml, `سند-قبض-${voucher.voucher_number}.pdf`);
       } catch (err) {
         toastErr(err.message || 'تعذر تحميل ملف PDF');
       } finally {
@@ -257,26 +294,29 @@ async function showVoucher(id, onChange) {
       }
     });
   }
+
   m.el.querySelector('[data-print]').addEventListener('click', () => {
-    const style = getSelectedStyle();
-    printDoc(voucherPrint({ voucher, issuer, client, style }));
+    printDoc(currentHtml);
   });
-  const cancelBtn = m.el.querySelector('[data-cancel]');
-  if (cancelBtn) {
-    cancelBtn.addEventListener('click', async () => {
+
+  const deleteBtn = m.el.querySelector('[data-delete]');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
       const ok = await confirmDialog({
-        title: 'إلغاء سند القبض',
-        message: 'سيُعاد فتح الفواتير المسددة بهذا السند ويُعكس أثره في كشف الحساب.',
+        title: `حذف سند القبض ${voucher.voucher_number} نهائياً`,
+        message: 'هل أنت متأكد من حذف هذا السند نهائياً من قاعدة البيانات؟ سيتم مسح السند والقيود المرتبطة به بالكامل.',
         danger: true,
-        okText: 'إلغاء السند',
+        okText: 'نعم، حذف نهائي',
       });
       if (!ok) return;
       try {
-        await api.post(`/api/vouchers/${id}/cancel`, { reason: 'إلغاء من شاشة السندات' });
-        toastOk('تم إلغاء السند');
+        await api.del(`/api/vouchers/${id}`);
+        toastOk(`تم حذف سند القبض ${voucher.voucher_number} نهائياً من قاعدة البيانات`);
         m.close();
         if (onChange) onChange();
-      } catch { /* تنبيه تلقائي */ }
+      } catch (err) {
+        toastErr(err.message || 'فشل حذف السند');
+      }
     });
   }
 }
@@ -417,7 +457,7 @@ export async function render(view, ctx) {
               <th class="text-end">غير موزّع <span class="cur-sym">${sarSvg({ size: 12 })}</span></th><th></th></tr></thead>
             <tbody>
               ${raw(state.data.items.length ? state.data.items.map((v) => `<tr class="${v.status === 'CANCELLED' ? 'row-off' : ''}">
-                <td class="mono"><b>${esc(v.voucher_number)}</b></td>
+                <td class="mono"><a href="javascript:void(0)" data-act="show" data-id="${esc(v.id)}" style="color:var(--primary);text-decoration:underline;cursor:pointer"><b>${esc(v.voucher_number)}</b></a></td>
                 <td class="tiny nowrap">${esc(dateAr(v.voucher_date))}</td>
                 <td>${esc(v.client_name)}<div class="tiny muted mono">${esc(v.client_code)}</div></td>
                 <td class="tiny">${esc(v.issuer_name)}</td>
@@ -429,6 +469,9 @@ export async function render(view, ctx) {
                 <td class="actions">
                   ${v.status === 'CANCELLED' ? '<span class="badge red">ملغى</span>' : '<span class="badge green">نشط</span>'}
                   <button class="btn btn-sm" data-act="show" data-id="${esc(v.id)}" type="button">${icon.eye({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}عرض</button>
+                  <button class="btn btn-sm btn-danger" data-act="delete" data-id="${esc(v.id)}" data-num="${esc(v.voucher_number)}" type="button" title="حذف السند نهائياً من قاعدة البيانات">
+                    ${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:2px' })}حذف
+                  </button>
                 </td>
               </tr>`).join('') : '<tr><td colspan="10" class="text-center muted" style="padding:2rem">لا توجد سندات مطابقة</td></tr>')}
             </tbody>
@@ -477,6 +520,25 @@ export async function render(view, ctx) {
     }
 
     delegate(view, 'click', '[data-act="show"]', async (e, btn) => { await showVoucher(btn.dataset.id, reload); });
+
+    delegate(view, 'click', '[data-act="delete"]', async (e, btn) => {
+      const id = btn.dataset.id;
+      const num = btn.dataset.num || '';
+      const ok = await confirmDialog({
+        title: `حذف سند القبض ${num} نهائياً`,
+        message: 'هل أنت متأكد من حذف هذا السند نهائياً من قاعدة البيانات؟ سيتم مسح السند والقيود المرتبطة به بالكامل.',
+        danger: true,
+        okText: 'نعم، حذف نهائي',
+      });
+      if (!ok) return;
+      try {
+        await api.del(`/api/vouchers/${id}`);
+        toastOk(`تم حذف سند القبض ${num} نهائياً من قاعدة البيانات`);
+        await reload();
+      } catch (err) {
+        toastErr(err.message || 'فشل حذف السند');
+      }
+    });
 
     const headers = ['رقم السند', 'التاريخ', 'العميل', 'الشركة', 'طريقة السداد', 'المرجع', 'المبلغ', 'الموزّع', 'غير موزّع', 'الحالة'];
     const rows = () => state.data.items.map((v) => [v.voucher_number, v.voucher_date, v.client_name, v.issuer_name,

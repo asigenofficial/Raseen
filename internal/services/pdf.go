@@ -29,6 +29,12 @@ func FindAvailableBrowser() string {
 		`/usr/local/bin/chrome`,
 		`/usr/bin/chrome`,
 	}
+	if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+		candidates = append(candidates,
+			filepath.Join(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
+			filepath.Join(localAppData, "Microsoft", "Edge", "Application", "msedge.exe"),
+		)
+	}
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {
 			return c

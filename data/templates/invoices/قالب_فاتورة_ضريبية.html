@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="utf-8" />
+  <title>فاتورة بيع / TAX INVOICE</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 8mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 11.5px;
+      color: #2b1f09;
+      background: #f1f5f9;
+      padding: 10px;
+      direction: rtl;
+    }
+
+    /* ── Outer Golden Double Frame ── */
+    .invoice-frame {
+      width: 210mm;
+      min-height: 290mm;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 2px solid #b89758;
+      outline: 1px solid #b89758;
+      outline-offset: -5px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    }
+
+    /* ── Header Section ── */
+    .header-wrap {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr 105px;
+      align-items: center;
+      border-bottom: 2px solid #b89758;
+      padding-bottom: 12px;
+      margin-bottom: 10px;
+      gap: 10px;
+    }
+
+    /* Right Side: Seller Info */
+    .seller-info {
+      text-align: right;
+    }
+
+    .seller-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #2e2311;
+      margin-bottom: 4px;
+      line-height: 1.3;
+    }
+
+    .seller-address {
+      font-size: 11px;
+      color: #554426;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+
+    .seller-meta-row {
+      font-size: 11px;
+      color: #3b2c12;
+      line-height: 1.6;
+    }
+
+    .seller-meta-row strong {
+      font-family: Tahoma, Arial, sans-serif;
+      color: #1a1408;
+    }
+
+    /* Center: Logo Slot & Tax Invoice Badge */
+    .center-header {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .logo-placeholder {
+      max-height: 75px;
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-placeholder img {
+      max-height: 75px;
+      max-width: 160px;
+      object-fit: contain;
+    }
+
+    .tax-invoice-badge {
+      background: #ebd8b0;
+      border: 1.5px solid #b89758;
+      color: #3b2a0c;
+      font-weight: 800;
+      font-size: 13px;
+      padding: 4px 18px;
+      border-radius: 2px;
+      display: inline-block;
+      letter-spacing: 0.5px;
+    }
+
+    /* Left: QR Code */
+    .qr-frame {
+      width: 105px;
+      height: 105px;
+      border: 1.5px solid #b89758;
+      background: #ffffff;
+      padding: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-inline-start: auto;
+    }
+
+    .qr-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    /* ── Customer & Invoice Details Table ── */
+    .info-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-bottom: 12px;
+      border: 1px solid #b89758;
+    }
+
+    .info-table td {
+      padding: 5px 8px;
+      border: 1px solid #b89758;
+    }
+
+    .info-table td.lbl {
+      background: #f7ebd1;
+      color: #3b2a0c;
+      font-weight: 700;
+    }
+
+    .info-table td.val {
+      background: #ffffff;
+      color: #1a1408;
+      font-weight: 600;
+    }
+
+    /* ── Items Table ── */
+    .items-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 10px;
+      position: relative;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11.5px;
+      border: 1px solid #b89758;
+    }
+
+    .items-table thead tr {
+      background: #e8d7b0;
+      color: #3d2b0f;
+      font-weight: 800;
+    }
+
+    .items-table th {
+      padding: 6px 6px;
+      border: 1px solid #b89758;
+      text-align: center;
+      font-size: 11.5px;
+    }
+
+    .items-table td {
+      padding: 6px 8px;
+      border: 1px solid #d4c29a;
+      font-size: 11px;
+      color: #2b1f09;
+    }
+
+
+    /* ── Bottom Section: Notes & Totals ── */
+    .bottom-summary-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 14px;
+      margin-top: 10px;
+      align-items: stretch;
+    }
+
+    /* Notes Box (Left in RTL) */
+    .notes-box-container {
+      border: 1.5px solid #b89758;
+      background: #ffffff;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      min-height: 120px;
+    }
+
+    .notes-title-header {
+      text-align: center;
+      font-weight: 800;
+      font-size: 12px;
+      color: #3b2a0c;
+      border-bottom: 1px dashed #d4c29a;
+      padding-bottom: 4px;
+      margin-bottom: 8px;
+    }
+
+    .notes-content-body {
+      font-size: 11px;
+      color: #554426;
+      line-height: 1.7;
+      flex: 1;
+    }
+
+    /* Totals Table (Right in RTL) */
+    .totals-grid-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11.5px;
+      border: 1.5px solid #b89758;
+    }
+
+    .totals-grid-table td {
+      padding: 6px 10px;
+      border: 1px solid #b89758;
+    }
+
+    .totals-grid-table td.lbl {
+      background: #f7ebd1;
+      color: #3b2a0c;
+      font-weight: 700;
+      width: 150px;
+    }
+
+    .totals-grid-table td.val {
+      background: #ffffff;
+      font-family: Tahoma, Arial, sans-serif;
+      font-weight: 800;
+      text-align: center;
+      font-size: 12px;
+      color: #1a1408;
+    }
+
+    .totals-grid-table td.cur {
+      background: #f7ebd1;
+      color: #3b2a0c;
+      text-align: center;
+      width: 38px;
+      font-weight: 800;
+      font-size: 12px;
+    }
+
+    /* ── Footer ── */
+    .invoice-footer-line {
+      margin-top: 14px;
+      border-top: 1px solid #b89758;
+      padding-top: 6px;
+      text-align: center;
+      font-size: 10.5px;
+      color: #554426;
+      font-weight: 600;
+    }
+
+    .page-number-indicator {
+      text-align: center;
+      font-size: 9.5px;
+      color: #8c764e;
+      margin-top: 3px;
+    }
+
+    /* Print Media Rules */
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .invoice-frame {
+        box-shadow: none;
+        width: 100%;
+        min-height: auto;
+        height: 100%;
+        margin: 0;
+        padding: 10mm;
+        border: 2px solid #b89758;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="invoice-frame">
+    <div>
+      <!-- ── Top Header ── -->
+      <header class="header-wrap">
+        <!-- Right: Seller Details -->
+        <div class="seller-info">
+          <div class="seller-title">{{seller_name}}</div>
+          <div class="seller-address">{{seller_address}}</div>
+          <div class="seller-meta-row">الرقم الضريبي: <strong>{{seller_tax}}</strong></div>
+          <div class="seller-meta-row">السجل التجاري: <strong>{{seller_cr}}</strong></div>
+          <div class="seller-meta-row">جوال: <strong>{{seller_phone}}</strong></div>
+        </div>
+
+        <!-- Center: Logo Slot & Tax Invoice Badge -->
+        <div class="center-header">
+          <div class="logo-placeholder">
+            <!-- Logo will be inserted by user or system -->
+            <img src="" alt="" style="display:none;" />
+          </div>
+          <div class="tax-invoice-badge">
+            TAX INVOICE / فاتورة بيع
+          </div>
+        </div>
+
+        <!-- Left: ZATCA QR Code -->
+        <div class="qr-frame">
+          {{qr_code}}
+        </div>
+      </header>
+
+      <!-- ── Customer & Invoice Details Table ── -->
+      <table class="info-table">
+        <tr>
+          <td class="lbl" style="width: 13%;">العميل:</td>
+          <td class="val" style="width: 47%;"><strong>{{buyer_name}}</strong></td>
+          <td class="lbl" style="width: 16%;">نوع الفاتورة:</td>
+          <td class="val" style="width: 24%; text-align: center;"><strong>{{payment_method}}</strong></td>
+        </tr>
+        <tr>
+          <td class="lbl">العنوان:</td>
+          <td class="val">{{buyer_address}}</td>
+          <td class="lbl">رقم الفاتورة:</td>
+          <td class="val" style="text-align: center; font-family: Tahoma, sans-serif;">
+            <strong>{{invoice_number}}</strong></td>
+        </tr>
+        <tr>
+          <td class="lbl">الرقم الضريبي:</td>
+          <td class="val"><strong style="font-family: Tahoma, sans-serif; letter-spacing: 0.5px;">{{buyer_tax}}</strong>
+          </td>
+          <td class="lbl">تاريخ الفاتورة:</td>
+          <td class="val" style="text-align: center; font-family: Tahoma, sans-serif;"><strong>{{issue_date}}
+              {{issue_time}}</strong></td>
+        </tr>
+      </table>
+
+      <!-- ── Items Table ── -->
+      <div class="items-section">
+        {{items_table}}
+      </div>
+
+    </div>
+
+    <div>
+      <!-- ── Bottom Summary: Notes + Financial Totals ── -->
+      <div class="bottom-summary-grid">
+        <!-- Notes Box (Left in RTL) -->
+        <div class="notes-box-container">
+          <div class="notes-title-header">ملاحظات Notes</div>
+          <div class="notes-content-body">
+            {{notes}}
+          </div>
+        </div>
+
+        <!-- Totals Table (Right in RTL) -->
+        <div>
+          <table class="totals-grid-table">
+            <tr>
+              <td class="lbl">الإجمالي</td>
+              <td class="val">{{subtotal}}</td>
+              <td class="cur" title="ريال سعودي">
+                <svg viewBox="0 0 1124.14 1256.39" width="13" height="15" fill="#3b2a0c" style="vertical-align:middle;display:inline-block;"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg>
+              </td>
+            </tr>
+            <tr>
+              <td class="lbl">الخصم</td>
+              <td class="val">{{discount}}</td>
+              <td class="cur" title="ريال سعودي">
+                <svg viewBox="0 0 1124.14 1256.39" width="13" height="15" fill="#3b2a0c" style="vertical-align:middle;display:inline-block;"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg>
+              </td>
+            </tr>
+            <tr>
+              <td class="lbl">القيمة المضافة (15%) VAT</td>
+              <td class="val">{{tax_amount}}</td>
+              <td class="cur" title="ريال سعودي">
+                <svg viewBox="0 0 1124.14 1256.39" width="13" height="15" fill="#3b2a0c" style="vertical-align:middle;display:inline-block;"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg>
+              </td>
+            </tr>
+            <tr>
+              <td class="lbl" style="background:#eedab0; font-weight:900;">الإجمالي شامل الضريبة</td>
+              <td class="val" style="background:#fefbf4; font-size:13.5px; font-weight:900; color:#2e2311;">
+                {{grand_total}}</td>
+              <td class="cur" style="background:#eedab0; font-weight:900;" title="ريال سعودي">
+                <svg viewBox="0 0 1124.14 1256.39" width="13" height="15" fill="#3b2a0c" style="vertical-align:middle;display:inline-block;"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg>
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Footer ── -->
+      <footer class="invoice-footer-line">
+        {{seller_address}} &nbsp;&bull;&nbsp; جوال: {{seller_phone}}
+      </footer>
+    </div>
+  </div>
+
+</body>
+
+</html>

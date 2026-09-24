@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="utf-8" />
+  <title>سند قبض مالي معتمد — {{voucher_number}}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #1a1917;
+      background: #181a1f;
+      padding: 16px;
+      direction: rtl;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .receipt-card {
+      background: #FAF7EE;
+      border: 2px solid #3e3b32;
+      border-radius: 4px;
+      padding: 22px 24px;
+      max-width: 210mm;
+      min-height: 290mm;
+      margin: 0 auto;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* ─── الترويسة العليا ─── */
+    .receipt-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding-bottom: 12px;
+    }
+
+    .header-col-left {
+      text-align: left;
+      direction: ltr;
+      font-family: 'Segoe UI', Arial, sans-serif;
+    }
+
+    .comp-name-en {
+      font-size: 14.5px;
+      font-weight: 900;
+      color: #161718;
+      line-height: 1.25;
+      margin-bottom: 4px;
+    }
+
+    .comp-meta-en {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #2b2a26;
+      line-height: 1.45;
+    }
+
+    .header-col-right {
+      text-align: right;
+      direction: rtl;
+      font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+    }
+
+    .comp-name-ar {
+      font-size: 15.5px;
+      font-weight: 900;
+      color: #111722;
+      line-height: 1.25;
+      margin-bottom: 4px;
+    }
+
+    .comp-meta-ar {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #2b2a26;
+      line-height: 1.45;
+    }
+
+    /* ─── الصندوق الأول: ملخص السند ─── */
+    .summary-box {
+      border: 1.5px solid #c5c0b4;
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin-top: 14px;
+      background: #ffffff;
+    }
+
+    .summary-top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .receipt-circle-stamp {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      border: 1.5px solid #2b2924;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      color: #1a1916;
+      font-family: Arial, sans-serif;
+    }
+
+    .receipt-title-wrap {
+      text-align: right;
+    }
+
+    .slip-subtext {
+      font-size: 11px;
+      font-weight: 700;
+      color: #5e584c;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+    }
+
+    .slip-main-title {
+      font-size: 22px;
+      font-weight: 900;
+      color: #0e1620;
+      margin-top: 2px;
+    }
+
+    /* كبسولات ملخص السند الأربعة */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: 1.15fr 0.95fr 1fr 1.6fr;
+      gap: 10px;
+      direction: rtl;
+    }
+
+    .kpi-cell {
+      border: 1px dashed #cfc9bd;
+      border-radius: 8px;
+      padding: 9px 8px;
+      text-align: center;
+      background: #ffffff;
+    }
+
+    .kpi-title {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #676d73;
+      margin-bottom: 4px;
+    }
+
+    .kpi-val {
+      font-size: 13.5px;
+      font-weight: 900;
+      color: #1a1917;
+    }
+
+    .kpi-val-amt {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      direction: ltr;
+    }
+
+    /* شريط التفقيط */
+    .tafqeet-bar {
+      border: 1px dashed #cfc9bd;
+      border-radius: 8px;
+      padding: 9px 14px;
+      text-align: center;
+      margin-top: 12px;
+      font-size: 12px;
+      font-weight: 900;
+      color: #1a1917;
+      background: #ffffff;
+    }
+
+    /* ─── الصندوق الثاني: بيان السند ─── */
+    .statement-box {
+      border: 1.5px solid #c5c0b4;
+      border-radius: 12px;
+      padding: 16px 22px;
+      margin-top: 14px;
+      background: #FAF7EE;
+    }
+
+    .statement-header {
+      font-size: 13.5px;
+      font-weight: 900;
+      color: #111722;
+      text-align: right;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed #c5c0b4;
+      margin-bottom: 6px;
+    }
+
+    .statement-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px dashed #ded8cb;
+      padding: 8px 0;
+      font-size: 12px;
+    }
+
+    .statement-row:last-child {
+      border-bottom: none;
+      padding-bottom: 2px;
+    }
+
+    .statement-label {
+      color: #5e584c;
+      font-weight: 700;
+      width: 140px;
+      text-align: right;
+    }
+
+    .statement-value {
+      color: #1a1917;
+      font-weight: 800;
+      text-align: left;
+      flex: 1;
+    }
+
+    .statement-value.amt {
+      direction: ltr;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 4px;
+      font-weight: 900;
+    }
+
+    /* ─── الصندوق الثالث: التواقيع ─── */
+    .signatures-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-top: 14px;
+      direction: rtl;
+    }
+
+    .sig-card {
+      border: 1px dashed #cfc9bd;
+      border-radius: 8px;
+      padding: 12px 14px;
+      text-align: center;
+      background: #FAF7EE;
+    }
+
+    .sig-head {
+      font-size: 11px;
+      font-weight: 800;
+      color: #5e584c;
+      margin-bottom: 24px;
+    }
+
+    .sig-dots-line {
+      border-bottom: 1.5px dotted #8f897b;
+      width: 85%;
+      margin: 0 auto;
+    }
+
+    /* ─── التذييل السفلي ─── */
+    .receipt-footer {
+      border-top: 1.5px solid #8F897B;
+      margin-top: 16px;
+      padding-top: 10px;
+      text-align: center;
+    }
+
+    .footer-address {
+      font-size: 11px;
+      font-weight: 800;
+      color: #2b2924;
+    }
+
+    .footer-card-tag {
+      font-size: 11px;
+      font-weight: 900;
+      color: #111722;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+      font-family: Arial, sans-serif;
+    }
+
+    .sar-sym {
+      display: inline-flex;
+      align-items: center;
+      vertical-align: middle;
+      margin: 0 2px;
+      font-family: Arial, sans-serif;
+      font-weight: 900;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
+      }
+
+      .receipt-card {
+        box-shadow: none;
+        margin: 0;
+        max-width: 100%;
+        border: 2px solid #3e3b32 !important;
+        background: #FAF7EE !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="receipt-card">
+
+    <!-- ── الترويسة ── -->
+    <header class="receipt-header">
+      <!-- اليمين: باللغة العربية (Right in RTL) -->
+      <div class="header-col-right">
+        <div class="comp-name-ar">{{seller_name}}</div>
+        <div class="comp-meta-ar">{{seller_meta_ar}}</div>
+      </div>
+
+      <!-- اليسار: باللغة الإنجليزية (Left in RTL) -->
+      <div class="header-col-left">
+        <div class="comp-name-en">{{seller_name_en}}</div>
+        <div class="comp-meta-en">{{seller_meta_en}}</div>
+      </div>
+    </header>
+
+    <!-- ── الصندوق الأول: قسيمة تحصيل / سند قبض ── -->
+    <section class="summary-box">
+      <!-- العنوان على اليمين والختم الدائري على اليسار -->
+      <div class="summary-top-row">
+        <!-- اليمين: عنوان السند عربي وإنجليزي -->
+        <div class="receipt-title-wrap">
+          <div class="slip-subtext">Payment Slip / قسيمة تحصيل</div>
+          <div class="slip-main-title">سند قبض</div>
+        </div>
+        <!-- اليسار: ختم الدائرة RECEIPT -->
+        <div class="receipt-circle-stamp">RECEIPT</div>
+      </div>
+
+      <!-- الكبسولات الأربعة (من اليمين إلى اليسار) -->
+      <div class="kpi-row">
+        <!-- 1. أقصى اليمين: المبلغ المحصل -->
+        <div class="kpi-cell">
+          <div class="kpi-title">المبلغ المحصل</div>
+          <div class="kpi-val kpi-val-amt">
+            <span>{{grand_total}}</span>
+            <span class="sar-sym">&#xFDFB;</span>
+          </div>
+        </div>
+
+        <!-- 2. الثاني من اليمين: رقم السند -->
+        <div class="kpi-cell">
+          <div class="kpi-title">رقم السند</div>
+          <div class="kpi-val">{{voucher_number}}</div>
+        </div>
+
+        <!-- 3. الثالث من اليمين: تاريخ السند -->
+        <div class="kpi-cell">
+          <div class="kpi-title">تاريخ السند</div>
+          <div class="kpi-val">{{voucher_date}}</div>
+        </div>
+
+        <!-- 4. أقصى اليسار: العميل -->
+        <div class="kpi-cell">
+          <div class="kpi-title">العميل</div>
+          <div class="kpi-val" style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            {{buyer_name}}
+          </div>
+        </div>
+      </div>
+
+      <!-- التفقيط -->
+      <div class="tafqeet-bar">
+        فقط مبلغ وقدره {{amount_in_words}} لا غير
+      </div>
+    </section>
+
+    <!-- ── الصندوق الثاني: بيان السند ── -->
+    <section class="statement-box">
+      <div class="statement-header">بيان السند</div>
+
+      <div class="statement-row">
+        <div class="statement-label">استلمنا من</div>
+        <div class="statement-value"><strong>{{buyer_name}}</strong></div>
+      </div>
+
+      <div class="statement-row">
+        <div class="statement-label">العملة</div>
+        <div class="statement-value">ريال سعودي</div>
+      </div>
+
+      <div class="statement-row">
+        <div class="statement-label">المبلغ</div>
+        <div class="statement-value amt">
+          <span>{{grand_total}}</span>
+          <span class="sar-sym">&#xFDFB;</span>
+        </div>
+      </div>
+
+      <div class="statement-row">
+        <div class="statement-label">ملاحظات السند</div>
+        <div class="statement-value">{{notes}}</div>
+      </div>
+    </section>
+
+    <!-- ── الصندوق الثالث: التواقيع (من اليمين لليسار) ── -->
+    <section class="signatures-row">
+      <!-- اليمين -->
+      <div class="sig-card">
+        <div class="sig-head">الصندوق</div>
+        <div class="sig-dots-line"></div>
+      </div>
+
+      <!-- الوسط -->
+      <div class="sig-card">
+        <div class="sig-head">توقيع المحاسب</div>
+        <div class="sig-dots-line"></div>
+      </div>
+
+      <!-- اليسار -->
+      <div class="sig-card">
+        <div class="sig-head">توقيع وختم</div>
+        <div class="sig-dots-line"></div>
+      </div>
+    </section>
+
+    <!-- ── التذييل السفلي ── -->
+    <footer class="receipt-footer">
+      <div class="footer-address">{{seller_address}}</div>
+      <div class="footer-card-tag">RECEIPT CARD</div>
+    </footer>
+
+  </div>
+
+</body>
+
+</html>

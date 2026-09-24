@@ -197,7 +197,6 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		invoiceNumber = num
 		sequenceNo = seq
 	}
-	if err := tx.QueryRow("SELECT COALESCE(MAX(sequence_no),0)+1 FROM invoices WHERE issuer_id=?",issuer.ID).Scan(&sequenceNo); err != nil { return nil,err }
 
 	// Previous invoice hash
 	var pih string
@@ -1124,13 +1123,95 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		buyerAddr = client.Address
 	}
 
-	qrPayload := zatca.BuildQrPayload(zatca.QrParams{
-		SellerName: issuer.NameAr,
-		VatNumber:  issuer.TaxNumber,
-		Timestamp:  issueDatetime,
-		Total:      models.FmtMoney(grandTotalMinor),
-		VatTotal:   models.FmtMoney(taxTotalMinor),
+	var ublLines []zatca.UblLineItem
+	for _, cl := range computedLines {
+		ublLines = append(ublLines, zatca.UblLineItem{
+			Name:        cl.ItemName,
+			Unit:        cl.Unit,
+			Quantity:    fmt.Sprintf("%.3f", cl.Quantity),
+			UnitPrice:   models.FmtMoney(cl.UnitPrice),
+			TaxRate:     cl.taxRateDisplay,
+			Taxable:     models.FmtMoney(cl.Taxable),
+			TaxAmount:   models.FmtMoney(cl.TaxAmount),
+			RoundingAmt: models.FmtMoney(cl.TotalLine),
+		})
+	}
+
+	ublInv := zatca.UblInvoiceInfo{
+		InvoiceNumber:  inv.InvoiceNumber,
+		UUID:           inv.UUID,
+		IssueDate:      issueDate,
+		IssueTime:      issueTime,
+		InvoiceType:    invoiceType,
+		Subtotal:       models.FmtMoney(subtotalMinor),
+		DiscountAmount: models.FmtMoney(discountTotalMinor),
+		TaxableAmount:  models.FmtMoney(taxableTotalMinor),
+		TaxAmount:      models.FmtMoney(taxTotalMinor),
+		GrandTotal:     models.FmtMoney(grandTotalMinor),
+		TaxRateDisplay: fmt.Sprintf("%.2f", issuer.DefaultTaxRate),
+	}
+
+	ublIssuer := zatca.UblPartyInfo{
+		Name:               issuer.NameAr,
+		TaxNumber:          issuer.TaxNumber,
+		CommercialRegister: issuer.CommercialRegister,
+		Street:             issuer.Street,
+		BuildingNo:         issuer.BuildingNo,
+		District:           issuer.District,
+		City:               issuer.City,
+		PostalCode:         issuer.PostalCode,
+		Country:            issuer.Country,
+	}
+
+	ublClient := zatca.UblPartyInfo{
+		Name:               client.Name,
+		TaxNumber:          client.TaxNumber,
+		CommercialRegister: client.CommercialRegister,
+		Street:             client.Street,
+		BuildingNo:         client.BuildingNo,
+		District:           client.District,
+		City:               client.City,
+		PostalCode:         client.PostalCode,
+		Country:            client.Country,
+	}
+
+	xml := zatca.BuildUblXml(ublInv, ublIssuer, ublClient, ublLines, zatca.UblChainInfo{
+		ICV:      inv.SequenceNo,
+		PIH:      inv.PreviousInvoiceHash,
+		Currency: issuer.Currency,
 	})
+
+	invHash := zatca.InvoiceHash(xml)
+
+	qrParams := zatca.QrParams{
+		SellerName:  issuer.NameAr,
+		VatNumber:   issuer.TaxNumber,
+		Timestamp:   issueDatetime,
+		Total:       models.FmtMoney(grandTotalMinor),
+		VatTotal:    models.FmtMoney(taxTotalMinor),
+		InvoiceHash: invHash,
+	}
+
+	signature := ""
+	signatureMode := "NONE"
+	if zatcaPhase == "PHASE2" {
+		var privKeyEnc sql.NullString
+		var pubKeyDer sql.NullString
+		_ = tx.QueryRow("SELECT private_key_enc, public_key_der FROM issuer_credentials WHERE issuer_id = ?", issuer.ID).
+			Scan(&privKeyEnc, &pubKeyDer)
+		if privKeyEnc.Valid && privKeyEnc.String != "" {
+			if privPem, err := crypto.DecryptSecret(privKeyEnc.String, s.masterKey); err == nil {
+				if sig, err := zatca.SignHash(privPem, invHash); err == nil {
+					signature = sig
+					signatureMode = "LOCAL"
+					qrParams.Signature = sig
+					qrParams.PublicKey = pubKeyDer.String
+				}
+			}
+		}
+	}
+
+	qrPayload := zatca.BuildQrPayload(qrParams)
 
 	pricesIncInt := 0
 	if input.PricesIncludeTax {
@@ -1147,7 +1228,7 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 			due_date = ?, cheque_date = ?, cheque_no = ?, prices_include_tax = ?,
 			seller_name = ?, seller_tax_number = ?, seller_cr = ?, seller_address = ?, seller_address_en = ?,
 			buyer_name = ?, buyer_tax_number = ?, buyer_cr = ?, buyer_address = ?,
-			qr_payload = ?, notes = ?, updated_at = ?
+			qr_payload = ?, invoice_hash = ?, signature = ?, signature_mode = ?, notes = ?, updated_at = ?
 		WHERE id = ?
 	`,
 		client.ID, invoiceType, zatcaPhase,
@@ -1157,11 +1238,20 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		input.DueDate, input.ChequeDate, input.ChequeNo, pricesIncInt,
 		issuer.NameAr, issuer.TaxNumber, issuer.CommercialRegister, sellerAddr, issuer.AddressEn,
 		client.Name, client.TaxNumber, client.CommercialRegister, buyerAddr,
-		qrPayload, input.Notes, nowIso, id,
+		qrPayload, invHash, signature, signatureMode, input.Notes, nowIso, id,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update invoice: %w", err)
 	}
+
+	_, _ = tx.Exec(`
+		INSERT INTO invoice_documents (invoice_id, xml, issuer_json, client_json)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(invoice_id) DO UPDATE SET
+			xml = excluded.xml,
+			issuer_json = excluded.issuer_json,
+			client_json = excluded.client_json
+	`, id, xml, mustJSON(issuer), mustJSON(client))
 
 	if _, err := tx.Exec("DELETE FROM invoice_items WHERE invoice_id = ?", id); err != nil {
 		return nil, fmt.Errorf("failed to delete old invoice items: %w", err)
