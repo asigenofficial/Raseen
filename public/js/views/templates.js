@@ -49,32 +49,45 @@ function buildMockInvoice(issuer, phase = 'PHASE1') {
     payment_label: 'نقدي',
     zatca_phase: phase,
     signature_mode: isPhase2 ? 'LOCAL' : 'NONE',
-    seller_name: issuer.name_ar || '',
-    seller_name_en: issuer.name_en || '',
-    seller_tax_number: issuer.tax_number || '',
-    seller_cr: issuer.commercial_register || '',
-    seller_address: [issuer.building_no, issuer.street, issuer.district, issuer.city].filter(Boolean).join(' - '),
-    seller_address_en: issuer.address_en || '',
-    buyer_name: 'العميل',
-    buyer_tax_number: '',
-    buyer_cr: '',
-    buyer_address: '',
+    seller_name: 'اسم الشركة',
+    seller_name_en: 'Company Name',
+    seller_tax_number: 'الرقم الضريبي',
+    seller_cr: 'السجل التجاري',
+    seller_address: 'العنوان الوطني',
+    seller_address_en: 'National Address',
+    buyer_name: 'اسم العميل',
+    buyer_tax_number: 'الرقم الضريبي للعميل',
+    buyer_cr: 'السجل التجاري للعميل',
+    buyer_address: 'عنوان العميل',
     qr_payload: '',
     invoice_hash: '',
-    notes: '',
+    notes: 'ملاحظات وبيان الفاتورة',
     lines: [
       {
         line_no: 1,
         item_code: 'ITM-01',
-        item_name: 'بند الفاتورة',
+        item_name: 'اسم الصنف أو الخدمة 1',
         unit: 'حبة',
         quantity: 1,
-        unit_price: 1000,
+        unit_price: 100,
         discount: 0,
-        taxable: 1000,
+        taxable: 100,
         tax_rate: 15,
-        tax_amount: 150,
-        total_line: 1150,
+        tax_amount: 15,
+        total_line: 115,
+      },
+      {
+        line_no: 2,
+        item_code: 'ITM-02',
+        item_name: 'اسم الصنف أو الخدمة 2',
+        unit: 'خدمة',
+        quantity: 2,
+        unit_price: 50,
+        discount: 0,
+        taxable: 100,
+        tax_rate: 15,
+        tax_amount: 15,
+        total_line: 115,
       },
     ],
   };
@@ -82,18 +95,18 @@ function buildMockInvoice(issuer, phase = 'PHASE1') {
 
 const mockClient = {
   id: '',
-  name: 'العميل',
-  client_code: '',
-  tax_number: '',
+  name: 'اسم العميل',
+  client_code: 'CLI-001',
+  tax_number: 'الرقم الضريبي للعميل',
   building_no: '',
-  street: '',
+  street: 'عنوان العميل',
   district: '',
-  city: '',
+  city: 'المدينة',
   postal_code: '',
-  country: '',
-  address: '',
-  mobile: '',
-  phone: '',
+  country: 'SA',
+  address: 'عنوان العميل',
+  mobile: 'رقم الهاتف / الجوال',
+  phone: 'رقم الهاتف / الجوال',
 };
 
 function formatBytes(bytes) {
@@ -220,27 +233,6 @@ export async function render(view) {
   let invoiceState = 'normal';
 
   function getDynamicPreviewInvoice() {
-    if (liveInvoices.length > 0) {
-      const realInv = liveInvoices[0];
-      const matchedClient = liveClients.find((c) => c.id === realInv.client_id) || liveClients[0] || {};
-      return {
-        ...realInv,
-        currency: realInv.currency || activeIssuer.currency || 'SAR',
-        seller_name: activeIssuer.name_ar || '',
-        seller_name_en: activeIssuer.name_en || '',
-        seller_tax_number: activeIssuer.tax_number || '',
-        seller_cr: activeIssuer.commercial_register || '',
-        seller_address: [activeIssuer.building_no, activeIssuer.street, activeIssuer.district, activeIssuer.city].filter(Boolean).join(' - '),
-        seller_address_en: activeIssuer.address_en || '',
-        buyer_name: realInv.client_name || matchedClient.name || 'العميل',
-        buyer_tax_number: realInv.client_tax_number || matchedClient.tax_number || '',
-        buyer_cr: matchedClient.commercial_register || '',
-        buyer_address: realInv.client_address || matchedClient.address || '',
-        status_label: realInv.status_label || (realInv.status === 'PAID' ? 'مسددة' : 'معتمدة'),
-        payment_label: realInv.payment_label || 'نقدي',
-        lines: realInv.lines && realInv.lines.length ? realInv.lines : buildMockInvoice(activeIssuer, activeZatcaPhase).lines,
-      };
-    }
     return buildMockInvoice(activeIssuer, activeZatcaPhase);
   }
 
@@ -879,127 +871,48 @@ export async function render(view) {
     if (invoiceState === 'cancelled') invStatus = 'CANCELLED';
     else if (invoiceState === 'draft') invStatus = 'DRAFT';
 
-    const snap = tpl?.style_meta?.snapshot;
-    let issuerToUse = activeIssuer;
-    let clientToUse = liveClients[0] || mockClient;
+    let issuerToUse = {
+      name_ar: 'اسم الشركة',
+      name_en: 'Company Name',
+      tax_number: 'الرقم الضريبي',
+      commercial_register: 'السجل التجاري',
+      building_no: '',
+      street: 'العنوان الوطني',
+      district: '',
+      city: '',
+      address_en: 'National Address',
+      phone: 'رقم الهاتف / الجوال',
+      mobile: 'رقم الهاتف / الجوال',
+      currency: 'SAR',
+    };
+    let clientToUse = {
+      name: 'اسم العميل',
+      tax_number: 'الرقم الضريبي للعميل',
+      commercial_register: 'السجل التجاري للعميل',
+      address: 'عنوان العميل',
+      phone: 'رقم الهاتف / الجوال',
+    };
 
     let invToRender = {
       ...currentInvoice,
       status: invStatus,
-      status_label: invStatus === 'CANCELLED' ? 'ملغاة' : invStatus === 'DRAFT' ? 'مسودة' : (currentInvoice.status_label || 'معتمدة'),
+      status_label: invStatus === 'CANCELLED' ? 'ملغاة' : invStatus === 'DRAFT' ? 'مسودة' : 'معتمدة',
       zatca_phase: activeZatcaPhase,
       signature_mode: activeZatcaPhase === 'PHASE2' ? 'LOCAL' : 'NONE',
+      invoice_number: 'رقم الفاتورة',
+      issue_date: 'تاريخ الفاتورة',
+      payment_label: 'طريقة السداد',
+      payment_method: 'طريقة السداد',
+      seller_name: 'اسم الشركة',
+      seller_name_en: 'Company Name',
+      seller_tax_number: 'الرقم الضريبي',
+      seller_cr: 'السجل التجاري',
+      seller_address: 'العنوان الوطني',
+      buyer_name: 'اسم العميل',
+      buyer_tax_number: 'الرقم الضريبي للعميل',
+      buyer_address: 'عنوان العميل',
+      notes: 'ملاحظات وبيان الفاتورة',
     };
-
-    if (snap && (snap.seller || snap.invoice)) {
-      let sName = snap.seller?.name_ar || '';
-      let sTax = snap.seller?.tax_number || '';
-      let sCr = snap.seller?.commercial_register || '';
-      let sAddr = snap.seller?.address || '';
-
-      if (snap.seller && typeof snap.seller === 'object') {
-        for (const [k, v] of Object.entries(snap.seller)) {
-          if (!v || typeof v !== 'string') continue;
-          const lk = k.toLowerCase();
-          if (!sName && (lk.includes('اسم') || lk.includes('منشأة') || lk.includes('شركة') || lk.includes('مؤسسة') || lk.includes('name') || lk.includes('seller') || lk.includes('المورد'))) sName = v;
-          if (!sTax && (lk.includes('ضريب') || lk.includes('vat') || lk.includes('tax'))) sTax = v;
-          if (!sCr && (lk.includes('سجل') || lk.includes('cr'))) sCr = v;
-          if (!sAddr && (lk.includes('عنوان') || lk.includes('address') || lk.includes('حي') || lk.includes('طريق'))) sAddr = v;
-        }
-      }
-      if (!sName) {
-        sName = tpl?.name_ar || activeIssuer.name_ar;
-      }
-
-      let bName = snap.buyer?.name || '';
-      let bTax = snap.buyer?.tax_number || '';
-      let bAddr = snap.buyer?.address || '';
-      if (snap.buyer && typeof snap.buyer === 'object') {
-        for (const [k, v] of Object.entries(snap.buyer)) {
-          if (!v || typeof v !== 'string') continue;
-          const lk = k.toLowerCase();
-          if (!bName && (lk.includes('اسم') || lk.includes('عميل') || lk.includes('مشتري') || lk.includes('buyer') || lk.includes('client'))) bName = v;
-          if (!bTax && (lk.includes('ضريب') || lk.includes('vat') || lk.includes('tax'))) bTax = v;
-          if (!bAddr && (lk.includes('عنوان') || lk.includes('address') || lk.includes('حي'))) bAddr = v;
-        }
-      }
-      if (!bName) bName = mockClient.name;
-
-      issuerToUse = {
-        ...activeIssuer,
-        name_ar: sName || activeIssuer.name_ar,
-        name_en: activeIssuer.name_en || '',
-        tax_number: sTax || activeIssuer.tax_number,
-        commercial_register: sCr || activeIssuer.commercial_register,
-        building_no: '',
-        street: sAddr || activeIssuer.street || '',
-        district: '',
-        city: '',
-        address_en: '',
-      };
-
-      clientToUse = {
-        ...mockClient,
-        name: bName || mockClient.name,
-        tax_number: bTax || mockClient.tax_number,
-        commercial_register: snap.buyer?.cr || '',
-        address: bAddr || mockClient.address,
-      };
-
-      const dateStr = (snap.invoice?.issue_date || new Date().toISOString().slice(0, 10)) + 'T14:30:00Z';
-      const grandTotal = snap.invoice?.grand_total ?? currentInvoice.grand_total;
-      const taxAmount = snap.invoice?.tax_amount ?? currentInvoice.tax_amount;
-
-      const qrPayload = generateZatcaTlvBase64(
-        sName || activeIssuer.name_ar,
-        sTax || activeIssuer.tax_number,
-        dateStr,
-        grandTotal,
-        taxAmount
-      );
-
-      let mergedLines = currentInvoice.lines;
-      if (snap.invoice?.lines && snap.invoice.lines.length) {
-        mergedLines = snap.invoice.lines.map((sl, idx) => {
-          const fallbackLine = currentInvoice.lines[idx % currentInvoice.lines.length] || {};
-          return {
-            ...fallbackLine,
-            ...sl,
-            line_no: idx + 1,
-            item_name: sl['item_name'] || sl['السلعة أو الخدمة'] || sl['الصنف'] || sl['الوصف'] || fallbackLine.item_name,
-            quantity: Number(sl['quantity'] || sl['الكمية'] || fallbackLine.quantity) || 1,
-            unit_price: Number(sl['unit_price'] || sl['سعر الوحدة'] || sl['السعر'] || fallbackLine.unit_price) || 100,
-            total_line: Number(sl['total_line'] || sl['الإجمالي شامل الضريبة'] || sl['الإجمالي'] || fallbackLine.total_line) || 115,
-            tax_amount: Number(sl['tax_amount'] || sl['قيمة الضريبة'] || fallbackLine.tax_amount) || 15,
-            taxable: Number(sl['taxable'] || sl['الصافي قبل الضريبة'] || fallbackLine.taxable) || 100,
-          };
-        });
-      }
-
-      invToRender = {
-        ...invToRender,
-        invoice_number: snap.invoice?.invoice_number || currentInvoice.invoice_number,
-        issue_date: snap.invoice?.issue_date || currentInvoice.issue_date,
-        payment_label: snap.invoice?.payment_label || currentInvoice.payment_label,
-        seller_name: sName || activeIssuer.name_ar,
-        seller_name_en: activeIssuer.name_en || '',
-        seller_tax_number: sTax || activeIssuer.tax_number,
-        seller_cr: sCr || activeIssuer.commercial_register,
-        seller_address: sAddr || activeIssuer.address,
-        buyer_name: bName || mockClient.name,
-        buyer_tax_number: bTax || mockClient.tax_number,
-        buyer_address: bAddr || mockClient.address,
-        subtotal: snap.invoice?.subtotal ?? currentInvoice.subtotal,
-        discount_amount: snap.invoice?.discount_amount ?? currentInvoice.discount_amount,
-        taxable_amount: snap.invoice?.taxable_amount ?? currentInvoice.taxable_amount,
-        tax_amount: taxAmount,
-        grand_total: grandTotal,
-        paid_amount: grandTotal,
-        remaining_amount: 0,
-        qr_payload: qrPayload || currentInvoice.qr_payload,
-        lines: mergedLines,
-      };
-    }
 
     return { issuerToUse, clientToUse, invToRender };
   }
@@ -1134,7 +1047,7 @@ export async function render(view) {
     });
 
     const m = modal({
-      title: `معاينة الفاتورة: ${tpl?.name_ar || activeIssuer.name_ar}`,
+      title: `معاينة الفاتورة: ${tpl?.name_ar || tpl?.name || 'قالب الفاتورة'}`,
       wide: true,
       body: html`
         <div style="background:#0b101c; padding:1.5rem; border-radius:8px; display:flex; justify-content:center; overflow:auto; max-height:78vh;">
