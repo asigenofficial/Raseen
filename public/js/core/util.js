@@ -597,7 +597,7 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       return docDate;
     }
     if (k === 'due_date') return invoice?.due_date || '';
-    if (k === 'issue_time' || k === 'time') return invoice?.issue_time || '12:00:00';
+    if (k === 'issue_time' || k === 'time') return invoice?.issue_time || '';
 
     // 5. المبالغ المالية
     if (k === 'amount' || k === 'grand_total' || k === 'total' || k === 'total_amount' || k === 'net_amount') {
@@ -656,13 +656,13 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       return (p.includes('card') || p.includes('pos') || p.includes('شبكة') || p.includes('مدى')) ? '✓' : '';
     }
     if (k === 'payment_method' || k === 'payment_type' || k === 'payment_label' || k === 'payment_mode') {
-      return voucher?.payment_label || voucher?.payment_type || invoice?.payment_label || invoice?.payment_method || 'نقداً';
+      return voucher?.payment_label || voucher?.payment_type || invoice?.payment_label || invoice?.payment_method || '';
     }
     if (k === 'notes' || k === 'paid_for' || k === 'description' || k === 'memo' || k === 'statement') {
-      return doc.notes || (voucher ? 'سداد دفعات مالية تحت الحساب' : '');
+      return doc.notes || '';
     }
     if (k === 'reference_no' || k === 'cheque_no' || k === 'ref_no' || k === 'check_number') {
-      return voucher?.reference_no || '—';
+      return voucher?.reference_no || '';
     }
     if (k === 'currency_symbol' || k === 'sar_symbol') {
       return `<svg viewBox="0 0 1124.14 1256.39" width="0.88em" height="0.88em" class="sar-sym" style="vertical-align:-0.12em;display:inline-block;fill:currentColor;margin:0 2px;" aria-label="ريال سعودي" title="ريال سعودي"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg>`;
