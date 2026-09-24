@@ -1213,29 +1213,35 @@ export async function render(view) {
   async function openVoucherFullscreenPreview(tplId) {
     const tpl = excelTemplates.find((t) => t.id === tplId) || { id: tplId, name_ar: 'سند قبض' };
 
-    // استخدام سند حقيقي ومسجل فعلياً للمنشأة بدون أي بيانات أو أسماء وهمية ثابتة
-    const realVoucher = liveVouchers[0];
-    const voucherToUse = realVoucher ? {
-      ...realVoucher,
-      total_amount: Number(realVoucher.total_amount || 0),
-      allocated_amount: Number(realVoucher.allocated_total || realVoucher.allocated_amount || 0),
-      unallocated: Number(realVoucher.unallocated || 0),
-    } : {
-      voucher_number: `${activeIssuer.invoice_prefix || 'REC'}-${new Date().getFullYear()}-0001`,
-      voucher_date: new Date().toISOString().split('T')[0],
-      total_amount: 1000.00,
-      allocated_amount: 1000.00,
-      unallocated: 0.00,
-      payment_label: 'تحويل بنكي',
-      reference_no: '—',
-      notes: 'سداد دفعات مالية تحت الحساب',
-      created_by: 'النظام',
-      status: 'ACTIVE',
+    // عرض قالب السند كنموذج فارغ تماماً بدون أي بيانات شركة أو عميل لأنه قالب خام
+    const blankIssuer = {
+      name_ar: '',
+      name_en: '',
+      tax_number: '',
+      commercial_register: '',
+      building_no: '',
+      street: '',
+      district: '',
+      city: '',
+      address_en: '',
+      phone: '',
+      mobile: '',
     };
-
-    const clientToUse = liveClients.find((c) => c.id === voucherToUse.client_id)
-      || liveClients[0]
-      || { name: voucherToUse.client_name || 'العميل المعتمد', client_code: 'CLI-001' };
+    const blankClient = {
+      name: '',
+      tax_number: '',
+      commercial_register: '',
+      address: '',
+    };
+    const blankVoucher = {
+      voucher_number: '',
+      voucher_date: '',
+      total_amount: '',
+      amount_in_words: '',
+      payment_label: '',
+      reference_no: '',
+      notes: '',
+    };
 
     let docHtml = '';
     try {
@@ -1244,16 +1250,16 @@ export async function render(view) {
         const rawHtml = await res.text();
         if (rawHtml) {
           docHtml = fillDynamicTemplateHtml(rawHtml, {
-            issuer: activeIssuer,
-            client: clientToUse,
-            voucher: voucherToUse,
+            issuer: blankIssuer,
+            client: blankClient,
+            voucher: blankVoucher,
           });
         }
       }
     } catch {}
 
     if (!docHtml) {
-      docHtml = voucherPrint({ voucher: voucherToUse, issuer: activeIssuer, client: clientToUse, style: tplId });
+      docHtml = voucherPrint({ voucher: blankVoucher, issuer: blankIssuer, client: blankClient, style: tplId });
     }
 
     const m = modal({
