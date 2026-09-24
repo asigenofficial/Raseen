@@ -1955,11 +1955,19 @@ func (s *Server) Handler() http.Handler {
 				return
 			}
 			defer fIndex.Close()
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 			_, _ = io.Copy(w, fIndex)
 			return
 		}
 		defer f.Close()
+
+		// Set anti-stale cache control for ES module scripts and html
+		if strings.HasSuffix(path, ".js") {
+			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		} else if strings.HasSuffix(path, ".html") || strings.HasSuffix(path, ".css") {
+			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		}
 
 		fileServer.ServeHTTP(w, r)
 	})
