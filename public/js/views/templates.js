@@ -842,35 +842,35 @@ export async function render(view) {
     if (isDocOrVoucher) {
       return {
         issuerToUse: {
-          name_ar: '',
-          name_en: '',
-          tax_number: '',
-          commercial_register: '',
+          name_ar: 'اسم الشركة',
+          name_en: 'Company Name',
+          tax_number: 'الرقم الضريبي',
+          commercial_register: 'السجل التجاري',
           building_no: '',
-          street: '',
+          street: 'العنوان الوطني',
           district: '',
           city: '',
-          address_en: '',
-          phone: '',
-          mobile: '',
+          address_en: 'National Address',
+          phone: 'رقم الهاتف / الجوال',
+          mobile: 'رقم الهاتف / الجوال',
         },
         clientToUse: {
-          name: '',
-          tax_number: '',
-          commercial_register: '',
-          address: '',
+          name: 'اسم العميل',
+          tax_number: 'الرقم الضريبي للعميل',
+          commercial_register: 'السجل التجاري للعميل',
+          address: 'عنوان العميل',
           phone: '',
         },
         invToRender: {
-          voucher_number: '',
-          invoice_number: '',
-          voucher_date: '',
-          issue_date: '',
-          grand_total: '',
-          amount_in_words: '',
-          notes: '',
+          voucher_number: 'رقم السند',
+          invoice_number: 'رقم السند',
+          voucher_date: 'تاريخ السند',
+          issue_date: 'تاريخ السند',
+          grand_total: 'المبلغ',
+          amount_in_words: 'المبلغ بالحروف',
+          notes: 'ملاحظات وبيان السند',
           status: 'ISSUED',
-          status_label: '',
+          status_label: 'معتمدة',
         },
       };
     }
@@ -1213,34 +1213,34 @@ export async function render(view) {
   async function openVoucherFullscreenPreview(tplId) {
     const tpl = excelTemplates.find((t) => t.id === tplId) || { id: tplId, name_ar: 'سند قبض' };
 
-    // عرض قالب السند كنموذج فارغ تماماً بدون أي بيانات شركة أو عميل لأنه قالب خام
-    const blankIssuer = {
-      name_ar: '',
-      name_en: '',
-      tax_number: '',
-      commercial_register: '',
+    // عرض قالب السند بمسميات الحقول العامة (اسم الشركة، اسم العميل، إلخ) بدلاً من الاسم المباشر
+    const placeholderIssuer = {
+      name_ar: 'اسم الشركة',
+      name_en: 'Company Name',
+      tax_number: 'الرقم الضريبي',
+      commercial_register: 'السجل التجاري',
       building_no: '',
-      street: '',
+      street: 'العنوان الوطني',
       district: '',
       city: '',
-      address_en: '',
-      phone: '',
-      mobile: '',
+      address_en: 'National Address',
+      phone: 'رقم الهاتف / الجوال',
+      mobile: 'رقم الهاتف / الجوال',
     };
-    const blankClient = {
-      name: '',
-      tax_number: '',
-      commercial_register: '',
-      address: '',
+    const placeholderClient = {
+      name: 'اسم العميل',
+      tax_number: 'الرقم الضريبي للعميل',
+      commercial_register: 'السجل التجاري للعميل',
+      address: 'عنوان العميل',
     };
-    const blankVoucher = {
-      voucher_number: '',
-      voucher_date: '',
-      total_amount: '',
-      amount_in_words: '',
-      payment_label: '',
-      reference_no: '',
-      notes: '',
+    const placeholderVoucher = {
+      voucher_number: 'رقم السند',
+      voucher_date: 'تاريخ السند',
+      total_amount: 'المبلغ',
+      amount_in_words: 'المبلغ بالحروف',
+      payment_label: 'طريقة السداد',
+      reference_no: 'رقم المرجع',
+      notes: 'ملاحظات وبيان السند',
     };
 
     let docHtml = '';
@@ -1250,16 +1250,16 @@ export async function render(view) {
         const rawHtml = await res.text();
         if (rawHtml) {
           docHtml = fillDynamicTemplateHtml(rawHtml, {
-            issuer: blankIssuer,
-            client: blankClient,
-            voucher: blankVoucher,
+            issuer: placeholderIssuer,
+            client: placeholderClient,
+            voucher: placeholderVoucher,
           });
         }
       }
     } catch {}
 
     if (!docHtml) {
-      docHtml = voucherPrint({ voucher: blankVoucher, issuer: blankIssuer, client: blankClient, style: tplId });
+      docHtml = voucherPrint({ voucher: placeholderVoucher, issuer: placeholderIssuer, client: placeholderClient, style: tplId });
     }
 
     const m = modal({

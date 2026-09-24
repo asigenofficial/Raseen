@@ -551,17 +551,31 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
     if (k === 'seller_meta_ar') {
       const parts = [];
       if (addr) parts.push(addr);
-      if (issuer.tax_number) parts.push(`الرقم الضريبي: ${issuer.tax_number}`);
-      if (issuer.commercial_register) parts.push(`السجل التجاري: ${issuer.commercial_register}`);
-      if (issuer.phone || issuer.mobile) parts.push(`جوال: ${issuer.phone || issuer.mobile}`);
+      if (issuer.tax_number) {
+        parts.push(issuer.tax_number.includes('ضريب') ? issuer.tax_number : `الرقم الضريبي: ${issuer.tax_number}`);
+      }
+      if (issuer.commercial_register) {
+        parts.push(issuer.commercial_register.includes('سجل') ? issuer.commercial_register : `السجل التجاري: ${issuer.commercial_register}`);
+      }
+      if (issuer.phone || issuer.mobile) {
+        const ph = issuer.phone || issuer.mobile;
+        parts.push(ph.includes('هاتف') || ph.includes('جوال') ? ph : `جوال: ${ph}`);
+      }
       return parts.join('<br />');
     }
     if (k === 'seller_meta_en') {
       const parts = [];
       if (issuer.address_en) parts.push(issuer.address_en);
-      if (issuer.tax_number) parts.push(`TAX NO.: ${issuer.tax_number}`);
-      if (issuer.commercial_register) parts.push(`Commercial Record No : ${issuer.commercial_register}`);
-      if (issuer.phone || issuer.mobile) parts.push(`PHONE: ${issuer.phone || issuer.mobile}`);
+      if (issuer.tax_number) {
+        parts.push(issuer.tax_number.toUpperCase().includes('TAX') ? issuer.tax_number : `TAX NO.: ${issuer.tax_number}`);
+      }
+      if (issuer.commercial_register) {
+        parts.push(issuer.commercial_register.toUpperCase().includes('CR') || issuer.commercial_register.toUpperCase().includes('RECORD') ? issuer.commercial_register : `Commercial Record No : ${issuer.commercial_register}`);
+      }
+      if (issuer.phone || issuer.mobile) {
+        const ph = issuer.phone || issuer.mobile;
+        parts.push(ph.toUpperCase().includes('PHONE') ? ph : `PHONE: ${ph}`);
+      }
       return parts.join('<br />');
     }
 
@@ -587,6 +601,10 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
 
     // 5. المبالغ المالية
     if (k === 'amount' || k === 'grand_total' || k === 'total' || k === 'total_amount' || k === 'net_amount') {
+      const rawAmt = voucher?.total_amount ?? invoice?.grand_total;
+      if (rawAmt !== undefined && rawAmt !== null && isNaN(Number(rawAmt))) {
+        return String(rawAmt);
+      }
       return docTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     if (k === 'subtotal' || k === 'taxable' || k === 'taxable_amount') {
