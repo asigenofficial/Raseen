@@ -169,22 +169,21 @@ export async function render(view, ctx) {
     const t = lineTotals(l, state.header_discount_percent);
     return `<tr data-key="${l.key}">
       <td class="text-center tiny">${i + 1}</td>
-      <td style="min-width:230px">
+      <td style="min-width:240px">
         <div class="rel">
           <input type="text" data-f="item_name" value="${esc(l.item_name)}" placeholder="اكتب اسم الصنف أو الكود…" autocomplete="off" />
-          <div class="item-search-results hidden" data-results></div>
         </div>
-        ${l.item_code ? `<div class="tiny muted mono">${esc(l.item_code)}</div>` : ''}
+        ${l.item_code ? `<div class="tiny muted mono" style="margin-top:2px">${esc(l.item_code)}</div>` : ''}
       </td>
-      <td style="width:78px"><input type="text" data-f="unit" value="${esc(l.unit)}" /></td>
-      <td style="width:86px"><input type="number" data-f="quantity" value="${l.quantity}" step="0.001" min="0.001" /></td>
-      <td style="width:104px"><input type="number" data-f="unit_price" value="${l.unit_price}" step="0.01" min="0" /></td>
+      <td style="width:80px"><input type="text" data-f="unit" value="${esc(l.unit)}" /></td>
+      <td style="width:90px"><input type="number" data-f="quantity" value="${l.quantity}" step="0.001" min="0.001" /></td>
+      <td style="width:110px"><input type="number" data-f="unit_price" value="${l.unit_price}" step="0.01" min="0" /></td>
       <td style="width:96px"><input type="number" data-f="discount" value="${l.discount}" step="0.01" min="0" /></td>
-      <td style="width:74px"><input type="number" data-f="tax_rate" value="${l.tax_rate}" step="0.01" min="0" max="100" /></td>
-      <td class="text-end num" style="width:92px">${money(t.taxable)}</td>
-      <td class="text-end num" style="width:84px">${money(t.tax)}</td>
-      <td class="text-end num" style="width:98px"><b>${money(t.total)}</b></td>
-      <td class="actions">
+      <td style="width:80px"><input type="number" data-f="tax_rate" value="${l.tax_rate}" step="0.01" min="0" max="100" /></td>
+      <td class="text-end num" style="width:105px;white-space:nowrap">${money(t.taxable)}</td>
+      <td class="text-end num" style="width:95px;white-space:nowrap">${money(t.tax)}</td>
+      <td class="text-end num" style="width:110px;white-space:nowrap"><b>${money(t.total)}</b></td>
+      <td class="actions" style="width:120px">
         <button class="btn btn-sm" data-act="dup" type="button" title="تكرار البند">${icon.copy({ size: 13, style: 'vertical-align:text-bottom;margin-left:2px' })}تكرار</button>
         <button class="btn btn-sm btn-danger" data-act="rm" type="button" title="حذف البند">${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:2px' })}حذف</button>
       </td>
@@ -365,11 +364,19 @@ export async function render(view, ctx) {
           <button class="btn btn-sm btn-primary" id="add-line" type="button">${icon.plus({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}إضافة بند جديد</button>
         </div>
         <div class="table-wrap">
-          <table class="tbl compact" id="lines-tbl">
+          <table class="tbl compact" id="lines-tbl" style="min-width:1020px">
             <thead><tr>
-              <th style="width:26px">#</th><th>الصنف / الوصف</th><th>الوحدة</th><th>الكمية</th>
-              <th>السعر</th><th>الخصم</th><th>الضريبة %</th>
-              <th class="text-end">قبل الضريبة</th><th class="text-end">الضريبة</th><th class="text-end">الإجمالي</th><th></th>
+              <th style="width:32px">#</th>
+              <th style="min-width:240px">الصنف / الوصف</th>
+              <th style="width:80px">الوحدة</th>
+              <th style="width:90px">الكمية</th>
+              <th style="width:110px">السعر</th>
+              <th style="width:96px">الخصم</th>
+              <th style="width:80px">الضريبة %</th>
+              <th class="text-end" style="width:105px;white-space:nowrap">قبل الضريبة</th>
+              <th class="text-end" style="width:95px;white-space:nowrap">الضريبة</th>
+              <th class="text-end" style="width:110px;white-space:nowrap">الإجمالي</th>
+              <th style="width:120px"></th>
             </tr></thead>
             <tbody id="lines">${raw(linesHtml())}</tbody>
           </table>
@@ -595,47 +602,225 @@ export async function render(view, ctx) {
       refreshLines();
     });
 
-    // اختصارات: Enter في آخر بند يضيف بنداً جديداً
+    // اختصارات لوحة المفاتيح والتحكم الذكي بالأسهم و Enter
     delegate($('#lines', view), 'keydown', 'input', (e, input) => {
+      const box = document.getElementById('global-item-search-popover');
+      const isPopoverOpen = box && !box.classList.contains('hidden');
+
+      if (input.dataset.f === 'item_name' && isPopoverOpen) {
+        const items = [...box.querySelectorAll('.popover-item')];
+        if (items.length) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activePopoverIdx = (activePopoverIdx + 1) % items.length;
+            items.forEach((it, i) => it.classList.toggle('sel', i === activePopoverIdx));
+            items[activePopoverIdx]?.scrollIntoView({ block: 'nearest' });
+            return;
+          }
+          if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activePopoverIdx = (activePopoverIdx - 1 + items.length) % items.length;
+            items.forEach((it, i) => it.classList.toggle('sel', i === activePopoverIdx));
+            items[activePopoverIdx]?.scrollIntoView({ block: 'nearest' });
+            return;
+          }
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const sel = items[activePopoverIdx] || items[0];
+            if (sel) {
+              const item = store.items.find((x) => x.id === sel.dataset.id);
+              const key = input.closest('tr')?.dataset.key;
+              const line = state.lines.find((l) => l.key === key);
+              if (item && line) {
+                applyItem(line, item);
+                closePopover();
+                refreshLines();
+                setTimeout(() => {
+                  const tr = view.querySelector(`tr[data-key="${key}"]`);
+                  tr?.querySelector('input[data-f="quantity"]')?.focus();
+                }, 40);
+                return;
+              }
+            }
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            closePopover();
+            return;
+          }
+        }
+      }
+
       if (e.key === 'Enter') {
         e.preventDefault();
-        const results = input.parentElement.querySelector('[data-results]');
-        if (results && !results.classList.contains('hidden')) {
-          const sel = results.querySelector('.sel') || results.querySelector('div');
-          if (sel) { sel.click(); return; }
-        }
+        closePopover();
         $('#add-line', view).click();
       }
     });
+
+    const onWindowReposition = () => {
+      if (activeFloatingInput && document.body.contains(activeFloatingInput)) {
+        const box = document.getElementById('global-item-search-popover');
+        if (box && !box.classList.contains('hidden')) {
+          positionPopover(activeFloatingInput, box);
+        }
+      } else {
+        closePopover();
+      }
+    };
+
+    const onGlobalClick = (e) => {
+      const box = document.getElementById('global-item-search-popover');
+      if (!box || box.classList.contains('hidden')) return;
+      if (box.contains(e.target) || (activeFloatingInput && activeFloatingInput.contains(e.target))) return;
+      closePopover();
+    };
+
+    window.addEventListener('scroll', onWindowReposition, { passive: true });
+    window.addEventListener('resize', onWindowReposition, { passive: true });
+    document.addEventListener('mousedown', onGlobalClick);
 
     $('#save', view).addEventListener('click', save);
     $('#save2', view).addEventListener('click', save);
   }
 
+  let activeFloatingInput = null;
+  let activeFloatingLine = null;
+  let activePopoverIdx = -1;
+
+  function getOrCreatePopover() {
+    let box = document.getElementById('global-item-search-popover');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'global-item-search-popover';
+      box.className = 'global-item-search-popover hidden';
+      document.body.appendChild(box);
+    }
+    return box;
+  }
+
+  function closePopover() {
+    const box = document.getElementById('global-item-search-popover');
+    if (box) {
+      box.classList.add('hidden');
+      box.innerHTML = '';
+    }
+    activeFloatingInput = null;
+    activeFloatingLine = null;
+    activePopoverIdx = -1;
+  }
+
+  function positionPopover(input, box) {
+    if (!input || !document.body.contains(input)) {
+      closePopover();
+      return;
+    }
+    const rect = input.getBoundingClientRect();
+    const width = Math.min(Math.max(rect.width, 440), window.innerWidth - 24);
+
+    let left = rect.right - width;
+    if (left < 12) left = 12;
+    if (left + width > window.innerWidth - 12) {
+      left = window.innerWidth - width - 12;
+    }
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const popoverHeight = Math.min(360, box.offsetHeight || 300);
+
+    let top;
+    if (spaceBelow < 220 && spaceAbove > spaceBelow) {
+      // فتح إلى الأعلى (Drop-up) في حال عدم وجود مساحة كافية بالأسفل
+      top = Math.max(10, rect.top - popoverHeight - 6);
+    } else {
+      // فتح إلى الأسفل طافياً فوق أي عنصر خارج الجدول بدون قص
+      top = rect.bottom + 6;
+    }
+
+    box.style.left = `${Math.round(left)}px`;
+    box.style.top = `${Math.round(top)}px`;
+    box.style.width = `${Math.round(width)}px`;
+  }
+
   function showSuggestions(input, line) {
-    const box = input.parentElement.querySelector('[data-results]');
+    activeFloatingInput = input;
+    activeFloatingLine = line;
+    const box = getOrCreatePopover();
     const q = input.value.trim().toLowerCase();
-    if (q.length < 1) { box.classList.add('hidden'); return; }
+    if (q.length < 1) {
+      closePopover();
+      return;
+    }
+
     const matches = store.items.filter((it) => it.name_ar.toLowerCase().includes(q)
       || (it.name_en || '').toLowerCase().includes(q)
       || (it.item_code || '').toLowerCase().includes(q)
-      || (it.barcode || '').includes(q)).slice(0, 12);
-    if (!matches.length) { box.classList.add('hidden'); return; }
-    box.innerHTML = matches.map((it) => `<div data-id="${esc(it.id)}">
-        <b>${esc(it.name_ar)}</b>
-        <span class="tiny muted mono"> ${esc(it.item_code)} · ${money(it.sale_price)} / ${esc(it.unit)}</span>
-      </div>`).join('');
+      || (it.barcode || '').includes(q)).slice(0, 10);
+
+    if (!matches.length) {
+      box.innerHTML = `
+        <div class="popover-empty">
+          <span>لا يوجد صنف مطابق لـ "<b>${esc(input.value)}</b>"</span>
+          <small class="muted">يمكنك المتابعة واستخدام هذا الوصف كبند حر</small>
+        </div>
+      `;
+      box.classList.remove('hidden');
+      positionPopover(input, box);
+      activePopoverIdx = -1;
+      return;
+    }
+
+    activePopoverIdx = 0;
+
+    box.innerHTML = `
+      <div class="popover-head">
+        <span class="popover-title">الأصناف المطابقة (${matches.length})</span>
+        <span class="popover-hint">↑↓ للتنقل · Enter للاختيار</span>
+      </div>
+      <div class="popover-list">
+        ${matches.map((it, idx) => `
+          <div class="popover-item ${idx === 0 ? 'sel' : ''}" data-id="${esc(it.id)}" data-idx="${idx}">
+            <div class="popover-item-main">
+              <div class="popover-item-name">${esc(it.name_ar)}</div>
+              ${it.name_en ? `<div class="popover-item-sub">${esc(it.name_en)}</div>` : ''}
+            </div>
+            <div class="popover-item-meta">
+              <div class="popover-item-badges">
+                <span class="badge mono gray tiny">${esc(it.item_code)}</span>
+                ${it.barcode ? `<span class="badge mono blue tiny">📦 ${esc(it.barcode)}</span>` : ''}
+              </div>
+              <div class="popover-item-price">
+                <strong>${money(it.sale_price)}</strong> <small class="muted">ر.س / ${esc(it.unit || 'حبة')}</small>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
     box.classList.remove('hidden');
-    box.querySelectorAll('div[data-id]').forEach((el) => {
+    positionPopover(input, box);
+
+    box.querySelectorAll('.popover-item').forEach((el) => {
       el.addEventListener('mousedown', (ev) => {
         ev.preventDefault();
         const item = store.items.find((x) => x.id === el.dataset.id);
-        if (item) applyItem(line, item);
-        box.classList.add('hidden');
-        refreshLines();
+        if (item) {
+          applyItem(line, item);
+          closePopover();
+          refreshLines();
+          setTimeout(() => {
+            const tr = view.querySelector(`tr[data-key="${line.key}"]`);
+            tr?.querySelector('input[data-f="quantity"]')?.focus();
+          }, 40);
+        }
+      });
+      el.addEventListener('mouseenter', () => {
+        box.querySelectorAll('.popover-item').forEach(x => x.classList.remove('sel'));
+        el.classList.add('sel');
+        activePopoverIdx = Number(el.dataset.idx);
       });
     });
-    input.addEventListener('blur', () => setTimeout(() => box.classList.add('hidden'), 150), { once: true });
   }
 
   async function save(e) {
