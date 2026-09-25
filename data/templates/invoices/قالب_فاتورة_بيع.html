@@ -680,110 +680,13 @@
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td class="col-idx">1</td>
-              <td class="col-name"></td>
-              <td class="col-unit"></td>
-              <td class="col-qty"></td>
-              <td class="col-price"></td>
-              <td class="col-disc"></td>
-              <td class="col-vat"></td>
-              <td class="col-total"></td>
-            </tr>
-            <tr>
-              <td class="col-idx">2</td>
-              <td class="col-name"></td>
-              <td class="col-unit"></td>
-              <td class="col-qty"></td>
-              <td class="col-price"></td>
-              <td class="col-disc"></td>
-              <td class="col-vat"></td>
-              <td class="col-total"></td>
-            </tr>
-            <tr>
-              <td class="col-idx">3</td>
-              <td class="col-name"></td>
-              <td class="col-unit"></td>
-              <td class="col-qty"></td>
-              <td class="col-price"></td>
-              <td class="col-disc"></td>
-              <td class="col-vat"></td>
-              <td class="col-total"></td>
-            </tr>
-            <tr>
-              <td class="col-idx">4</td>
-              <td class="col-name"></td>
-              <td class="col-unit"></td>
-              <td class="col-qty"></td>
-              <td class="col-price"></td>
-              <td class="col-disc"></td>
-              <td class="col-vat"></td>
-              <td class="col-total"></td>
-            </tr>
-            <tr>
-              <td class="col-idx">5</td>
-              <td class="col-name"></td>
-              <td class="col-unit"></td>
-              <td class="col-qty"></td>
-              <td class="col-price"></td>
-              <td class="col-disc"></td>
-              <td class="col-vat"></td>
-              <td class="col-total"></td>
-            </tr>
-            <tr>
-              <td class="col-idx">6</td>
-              <td class="col-name"></td>
-              <td class="col-unit"></td>
-              <td class="col-qty"></td>
-              <td class="col-price"></td>
-              <td class="col-disc"></td>
-              <td class="col-vat"></td>
-              <td class="col-total"></td>
-            </tr>
-            <tr>
-              <td class="col-idx">7</td>
-              <td class="col-name"></td>
-              <td class="col-unit"></td>
-              <td class="col-qty"></td>
-              <td class="col-price"></td>
-              <td class="col-disc"></td>
-              <td class="col-vat"></td>
-              <td class="col-total"></td>
-            </tr>
-            <tr>
-              <td class="col-idx">8</td>
-              <td class="col-name"></td>
-              <td class="col-unit"></td>
-              <td class="col-qty"></td>
-              <td class="col-price"></td>
-              <td class="col-disc"></td>
-              <td class="col-vat"></td>
-              <td class="col-total"></td>
-            </tr>
-            <tr>
-              <td class="col-idx">9</td>
-              <td class="col-name"></td>
-              <td class="col-unit"></td>
-              <td class="col-qty"></td>
-              <td class="col-price"></td>
-              <td class="col-disc"></td>
-              <td class="col-vat"></td>
-              <td class="col-total"></td>
-            </tr>
-            <tr>
-              <td class="col-idx">10</td>
-              <td class="col-name"></td>
-              <td class="col-unit"></td>
-              <td class="col-qty"></td>
-              <td class="col-price"></td>
-              <td class="col-disc"></td>
-              <td class="col-vat"></td>
-              <td class="col-total"></td>
-            </tr>
+            {{items_rows}}
           </tbody>
         </table>
       </section>
+    </div>
 
+    <div>
       <!-- ── القسم السفلي: رمز الاستجابة + جدول الإجماليات + الملاحظات ── -->
       <section class="summary-section">
         <!-- الرمز الشريطي QR المربع -->
@@ -846,14 +749,14 @@
           </div>
         </div>
       </section>
-    </div>
 
-    <!-- ── التذييل السفلي ── -->
-    <footer class="invoice-footer">
-      <div style="width:30px;"></div>
-      <div class="footer-location">{{seller_city}} - {{seller_country}}</div>
-      <div style="width:30px;"></div>
-    </footer>
+      <!-- ── التذييل السفلي ── -->
+      <footer class="invoice-footer">
+        <div style="width:30px;"></div>
+        <div class="footer-location">{{seller_city}} - {{seller_country}}</div>
+        <div style="width:30px;"></div>
+      </footer>
+    </div>
 
   </div>
 </body>

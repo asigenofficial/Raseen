@@ -52,16 +52,20 @@ export { sarSvg };
 const nf2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const nf0 = new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 });
 
-/** مبلغ بمنزلتين وفواصل آلاف. */
+/** مبلغ بمنزلتين وفواصل آلاف - يعيد 0.00 بدلاً من NaN */
 export function money(value) {
-  const n = Number(value || 0);
-  return nf2.format(Number.isFinite(n) ? n : 0);
+  if (value === '' || value === undefined || value === null) return '0.00';
+  const n = Number(String(value).replace(/,/g, '').trim());
+  if (isNaN(n) || !Number.isFinite(n)) return '0.00';
+  return nf2.format(n);
 }
 
-/** رقم عام (كميات، أعداد). */
+/** رقم عام (كميات، أعداد) - يعيد 0 بدلاً من NaN */
 export function num(value) {
-  const n = Number(value || 0);
-  return nf0.format(Number.isFinite(n) ? n : 0);
+  if (value === '' || value === undefined || value === null) return '0';
+  const n = Number(String(value).replace(/,/g, '').trim());
+  if (isNaN(n) || !Number.isFinite(n)) return '0';
+  return nf0.format(n);
 }
 
 /** مبلغ مع العملة ورمز الريال السعودي الرسمي فيكتور SVG. */
@@ -504,9 +508,173 @@ export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
 }
 
 
+function detectColumnTypeJS(th) {
+  const clean = (th || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+
+  if (clean.includes('شامل') || clean.includes('مع الضريبة') || clean.includes('صافي') || clean.includes('with vat') || clean.includes('total with') || clean.includes('gross') || clean.includes('total line')) {
+    return 'total';
+  }
+  if (clean.includes('كود') || clean.includes('رمز') || clean.includes('item code') || clean.includes('sku') || clean.includes('barcode') || clean.includes('رقم الصنف')) {
+    return 'code';
+  }
+  if (clean === '#' || clean === 'م' || clean === 'ت' || clean === 'م.' || clean.includes('تسلسل') || clean === 'no' || clean === 'no.' || clean === 'sr' || clean === 'sn') {
+    return 'index';
+  }
+  if (clean.includes('سعر') || clean.includes('price')) {
+    return 'price';
+  }
+  if (clean.includes('كمية') || clean.includes('qty') || clean.includes('quantity') || clean.includes('عدد')) {
+    return 'qty';
+  }
+  if (clean.includes('وحدة') || clean.includes('unit') || clean.includes('uom')) {
+    return 'unit';
+  }
+  if (clean.includes('خصم') || clean.includes('discount')) {
+    return 'discount';
+  }
+  if (clean.includes('نسبة') || clean.includes('معدل') || clean.includes('rate') || clean === '%' || clean === '15%') {
+    return 'tax_rate';
+  }
+  if (clean.includes('ضريبة') || clean.includes('vat') || clean.includes('tax')) {
+    return 'tax_amount';
+  }
+  if (clean.includes('قبل') || clean.includes('خاضع') || clean.includes('taxable') || clean.includes('إجمالي') || clean.includes('subtotal') || clean.includes('total') || clean.includes('مبلغ')) {
+    return 'taxable';
+  }
+  if (clean.includes('ملاحظ') || clean.includes('note')) {
+    return 'notes';
+  }
+  return 'name';
+}
+
+function extractTableHeadersJS(htmlSnippet) {
+  const tableMatches = htmlSnippet.match(/<table\b[^>]*>([\s\S]*?)<\/table>/gi) || [];
+  let targetTableHtml = '';
+  for (const tbl of tableMatches) {
+    if (/items_rows|items_table_body|items_body|table_rows/i.test(tbl)) {
+      targetTableHtml = tbl;
+      break;
+    }
+  }
+  if (!targetTableHtml) {
+    for (const tbl of tableMatches) {
+      if (/وصف|صنف|بيان|كمية|سعر|item|desc|qty|price/i.test(tbl)) {
+        targetTableHtml = tbl;
+        break;
+      }
+    }
+  }
+  if (!targetTableHtml) {
+    targetTableHtml = htmlSnippet;
+  }
+
+  const thRegex = /<th\b[^>]*>([\s\S]*?)<\/th>/gi;
+  let matches = [...targetTableHtml.matchAll(thRegex)];
+  if (matches.length > 0) {
+    return matches.map(m => m[1]);
+  }
+  const trMatch = targetTableHtml.match(/<tr\b[^>]*>([\s\S]*?)<\/tr>/i);
+  if (trMatch) {
+    const tdMatches = [...trMatch[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)];
+    if (tdMatches.length > 0) {
+      return tdMatches.map(m => m[1]);
+    }
+  }
+  return [];
+}
+
+function generateSmartRowsJS(htmlSnippet, rawLines) {
+  const headers = extractTableHeadersJS(htmlSnippet);
+  let cols = [];
+  if (headers.length > 0) {
+    cols = headers.map(detectColumnTypeJS);
+  } else {
+    cols = ['index', 'name', 'qty', 'unit', 'price', 'taxable', 'discount', 'tax_amount', 'tax_rate', 'total'];
+  }
+
+  let lines = rawLines;
+  if (!lines || lines.length === 0) {
+    lines = [
+      { item_name: 'اسم الصنف أو الخدمة 1', item_code: 'ITM-01', unit: 'حبة', quantity: 0, unit_price: 0, discount: 0, taxable: 0, tax_amount: 0, total_line: 0 },
+    ];
+  }
+
+  const filledRows = lines.map((l, idx) => {
+    const rawQty = Number(String(l.quantity ?? '').replace(/,/g, '').trim());
+    const qtyNum = (!isNaN(rawQty) && Number.isFinite(rawQty)) ? rawQty : 0;
+    const qtyStr = qtyNum % 1 === 0 ? String(qtyNum) : qtyNum.toFixed(2);
+
+    const rawPrice = Number(String(l.unit_price ?? '').replace(/,/g, '').trim());
+    const priceNum = (!isNaN(rawPrice) && Number.isFinite(rawPrice)) ? rawPrice : 0;
+    const priceStr = priceNum.toFixed(2);
+
+    const rawDisc = Number(String(l.discount ?? '').replace(/,/g, '').trim());
+    const discNum = (!isNaN(rawDisc) && Number.isFinite(rawDisc) && rawDisc > 0) ? rawDisc : 0;
+    const discStr = discNum.toFixed(2);
+
+    const rawTaxable = Number(String(l.taxable ?? '').replace(/,/g, '').trim());
+    const taxableNum = (!isNaN(rawTaxable) && Number.isFinite(rawTaxable) && l.taxable !== undefined && l.taxable !== '')
+      ? rawTaxable
+      : Math.max(0, qtyNum * priceNum - discNum);
+    const taxableStr = taxableNum.toFixed(2);
+
+    const rawVat = Number(String(l.tax_amount ?? '').replace(/,/g, '').trim());
+    const vatNum = (!isNaN(rawVat) && Number.isFinite(rawVat) && l.tax_amount !== undefined && l.tax_amount !== '')
+      ? rawVat
+      : (taxableNum * 0.15);
+    const vatStr = vatNum.toFixed(2);
+
+    const rawTotal = Number(String(l.total_line ?? '').replace(/,/g, '').trim());
+    const totalNum = (!isNaN(rawTotal) && Number.isFinite(rawTotal) && l.total_line !== undefined && l.total_line !== '')
+      ? rawTotal
+      : (taxableNum + vatNum);
+    const totalStr = totalNum.toFixed(2);
+
+    const itemName = l.item_name || l.name || 'اسم الصنف أو الخدمة';
+    const itemCode = l.item_code || l.code || '—';
+    const unit = l.unit || 'حبة';
+
+    const bg = idx % 2 === 1 ? '#fafafa' : '#fff';
+    const cells = cols.map(c => {
+      switch (c) {
+        case 'index':
+          return `<td class="c" style="padding:6px 8px;text-align:center;">${idx + 1}</td>`;
+        case 'code':
+          return `<td class="c" style="padding:6px 8px;text-align:center;font-family:Tahoma,sans-serif;">${esc(itemCode)}</td>`;
+        case 'name':
+          return `<td class="r" style="padding:6px 8px;font-weight:600;text-align:right;">${esc(itemName)}</td>`;
+        case 'unit':
+          return `<td class="c" style="padding:6px 8px;text-align:center;">${esc(unit)}</td>`;
+        case 'price':
+          return `<td class="c num" style="padding:6px 8px;text-align:center;font-family:Tahoma,sans-serif;">${priceStr}</td>`;
+        case 'qty':
+          return `<td class="c num" style="padding:6px 8px;text-align:center;font-family:Tahoma,sans-serif;">${qtyStr}</td>`;
+        case 'taxable':
+          return `<td class="c num" style="padding:6px 8px;text-align:center;font-family:Tahoma,sans-serif;">${taxableStr}</td>`;
+        case 'discount':
+          return `<td class="c num" style="padding:6px 8px;text-align:center;font-family:Tahoma,sans-serif;">${discStr}</td>`;
+        case 'tax_rate':
+          return `<td class="c num" style="padding:6px 8px;text-align:center;font-family:Tahoma,sans-serif;">15%</td>`;
+        case 'tax_amount':
+          return `<td class="c num" style="padding:6px 8px;text-align:center;font-family:Tahoma,sans-serif;">${vatStr}</td>`;
+        case 'total':
+          return `<td class="c num" style="padding:6px 8px;text-align:center;font-family:Tahoma,sans-serif;font-weight:700;">${totalStr}</td>`;
+        case 'notes':
+          return `<td class="c" style="padding:6px 8px;text-align:center;"></td>`;
+        default:
+          return `<td class="r" style="padding:6px 8px;text-align:right;">${esc(itemName)}</td>`;
+      }
+    }).join('');
+
+    return `<tr style="background:${bg};">${cells}</tr>`;
+  });
+
+  return filledRows.join('');
+}
+
 /**
  * محرك استبدال الوسوم الديناميكي الشامل لأي قالب HTML بدون أي قيود أو ثوابت.
- * يكتشف الوسوم الموجودة في القالب برمجياً ويستبدلها بالقيم الحقيقية من المنشأة / العميل / الفاتورة / السند.
+ * يكتشف الوسوم والجداول وهيكلتها برمجياً ويستبدلها بالقيم الحقيقية تلقائياً.
  */
 export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, voucher = null, invoice = null, extra = {} } = {}) {
   if (!rawHtml) return '';
@@ -521,6 +689,9 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
   const docDate = voucher?.voucher_date || invoice?.issue_date || new Date().toISOString().slice(0, 10);
   const docNumber = voucher?.voucher_number || invoice?.invoice_number || '';
   const partyName = client.name || voucher?.client_name || invoice?.client_name || '';
+
+  // توليد صفوف الأصناف بذكاء وفق أعمدة القالب الفعلية
+  const smartRows = generateSmartRowsJS(rawHtml, invoice?.lines);
 
   const resolveTagValue = (rawKey) => {
     const k = rawKey.trim().toLowerCase();
@@ -588,6 +759,11 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
     if (k === 'buyer_address' || k === 'client_address') return clientAddr;
     if (k === 'buyer_phone' || k === 'client_phone') return client.phone || client.mobile || '';
     if (k === 'buyer_email' || k === 'client_email') return client.email || '';
+    if (k === 'buyer_city' || k === 'client_city') return client.city || '';
+    if (k === 'buyer_street' || k === 'client_street') return client.street || '';
+    if (k === 'buyer_district' || k === 'client_district') return client.district || '';
+    if (k === 'buyer_postal_code' || k === 'buyer_zip' || k === 'client_postal_code') return client.postal_code || '';
+    if (k === 'buyer_building_no' || k === 'client_building_no') return client.building_no || '';
 
     // 4. أرقام وتواريخ المستند
     if (k === 'invoice_number' || k === 'voucher_number' || k === 'doc_number' || k === 'number' || k === 'reference') {
@@ -602,33 +778,46 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
     // 5. المبالغ المالية
     if (k === 'amount' || k === 'grand_total' || k === 'total' || k === 'total_amount' || k === 'net_amount') {
       const rawAmt = voucher?.total_amount ?? invoice?.grand_total;
-      if (rawAmt !== undefined && rawAmt !== null && isNaN(Number(rawAmt))) {
-        return String(rawAmt);
-      }
-      return docTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const n = Number(String(rawAmt ?? '').replace(/,/g, '').trim());
+      const val = (!isNaN(n) && Number.isFinite(n)) ? n : 0;
+      return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     if (k === 'subtotal' || k === 'taxable' || k === 'taxable_amount') {
-      const sub = Number(invoice?.subtotal ?? docTotal);
-      return sub.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const sub = invoice?.subtotal ?? docTotal;
+      const n = Number(String(sub ?? '').replace(/,/g, '').trim());
+      const val = (!isNaN(n) && Number.isFinite(n)) ? n : 0;
+      return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     if (k === 'tax_amount' || k === 'vat_amount' || k === 'vat') {
-      const tax = Number(invoice?.tax_amount ?? 0);
-      return tax.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const tax = invoice?.tax_amount;
+      const n = Number(String(tax ?? '').replace(/,/g, '').trim());
+      const val = (!isNaN(n) && Number.isFinite(n)) ? n : 0;
+      return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     if (k === 'discount' || k === 'discount_amount') {
-      const d = Number(invoice?.discount_amount ?? 0);
-      return d.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const d = invoice?.discount_amount ?? invoice?.discount;
+      const n = Number(String(d ?? '').replace(/,/g, '').trim());
+      const val = (!isNaN(n) && Number.isFinite(n)) ? n : 0;
+      return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     if (k === 'paid_amount' || k === 'paid') {
-      const p = Number(invoice?.paid_amount ?? docTotal);
-      return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const p = invoice?.paid_amount;
+      const n = Number(String(p ?? '').replace(/,/g, '').trim());
+      const val = (!isNaN(n) && Number.isFinite(n)) ? n : 0;
+      return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (k === 'remaining_amount' || k === 'due_amount' || k === 'balance_due') {
+      const rem = invoice?.remaining_amount;
+      const n = Number(String(rem ?? '').replace(/,/g, '').trim());
+      const val = (!isNaN(n) && Number.isFinite(n)) ? n : 0;
+      return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     if (k === 'amount_in_words' || k === 'tafqeet' || k === 'total_in_words') {
-      if (doc?.amount_in_words) return String(doc.amount_in_words);
+      if (doc?.amount_in_words && doc.amount_in_words !== '—' && doc.amount_in_words !== '0') return String(doc.amount_in_words);
       if (docTotal > 0) {
         return Math.floor(docTotal).toLocaleString('ar-SA') + ' ريال سعودي';
       }
-      return '';
+      return 'صفر ريال سعودي';
     }
 
     // 6. طرق الدفع والبيان
@@ -686,7 +875,6 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
         const svg = qrSvg(qrPayload, { scale: 3, margin: 1 });
         return `<div class="zatca-qr-container" style="display:inline-block; line-height:0;">${svg}</div>`;
       }
-      // في المعاينة نولد رمز QR تجريبي مطابق لهيئة الزكاة والضريبة
       if (globalThis.ZQR && typeof globalThis.ZQR.svg === 'function') {
         const sampleQr = globalThis.ZQR.svg('ZATCA-SAMPLE-INVOICE-PREVIEW', { ecl: 'M', margin: 1, scale: 3 });
         return `<div class="zatca-qr-container" style="display:inline-block; line-height:0;">${sampleQr}</div>`;
@@ -694,11 +882,23 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       return `<div style="width:90px; height:90px; border:1px solid #0f172a; display:inline-flex; align-items:center; justify-content:center; font-family:monospace; font-size:10px; font-weight:700;">ZATCA QR</div>`;
     }
 
-    if (k === 'items_table') {
+    if (k === 'remaining_amount' || k === 'due_amount' || k === 'balance_due') {
+      const p = Number(invoice?.paid_amount ?? docTotal);
+      const rem = Number(invoice?.remaining_amount ?? Math.max(0, docTotal - p));
+      return rem.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (k === 'total_qty' || k === 'total_quantity' || k === 'qty_total') {
       const lines = invoice?.lines || [];
-      if (!lines.length) {
-        return '<p style="text-align:center;color:#64748b;padding:12px;">لا توجد بنود مضافة</p>';
-      }
+      const sum = lines.reduce((acc, l) => acc + Number(l.quantity || 0), 0);
+      return sum > 0 ? (sum % 1 === 0 ? String(sum) : sum.toFixed(2)) : '0.00';
+    }
+
+    // 8. صفوف وجداول الأصناف الذكية التلقائية لأي قالب
+    if (k.startsWith('items_rows') || k.startsWith('items_table_body') || k.startsWith('items_body') || k.startsWith('table_rows')) {
+      return smartRows;
+    }
+
+    if (k === 'items_table') {
       return `
         <table style="width:100%; border-collapse:collapse; font-size:12px; margin:10px 0;" dir="rtl">
           <thead>
@@ -712,22 +912,13 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
             </tr>
           </thead>
           <tbody>
-            ${lines.map((l, idx) => `
-              <tr style="background:${idx % 2 === 1 ? '#f8fafc' : '#fff'};">
-                <td style="padding:6px 8px; border:1px solid #e2e8f0; text-align:center;">${idx + 1}</td>
-                <td style="padding:6px 8px; border:1px solid #e2e8f0; font-weight:600;">${l.item_name || l.name || ''}</td>
-                <td style="padding:6px 8px; border:1px solid #e2e8f0; text-align:center;">${Number(l.quantity || 1).toFixed(2)}</td>
-                <td style="padding:6px 8px; border:1px solid #e2e8f0;">${Number(l.unit_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                <td style="padding:6px 8px; border:1px solid #e2e8f0;">${Number(l.tax_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                <td style="padding:6px 8px; border:1px solid #e2e8f0; font-weight:700;">${Number(l.total_line || l.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-              </tr>
-            `).join('')}
+            ${smartRows}
           </tbody>
         </table>
       `;
     }
 
-    // 8. بحث ديناميكي في حقول الكائن المباشرة
+    // 9. بحث ديناميكي في حقول الكائن المباشرة
     if (doc[rawKey] !== undefined) return String(doc[rawKey]);
     if (doc[k] !== undefined) return String(doc[k]);
     if (issuer[rawKey] !== undefined) return String(issuer[rawKey]);
@@ -738,8 +929,16 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
     return '';
   };
 
-  return rawHtml.replace(/\{\{\s*([a-zA-Z0-9_\-\.]+)\s*\}\}/g, (match, key) => {
+  let result = rawHtml.replace(/\{\{\s*([a-zA-Z0-9_\-\.]+)\s*\}\}/g, (match, key) => {
     const val = resolveTagValue(key);
     return val !== undefined ? val : match;
   });
+
+  // استبدال ذكي إضافي إذا كان القالب يحتوي على tbody ثابت أو فارغ بدون وسوم
+  const tbodyRegex = /(<tbody\b[^>]*>)([\s\S]*?)(<\/tbody>)/i;
+  if (tbodyRegex.test(result) && !rawHtml.includes('{{items_rows') && !rawHtml.includes('{{items_table')) {
+    result = result.replace(tbodyRegex, `$1${smartRows}$3`);
+  }
+
+  return result;
 }

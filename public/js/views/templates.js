@@ -6,68 +6,9 @@ import { api } from '../core/api.js';
 import { store, can } from '../core/store.js';
 import {
   html, raw, esc, printDoc, modal, toastOk, toastErr, $, $$, exportExcel, downloadPdfFromHtml,
+  fillDynamicTemplateHtml,
 } from '../core/util.js';
-import * as _coreUtil from '../core/util.js';
 
-// دالة تعبئة وسوم القوالب مع حماية من كاش المتصفح القديم
-const fillDynamicTemplateHtml = _coreUtil.fillDynamicTemplateHtml || function(rawHtml, { issuer = {}, client = {}, voucher = null, invoice = null, extra = {} } = {}) {
-  if (!rawHtml) return '';
-  const doc = voucher || invoice || {};
-  const addr = [issuer.building_no, issuer.street, issuer.district, issuer.city].filter(Boolean).join(' - ') || issuer.address || issuer.city || '';
-  const clientAddr = [client.building_no, client.street, client.district, client.city].filter(Boolean).join(' - ') || client.address || client.city || '';
-  const docTotal = Number(voucher?.total_amount ?? invoice?.grand_total ?? 0);
-  const docDate = voucher?.voucher_date || invoice?.issue_date || new Date().toISOString().slice(0, 10);
-  const docNumber = voucher?.voucher_number || invoice?.invoice_number || '';
-  const partyName = client.name || voucher?.client_name || invoice?.client_name || '';
-
-  const resolveTagValue = (rawKey) => {
-    const k = rawKey.trim().toLowerCase();
-    if (extra[rawKey] !== undefined) return String(extra[rawKey]);
-    if (extra[k] !== undefined) return String(extra[k]);
-    if (k === 'seller_name' || k === 'issuer_name' || k === 'company_name' || k === 'seller' || k === 'receiver_name') return issuer.name_ar || issuer.name || '';
-    if (k === 'seller_name_en' || k === 'issuer_name_en') return issuer.name_en || '';
-    if (k === 'seller_tax' || k === 'seller_vat' || k === 'tax_number' || k === 'vat_number') return issuer.tax_number || '';
-    if (k === 'seller_cr' || k === 'cr_number' || k === 'commercial_register') return issuer.commercial_register || '';
-    if (k === 'seller_address' || k === 'issuer_address' || k === 'company_address') return addr;
-    if (k === 'seller_phone' || k === 'company_phone' || k === 'phone') return issuer.phone || issuer.mobile || '';
-    if (k === 'seller_email' || k === 'company_email' || k === 'email') return issuer.email || '';
-    if (k === 'seller_iban' || k === 'iban' || k === 'bank_account') return issuer.iban || '';
-    if (k === 'bank_name' || k === 'seller_bank') return issuer.bank_name || '';
-    if (k === 'buyer_name' || k === 'client_name' || k === 'customer_name' || k === 'received_from' || k === 'client') return partyName;
-    if (k === 'buyer_tax' || k === 'client_tax' || k === 'buyer_vat') return client.tax_number || '';
-    if (k === 'buyer_cr' || k === 'client_cr') return client.commercial_register || '';
-    if (k === 'buyer_address' || k === 'client_address') return clientAddr;
-    if (k === 'buyer_phone' || k === 'client_phone') return client.phone || client.mobile || '';
-    if (k === 'invoice_number' || k === 'voucher_number' || k === 'doc_number' || k === 'number' || k === 'reference') return docNumber;
-    if (k === 'issue_date' || k === 'voucher_date' || k === 'invoice_date' || k === 'date') return docDate;
-    if (k === 'amount' || k === 'grand_total' || k === 'total' || k === 'total_amount' || k === 'net_amount') {
-      const rawAmt = voucher?.total_amount ?? invoice?.grand_total;
-      if (rawAmt !== undefined && rawAmt !== null && isNaN(Number(rawAmt))) return String(rawAmt);
-      return docTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-    if (k === 'subtotal' || k === 'taxable' || k === 'taxable_amount') return Number(invoice?.subtotal ?? docTotal).toLocaleString('en-US', { minimumFractionDigits: 2 });
-    if (k === 'tax_amount' || k === 'vat_amount' || k === 'vat') return Number(invoice?.tax_amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
-    if (k === 'paid_amount' || k === 'paid') return Number(invoice?.paid_amount ?? docTotal).toLocaleString('en-US', { minimumFractionDigits: 2 });
-    if (k === 'amount_in_words' || k === 'tafqeet' || k === 'total_in_words') {
-      if (doc?.amount_in_words) return String(doc.amount_in_words);
-      if (docTotal > 0) return Math.floor(docTotal).toLocaleString('ar-SA') + ' ريال سعودي';
-      return '';
-    }
-    if (k === 'amount_halala' || k === 'halala') return String(Math.round((docTotal % 1) * 100)).padStart(2, '0');
-    if (k === 'amount_riyal' || k === 'riyal') return Math.floor(docTotal).toLocaleString('en-US');
-    if (k === 'notes' || k === 'description') return doc.notes || '';
-    if (k === 'reference_no' || k === 'cheque_no') return voucher?.reference_no || '';
-    if (doc[rawKey] !== undefined) return String(doc[rawKey]);
-    if (issuer[rawKey] !== undefined) return String(issuer[rawKey]);
-    if (client[rawKey] !== undefined) return String(client[rawKey]);
-    return '';
-  };
-
-  return rawHtml.replace(/\{\{\s*([a-zA-Z0-9_\-\.]+)\s*\}\}/g, (match, key) => {
-    const val = resolveTagValue(key);
-    return val !== undefined ? val : match;
-  });
-};
 import {
   invoiceA4, invoiceThermal, invoicePreviewDoc, INVOICE_TEMPLATES,
   VOUCHER_TEMPLATES, voucherPrint,
@@ -493,6 +434,7 @@ export async function render(view) {
               <a class="btn btn-sm" href="/api/invoices/template?style=${esc(tpl.id)}" target="_blank" download="invoice_template_${esc(tpl.id)}.html" title="تنزيل ملف القالب" style="padding:4px 8px; font-size:0.76rem;">
                 تنزيل القالب
               </a>
+              ${tpl.badge === 'مخصص' ? `<a class="btn btn-sm" href="#/template-builder?id=${encodeURIComponent(tpl.id)}">تعديل التصميم</a>` : ''}
               <button type="button" class="btn btn-sm btn-danger btn-delete-tpl" data-tpl-id="${esc(tpl.id)}" data-tpl-name="${esc(tpl.name_ar || tpl.name)}" title="حذف القالب" style="padding:4px 7px;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               </button>
@@ -561,6 +503,7 @@ export async function render(view) {
             </div>
             <div class="doc-tpl-card-actions">
               ${tpl.is_builtin ? '' : `
+                ${tpl.badge === 'سند مخصص' ? `<a class="btn btn-sm" href="#/template-builder?id=${encodeURIComponent(tpl.id)}">تعديل التصميم</a>` : ''}
                 <button type="button" class="btn btn-sm btn-inspect-tpl" data-tpl-id="${esc(tpl.id)}" title="فحص خلايا القالب" style="padding:4px 8px; font-size:0.76rem;">فحص</button>
                 <a class="btn btn-sm" href="/api/invoices/template?style=${esc(tpl.id)}" target="_blank" download="${esc(tpl.name_ar || tpl.name || 'voucher_template')}.html" style="padding:4px 8px; font-size:0.76rem;">تنزيل القالب</a>
                 <button type="button" class="btn btn-sm btn-danger btn-delete-tpl" data-tpl-id="${esc(tpl.id)}" data-tpl-name="${esc(tpl.name_ar || tpl.name)}" style="padding:4px 7px;">حذف</button>
@@ -817,6 +760,7 @@ export async function render(view) {
             </h1>
           </div>
           <div class="page-actions" style="flex-wrap:wrap; gap:.5rem;">
+            <a class="btn btn-primary" href="#/template-builder">إنشاء قالب فاتورة أو مستند</a>
             <div class="field" style="margin:0; min-width:210px;">
               <select id="sel-issuer">
                 ${raw(issuers.map((iss) => `<option value="${esc(iss.id)}"${iss.id === activeIssuer.id ? ' selected' : ''}>${esc(iss.name_ar)} (${esc(iss.code)})</option>`).join(''))}
@@ -892,36 +836,49 @@ export async function render(view) {
 
   function resolvePreviewEntities(tpl) {
     const isDocOrVoucher = tpl?.category === 'documents' || tpl?.category === 'vouchers' || (tpl?.badge && tpl.badge.includes('سند'));
+
+    const issuerToUse = {
+      name_ar: 'اسم الشركة / المنشأة',
+      name_en: 'Company / Establishment Name',
+      tax_number: '300000000000003',
+      commercial_register: '1010000000',
+      building_no: '1234',
+      street: 'اسم الشارع الرئيسي',
+      district: 'اسم الحي',
+      city: 'المدينة',
+      address: 'المملكة العربية السعودية - المدينة',
+      address_en: 'City, Kingdom of Saudi Arabia',
+      phone: '05xxxxxxxx',
+      mobile: '05xxxxxxxx',
+      currency: 'SAR',
+      logo: '',
+      logo_data: '',
+    };
+
     if (isDocOrVoucher) {
       return {
-        issuerToUse: {
-          name_ar: 'اسم الشركة',
-          name_en: 'Company Name',
-          tax_number: 'الرقم الضريبي',
-          commercial_register: 'السجل التجاري',
-          building_no: '',
-          street: 'العنوان الوطني',
-          district: '',
-          city: '',
-          address_en: 'National Address',
-          phone: 'رقم الهاتف / الجوال',
-          mobile: 'رقم الهاتف / الجوال',
-        },
+        issuerToUse,
         clientToUse: {
-          name: 'اسم العميل',
-          tax_number: 'الرقم الضريبي للعميل',
-          commercial_register: 'السجل التجاري للعميل',
-          address: 'عنوان العميل',
-          phone: '',
+          name: 'اسم العميل / المستلم',
+          tax_number: '300000000000003',
+          commercial_register: '1010000000',
+          address: 'عنوان العميل - المدينة',
+          phone: '05xxxxxxxx',
         },
         invToRender: {
-          voucher_number: 'رقم السند',
-          invoice_number: 'رقم السند',
-          voucher_date: 'تاريخ السند',
-          issue_date: 'تاريخ السند',
-          grand_total: 'المبلغ',
-          amount_in_words: 'المبلغ بالحروف',
-          notes: 'ملاحظات وبيان السند',
+          voucher_number: 'REC-0001',
+          invoice_number: 'REC-0001',
+          voucher_date: 'YYYY/MM/DD',
+          issue_date: 'YYYY/MM/DD',
+          grand_total: 0,
+          total_amount: 0,
+          amount: 0,
+          amount_in_words: 'صفر ريال سعودي',
+          notes: 'ملاحظات وشروط السند',
+          paid_for: 'سداد دفعة حساب مبيعات',
+          payment_type: 'تحويل بنكي',
+          payment_label: 'تحويل بنكي',
+          reference_no: 'TRX-000001',
           status: 'ISSUED',
           status_label: 'معتمدة',
         },
@@ -932,32 +889,34 @@ export async function render(view) {
     if (invoiceState === 'cancelled') invStatus = 'CANCELLED';
     else if (invoiceState === 'draft') invStatus = 'DRAFT';
 
-    let issuerToUse = {
-      name_ar: 'اسم الشركة',
-      name_en: 'Company Name',
-      tax_number: 'الرقم الضريبي',
-      commercial_register: 'السجل التجاري',
-      building_no: '',
-      street: 'العنوان الوطني',
-      district: '',
-      city: '',
-      address_en: 'National Address',
-      phone: 'رقم الهاتف / الجوال',
-      mobile: 'رقم الهاتف / الجوال',
-      currency: 'SAR',
-    };
-    let clientToUse = {
-      name: 'اسم العميل',
-      tax_number: 'الرقم الضريبي للعميل',
-      commercial_register: 'السجل التجاري للعميل',
-      address: 'عنوان العميل',
-      phone: 'رقم الهاتف / الجوال',
+    const clientToUse = {
+      name: 'اسم العميل / المشتري',
+      tax_number: '300000000000003',
+      commercial_register: '1010000000',
+      address: 'عنوان العميل - المدينة',
+      phone: '05xxxxxxxx',
     };
 
-    let invToRender = {
+    const sampleLines = [
+      {
+        item_name: 'اسم الصنف أو الخدمة 1',
+        item_code: 'ITM-001',
+        quantity: 0,
+        unit: 'حبة',
+        unit_price: 0,
+        discount: 0,
+        taxable: 0,
+        tax_amount: 0,
+        total_line: 0,
+      }
+    ];
+
+    const invToRender = {
       ...currentInvoice,
+      lines: sampleLines,
       subtotal: 0,
       discount_amount: 0,
+      discount: 0,
       taxable_amount: 0,
       tax_amount: 0,
       grand_total: 0,
@@ -967,19 +926,25 @@ export async function render(view) {
       status_label: invStatus === 'CANCELLED' ? 'ملغاة' : invStatus === 'DRAFT' ? 'مسودة' : 'معتمدة',
       zatca_phase: activeZatcaPhase,
       signature_mode: activeZatcaPhase === 'PHASE2' ? 'LOCAL' : 'NONE',
-      invoice_number: 'رقم الفاتورة',
-      issue_date: 'تاريخ الفاتورة',
-      payment_label: 'طريقة السداد',
-      payment_method: 'طريقة السداد',
-      seller_name: 'اسم الشركة',
-      seller_name_en: 'Company Name',
-      seller_tax_number: 'الرقم الضريبي',
-      seller_cr: 'السجل التجاري',
-      seller_address: 'العنوان الوطني',
-      buyer_name: 'اسم العميل',
-      buyer_tax_number: 'الرقم الضريبي للعميل',
-      buyer_address: 'عنوان العميل',
-      notes: 'ملاحظات وبيان الفاتورة',
+      invoice_number: '1001',
+      issue_date: 'YYYY/MM/DD',
+      issue_time: '12:00:00 م',
+      due_date: 'YYYY/MM/DD',
+      payment_label: 'آجلة',
+      payment_method: 'آجلة',
+      seller_name: issuerToUse.name_ar,
+      seller_name_en: issuerToUse.name_en,
+      seller_tax_number: issuerToUse.tax_number,
+      seller_cr: issuerToUse.commercial_register,
+      seller_address: issuerToUse.address,
+      seller_phone: issuerToUse.phone,
+      buyer_name: clientToUse.name,
+      buyer_tax_number: clientToUse.tax_number,
+      buyer_tax: clientToUse.tax_number,
+      buyer_address: clientToUse.address,
+      buyer_phone: clientToUse.phone,
+      amount_in_words: 'صفر ريال سعودي',
+      notes: 'ملاحظات وشروط الفاتورة',
     };
 
     return { issuerToUse, clientToUse, invToRender };
@@ -1059,10 +1024,6 @@ export async function render(view) {
     });
 
     if (tpl && tpl.id) {
-      if (templateHtmlCache.has(tpl.id)) {
-        iframe.srcdoc = templateHtmlCache.get(tpl.id);
-        return;
-      }
       iframe.srcdoc = getTemplateLoadingHtml(`جارٍ تحميل قالب: ${tpl.name_ar || tpl.name}`);
       fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html`)
         .then((r) => r.ok ? r.text() : null)
@@ -1074,7 +1035,6 @@ export async function render(view) {
               invoice: invToRender,
               preview: true,
             });
-            templateHtmlCache.set(tpl.id, filledHtml);
             iframe.srcdoc = filledHtml;
           } else if (iframe) {
             iframe.srcdoc = fallbackHtml();
@@ -1089,65 +1049,62 @@ export async function render(view) {
   }
 
   function openFullscreenPreview(tplOverride = null) {
-    const tpl = tplOverride || excelTemplates.find((t) => t.id === printCfg.template_style);
-    const previewPrintCfg = { ...printCfg };
-    if (tpl) {
-      previewPrintCfg.template_style = tpl.id;
-      previewPrintCfg.template_title = tpl.name_ar || tpl.name;
-      previewPrintCfg.headers = tpl.headers || [];
-      previewPrintCfg.alignments = tpl.style_meta?.alignments || [];
-      previewPrintCfg.header_fill = tpl.style_meta?.header_fill || tpl.color_hex;
-      previewPrintCfg.banner_text = tpl.style_meta?.banner_text || '';
-      previewPrintCfg.banner_fill = tpl.style_meta?.banner_fill || tpl.style_meta?.header_fill || '';
-      previewPrintCfg.primary_color = tpl.color_hex || previewPrintCfg.primary_color || '#0d9488';
-      previewPrintCfg.dark_color = tpl.style_meta?.header_fill || tpl.color_hex;
-    }
+    try {
+      const tpl = tplOverride || excelTemplates.find((t) => t.id === printCfg.template_style) || excelTemplates[0];
+      const previewPrintCfg = { ...printCfg };
+      if (tpl) {
+        previewPrintCfg.template_style = tpl.id;
+        previewPrintCfg.template_title = tpl.name_ar || tpl.name;
+        previewPrintCfg.headers = tpl.headers || [];
+        previewPrintCfg.alignments = tpl.style_meta?.alignments || [];
+        previewPrintCfg.header_fill = tpl.style_meta?.header_fill || tpl.color_hex;
+        previewPrintCfg.banner_text = tpl.style_meta?.banner_text || '';
+        previewPrintCfg.banner_fill = tpl.style_meta?.banner_fill || tpl.style_meta?.header_fill || '';
+        previewPrintCfg.primary_color = tpl.color_hex || previewPrintCfg.primary_color || '#0d9488';
+        previewPrintCfg.dark_color = tpl.style_meta?.header_fill || tpl.color_hex;
+      }
 
-    const { issuerToUse, clientToUse, invToRender } = resolvePreviewEntities(tpl);
+      const { issuerToUse, clientToUse, invToRender } = resolvePreviewEntities(tpl);
 
-    let docHtml = '';
-    const fallbackHtml = () => invoicePreviewDoc({
-      invoice: invToRender,
-      issuer: issuerToUse,
-      client: clientToUse,
-      printSettings: previewPrintCfg,
-      qrSettings: qrCfg,
-    });
+      let docHtml = '';
+      const fallbackHtml = () => invoicePreviewDoc({
+        invoice: invToRender,
+        issuer: issuerToUse,
+        client: clientToUse,
+        printSettings: previewPrintCfg,
+        qrSettings: qrCfg,
+      });
 
-    const m = modal({
-      title: `معاينة الفاتورة: ${tpl?.name_ar || tpl?.name || 'قالب الفاتورة'}`,
-      wide: true,
-      body: html`
-        <div style="background:#0b101c; padding:1.5rem; border-radius:8px; display:flex; justify-content:center; overflow:auto; max-height:78vh;">
-          <div style="background:#fff; width:210mm; min-height:297mm; box-shadow:0 10px 40px rgba(0,0,0,0.6); border-radius:4px; overflow:hidden;">
-            <iframe id="fullscreen-iframe" style="width:100%; height:100%; min-height:850px; border:none; display:block; background:#fff;"></iframe>
+      const m = modal({
+        title: `معاينة الفاتورة: ${tpl?.name_ar || tpl?.name || 'قالب الفاتورة'}`,
+        wide: true,
+        body: html`
+          <div style="background:#0b101c; padding:1.5rem; border-radius:8px; display:flex; justify-content:center; overflow:auto; max-height:78vh;">
+            <div style="background:#fff; width:210mm; min-height:297mm; box-shadow:0 10px 40px rgba(0,0,0,0.6); border-radius:4px; overflow:hidden;">
+              <iframe id="fullscreen-iframe" style="width:100%; height:100%; min-height:850px; border:none; display:block; background:#fff;"></iframe>
+            </div>
           </div>
-        </div>
-      `,
-      footer: html`
-        <div class="flex gap" style="justify-content:space-between; width:100%;">
-          <div class="flex gap-xs">
-            <button class="btn btn-primary" id="btn-modal-print" type="button" style="display:inline-flex;align-items:center;gap:4px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
-              طباعة الآن
-            </button>
-            <button class="btn" id="btn-modal-pdf" type="button" style="display:inline-flex;align-items:center;gap:4px;">
-              PDF ⤓
-            </button>
+        `,
+        footer: html`
+          <div class="flex gap" style="justify-content:space-between; width:100%;">
+            <div class="flex gap-xs">
+              <button class="btn btn-primary" id="btn-modal-print" type="button" style="display:inline-flex;align-items:center;gap:4px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+                طباعة الآن
+              </button>
+              <button class="btn" id="btn-modal-pdf" type="button" style="display:inline-flex;align-items:center;gap:4px;">
+                PDF ⤓
+              </button>
+            </div>
+            <button class="btn" data-close type="button">إغلاق</button>
           </div>
-          <button class="btn" data-close type="button">إغلاق</button>
-        </div>
-      `,
-    });
+        `,
+      });
 
-    const fIframe = $('#fullscreen-iframe', m.el);
-    if (tpl && tpl.id) {
-      if (templateHtmlCache.has(tpl.id)) {
-        docHtml = templateHtmlCache.get(tpl.id);
-        if (fIframe) fIframe.srcdoc = docHtml;
-      } else {
+      const fIframe = $('#fullscreen-iframe', m.el);
+      if (tpl && tpl.id) {
         if (fIframe) fIframe.srcdoc = getTemplateLoadingHtml(`جارٍ تحميل ومعاينة قالب: ${tpl.name_ar || tpl.name}`);
-        fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html`)
+        fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html`, { credentials: 'same-origin' })
           .then((r) => r.ok ? r.text() : null)
           .then((realHtml) => {
             if (realHtml && fIframe) {
@@ -1157,7 +1114,6 @@ export async function render(view) {
                 invoice: invToRender,
                 preview: true,
               });
-              templateHtmlCache.set(tpl.id, filledHtml);
               docHtml = filledHtml;
               fIframe.srcdoc = filledHtml;
             } else if (fIframe) {
@@ -1165,30 +1121,34 @@ export async function render(view) {
               fIframe.srcdoc = docHtml;
             }
           })
-          .catch(() => {
+          .catch((err) => {
+            console.warn('Fetch template render-html failed, using fallback:', err);
             docHtml = fallbackHtml();
             if (fIframe) fIframe.srcdoc = docHtml;
           });
+      } else {
+        docHtml = fallbackHtml();
+        if (fIframe) fIframe.srcdoc = docHtml;
       }
-    } else {
-      docHtml = fallbackHtml();
-      if (fIframe) fIframe.srcdoc = docHtml;
+
+      $('#btn-modal-print', m.el)?.addEventListener('click', () => {
+        printDoc(docHtml);
+      });
+
+      $('#btn-modal-pdf', m.el)?.addEventListener('click', async (e) => {
+        e.currentTarget.disabled = true;
+        try {
+          await downloadPdfFromHtml(docHtml, `${tpl?.id || 'invoice'}_preview.pdf`);
+        } catch (err) {
+          toastErr('فشل تصدير ملف PDF: ' + (err.message || err));
+        } finally {
+          e.currentTarget.disabled = false;
+        }
+      });
+    } catch (err) {
+      console.error('openFullscreenPreview error:', err);
+      toastErr('فشل فتح معاينة الفاتورة: ' + (err.message || err));
     }
-
-    $('#btn-modal-print', m.el)?.addEventListener('click', () => {
-      printDoc(docHtml);
-    });
-
-    $('#btn-modal-pdf', m.el)?.addEventListener('click', async (e) => {
-      e.currentTarget.disabled = true;
-      try {
-        await downloadPdfFromHtml(docHtml, `${tpl?.id || 'invoice'}_preview.pdf`);
-      } catch (err) {
-        toastErr('فشل تصدير ملف PDF: ' + (err.message || err));
-      } finally {
-        e.currentTarget.disabled = false;
-      }
-    });
   }
 
   async function openVoucherFullscreenPreview(tplId) {
@@ -2207,15 +2167,6 @@ export async function render(view) {
           toastErr('حدث خطأ أثناء حفظ اعتماد القالب: ' + err.message);
         }
         renderView();
-      });
-    });
-
-    // معاينة الفاتورة في نافذة بصرية كصورة A4
-    $$('.btn-visual-invoice-modal', view).forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const tplId = btn.dataset.tplId;
-        const tpl = excelTemplates.find((t) => t.id === tplId);
-        openFullscreenPreview(tpl);
       });
     });
 

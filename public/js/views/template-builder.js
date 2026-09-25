@@ -3,7 +3,8 @@
 //  يتيح تنظيم كامل، إدراج وتخصيص أي جداول، والتحكم الشامل في خلفية وإطار القوالب
 // ==========================================================================
 import { api } from '../core/api.js';
-import { toastOk, toastErr, $, $$, esc } from '../core/util.js';
+import { toastOk, toastErr, $, $$, esc, qrSvg } from '../core/util.js';
+import { code39Svg } from '../print/code39.js';
 
 const PALETTE = [
   '#059669', '#1d4ed8', '#0f172a', '#6d28d9',
@@ -40,6 +41,11 @@ const SYSTEM_TAGS = [
 let view = null;
 let editingId = null;
 let saving = false;
+let presetStyles = '';
+let selectedBlock = null;
+let selectedTable = null;
+let copiedBlock = null;
+let zoomPercent = 100;
 let activeTab = 'elements'; // 'elements' | 'background' | 'typography'
 
 let docMeta = {
@@ -72,6 +78,8 @@ function createBlockElement(htmlContent, blockType = 'block') {
     <div class="block-controls" contenteditable="false">
       <button type="button" class="btn-ctrl btn-move-up" title="نقل لأعلى">▲</button>
       <button type="button" class="btn-ctrl btn-move-down" title="نقل لأسفل">▼</button>
+      <button type="button" class="btn-ctrl btn-place-bottom" title="وضع العنصر أسفل الورقة">⬇</button>
+      <button type="button" class="btn-ctrl btn-drag" title="اسحب لترتيب العنصر أو إنزاله في فراغ الورقة">⠿</button>
       <button type="button" class="btn-ctrl btn-dup" title="تكرار العنصر">⧉</button>
       <button type="button" class="btn-ctrl btn-del-blk" title="حذف العنصر">&times;</button>
     </div>
@@ -439,16 +447,160 @@ function getBadgeBlockHTML(color) {
   `;
 }
 
+function getQrBlockHTML() {
+  return `<div class="builder-qr" style="display:inline-flex; flex-direction:column; align-items:center; gap:5px; padding:10px; background:#fff; color:#0f172a;">
+    <div class="builder-qr-preview" contenteditable="false">${qrSvg('RASEEN-PREVIEW', { scale: 3, margin: 1 })}</div>
+    <div class="builder-qr-value" style="display:none;">{{qr_code}}</div>
+    <input class="builder-qr-input" value="{{qr_code}}" title="اكتب محتوى الرمز أو اترك وسم الفاتورة" style="width:150px; font-size:11px; text-align:center;" />
+    <small contenteditable="true">امسح الرمز للتحقق</small>
+  </div>`;
+}
+
+function getBarcodeBlockHTML() {
+  return `<div class="builder-barcode" style="display:inline-flex; flex-direction:column; align-items:center; gap:4px; padding:10px; background:#fff; color:#111;">
+    <div class="builder-barcode-preview">${code39Svg('PRD-01')}</div>
+    <small class="builder-barcode-label">PRD-01</small>
+    <input class="builder-barcode-input" value="PRD-01" title="قيمة الباركود Code 39" style="width:150px; font-size:11px; text-align:center;" />
+  </div>`;
+}
+
 // ─── Attach Block Controls (Move, Duplicate, Delete, Table Operations) ─────
+
+function selectBlock(block, table = null) {
+  selectedBlock?.classList.remove('editor-block-selected');
+  selectedBlock = block;
+  selectedTable = table || block?.querySelector('table');
+  selectedBlock?.classList.add('editor-block-selected');
+  const styleSelect = $('#sel-table-style', view);
+  if (styleSelect) {
+    styleSelect.disabled = !selectedTable;
+    styleSelect.value = selectedTable?.dataset.style || 'financial';
+  }
+  const scale = $('#rng-block-scale', view);
+  if (scale) {
+    scale.disabled = !block;
+    scale.value = block ? Number.parseInt(block.style.zoom || '100', 10) : 100;
+    $('#out-block-scale', view).textContent = `${scale.value}%`;
+  }
+}
+
+function bottomRoom(item, selector) {
+  const page = item.closest('#editor-canvas-sheet');
+  if (!page) return 0;
+  const pageRect = page.getBoundingClientRect();
+  const itemRect = item.getBoundingClientRect();
+  const scale = item.offsetHeight ? itemRect.height / item.offsetHeight : 1;
+  const lastBlock = [...item.parentElement.children].filter(child => child.matches(selector)).at(-1);
+  const flowBottom = Math.max(itemRect.bottom, lastBlock?.getBoundingClientRect().bottom || 0);
+  const bottomInset = parseFloat(getComputedStyle(page).paddingBottom) || 0;
+  const pageScale = page.offsetHeight ? pageRect.height / page.offsetHeight : 1;
+  return Math.max(0, (pageRect.bottom - bottomInset * pageScale - flowBottom) / scale);
+}
+
+function bindMoveHandle(handle, item, selector) {
+  handle.draggable = false;
+  handle.onpointerdown = (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const parent = item.parentElement;
+    if (!parent) return;
+    const page = item.closest('#editor-canvas-sheet');
+    let anchorY = event.clientY;
+    let baseGap = parseFloat(getComputedStyle(item).marginTop) || 0;
+    const pointerId = event.pointerId;
+    view.setPointerCapture(pointerId);
+    item.classList.add('builder-moving');
+    const onMove = (move) => {
+      if (move.pointerId !== pointerId) return;
+      let target = document.elementFromPoint(move.clientX, move.clientY);
+      while (target && target.parentElement !== parent) target = target.parentElement;
+      if (target && target !== item && target.matches(selector)) {
+        const after = move.clientY > target.getBoundingClientRect().top + target.offsetHeight / 2;
+        parent.insertBefore(item, after ? target.nextSibling : target);
+        anchorY = move.clientY;
+        baseGap = parseFloat(getComputedStyle(item).marginTop) || 0;
+        return;
+      }
+      if (!page) return;
+      const pageRect = page.getBoundingClientRect();
+      if (move.clientX < pageRect.left || move.clientX > pageRect.right || move.clientY < pageRect.top || move.clientY > pageRect.bottom) return;
+      const scale = item.offsetHeight ? item.getBoundingClientRect().height / item.offsetHeight : 1;
+      const currentGap = parseFloat(getComputedStyle(item).marginTop) || 0;
+      const room = bottomRoom(item, selector);
+      item.style.marginTop = `${Math.max(0, Math.min(currentGap + room, baseGap + (move.clientY - anchorY) / scale))}px`;
+    };
+    const finish = () => {
+      item.classList.remove('builder-moving');
+      view.removeEventListener('pointermove', onMove);
+      view.removeEventListener('pointerup', finish);
+      view.removeEventListener('pointercancel', finish);
+      if (view.hasPointerCapture(pointerId)) view.releasePointerCapture(pointerId);
+    };
+    view.addEventListener('pointermove', onMove);
+    view.addEventListener('pointerup', finish);
+    view.addEventListener('pointercancel', finish);
+  };
+}
 
 function attachBlockControls(block) {
   if (!block) return;
+
+  block.tabIndex = 0;
+  block.onclick = (e) => selectBlock(block, e.target.closest('table'));
+  let dragHandle = $('.btn-drag', block);
+  if (!dragHandle && $('.block-controls', block)) {
+    dragHandle = document.createElement('button');
+    dragHandle.type = 'button';
+    dragHandle.className = 'btn-ctrl btn-drag';
+    dragHandle.title = 'اسحب لترتيب العنصر أو إنزاله في فراغ الورقة';
+    dragHandle.textContent = '⠿';
+    $('.block-controls', block).appendChild(dragHandle);
+  }
+  if (dragHandle) bindMoveHandle(dragHandle, block, '.editor-block');
+  let bottomButton = $('.btn-place-bottom', block);
+  if (!bottomButton && $('.block-controls', block)) {
+    bottomButton = document.createElement('button');
+    bottomButton.type = 'button';
+    bottomButton.className = 'btn-ctrl btn-place-bottom';
+    bottomButton.title = 'وضع العنصر أسفل الورقة';
+    bottomButton.textContent = '⬇';
+    $('.block-controls', block).appendChild(bottomButton);
+  }
+  if (bottomButton) bottomButton.onclick = (e) => {
+    e.stopPropagation();
+    const gap = parseFloat(getComputedStyle(block).marginTop) || 0;
+    block.style.marginTop = `${gap + bottomRoom(block, '.editor-block')}px`;
+  };
+  const qrInput = $('.builder-qr-input', block);
+  if (qrInput) qrInput.onchange = () => {
+    const value = qrInput.value.trim() || '{{qr_code}}';
+    try {
+      $('.builder-qr-preview', block).innerHTML = qrSvg(value === '{{qr_code}}' ? 'RASEEN-PREVIEW' : value, { scale: 3, margin: 1 });
+      $('.builder-qr-value', block).textContent = value;
+    } catch {
+      toastErr('محتوى الرمز طويل أو غير صالح');
+    }
+  };
+  const barcodeInput = $('.builder-barcode-input', block);
+  if (barcodeInput) barcodeInput.onchange = () => {
+    try {
+      const value = barcodeInput.value.trim().toUpperCase();
+      $('.builder-barcode-preview', block).innerHTML = code39Svg(value);
+      $('.builder-barcode-label', block).textContent = value;
+      barcodeInput.value = value;
+    } catch (err) {
+      barcodeInput.value = $('.builder-barcode-label', block).textContent;
+      toastErr(err.message);
+    }
+  };
 
   const btnDel = $('.btn-del-blk', block);
   if (btnDel) {
     btnDel.onclick = (e) => {
       e.stopPropagation();
       block.remove();
+      if (selectedBlock === block) selectBlock(null);
       toastOk('تم حذف العنصر');
     };
   }
@@ -482,6 +634,7 @@ function attachBlockControls(block) {
       const clone = block.cloneNode(true);
       attachBlockControls(clone);
       block.parentNode.insertBefore(clone, block.nextSibling);
+      selectBlock(clone);
       toastOk('تم تكرار العنصر');
     };
   }
@@ -553,6 +706,8 @@ function attachBlockControls(block) {
           }
         }
         tbody.appendChild(newTr);
+        const table = $('table', block);
+        if (table) applyTableStyle(table, table.dataset.style || 'financial');
         toastOk('تمت إضافة صف جديد');
       }
     };
@@ -629,13 +784,10 @@ function attachBlockControls(block) {
       e.stopPropagation();
       const table = $('table', block);
       if (table) {
-        const rows = table.querySelectorAll('tbody tr');
-        const isStriped = table.dataset.striped === 'true';
-        rows.forEach((tr, i) => {
-          tr.style.backgroundColor = (!isStriped && i % 2 === 1) ? '#f8fafc' : '#ffffff';
-        });
-        table.dataset.striped = isStriped ? 'false' : 'true';
-        toastOk(isStriped ? 'تم إيقاف تظليل الصفوف' : 'تم تفعيل تظليل الصفوف المتبادل');
+        const style = table.dataset.style === 'zebra' ? 'financial' : 'zebra';
+        applyTableStyle(table, style);
+        if (selectedTable === table) $('#sel-table-style', view).value = style;
+        toastOk(style === 'zebra' ? 'تم تفعيل تظليل الصفوف المتبادل' : 'تم إيقاف تظليل الصفوف');
       }
     };
   }
@@ -650,6 +802,24 @@ function attachBlockControls(block) {
       }
     };
   }
+}
+
+function applyTableStyle(table, style) {
+  if (!table) return;
+  table.dataset.style = style;
+  table.style.border = style === 'minimal' ? 'none' : '1px solid #cbd5e1';
+  const header = table.querySelector('thead tr');
+  if (header) {
+    header.style.backgroundColor = style === 'minimal' ? '#ffffff' : style === 'grid' ? '#e2e8f0' : docMeta.primary_color;
+    header.style.color = style === 'minimal' ? docMeta.primary_color : style === 'grid' ? '#0f172a' : '#ffffff';
+  }
+  table.querySelectorAll('th, td').forEach(cell => {
+    cell.style.border = style === 'minimal' ? 'none' : style === 'grid' ? '1px solid #94a3b8' : '1px solid #cbd5e1';
+    if (style === 'minimal') cell.style.borderBottom = '1px solid #cbd5e1';
+  });
+  table.querySelectorAll('tbody tr').forEach((row, index) => {
+    row.style.backgroundColor = style === 'zebra' && index % 2 ? '#edf6f8' : '#ffffff';
+  });
 }
 
 // ─── Sheet Background & Watermark Applicator ──────────────────────────────
@@ -746,8 +916,24 @@ function serializeCanvasToCleanHTML() {
 
   // Remove editor UI controls
   $$('.block-controls', clone).forEach(c => c.remove());
+  $$('.preset-section', clone).forEach(section => {
+    section.classList.remove('preset-section', 'builder-moving');
+    if (section.dataset.builderPositioned) {
+      section.style.position = '';
+      delete section.dataset.builderPositioned;
+    }
+  });
   $$('.logo-actions', clone).forEach(c => c.remove());
   $$('.btn-sub-ctrl', clone).forEach(c => c.remove());
+  $$('.builder-qr', clone).forEach(qr => {
+    const value = qr.querySelector('.builder-qr-value');
+    if (value?.textContent.trim() === '{{qr_code}}') {
+      qr.querySelector('.builder-qr-preview')?.remove();
+      value.style.display = '';
+    } else value?.remove();
+    qr.querySelector('.builder-qr-input')?.remove();
+  });
+  $$('.builder-barcode-input', clone).forEach(input => input.remove());
 
   // Remove contenteditable attributes
   $$('[contenteditable]', clone).forEach(el => el.removeAttribute('contenteditable'));
@@ -759,8 +945,7 @@ function serializeCanvasToCleanHTML() {
   });
 
   const innerHtml = clone.innerHTML;
-  const customStyleEl = $('#preset-custom-style', view);
-  const extraStyles = customStyleEl ? customStyleEl.textContent : '';
+  const extraStyles = presetStyles;
 
   // Frame styles for print export
   let frameCSS = '';
@@ -953,6 +1138,8 @@ function insertAtCursor(text) {
 
 function renderView() {
   if (!view) return;
+  selectedBlock = null;
+  selectedTable = null;
 
   view.innerHTML = `
     <!-- Hidden File Inputs -->
@@ -965,22 +1152,22 @@ function renderView() {
       <header style="background:#131c2e; border-bottom:1px solid #1e293b; padding:0.45rem 1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; z-index:30;">
         
         <!-- Branding & Core Controls -->
-        <div style="display:flex; align-items:center; gap:8px;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0;">
           <div id="theme-color-indicator" style="background:${docMeta.primary_color}; width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:14px; box-shadow:0 2px 8px rgba(0,0,0,0.4);">
             R
           </div>
           <span style="font-weight:800; font-size:0.95rem; white-space:nowrap;">محرر ومصمم القوالب</span>
           
-          <select id="sel-doc-type" style="padding:4px 8px; font-size:0.8rem; font-weight:700; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:5px;">
+          <select id="sel-doc-type" style="width:190px; max-width:100%; flex:none; padding:4px 8px; font-size:0.8rem; font-weight:700; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:5px;">
             <option value="invoices" ${docMeta.type === 'invoices' ? 'selected' : ''}>قالب فاتورة ضريبية</option>
             <option value="documents" ${docMeta.type === 'documents' ? 'selected' : ''}>قالب سند مالي / قبض</option>
           </select>
 
-          <select id="sel-preset-template" style="padding:4px 8px; font-size:0.8rem; font-weight:700; background:#0f172a; color:#38bdf8; border:1px solid #0284c7; border-radius:5px; cursor:pointer;" title="تحميل قالب جاهز ومعتمد للتعديل عليه">
+          <select id="sel-preset-template" style="width:230px; max-width:100%; flex:none; padding:4px 8px; font-size:0.8rem; font-weight:700; background:#0f172a; color:#38bdf8; border:1px solid #0284c7; border-radius:5px; cursor:pointer;" title="تحميل قالب جاهز ومعتمد للتعديل عليه">
             <option value="">قوالب جاهزة معتمدة ▾</option>
           </select>
 
-          <input type="text" id="inp-doc-name" value="${esc(docMeta.name_ar)}" placeholder="اسم القالب..." style="padding:4px 10px; font-size:0.8rem; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:5px; width:160px;" />
+          <input type="text" id="inp-doc-name" value="${esc(docMeta.name_ar)}" placeholder="اسم القالب..." style="padding:4px 10px; font-size:0.8rem; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:5px; width:160px; max-width:100%; flex:none;" />
         </div>
 
         <!-- Center: Quick Color Palette -->
@@ -1044,6 +1231,8 @@ function renderView() {
         <button type="button" class="btn-insert-blk" data-type="specs_table">جدول البنود والمواصفات</button>
         <button type="button" class="btn-insert-blk" data-type="totals">الإجماليات ورمز QR</button>
         <button type="button" class="btn-insert-blk" data-type="sar_badge">${SAR_SYMBOL_SVG} شارة الريال</button>
+        <button type="button" class="btn-insert-blk" data-type="qr_code">رمز QR / باركود</button>
+        <button type="button" class="btn-insert-blk" data-type="barcode">باركود خطي</button>
         
         ${docMeta.type === 'documents' ? `
         <button type="button" class="btn-insert-blk" data-type="voucher_banner">شريط المبلغ</button>
@@ -1089,9 +1278,7 @@ function renderView() {
             <span>شفافية:</span>
             <input type="range" id="rng-bg-img-opacity" min="0.05" max="1" step="0.05" value="${sheetBg.bgImageOpacity}" style="width:65px; cursor:pointer;" />
           </label>
-          ${sheetBg.bgImage ? `
-            <button type="button" id="btn-remove-bg-img" class="btn-tag-chip" style="background:#ef4444; color:#fff;" title="حذف صورة الخلفية">حذف</button>
-          ` : ''}
+          <button type="button" id="btn-remove-bg-img" class="btn-tag-chip" style="background:#ef4444; color:#fff;" title="حذف صورة الخلفية" ${sheetBg.bgImage ? '' : 'hidden'}>حذف</button>
         </div>
 
         <div style="width:1px; height:20px; background:#334155;"></div>
@@ -1196,9 +1383,28 @@ function renderView() {
       </div>
 
       <!-- Main Canvas Workspace (Real A4 Sheet) -->
-      <div style="flex:1; overflow:auto; padding:24px 10px; display:flex; justify-content:center; align-items:flex-start; background:#0b1120;">
+      <div class="builder-workspace" style="flex:1; min-height:0; overflow:auto; padding:24px 10px; display:flex; justify-content:center; align-items:flex-start; background:#0b1120;">
         <div class="editor-a4-sheet" id="editor-canvas-sheet">
           <!-- Blocks and background layers populate here -->
+        </div>
+      </div>
+
+      <div class="builder-bottom-bar">
+        <span>حرّك العنصر بأزرار ▲ ▼ أو اسحب ⠿ إلى فراغ أسفل الورقة</span>
+        <div class="builder-bottom-actions">
+          <label for="sel-table-style">شكل الجدول</label>
+          <select id="sel-table-style" disabled>
+            <option value="financial">مالي</option><option value="zebra">صفوف متبادلة</option>
+            <option value="grid">شبكة</option><option value="minimal">بسيط</option>
+          </select>
+          <button type="button" id="btn-copy-block" class="btn-tag-chip">نسخ العنصر</button>
+          <button type="button" id="btn-paste-block" class="btn-tag-chip">لصق العنصر</button>
+          <label for="rng-block-scale">حجم العنصر</label>
+          <input type="range" id="rng-block-scale" min="60" max="140" step="10" value="100" disabled />
+          <output id="out-block-scale">100%</output>
+          <label for="rng-builder-zoom">التكبير</label>
+          <input type="range" id="rng-builder-zoom" min="50" max="150" step="10" value="100" />
+          <output id="out-builder-zoom">100%</output>
         </div>
       </div>
 
@@ -1246,6 +1452,21 @@ function renderView() {
     </div>
 
     <style>
+      .visual-doc-editor > header #sel-doc-type { width: 190px !important; }
+      .visual-doc-editor > header #sel-preset-template { width: 230px !important; }
+      .visual-doc-editor > header #inp-doc-name { width: 160px !important; }
+      .builder-bottom-bar { flex:none; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:8px 16px; background:#131c2e; border-top:1px solid #334155; font-size:0.75rem; color:#94a3b8; }
+      .builder-bottom-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+      .builder-bottom-actions select { width:auto; padding:4px 8px; background:#0f172a; color:#fff; border:1px solid #475569; border-radius:5px; }
+      #rng-builder-zoom, #rng-block-scale { width:90px; }
+      .visual-doc-editor > header, .visual-doc-editor > nav, .visual-doc-editor > .tab-panel { flex-shrink:0; }
+      .editor-block-selected { outline:2px solid #38bdf8 !important; outline-offset:3px; }
+      .btn-drag { cursor:grab; }
+      .btn-drag, .preset-drag { touch-action:none; cursor:grab; }
+      .builder-moving { opacity:.65; }
+      .preset-section:hover > .preset-section-controls,
+      .preset-section:focus-within > .preset-section-controls { display:flex; }
+      .preset-section > .preset-section-controls { top:0; left:0; }
       .tab-btn {
         background: transparent;
         border: none;
@@ -1419,6 +1640,7 @@ function renderView() {
       }
 
       @media print {
+        .editor-a4-sheet { zoom:1 !important; }
         body * { visibility: hidden !important; }
         .editor-a4-sheet, .editor-a4-sheet * { visibility: visible !important; }
         .block-controls, .logo-actions, .btn-sub-ctrl { display: none !important; }
@@ -1485,28 +1707,86 @@ async function loadPresetsDropdown() {
   }
 }
 
+function applyPresetStyles(styles) {
+  presetStyles = styles;
+  let customStyleTag = $('#preset-custom-style', view);
+  if (!customStyleTag) {
+    customStyleTag = document.createElement('style');
+    customStyleTag.id = 'preset-custom-style';
+    view.appendChild(customStyleTag);
+  }
+  customStyleTag.textContent = `@scope (#editor-canvas-sheet .editor-block[data-block-type="preset"] .block-content) { ${styles.replace(/@page\s*\{[^}]*\}/g, '')} }`;
+}
+
+function attachPresetSectionDrag() {
+  const roots = $$('#editor-canvas-sheet .editor-block[data-block-type="preset"]', view)
+    .map(block => block.querySelector('.invoice-container, .voucher-card') || block.querySelector(':scope > .block-content'));
+  roots.forEach(root => [...root.children].forEach(section => {
+    if (!(section instanceof HTMLElement) || section.matches('script, style, table') || getComputedStyle(section).position === 'absolute') return;
+    section.classList.add('preset-section');
+    if (getComputedStyle(section).position === 'static') {
+      section.dataset.builderPositioned = 'true';
+      section.style.position = 'relative';
+    }
+    let controls = section.querySelector(':scope > .preset-section-controls');
+    if (!controls) {
+      controls = document.createElement('div');
+      controls.className = 'block-controls preset-section-controls';
+      controls.contentEditable = 'false';
+      controls.innerHTML = '<button type="button" class="btn-ctrl preset-up" title="نقل القسم لأعلى">▲</button><button type="button" class="btn-ctrl preset-down" title="نقل القسم لأسفل">▼</button><button type="button" class="btn-ctrl preset-bottom" title="وضع القسم أسفل الورقة">⬇</button><button type="button" class="btn-ctrl preset-drag" title="اسحب القسم">⠿</button><button type="button" class="btn-ctrl preset-dup" title="نسخ القسم">⧉</button><button type="button" class="btn-ctrl preset-del" title="حذف القسم">×</button>';
+      section.appendChild(controls);
+    }
+    controls.querySelector('.preset-up').onclick = (e) => {
+      e.stopPropagation();
+      let previous = section.previousElementSibling;
+      while (previous && !previous.matches('.preset-section')) previous = previous.previousElementSibling;
+      if (previous) root.insertBefore(section, previous);
+    };
+    controls.querySelector('.preset-down').onclick = (e) => {
+      e.stopPropagation();
+      let next = section.nextElementSibling;
+      while (next && !next.matches('.preset-section')) next = next.nextElementSibling;
+      if (next) root.insertBefore(next, section);
+    };
+    let bottomButton = controls.querySelector('.preset-bottom');
+    if (!bottomButton) {
+      bottomButton = document.createElement('button');
+      bottomButton.type = 'button';
+      bottomButton.className = 'btn-ctrl preset-bottom';
+      bottomButton.title = 'وضع القسم أسفل الورقة';
+      bottomButton.textContent = '⬇';
+      controls.appendChild(bottomButton);
+    }
+    bottomButton.onclick = (e) => {
+      e.stopPropagation();
+      const gap = parseFloat(getComputedStyle(section).marginTop) || 0;
+      section.style.marginTop = `${gap + bottomRoom(section, '.preset-section')}px`;
+    };
+    controls.querySelector('.preset-dup').onclick = (e) => {
+      e.stopPropagation();
+      section.after(section.cloneNode(true));
+      attachPresetSectionDrag();
+    };
+    controls.querySelector('.preset-del').onclick = (e) => { e.stopPropagation(); section.remove(); };
+    bindMoveHandle(controls.querySelector('.preset-drag'), section, '.preset-section');
+  }));
+}
+
 function loadRawHtmlIntoCanvas(rawHtml, tplName) {
   const canvas = $('#editor-canvas-sheet', view);
   if (!canvas) return;
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(rawHtml, 'text/html');
-
-  // Extract <style>
-  const styles = Array.from(doc.querySelectorAll('style')).map(s => s.textContent).join('\n');
-  let customStyleTag = $('#preset-custom-style', view);
-  if (!customStyleTag) {
-    customStyleTag = document.createElement('style');
-    customStyleTag.id = 'preset-custom-style';
-    document.head.appendChild(customStyleTag);
-  }
-  customStyleTag.textContent = styles;
+  applyPresetStyles(Array.from(doc.querySelectorAll('style')).map(s => s.textContent).join('\n'));
 
   // Extract body inner content or container
   const container = doc.querySelector('.invoice-container') || doc.querySelector('.voucher-card') || doc.body;
-  const content = container ? container.innerHTML : rawHtml;
+  const content = container === doc.body ? doc.body.innerHTML : container.outerHTML;
 
-  canvas.innerHTML = content;
+  canvas.replaceChildren(createBlockElement(content, 'preset'));
+  canvas.style.padding = container === doc.body ? '' : '0';
+  selectBlock(null);
 
   // Make text elements directly editable
   canvas.querySelectorAll('h1, h2, h3, h4, p, span, td, th, div').forEach(el => {
@@ -1514,6 +1794,7 @@ function loadRawHtmlIntoCanvas(rawHtml, tplName) {
       el.contentEditable = 'true';
     }
   });
+  attachPresetSectionDrag();
 
   if (tplName) {
     const cleanName = tplName.replace(/\(.*?\)/g, '').trim();
@@ -1528,12 +1809,62 @@ function loadRawHtmlIntoCanvas(rawHtml, tplName) {
   toastOk('تم تحميل القالب بنجاح للتصميم والتعديل!');
 }
 
+function restoreEditorContent(content) {
+  const canvas = $('#editor-canvas-sheet', view);
+  if (!canvas) return;
+  canvas.innerHTML = content;
+  if (canvas.querySelector('.invoice-container, .voucher-card')) canvas.style.padding = '0';
+  $$('.editor-block', canvas).forEach(attachBlockControls);
+  attachPresetSectionDrag();
+  applySheetBackground();
+}
+
 // ─── Attach Application Events ─────────────────────────────────────────────
 
 function attachAppEvents() {
   if (!view) return;
 
   const canvas = $('#editor-canvas-sheet', view);
+
+  $('#sel-table-style', view)?.addEventListener('change', (e) => {
+    applyTableStyle(selectedTable, e.target.value);
+  });
+  $('#btn-copy-block', view)?.addEventListener('click', () => {
+    if (!selectedBlock) return toastErr('حدد عنصراً أولاً');
+    copiedBlock = selectedBlock.cloneNode(true);
+    toastOk('تم نسخ العنصر');
+  });
+  $('#btn-paste-block', view)?.addEventListener('click', () => {
+    if (!copiedBlock) return toastErr('انسخ عنصراً أولاً');
+    const clone = copiedBlock.cloneNode(true);
+    attachBlockControls(clone);
+    if (selectedBlock?.isConnected) selectedBlock.after(clone);
+    else canvas.appendChild(clone);
+    attachPresetSectionDrag();
+    selectBlock(clone);
+    clone.scrollIntoView({ block: 'nearest' });
+  });
+  $('#rng-builder-zoom', view)?.addEventListener('input', (e) => {
+    zoomPercent = Number(e.target.value);
+    canvas.style.zoom = `${zoomPercent}%`;
+    $('#out-builder-zoom', view).textContent = `${zoomPercent}%`;
+  });
+  $('#rng-block-scale', view)?.addEventListener('input', (e) => {
+    if (!selectedBlock) return;
+    selectedBlock.style.zoom = `${e.target.value}%`;
+    $('#out-block-scale', view).textContent = `${e.target.value}%`;
+  });
+  view.onkeydown = (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    const key = e.key.toLowerCase();
+    if (key === 'c' && selectedBlock) {
+      copiedBlock = selectedBlock.cloneNode(true);
+      e.preventDefault();
+    } else if (key === 'v' && copiedBlock) {
+      $('#btn-paste-block', view).click();
+      e.preventDefault();
+    }
+  };
 
   // Tab Switching
   $$('.tab-btn', view).forEach(btn => {
@@ -1653,7 +1984,7 @@ function attachAppEvents() {
         reader.onload = (re) => {
           sheetBg.bgImage = re.target.result;
           applySheetBackground();
-          renderView(); // re-render to update remove button and options
+          $('#btn-remove-bg-img', view)?.removeAttribute('hidden');
           toastOk('تم تحميل صورة الورق الرسمي للخلفية');
         };
         reader.readAsDataURL(file);
@@ -1682,7 +2013,8 @@ function attachAppEvents() {
     btnRemoveBgImg.onclick = () => {
       sheetBg.bgImage = '';
       applySheetBackground();
-      renderView();
+      const removeButton = $('#btn-remove-bg-img', view);
+      if (removeButton) removeButton.hidden = true;
       toastOk('تمت إزالة صورة الخلفية');
     };
   }
@@ -1901,6 +2233,12 @@ function attachAppEvents() {
         case 'sar_badge':
           newBlock = createBlockElement(getSarBadgeBlockHTML(col), 'sar_badge');
           break;
+        case 'qr_code':
+          newBlock = createBlockElement(getQrBlockHTML(), 'qr_code');
+          break;
+        case 'barcode':
+          newBlock = createBlockElement(getBarcodeBlockHTML(), 'barcode');
+          break;
         case 'voucher_banner':
           newBlock = createBlockElement(getVoucherBannerBlockHTML(col), 'voucher_banner');
           break;
@@ -1923,6 +2261,7 @@ function attachAppEvents() {
 
       if (newBlock && canvas) {
         canvas.appendChild(newBlock);
+        selectBlock(newBlock);
         newBlock.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         toastOk('تمت إضافة العنصر إلى المستند');
       }
@@ -1934,7 +2273,11 @@ function attachAppEvents() {
   if (btnClear) {
     btnClear.onclick = () => {
       if (confirm('هل تريد إفراغ ورقة العمل بالكامل للبدء من صفحة بيضاء؟')) {
-        if (canvas) canvas.innerHTML = '';
+        if (canvas) {
+          canvas.innerHTML = '';
+          canvas.style.padding = '';
+        }
+        selectBlock(null);
         applySheetBackground();
         toastOk('تم إفراغ الصفحة');
       }
@@ -1971,6 +2314,8 @@ function attachAppEvents() {
           name_ar: docMeta.name_ar.trim(),
           primary_color: docMeta.primary_color,
           html_content: generatedHTML,
+          editor_content: canvas.innerHTML,
+          preset_styles: presetStyles,
           bg_config: sheetBg
         };
 
@@ -1995,8 +2340,14 @@ function attachAppEvents() {
 
 export async function render(container) {
   view = container;
+  document.querySelector('head #preset-custom-style')?.remove();
   editingId = null;
   saving = false;
+  presetStyles = '';
+  selectedBlock = null;
+  selectedTable = null;
+  copiedBlock = null;
+  zoomPercent = 100;
   activeTab = 'elements';
   docMeta = {
     type: 'invoices',
@@ -2016,5 +2367,23 @@ export async function render(container) {
     frameColor: '#cbd5e1'
   };
 
+  const requestedId = new URLSearchParams(window.location.hash.split('?')[1] || '').get('id');
+  if (requestedId) {
+    try {
+      const response = await api.get('/api/templates/builder/' + encodeURIComponent(requestedId));
+      const config = response.builder_config || response;
+      if (config.editor_content) {
+        editingId = requestedId;
+        docMeta = { type: config.type || 'invoices', name_ar: config.name_ar || 'قالب مخصص', primary_color: config.primary_color || '#1a2638' };
+        sheetBg = { ...sheetBg, ...config.bg_config };
+        renderView();
+        restoreEditorContent(config.editor_content);
+        if (config.preset_styles) applyPresetStyles(config.preset_styles);
+        return;
+      }
+    } catch (err) {
+      toastErr('تعذر فتح القالب: ' + (err.message || 'خطأ غير متوقع'));
+    }
+  }
   renderView();
 }

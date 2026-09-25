@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="utf-8" />
+  <title>فاتورة مبيعات ضريبية — {{invoice_number}}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 8mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 11.5px;
+      color: #000000;
+      background: #ffffff;
+      direction: rtl;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .invoice-container {
+      width: 196mm;
+      min-height: 278mm;
+      margin: 0 auto;
+      padding: 10px 14px;
+      box-sizing: border-box;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* ── الترويسة العلوية ── */
+    .top-header-grid {
+      display: grid;
+      grid-template-columns: 1fr 130px;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 12px;
+    }
+
+    .header-center-titles {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .tax-invoice-badge {
+      background: #000000;
+      color: #ffffff;
+      padding: 8px 30px;
+      text-align: center;
+      width: 320px;
+      max-width: 100%;
+      margin-bottom: 4px;
+    }
+
+    .tax-invoice-badge .ar-title {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .tax-invoice-badge .en-title {
+      font-size: 12.5px;
+      font-weight: 700;
+      font-family: Arial, Tahoma, sans-serif;
+      letter-spacing: 0.8px;
+    }
+
+    .invoice-no-pill {
+      border: 1.5px solid #000000;
+      background: #ffffff;
+      padding: 3px 18px;
+      font-weight: 800;
+      font-size: 12px;
+      display: inline-block;
+      min-width: 210px;
+    }
+
+    .invoice-no-pill span.num {
+      font-family: Tahoma, Arial, sans-serif;
+      font-size: 13px;
+    }
+
+    .qr-frame-box {
+      text-align: left;
+      line-height: 0;
+    }
+
+    .qr-frame-box img,
+    .qr-frame-box svg {
+      width: 110px !important;
+      height: 110px !important;
+      display: inline-block;
+    }
+
+    /* ── شريط بيانات الفاتورة الرئيسي (الرمادي الفاتح) ── */
+    .invoice-meta-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1.5px solid #000000;
+      background: #e2e8f0;
+      margin-bottom: 8px;
+      font-size: 11px;
+    }
+
+    .invoice-meta-table td {
+      border: 1px solid #64748b;
+      padding: 5px 8px;
+      vertical-align: middle;
+    }
+
+    .num {
+      font-family: Tahoma, Arial, sans-serif;
+      direction: ltr;
+      unicode-bidi: embed;
+    }
+
+    /* ── شبكة فاتورة من / فاتورة إلى ── */
+    .parties-grid-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1.5px solid #000000;
+      margin-bottom: 10px;
+      font-size: 11px;
+    }
+
+    .parties-grid-table td {
+      border: 1px solid #000000;
+      vertical-align: top;
+      padding: 0;
+    }
+
+    .party-card {
+      padding: 6px 10px;
+    }
+
+    .party-card-header {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid #000000;
+      padding-bottom: 4px;
+      margin-bottom: 6px;
+      font-weight: 800;
+      font-size: 12px;
+    }
+
+    .party-row {
+      display: flex;
+      margin-bottom: 4px;
+      line-height: 1.4;
+    }
+
+    .party-lbl {
+      width: 130px;
+      font-weight: 600;
+      color: #1e293b;
+      flex-shrink: 0;
+    }
+
+    .party-val {
+      font-weight: 700;
+      color: #000000;
+      flex-grow: 1;
+    }
+
+    /* ── جدول الأصناف والبنود ── */
+    .items-table-wrapper {
+      margin-bottom: 12px;
+    }
+
+    .items-table-wrapper table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1.5px solid #000000;
+      font-size: 11px;
+    }
+
+    .items-table-wrapper table th {
+      background: #b9d5e9 !important;
+      color: #000000 !important;
+      border: 1px solid #000000 !important;
+      padding: 6px 4px;
+      font-weight: 800;
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    .items-table-wrapper table td {
+      border: 1px solid #64748b !important;
+      padding: 5px 6px;
+      vertical-align: middle;
+      color: #000000;
+    }
+
+    .items-table-wrapper table tbody tr:nth-child(even) {
+      background: #f8fafc;
+    }
+
+    /* ── القسم السفلي: الإجماليات وختم البائع ── */
+    .bottom-section-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 18px;
+      align-items: start;
+      margin-top: auto;
+      margin-bottom: 12px;
+    }
+
+    /* جدول الإجماليات المالي */
+    .totals-box-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1.5px solid #000000;
+      font-size: 11px;
+    }
+
+    .totals-box-table td {
+      border: 1px solid #000000;
+      padding: 4px 8px;
+      vertical-align: middle;
+    }
+
+    .totals-box-table td.lbl {
+      background: #f1f5f9;
+      font-weight: 700;
+      width: 62%;
+      text-align: right;
+    }
+
+    .totals-box-table td.val {
+      font-family: Tahoma, Arial, sans-serif;
+      font-weight: 800;
+      text-align: center;
+      width: 26%;
+      direction: ltr;
+    }
+
+    .totals-box-table td.curr {
+      width: 12%;
+      text-align: center;
+      font-weight: 700;
+      background: #f8fafc;
+    }
+
+    /* كرت الختم وتوقيع البائع */
+    .seller-sign-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+    }
+
+    .stamp-box {
+      width: 100%;
+      height: 95px;
+      border: 1.5px solid #000000;
+      background: #ffffff;
+      margin-bottom: 6px;
+    }
+
+    .seller-name-caption {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      font-size: 11.5px;
+      font-weight: 700;
+      width: 100%;
+    }
+
+    /* ── التذييل ورقم الصفحة ── */
+    .invoice-footer-bar {
+      border-top: 1px solid #cbd5e1;
+      padding-top: 6px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #334155;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
+      }
+
+      .invoice-container {
+        width: 100%;
+        min-height: auto;
+        height: 100%;
+        margin: 0;
+        padding: 5mm;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="invoice-container">
+    <div>
+      <!-- ── الترويسة العلوية ── -->
+      <header class="top-header-grid">
+        <!-- المنتصف: شارة الفاتورة ورقمها -->
+        <div class="header-center-titles">
+          <div class="tax-invoice-badge">
+            <div class="ar-title">فاتورة مبيعات ضريبية</div>
+            <div class="en-title">TAX SALES INVOICE</div>
+          </div>
+          <div class="invoice-no-pill">
+            رقم الفاتورة: INVOICE NO: <span class="num">{{invoice_number}}</span>
+          </div>
+        </div>
+
+        <!-- اليمين: رمز الاستجابة السريع QR -->
+        <div class="qr-frame-box">
+          {{qr_code}}
+        </div>
+      </header>
+
+      <!-- ── شريط بيانات الفاتورة والمخزن ── -->
+      <table class="invoice-meta-table">
+        <tr>
+          <!-- التاريخ -->
+          <td style="width: 36%;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 2px;">
+              <span>التاريخ:</span>
+              <strong class="num">{{issue_date}}</strong>
+              <span>DATE :</span>
+              <strong class="num">{{issue_date}}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top: 4px;">
+              <span>نوع الفاتورة:</span>
+              <strong>{{payment_method}}</strong>
+              <span>طريقة الدفع:</span>
+              <strong>{{payment_method}}</strong>
+            </div>
+          </td>
+
+          <!-- الاستحقاق والمخزن -->
+          <td style="width: 34%;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 2px;">
+              <span>تاريخ الإستحقاق:</span>
+              <strong class="num">{{due_date}}</strong>
+              <span>DUE DATE :</span>
+              <strong class="num">{{due_date}}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top: 4px;">
+              <span>المخزن:</span>
+              <strong>المخزن الرئيسي</strong>
+              <span>STORE :</span>
+              <strong>Main Store</strong>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- ── بيانات البائع والعميل ── -->
+      <table class="parties-grid-table">
+        <tr>
+          <!-- فاتورة من (المورد / المنشأة) -->
+          <td style="width: 50%;">
+            <div class="party-card">
+              <div class="party-card-header">
+                <span>فاتورة من</span>
+                <span>INVOICE FROM</span>
+              </div>
+              <div class="party-row">
+                <span class="party-lbl">اسم المورد :</span>
+                <span class="party-val">{{seller_name}}</span>
+              </div>
+              <div class="party-row">
+                <span class="party-lbl">الرقم الضريبي للمورد :</span>
+                <span class="party-val num">{{seller_tax}}</span>
+              </div>
+              <div class="party-row">
+                <span class="party-lbl">عنوان المورد:</span>
+                <span class="party-val">{{seller_address}}</span>
+              </div>
+              <div class="party-row">
+                <span class="party-lbl">سجل تجاري :</span>
+                <span class="party-val num">{{seller_cr}}</span>
+              </div>
+            </div>
+          </td>
+
+          <!-- فاتورة إلى (العميل) -->
+          <td style="width: 50%;">
+            <div class="party-card">
+              <div class="party-card-header">
+                <span>فاتورة إلى</span>
+                <span>INVOICE TO</span>
+              </div>
+              <div class="party-row">
+                <span class="party-lbl">اسم العميل:</span>
+                <span class="party-val">{{buyer_name}}</span>
+              </div>
+              <div class="party-row">
+                <span class="party-lbl">الرقم الضريبي للعميل :</span>
+                <span class="party-val num">{{buyer_tax}}</span>
+              </div>
+              <div class="party-row">
+                <span class="party-lbl">عنوان العميل:</span>
+                <span class="party-val">{{buyer_address}}</span>
+              </div>
+              <div class="party-row">
+                <span class="party-lbl">جوال العميل :</span>
+                <span class="party-val num">{{buyer_phone}}</span>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- ── جدول الأصناف والبنود ── -->
+      <div class="items-table-wrapper">
+        {{items_table}}
+      </div>
+    </div>
+
+    <!-- ── القسم السفلي: الإجماليات + ختم البائع والتذييل ── -->
+    <div>
+      <div class="bottom-section-grid">
+        <!-- جدول الإجماليات المالية -->
+        <table class="totals-box-table">
+          <tr>
+            <td class="lbl">الإجمالي (غير شامل ضريبة القيمة المضافة)</td>
+            <td class="val num">{{subtotal}}</td>
+            <td class="curr">{{currency_symbol}}</td>
+          </tr>
+          <tr>
+            <td class="lbl">إجمالي الخصومات</td>
+            <td class="val num">{{discount}}</td>
+            <td class="curr">{{currency_symbol}}</td>
+          </tr>
+          <tr>
+            <td class="lbl">الإجمالي الخاضع للضريبة (غير شامل الضريبة)</td>
+            <td class="val num">{{subtotal}}</td>
+            <td class="curr">{{currency_symbol}}</td>
+          </tr>
+          <tr>
+            <td class="lbl">ضريبة القيمة المضافة 15%</td>
+            <td class="val num">{{tax_amount}}</td>
+            <td class="curr">{{currency_symbol}}</td>
+          </tr>
+          <tr style="background:#f1f5f9;">
+            <td class="lbl" style="font-weight:900; font-size:12px;">الصافي بعد الضريبة</td>
+            <td class="val num" style="font-size:12.5px; font-weight:900;">{{grand_total}}</td>
+            <td class="curr" style="font-weight:900;">{{currency_symbol}}</td>
+          </tr>
+        </table>
+
+        <!-- مربع الختم والتوقيع -->
+        <div class="seller-sign-card">
+          <div class="stamp-box"></div>
+          <div class="seller-name-caption">
+            <span>اسم البائع:</span>
+            <strong>{{seller_name}}</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── شريط التذييل ── -->
+      <footer class="invoice-footer-bar">
+        <div>{{seller_address}}</div>
+      </footer>
+    </div>
+  </div>
+
+</body>
+
+</html>

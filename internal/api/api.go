@@ -1376,7 +1376,10 @@ func (s *Server) Handler() http.Handler {
 		if id == "" {
 			id = crypto.UUID()
 		}
-		_ = s.templates.SaveBuilderConfig(id, req)
+		if err := s.templates.SaveBuilderConfig(id, req); err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
 		s.json(w, 201, map[string]any{"id": id, "saved": true})
 	})
 
@@ -1387,7 +1390,10 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, "بيانات غير صالحة")
 			return
 		}
-		_ = s.templates.SaveBuilderConfig(id, req)
+		if err := s.templates.SaveBuilderConfig(id, req); err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
 		s.json(w, 200, map[string]any{"id": id, "updated": true})
 	})
 

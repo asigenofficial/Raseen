@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -361,32 +362,60 @@ func (s *TemplateService) Reset() error {
 // ─── GetFilePath ──────────────────────────────────────────────────────────────
 
 func (s *TemplateService) GetFilePath(id string) (string, error) {
+	if id == "" {
+		return "", errors.New("empty template id")
+	}
+
+	cleanId := strings.TrimSuffix(id, ".html")
+
+	// 1. Direct query by id, name_ar, or file_path in DB
 	var filePath string
-	_ = s.db.QueryRow("SELECT file_path FROM excel_templates WHERE id = ?", id).Scan(&filePath)
-	if filePath != "" {
+	err := s.db.QueryRow(`
+		SELECT file_path FROM excel_templates 
+		WHERE id = ? OR name_ar = ? OR file_path LIKE ? OR file_path LIKE ?
+		LIMIT 1
+	`, id, cleanId, "%"+id+"%", "%"+cleanId+"%").Scan(&filePath)
+	if err == nil && filePath != "" {
 		if _, errStat := os.Stat(filePath); errStat == nil {
 			return filePath, nil
 		}
 	}
 
-	// Fallback: search by id in both dirs
+	// 2. Direct search on disk by filename in templates/invoices and templates/documents
 	for _, sub := range []string{"invoices", "documents"} {
-		for _, ext := range []string{".html"} {
-			p := filepath.Join(s.dataDir, "templates", sub, id+ext)
-			if _, errStat := os.Stat(p); errStat == nil {
-				return p, nil
-			}
+		// exact match
+		exact := filepath.Join(s.dataDir, "templates", sub, cleanId+".html")
+		if _, errStat := os.Stat(exact); errStat == nil {
+			return exact, nil
 		}
-		// any file containing id
+		// case/space insensitive match
 		entries, err := os.ReadDir(filepath.Join(s.dataDir, "templates", sub))
 		if err == nil {
 			for _, e := range entries {
-				if strings.Contains(strings.ToLower(e.Name()), strings.ToLower(id)) {
+				base := strings.TrimSuffix(e.Name(), ".html")
+				if strings.EqualFold(base, cleanId) || strings.EqualFold(strings.ReplaceAll(base, " ", "_"), strings.ReplaceAll(cleanId, " ", "_")) {
+					return filepath.Join(s.dataDir, "templates", sub, e.Name()), nil
+				}
+				if strings.Contains(strings.ToLower(e.Name()), strings.ToLower(cleanId)) {
 					return filepath.Join(s.dataDir, "templates", sub, e.Name()), nil
 				}
 			}
 		}
 	}
+
+	// 3. Resync from disk and retry DB
+	_ = s.SyncDiskTemplates()
+	err = s.db.QueryRow(`
+		SELECT file_path FROM excel_templates 
+		WHERE id = ? OR name_ar = ? OR file_path LIKE ? OR file_path LIKE ?
+		LIMIT 1
+	`, id, cleanId, "%"+id+"%", "%"+cleanId+"%").Scan(&filePath)
+	if err == nil && filePath != "" {
+		if _, errStat := os.Stat(filePath); errStat == nil {
+			return filePath, nil
+		}
+	}
+
 	return "", errors.New("لم يتم العثور على ملف القالب المطلوب")
 }
 
@@ -456,34 +485,67 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		}
 	}
 
-	buyerPhone := ""
+	buyerPhone, buyerCode, buyerCity, buyerStreet, buyerDistrict, buyerPostalCode, buyerBuildingNo := "", "", "", "", "", "", ""
 	if inv.ClientSnapshot != nil {
+		buyerCode = inv.ClientSnapshot.ClientCode
+		buyerCity = inv.ClientSnapshot.City
+		buyerStreet = inv.ClientSnapshot.Street
+		buyerDistrict = inv.ClientSnapshot.District
+		buyerPostalCode = inv.ClientSnapshot.PostalCode
+		buyerBuildingNo = inv.ClientSnapshot.BuildingNo
 		buyerPhone = inv.ClientSnapshot.Phone
 		if buyerPhone == "" {
 			buyerPhone = inv.ClientSnapshot.Mobile
 		}
 	}
+	if buyerCode == "" {
+		buyerCode = inv.ClientCode
+	}
 
-	sellerName, sellerTax, sellerAddress, sellerCR := "", "", "", ""
+	sellerName, sellerTax, sellerAddress, sellerCR, sellerCity, sellerCountry := "", "", "", "", "", ""
+	sellerNameEn, sellerAddressEn, sellerPhone, sellerEmail := "", "", "", ""
+	sellerLogoHtml := ""
 	if inv.IssuerSnapshot != nil {
 		sellerName = inv.IssuerSnapshot.NameAr
+		sellerNameEn = inv.IssuerSnapshot.NameEn
 		sellerTax = inv.IssuerSnapshot.TaxNumber
 		sellerAddress = inv.IssuerSnapshot.Street + " " + inv.IssuerSnapshot.City
+		sellerAddressEn = inv.IssuerSnapshot.AddressEn
+		if sellerAddressEn == "" {
+			sellerAddressEn = inv.IssuerSnapshot.StreetEn + " " + inv.IssuerSnapshot.CityEn
+		}
 		sellerCR = inv.IssuerSnapshot.CommercialRegister
+		sellerCity = inv.IssuerSnapshot.City
+		sellerCountry = inv.IssuerSnapshot.Country
+		sellerPhone = inv.IssuerSnapshot.Phone
+		sellerEmail = inv.IssuerSnapshot.Email
+		if inv.IssuerSnapshot.LogoData != nil && *inv.IssuerSnapshot.LogoData != "" {
+			sellerLogoHtml = fmt.Sprintf(`<img src="%s" alt="Logo" style="max-height:75px;max-width:140px;object-fit:contain;" />`, *inv.IssuerSnapshot.LogoData)
+		}
 	}
 
 	qrB64 := ""
 	if inv.QrPayload != "" {
 		if qrPNG, err := qrcode.Encode(inv.QrPayload, qrcode.Medium, 120); err == nil {
-			qrB64 = `<img src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(qrPNG) + `" alt="QR" style="width:100px;height:100px;" />`
+			qrB64 = `<img src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(qrPNG) + `" alt="QR" style="width:95px;height:95px;display:block;" />`
 		}
 	}
 
-	sellerPhone, sellerEmail := "", ""
-	if inv.IssuerSnapshot != nil {
-		sellerPhone = inv.IssuerSnapshot.Phone
-		sellerEmail = inv.IssuerSnapshot.Email
+	totalQty := 0.0
+	for _, it := range inv.Lines {
+		totalQty += it.Quantity
 	}
+
+	paidAmount := inv.PaidAmountMajor
+	if paidAmount == 0 && inv.GrandTotalMajor > 0 && (strings.Contains(inv.PaymentMethod, "نقد") || strings.Contains(strings.ToLower(inv.PaymentMethod), "cash")) {
+		paidAmount = inv.GrandTotalMajor
+	}
+	remainingAmount := inv.RemainingAmountMajor
+	if remainingAmount == 0 && inv.GrandTotalMajor > paidAmount {
+		remainingAmount = inv.GrandTotalMajor - paidAmount
+	}
+
+	smartRows := generateSmartRows(tpl, inv)
 
 	result := strings.NewReplacer(
 		"{{invoice_number}}", inv.InvoiceNumber,
@@ -496,22 +558,45 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		}(),
 		"{{issue_time}}", inv.IssueTime,
 		"{{seller_name}}", sellerName,
+		"{{seller_name_en}}", sellerNameEn,
 		"{{seller_tax}}", sellerTax,
 		"{{seller_address}}", sellerAddress,
+		"{{seller_address_en}}", sellerAddressEn,
 		"{{seller_cr}}", sellerCR,
+		"{{seller_city}}", sellerCity,
+		"{{seller_country}}", sellerCountry,
 		"{{seller_phone}}", sellerPhone,
 		"{{seller_email}}", sellerEmail,
+		"{{logo}}", sellerLogoHtml,
 		"{{buyer_name}}", buyerName,
+		"{{buyer_code}}", buyerCode,
 		"{{buyer_tax}}", buyerTax,
 		"{{buyer_address}}", buyerAddress,
+		"{{buyer_city}}", buyerCity,
+		"{{buyer_street}}", buyerStreet,
+		"{{buyer_district}}", buyerDistrict,
+		"{{buyer_postal_code}}", buyerPostalCode,
+		"{{buyer_building_no}}", buyerBuildingNo,
 		"{{buyer_phone}}", buyerPhone,
 		"{{subtotal}}", fmt.Sprintf("%.2f", inv.SubtotalMajor),
 		"{{discount}}", fmt.Sprintf("%.2f", inv.DiscountAmountMajor),
 		"{{tax_amount}}", fmt.Sprintf("%.2f", inv.TaxAmountMajor),
 		"{{grand_total}}", fmt.Sprintf("%.2f", inv.GrandTotalMajor),
+		"{{paid_amount}}", fmt.Sprintf("%.2f", paidAmount),
+		"{{remaining_amount}}", fmt.Sprintf("%.2f", remainingAmount),
+		"{{total_qty}}", func() string {
+			if totalQty == float64(int64(totalQty)) {
+				return fmt.Sprintf("%.0f", totalQty)
+			}
+			return fmt.Sprintf("%.2f", totalQty)
+		}(),
 		"{{payment_method}}", inv.PaymentMethod,
 		"{{notes}}", inv.Notes,
 		"{{items_table}}", generateItemsTable(inv),
+		"{{items_rows}}", smartRows,
+		"{{items_rows_7col}}", smartRows,
+		"{{items_rows_luxury}}", smartRows,
+		"{{items_table_body}}", smartRows,
 		"{{qr_code}}", qrB64,
 		"{{voucher_number}}", inv.InvoiceNumber,
 		"{{voucher_date}}", inv.IssueDate,
@@ -524,7 +609,200 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		"{{currency}}", "SAR",
 	).Replace(tpl)
 
+	// استبدال أي وسم صفوف أصناف مهما كان اسمه
+	itemsRowsRegex := regexp.MustCompile(`\{\{\s*(items_rows[a-zA-Z0-9_-]*|items_table_body[a-zA-Z0-9_-]*|items_body[a-zA-Z0-9_-]*|table_rows[a-zA-Z0-9_-]*)\s*\}\}`)
+	result = itemsRowsRegex.ReplaceAllString(result, smartRows)
+
+	// استبدال ذكي إضافي إذا كان القالب يحتوي على tbody ثابت أو فارغ بدون وسوم
+	tbodyRegex := regexp.MustCompile(`(?i)(<tbody\b[^>]*>)([\s\S]*?)(</tbody>)`)
+	if tbodyRegex.MatchString(result) && !strings.Contains(tpl, "{{items_rows") && !strings.Contains(tpl, "{{items_table") {
+		result = tbodyRegex.ReplaceAllString(result, "${1}"+smartRows+"${3}")
+	}
+
 	return result
+}
+
+type colType int
+
+const (
+	colIndex colType = iota
+	colCode
+	colName
+	colUnit
+	colPrice
+	colQty
+	colTaxable
+	colDiscount
+	colTaxRate
+	colTaxAmount
+	colTotal
+	colNotes
+)
+
+func detectColumnType(th string) colType {
+	clean := strings.ToLower(stripHtmlTags(th))
+	clean = strings.Join(strings.Fields(clean), " ")
+
+	if strings.Contains(clean, "شامل") || strings.Contains(clean, "مع الضريبة") || strings.Contains(clean, "صافي") || strings.Contains(clean, "with vat") || strings.Contains(clean, "total with") || strings.Contains(clean, "gross") {
+		return colTotal
+	}
+	if strings.Contains(clean, "كود") || strings.Contains(clean, "رمز") || strings.Contains(clean, "item code") || strings.Contains(clean, "sku") || strings.Contains(clean, "barcode") || strings.Contains(clean, "item no") {
+		return colCode
+	}
+	if clean == "#" || clean == "م" || clean == "ت" || clean == "م." || strings.Contains(clean, "تسلسل") || clean == "no" || clean == "no." || clean == "sr" || clean == "sn" {
+		return colIndex
+	}
+	if strings.Contains(clean, "سعر") || strings.Contains(clean, "price") {
+		return colPrice
+	}
+	if strings.Contains(clean, "كمية") || strings.Contains(clean, "qty") || strings.Contains(clean, "quantity") || strings.Contains(clean, "عدد") {
+		return colQty
+	}
+	if strings.Contains(clean, "وحدة") || strings.Contains(clean, "unit") || strings.Contains(clean, "uom") {
+		return colUnit
+	}
+	if strings.Contains(clean, "خصم") || strings.Contains(clean, "discount") {
+		return colDiscount
+	}
+	if strings.Contains(clean, "نسبة") || strings.Contains(clean, "rate") || clean == "%" || clean == "15%" {
+		return colTaxRate
+	}
+	if strings.Contains(clean, "ضريبة") || strings.Contains(clean, "vat") || strings.Contains(clean, "tax") {
+		return colTaxAmount
+	}
+	if strings.Contains(clean, "قبل") || strings.Contains(clean, "خاضع") || strings.Contains(clean, "taxable") || strings.Contains(clean, "إجمالي") || strings.Contains(clean, "subtotal") || strings.Contains(clean, "total") || strings.Contains(clean, "مبلغ") {
+		return colTaxable
+	}
+	if strings.Contains(clean, "ملاحظ") || strings.Contains(clean, "note") {
+		return colNotes
+	}
+	return colName
+}
+
+func stripHtmlTags(s string) string {
+	re := regexp.MustCompile(`<[^>]*>`)
+	return re.ReplaceAllString(s, " ")
+}
+
+func extractTableHeaders(htmlSnippet string) []string {
+	tableRegex := regexp.MustCompile(`(?i)<table\b[^>]*>([\s\S]*?)</table>`)
+	tableMatches := tableRegex.FindAllString(htmlSnippet, -1)
+	targetTableHtml := ""
+	for _, tbl := range tableMatches {
+		if strings.Contains(tbl, "items_rows") || strings.Contains(tbl, "items_table_body") || strings.Contains(tbl, "items_body") || strings.Contains(tbl, "table_rows") {
+			targetTableHtml = tbl
+			break
+		}
+	}
+	if targetTableHtml == "" {
+		for _, tbl := range tableMatches {
+			lower := strings.ToLower(tbl)
+			if strings.Contains(lower, "وصف") || strings.Contains(lower, "صنف") || strings.Contains(lower, "بيان") || strings.Contains(lower, "كمية") || strings.Contains(lower, "سعر") || strings.Contains(lower, "item") || strings.Contains(lower, "qty") || strings.Contains(lower, "price") {
+				targetTableHtml = tbl
+				break
+			}
+		}
+	}
+	if targetTableHtml == "" {
+		targetTableHtml = htmlSnippet
+	}
+
+	thRegex := regexp.MustCompile(`(?i)<th\b[^>]*>([\s\S]*?)</th>`)
+	matches := thRegex.FindAllStringSubmatch(targetTableHtml, -1)
+	if len(matches) > 0 {
+		headers := make([]string, 0, len(matches))
+		for _, m := range matches {
+			if len(m) > 1 {
+				headers = append(headers, m[1])
+			}
+		}
+		return headers
+	}
+
+	// Try <td> in the first <tr>
+	trRegex := regexp.MustCompile(`(?i)<tr\b[^>]*>([\s\S]*?)</tr>`)
+	if trMatch := trRegex.FindStringSubmatch(targetTableHtml); len(trMatch) > 1 {
+		tdRegex := regexp.MustCompile(`(?i)<td\b[^>]*>([\s\S]*?)</td>`)
+		tdMatches := tdRegex.FindAllStringSubmatch(trMatch[1], -1)
+		if len(tdMatches) > 0 {
+			headers := make([]string, 0, len(tdMatches))
+			for _, m := range tdMatches {
+				if len(m) > 1 {
+					headers = append(headers, m[1])
+				}
+			}
+			return headers
+		}
+	}
+
+	return nil
+}
+
+func generateSmartRows(tpl string, inv *InvoiceView) string {
+	headers := extractTableHeaders(tpl)
+	var cols []colType
+	if len(headers) > 0 {
+		cols = make([]colType, len(headers))
+		for i, h := range headers {
+			cols[i] = detectColumnType(h)
+		}
+	} else {
+		cols = []colType{colIndex, colName, colQty, colUnit, colPrice, colTaxable, colDiscount, colTaxAmount, colTaxRate, colTotal}
+	}
+
+	var sb strings.Builder
+	for i, item := range inv.Lines {
+		bg := "#fff"
+		if i%2 == 1 {
+			bg = "#fafafa"
+		}
+		sb.WriteString(fmt.Sprintf(`<tr style="background:%s;">`, bg))
+		for _, col := range cols {
+			switch col {
+			case colIndex:
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;">%d</td>`, i+1))
+			case colCode:
+				code := item.ItemCode
+				if code == "" {
+					code = "—"
+				}
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%s</td>`, html.EscapeString(code)))
+			case colName:
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;font-weight:600;text-align:right;">%s</td>`, html.EscapeString(item.ItemName)))
+			case colUnit:
+				u := item.Unit
+				if u == "" {
+					u = "حبة"
+				}
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;">%s</td>`, html.EscapeString(u)))
+			case colPrice:
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%.2f</td>`, item.UnitPriceMajor))
+			case colQty:
+				if item.Quantity == float64(int64(item.Quantity)) {
+					sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%.0f</td>`, item.Quantity))
+				} else {
+					sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%.2f</td>`, item.Quantity))
+				}
+			case colTaxable:
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%.2f</td>`, item.TaxableMajor))
+			case colDiscount:
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%.2f</td>`, item.DiscountMajor))
+			case colTaxRate:
+				sb.WriteString(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">15%</td>`)
+			case colTaxAmount:
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%.2f</td>`, item.TaxAmountMajor))
+			case colTotal:
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;font-weight:700;">%.2f</td>`, item.TotalLineMajor))
+			case colNotes:
+				sb.WriteString(`<td style="padding:5px 6px;text-align:center;"></td>`)
+			default:
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;text-align:right;">%s</td>`, html.EscapeString(item.ItemName)))
+			}
+		}
+		sb.WriteString(`</tr>`)
+	}
+
+	return sb.String()
 }
 
 func generateItemsTable(inv *InvoiceView) string {
@@ -605,7 +883,9 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 
 	// 1. Save HTML to disk
 	outDir := filepath.Join(s.dataDir, "templates", category)
-	_ = os.MkdirAll(outDir, 0755)
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		return err
+	}
 	filePath := filepath.Join(outDir, id+".html")
 
 	htmlContent := ""
@@ -616,7 +896,9 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 		// Generate a minimal default HTML template
 		htmlContent = buildDefaultHTMLFromConfig(cfgMap, category)
 	}
-	_ = os.WriteFile(filePath, []byte(htmlContent), 0644)
+	if err := os.WriteFile(filePath, []byte(htmlContent), 0644); err != nil {
+		return err
+	}
 
 	badge := "مخصص"
 	if category == "documents" {
@@ -624,7 +906,7 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 	}
 
 	// 2. Upsert in catalog
-	_, _ = s.db.Exec(`
+	_, err = s.db.Exec(`
 		INSERT INTO excel_templates (id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, is_active, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', 1, CURRENT_TIMESTAMP)
 		ON CONFLICT(id) DO UPDATE SET
@@ -634,6 +916,9 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 			color_hex = excluded.color_hex,
 			updated_at = CURRENT_TIMESTAMP
 	`, id, nameAr, id, "قالب HTML من محرر القوالب", badge, category, filePath, primaryColor)
+	if err != nil {
+		return err
+	}
 
 	// 3. Save full builder config in meta table
 	_, err = s.db.Exec(`
