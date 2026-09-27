@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 
 <head>
@@ -339,7 +339,7 @@
       display: grid;
       grid-template-columns: 135px 1.25fr 1.35fr;
       gap: 12px;
-      align-items: stretch;
+      align-items: stretch;`n      margin-top: auto;
       margin-bottom: 12px;
       position: relative;
       z-index: 2;
@@ -671,14 +671,15 @@
         <table class="items-main-table">
           <thead>
             <tr>
-              <th style="width:5%;">#</th>
-              <th style="width:31%;">الصنف</th>
-              <th style="width:9%;">الوحدة</th>
-              <th style="width:9%;">الكمية</th>
+              <th style="width:4%;">#</th>
+              <th style="width:12%;">رقم الصنف</th>
+              <th style="width:25%;">الصنف</th>
+              <th style="width:8%;">الوحدة</th>
+              <th style="width:8%;">الكمية</th>
               <th style="width:11%;">سعر الوحدة</th>
-              <th style="width:9%;">الخصم</th>
-              <th style="width:10%;">الضريبة</th>
-              <th style="width:16%;">الإجمالي قبل الضريبة</th>
+              <th style="width:8%;">الخصم</th>
+              <th style="width:9%;">الضريبة</th>
+              <th style="width:15%;">الإجمالي قبل الضريبة</th>
             </tr>
           </thead>
           <tbody>
@@ -686,9 +687,7 @@
           </tbody>
         </table>
       </section>
-    </div>
 
-    <div>
       <!-- ── القسم السفلي: رمز الاستجابة + جدول الإجماليات + الملاحظات ── -->
       <section class="summary-section">
         <!-- الرمز الشريطي QR المربع -->
@@ -728,7 +727,9 @@
           </div>
         </div>
       </section>
+    </div>
 
+    <div>
       <!-- ── التذييل السفلي ── -->
       <footer class="invoice-footer">
         <div style="width:30px;"></div>

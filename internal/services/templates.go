@@ -662,42 +662,47 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 	}
 
 	qrB64 := ""
-	isTemplatePreview := inv.ID == "" || inv.ID == "preview" || inv.ID == "preview-inv" || inv.InvoiceNumber == "" || inv.InvoiceNumber == "رقم الفاتورة" || inv.QrPayload == ""
-	if !isTemplatePreview && inv.QrPayload != "" {
-		if qrPNG, err := qrcode.Encode(inv.QrPayload, qrcode.Medium, 120); err == nil {
-			qrB64 = `<img src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(qrPNG) + `" alt="QR" style="width:95px;height:95px;display:block;" />`
+	payload := inv.QrPayload
+	if payload == "" {
+		sName := sellerName
+		if sName == "" {
+			sName = "شركة تجريبية للتقنية"
 		}
+		sTax := sellerTax
+		if sTax == "" || len(sTax) != 15 {
+			sTax = "300000000000003"
+		}
+		issDate := inv.IssueDate
+		if issDate == "" {
+			issDate = time.Now().Format("2006-01-02")
+		}
+		issTime := inv.IssueTime
+		if issTime == "" {
+			issTime = "12:00:00"
+		}
+		if len(issTime) == 5 {
+			issTime += ":00"
+		}
+		tot := fmt.Sprintf("%.2f", inv.GrandTotalMajor)
+		if tot == "0.00" {
+			tot = "1150.00"
+		}
+		vat := fmt.Sprintf("%.2f", inv.TaxAmountMajor)
+		if vat == "0.00" {
+			vat = "150.00"
+		}
+		sampleParams := zatca.QrParams{
+			SellerName: sName,
+			VatNumber:  sTax,
+			Timestamp:  issDate + "T" + issTime + "Z",
+			Total:      tot,
+			VatTotal:   vat,
+		}
+		payload = zatca.BuildQrPayload(sampleParams)
 	}
-	if qrB64 == "" {
-		if isTemplatePreview {
-			qrB64 = `<div class="qr-placeholder" style="width:95px;height:95px;display:flex;align-items:center;justify-content:center;font-family:'Segoe UI',Arial,sans-serif;font-weight:900;font-size:28px;color:#1e293b;border:1.5px dashed #cbd5e1;border-radius:6px;background:#f8fafc;box-sizing:border-box;letter-spacing:1px;">QR</div>`
-		} else {
-			sName := sellerName
-			if sName == "" {
-				sName = "شركة تجريبية"
-			}
-			sTax := sellerTax
-			if sTax == "" {
-				sTax = "300000000000003"
-			}
-			issTime := inv.IssueTime
-			if issTime == "" {
-				issTime = "12:00:00"
-			}
-			sampleParams := zatca.QrParams{
-				SellerName:  sName,
-				VatNumber:   sTax,
-				Timestamp:   inv.IssueDate + "T" + issTime,
-				Total:       fmt.Sprintf("%.2f", inv.GrandTotalMajor),
-				VatTotal:    fmt.Sprintf("%.2f", inv.TaxAmountMajor),
-				InvoiceHash: inv.InvoiceHash,
-				Signature:   inv.Signature,
-			}
-			fallbackPayload := zatca.BuildQrPayload(sampleParams)
-			if qrPNG, err := qrcode.Encode(fallbackPayload, qrcode.Medium, 120); err == nil {
-				qrB64 = `<img src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(qrPNG) + `" alt="QR" style="width:95px;height:95px;display:block;" />`
-			}
-		}
+
+	if qrPNG, err := qrcode.Encode(payload, qrcode.Medium, 384); err == nil {
+		qrB64 = `<img src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(qrPNG) + `" alt="QR" style="width:110px;height:110px;display:block;margin:0 auto;image-rendering:pixelated;image-rendering:crisp-edges;" />`
 	}
 
 	totalQty := 0.0

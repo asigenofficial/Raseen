@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 
 <head>
@@ -363,7 +363,7 @@
       display: grid;
       grid-template-columns: 1.35fr 1.25fr 135px;
       gap: 12px;
-      align-items: stretch;
+      align-items: stretch;`n      margin-top: auto;
       margin-bottom: 12px;
       position: relative;
       z-index: 2;
@@ -686,14 +686,15 @@
           <thead>
             <tr>
               <th style="width:4%;">#</th>
-              <th style="width:26%;">الصنف</th>
-              <th style="width:8%;">الوحدة</th>
-              <th style="width:8%;">الكمية</th>
+              <th style="width:11%;">رقم الصنف</th>
+              <th style="width:23%;">الصنف</th>
+              <th style="width:7%;">الوحدة</th>
+              <th style="width:7%;">الكمية</th>
               <th style="width:10%;">سعر الوحدة</th>
-              <th style="width:11%;">الإجمالي</th>
-              <th style="width:9%;">الخصم</th>
-              <th style="width:9%;">الضريبة</th>
-              <th style="width:15%;">الإجمالي بعد الضريبة</th>
+              <th style="width:10%;">الإجمالي</th>
+              <th style="width:7%;">الخصم</th>
+              <th style="width:7%;">الضريبة</th>
+              <th style="width:14%;">الإجمالي بعد الضريبة</th>
             </tr>
           </thead>
           <tbody>
@@ -701,9 +702,7 @@
           </tbody>
         </table>
       </section>
-    </div>
 
-    <div>
       <!-- ── القسم السفلي: ملاحظات + جدول الإجماليات + رمز الاستجابة QR (مطابق للصورة) ── -->
       <section class="summary-section">
         <!-- صندوق الملاحظات على اليسار -->
@@ -743,7 +742,9 @@
           </div>
         </div>
       </section>
+    </div>
 
+    <div>
       <!-- ── التذييل السفلي ── -->
       <footer class="invoice-footer">
         <div style="width:30px;"></div>
