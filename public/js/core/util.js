@@ -548,7 +548,7 @@ function detectColumnTypeJS(th) {
   if (clean.includes('شامل') || clean.includes('مع الضريبة') || clean.includes('صافي') || clean.includes('with vat') || clean.includes('total with') || clean.includes('gross') || clean.includes('total line')) {
     return 'total';
   }
-  if (clean.includes('كود') || clean.includes('رمز') || clean.includes('item code') || clean.includes('sku') || clean.includes('barcode') || clean.includes('رقم الصنف')) {
+  if (clean.includes('كود') || clean.includes('رمز') || clean.includes('item code') || clean.includes('item_code') || clean.includes('code') || clean.includes('sku') || clean.includes('barcode') || clean.includes('رقم الصنف') || clean.includes('رقم البند') || clean.includes('item no') || clean.includes('item_no') || clean.includes('part no')) {
     return 'code';
   }
   if (clean === '#' || clean === 'م' || clean === 'ت' || clean === 'م.' || clean.includes('تسلسل') || clean === 'no' || clean === 'no.' || clean === 'sr' || clean === 'sn') {
@@ -1047,6 +1047,7 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
           <thead>
             <tr style="background:#0f172a; color:#fff;">
               <th style="padding:7px 8px; text-align:center; border:1px solid #cbd5e1; width:36px;">#</th>
+              <th style="padding:7px 8px; text-align:center; border:1px solid #cbd5e1; width:80px;">كود الصنف</th>
               <th style="padding:7px 8px; text-align:right; border:1px solid #cbd5e1;">الصنف / الخدمة</th>
               <th style="padding:7px 8px; text-align:center; border:1px solid #cbd5e1; width:70px;">الكمية</th>
               <th style="padding:7px 8px; text-align:right; border:1px solid #cbd5e1; width:95px;">سعر الوحدة</th>

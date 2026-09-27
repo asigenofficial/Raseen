@@ -60,7 +60,6 @@ function buildMockInvoice(issuer, phase = 'PHASE1') {
     seller_address_en: 'National Address',
     buyer_name: 'اسم العميل',
     buyer_tax_number: 'الرقم الضريبي للعميل',
-    buyer_cr: 'السجل التجاري للعميل',
     buyer_address: 'عنوان العميل',
     qr_payload: '',
     invoice_hash: '',
