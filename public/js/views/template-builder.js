@@ -24,7 +24,6 @@ const SYSTEM_TAGS = [
   { label: 'تاريخ الإصدار', tag: '{{issue_date}}' },
   { label: 'اسم العميل', tag: '{{buyer_name}}' },
   { label: 'الرقم الضريبي للعميل', tag: '{{buyer_tax}}' },
-  { label: 'سجل العميل', tag: '{{buyer_cr}}' },
   { label: 'عنوان العميل', tag: '{{buyer_address}}' },
   { label: 'هاتف العميل', tag: '{{buyer_phone}}' },
   { label: 'المجموع قبل الضريبة', tag: '{{subtotal}}' },
@@ -233,10 +232,6 @@ function getBuyerBlockHTML(color) {
         <tr style="border-bottom:1px solid #e2e8f0;">
           <td style="width:140px; font-weight:700; padding:6px 12px; background:#f8fafc; color:#475569;">الرقم الضريبي:</td>
           <td contenteditable="true" style="padding:6px 12px; font-weight:800; color:#0f172a; outline:none;">{{buyer_tax}}</td>
-        </tr>
-        <tr style="border-bottom:1px solid #e2e8f0;">
-          <td style="width:140px; font-weight:700; padding:6px 12px; background:#f8fafc; color:#475569;">السجل التجاري:</td>
-          <td contenteditable="true" style="padding:6px 12px; color:#334155; outline:none;">{{buyer_cr}}</td>
         </tr>
         <tr style="border-bottom:1px solid #e2e8f0;">
           <td style="width:140px; font-weight:700; padding:6px 12px; background:#f8fafc; color:#475569;">العنوان الوطني:</td>

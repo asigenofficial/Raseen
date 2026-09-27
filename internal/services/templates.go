@@ -1226,7 +1226,7 @@ func generateItemsTable(inv *InvoiceView) string {
 	var sb strings.Builder
 	sb.WriteString(`<table style="width:100%;border-collapse:collapse;font-size:12px;" dir="rtl">`)
 	sb.WriteString(`<thead><tr style="background:#059669;color:#fff;">`)
-	for _, h := range []string{"#", "الصنف / الخدمة", "الكمية", "سعر الوحدة", "الضريبة", "الإجمالي"} {
+	for _, h := range []string{"#", "كود الصنف", "الصنف / الخدمة", "الكمية", "سعر الوحدة", "الضريبة", "الإجمالي"} {
 		sb.WriteString(`<th style="padding:6px 8px;text-align:right;border:1px solid #ccc;">` + h + `</th>`)
 	}
 	sb.WriteString(`</tr></thead><tbody>`)
@@ -1236,13 +1236,14 @@ func generateItemsTable(inv *InvoiceView) string {
 		if i%2 == 1 {
 			bg = "#f0fdf4"
 		}
-		sb.WriteString(fmt.Sprintf(`<tr style="background:%s;">`, bg))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">%d</td>`, i+1))
-		nameHtml := html.EscapeString(item.ItemName)
-		if item.ItemCode != "" {
-			nameHtml += fmt.Sprintf(`<div style="font-size:10px;color:#64748b;direction:ltr;text-align:right;">%s</div>`, html.EscapeString(item.ItemCode))
+		code := item.ItemCode
+		if code == "" {
+			code = "—"
 		}
-		sb.WriteString(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">` + nameHtml + `</td>`)
+		sb.WriteString(fmt.Sprintf(`<tr style="background:%s;">`, bg))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;text-align:center;">%d</td>`, i+1))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;text-align:center;font-family:Tahoma,sans-serif;">%s</td>`, html.EscapeString(code)))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;font-weight:600;">%s</td>`, html.EscapeString(item.ItemName)))
 		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;text-align:center;">%.2f</td>`, item.Quantity))
 		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">%.2f</td>`, item.UnitPriceMajor))
 		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">%.2f</td>`, item.TaxAmountMajor))
