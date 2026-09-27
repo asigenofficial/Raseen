@@ -374,13 +374,23 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 
 	// Insert invoice items
 	for _, cl := range computedLines {
+		var itemID *string
+		if cl.ItemID != nil && strings.TrimSpace(*cl.ItemID) != "" {
+			trimmed := strings.TrimSpace(*cl.ItemID)
+			var exists int
+			errCheck := tx.QueryRow("SELECT 1 FROM items WHERE id = ?", trimmed).Scan(&exists)
+			if errCheck == nil && exists == 1 {
+				itemID = &trimmed
+			}
+		}
+
 		_, err = tx.Exec(`
 			INSERT INTO invoice_items (
 				id, invoice_id, item_id, line_no, item_code, item_name, unit,
 				quantity, unit_price, discount, tax_rate, taxable, tax_amount, total_line
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
-			cl.ID, invoiceID, cl.ItemID, cl.LineNo, cl.ItemCode, cl.ItemName, cl.Unit,
+			cl.ID, invoiceID, itemID, cl.LineNo, cl.ItemCode, cl.ItemName, cl.Unit,
 			cl.Quantity, cl.UnitPrice, cl.Discount, cl.TaxRate, cl.Taxable, cl.TaxAmount, cl.TotalLine,
 		)
 		if err != nil {
@@ -1024,10 +1034,16 @@ func computeInvoiceLines(lines []CreateInvoiceLineInput, pricesIncludeTax bool, 
 			unit = "حبة"
 		}
 
+		var itemID *string
+		if l.ItemID != nil && strings.TrimSpace(*l.ItemID) != "" {
+			t := strings.TrimSpace(*l.ItemID)
+			itemID = &t
+		}
+
 		cl := computedInvoiceLine{
 			InvoiceItem: models.InvoiceItem{
 				ID:         crypto.UUID(),
-				ItemID:     l.ItemID,
+				ItemID:     itemID,
 				LineNo:     idx + 1,
 				ItemCode:   l.ItemCode,
 				ItemName:   l.ItemName,
@@ -1297,13 +1313,23 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	}
 
 	for _, cl := range computedLines {
+		var itemID *string
+		if cl.ItemID != nil && strings.TrimSpace(*cl.ItemID) != "" {
+			trimmed := strings.TrimSpace(*cl.ItemID)
+			var exists int
+			errCheck := tx.QueryRow("SELECT 1 FROM items WHERE id = ?", trimmed).Scan(&exists)
+			if errCheck == nil && exists == 1 {
+				itemID = &trimmed
+			}
+		}
+
 		_, err = tx.Exec(`
 			INSERT INTO invoice_items (
 				id, invoice_id, item_id, line_no, item_code, item_name, unit,
 				quantity, unit_price, discount, tax_rate, taxable, tax_amount, total_line
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
-			crypto.UUID(), id, cl.ItemID, cl.LineNo, cl.ItemCode, cl.ItemName, cl.Unit,
+			crypto.UUID(), id, itemID, cl.LineNo, cl.ItemCode, cl.ItemName, cl.Unit,
 			cl.Quantity, cl.UnitPrice, cl.Discount, cl.TaxRate, cl.Taxable, cl.TaxAmount, cl.TotalLine,
 		)
 		if err != nil {

@@ -133,6 +133,18 @@ export async function render(view, ctx) {
     lines: [emptyLine()],
     ...(draft || {}),
   };
+  if (!state.is_edit && draft) {
+    if (state.client_id && !store.clients.some((c) => c.id === state.client_id)) {
+      state.client_id = '';
+    }
+    if (Array.isArray(state.lines)) {
+      state.lines.forEach((l) => {
+        if (l.item_id && !store.items.some((it) => it.id === l.item_id)) {
+          l.item_id = '';
+        }
+      });
+    }
+  }
   if (query.client_id && !state.is_edit) state.client_id = query.client_id;
   if (!state.lines || !state.lines.length) state.lines = [emptyLine()];
 
@@ -843,7 +855,7 @@ export async function render(view, ctx) {
     const lines = state.lines
       .filter((l) => l.item_name.trim() && l.quantity > 0)
       .map((l) => ({
-        item_id: l.item_id || null,
+        item_id: (l.item_id && store.items.some((it) => it.id === l.item_id)) ? l.item_id : null,
         item_code: l.item_code,
         item_name: l.item_name.trim(),
         unit: l.unit,
