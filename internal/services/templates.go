@@ -923,6 +923,7 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		"{{buyer_name}}", buyerName,
 		"{{buyer_code}}", buyerCode,
 		"{{buyer_tax}}", buyerTax,
+		"{{buyer_cr}}", "",    // السجل التجاري للعميل لا يظهر في الفواتير الضريبية
 		"{{buyer_address}}", buyerAddress,
 		"{{buyer_city}}", buyerCity,
 		"{{buyer_street}}", buyerStreet,
@@ -1178,17 +1179,28 @@ func ensureItemsRowsInTbody(tpl string) string {
 func generateSmartRows(tpl string, inv *InvoiceView) string {
 	headers := extractTableHeaders(tpl)
 	var cols []colType
-	hasCodeCol := false
 	if len(headers) > 0 {
 		cols = make([]colType, len(headers))
+		hasCode := false
 		for i, h := range headers {
 			cols[i] = detectColumnType(h)
 			if cols[i] == colCode {
-				hasCodeCol = true
+				hasCode = true
 			}
 		}
+		// إذا لم يجد النظام عمود كود في القالب، يُضيفه إلزامياً بعد رقم الصف
+		if !hasCode {
+			newCols := make([]colType, 0, len(cols)+1)
+			for _, c := range cols {
+				newCols = append(newCols, c)
+				if c == colIndex {
+					newCols = append(newCols, colCode)
+				}
+			}
+			cols = newCols
+		}
 	} else {
-		cols = []colType{colIndex, colName, colQty, colUnit, colPrice, colTaxable, colDiscount, colTaxAmount, colTaxRate, colTotal}
+		cols = []colType{colIndex, colCode, colName, colQty, colUnit, colPrice, colTaxable, colDiscount, colTaxAmount, colTaxRate, colTotal}
 	}
 
 	var sb strings.Builder
@@ -1210,9 +1222,6 @@ func generateSmartRows(tpl string, inv *InvoiceView) string {
 				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%s</td>`, html.EscapeString(code)))
 			case colName:
 				nameHtml := html.EscapeString(item.ItemName)
-				if !hasCodeCol && item.ItemCode != "" {
-					nameHtml += fmt.Sprintf(`<div style="font-size:0.75rem;color:#6b7280;font-family:Tahoma,sans-serif;direction:ltr;text-align:right;">%s</div>`, html.EscapeString(item.ItemCode))
-				}
 				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;font-weight:600;text-align:right;">%s</td>`, nameHtml))
 			case colUnit:
 				u := item.Unit
