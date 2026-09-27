@@ -599,6 +599,34 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 	return substituteInvoiceTags(string(data), inv), nil
 }
 
+// GenerateQRSVG generates an ultra-sharp, high-resolution vector SVG representation of the ZATCA QR code.
+// Being pure vector SVG with shape-rendering="crispEdges", it never loses modules or suffers nearest-neighbor
+// resampling artifacts when scaled or printed, allowing all phone cameras and ZATCA scanners to scan it easily.
+func GenerateQRSVG(payload string) string {
+	qr, err := qrcode.New(payload, qrcode.Medium)
+	if err != nil {
+		return ""
+	}
+	bm := qr.Bitmap()
+	n := len(bm)
+	if n == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" shape-rendering="crispEdges" class="zatca-qr-svg" style="width:125px;height:125px;max-width:100%%;max-height:100%%;display:block;margin:0 auto;">`, n, n))
+	sb.WriteString(fmt.Sprintf(`<rect width="%d" height="%d" fill="#ffffff"/>`, n, n))
+	sb.WriteString(`<path fill="#000000" d="`)
+	for y := 0; y < n; y++ {
+		for x := 0; x < n; x++ {
+			if bm[y][x] {
+				sb.WriteString(fmt.Sprintf("M%d,%dh1v1h-1z", x, y))
+			}
+		}
+	}
+	sb.WriteString(`"/></svg>`)
+	return sb.String()
+}
+
 // ─── Tag Substitution Engine ──────────────────────────────────────────────────
 
 func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
@@ -702,8 +730,10 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		payload = zatca.BuildQrPayload(sampleParams)
 	}
 
-	if qrPNG, err := qrcode.Encode(payload, qrcode.Medium, 384); err == nil {
-		qrB64 = `<img src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(qrPNG) + `" alt="QR" style="width:110px;height:110px;display:block;margin:0 auto;image-rendering:pixelated;image-rendering:crisp-edges;" />`
+	if svg := GenerateQRSVG(payload); svg != "" {
+		qrB64 = svg
+	} else if qrPNG, err := qrcode.Encode(payload, qrcode.Medium, 512); err == nil {
+		qrB64 = `<img src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(qrPNG) + `" alt="QR" style="width:125px;height:125px;display:block;margin:0 auto;" />`
 	}
 
 	totalQty := 0.0

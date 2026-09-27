@@ -417,7 +417,7 @@ export function printDoc(docHtml) {
 export function qrSvg(payload, options = {}) {
   if (!payload) return '';
   try {
-    return globalThis.ZQR.svg(payload, { ecl: 'M', margin: 2, scale: 4, ...options });
+    return globalThis.ZQR.svg(payload, { ecl: 'M', margin: 2, scale: 5, ...options });
   } catch (err) {
     console.warn('QR error', err);
     return '<div class="tiny muted">تعذر توليد رمز QR</div>';
