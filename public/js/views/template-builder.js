@@ -3,8 +3,9 @@
 //  يتيح تنظيم كامل، إدراج وتخصيص أي جداول، والتحكم الشامل في خلفية وإطار القوالب
 // ==========================================================================
 import { api } from '../core/api.js';
-import { toastOk, toastErr, $, $$, esc, qrSvg } from '../core/util.js';
+import { toastOk, toastErr, $, $$, esc, qrSvg, cleanStrayTableRowsAndFixTables } from '../core/util.js';
 import { code39Svg } from '../print/code39.js';
+import { openAiPromptModal } from './ai-prompt-modal.js';
 
 const PALETTE = [
   '#059669', '#1d4ed8', '#0f172a', '#6d28d9',
@@ -287,20 +288,20 @@ function getItemsTableBlockHTML(color) {
             <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:center; color:#64748b;">PRD-01</td>
             <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:right; font-weight:700; color:#0f172a;">خدمات برمجية وتطوير أنظمة</td>
             <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:center; font-weight:700;">1</td>
-            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">1,000.00 ${SAR_SYMBOL_SVG}</td>
+            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">${SAR_SYMBOL_SVG} 1,000.00</td>
             <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left; color:#dc2626;">0.00</td>
-            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">150.00 ${SAR_SYMBOL_SVG}</td>
-            <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:left; font-weight:800; color:#0f172a;">1,150.00 ${SAR_SYMBOL_SVG}</td>
+            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">${SAR_SYMBOL_SVG} 150.00</td>
+            <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:left; font-weight:800; color:#0f172a;">${SAR_SYMBOL_SVG} 1,150.00</td>
           </tr>
           <tr style="background:#f8fafc;">
             <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:center; font-weight:700;">2</td>
             <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:center; color:#64748b;">PRD-02</td>
             <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:right; font-weight:700; color:#0f172a;">دعم فني وصيانة دورية</td>
             <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:center; font-weight:700;">1</td>
-            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">500.00 ${SAR_SYMBOL_SVG}</td>
+            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">${SAR_SYMBOL_SVG} 500.00</td>
             <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left; color:#dc2626;">50.00</td>
-            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">67.50 ${SAR_SYMBOL_SVG}</td>
-            <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:left; font-weight:800; color:#0f172a;">517.50 ${SAR_SYMBOL_SVG}</td>
+            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">${SAR_SYMBOL_SVG} 67.50</td>
+            <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:left; font-weight:800; color:#0f172a;">${SAR_SYMBOL_SVG} 517.50</td>
           </tr>
         </tbody>
       </table>
@@ -312,9 +313,8 @@ function getItemsTableBlockHTML(color) {
 function getTotalsBlockHTML(color) {
   return `
     <div style="display:flex; justify-content:space-between; align-items:stretch; gap:12px; margin-top:10px; margin-bottom:14px;">
-      <div style="width:130px; border:1px solid #cbd5e1; border-radius:4px; padding:10px; text-align:center; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-        <div style="margin-bottom:4px;">{{qr_code}}</div>
-        <div contenteditable="true" style="font-size:9px; color:#64748b; font-weight:700; outline:none;">رمز التحقق المشفر ZATCA</div>
+      <div style="width:115px; border:1px solid #cbd5e1; border-radius:4px; padding:10px; text-align:center; background:#fff; display:flex; align-items:center; justify-content:center;">
+        <div style="width:90px; height:90px; display:flex; align-items:center; justify-content:center; font-family:'Segoe UI', Arial, sans-serif; font-weight:900; font-size:26px; color:#1e293b; border:1.5px dashed #cbd5e1; border-radius:6px; background:#f8fafc; letter-spacing:1px;">QR</div>
       </div>
       <div style="flex:1; border:1px solid #cbd5e1; border-radius:4px; padding:10px 14px; background:#f8fafc; font-size:11.5px; display:flex; flex-direction:column;">
         <div contenteditable="true" style="font-weight:800; color:${color}; margin-bottom:4px; outline:none;">ملاحظات وشروط الفاتورة:</div>
@@ -327,19 +327,19 @@ function getTotalsBlockHTML(color) {
         <table style="width:100%; border-collapse:collapse; font-size:12px;">
           <tr style="border-bottom:1px solid #f1f5f9;">
             <td contenteditable="true" style="padding:6px 10px; background:#f8fafc; font-weight:700; color:#475569; outline:none;">المجموع الخاضع للضريبة:</td>
-            <td style="padding:6px 10px; text-align:left; font-weight:700; color:#0f172a;">{{subtotal}} ${SAR_SYMBOL_SVG}</td>
+            <td style="padding:6px 10px; text-align:left; font-weight:700; color:#0f172a;">${SAR_SYMBOL_SVG} {{subtotal}}</td>
           </tr>
           <tr style="border-bottom:1px solid #f1f5f9;">
             <td contenteditable="true" style="padding:6px 10px; background:#f8fafc; font-weight:700; color:#475569; outline:none;">إجمالي الخصم:</td>
-            <td style="padding:6px 10px; text-align:left; font-weight:700; color:#dc2626;">{{discount}} ${SAR_SYMBOL_SVG}</td>
+            <td style="padding:6px 10px; text-align:left; font-weight:700; color:#dc2626;">${SAR_SYMBOL_SVG} {{discount}}</td>
           </tr>
           <tr style="border-bottom:1px solid #f1f5f9;">
             <td contenteditable="true" style="padding:6px 10px; background:#f8fafc; font-weight:700; color:#475569; outline:none;">ضريبة القيمة المضافة (15%):</td>
-            <td style="padding:6px 10px; text-align:left; font-weight:700; color:#0f172a;">{{tax_amount}} ${SAR_SYMBOL_SVG}</td>
+            <td style="padding:6px 10px; text-align:left; font-weight:700; color:#0f172a;">${SAR_SYMBOL_SVG} {{tax_amount}}</td>
           </tr>
           <tr style="background:${color}; color:#fff;" class="totals-grand-row">
             <td contenteditable="true" style="padding:8px 10px; font-size:13px; font-weight:900; outline:none;">المبلغ الإجمالي المستحق:</td>
-            <td style="padding:8px 10px; font-size:14px; font-weight:900; text-align:left;">{{grand_total}} ${SAR_SYMBOL_SVG}</td>
+            <td style="padding:8px 10px; font-size:14px; font-weight:900; text-align:left;">${SAR_SYMBOL_SVG} {{grand_total}}</td>
           </tr>
         </table>
       </div>
@@ -356,8 +356,8 @@ function getVoucherBannerBlockHTML(color) {
         <div contenteditable="true" style="font-size:11px; color:#64748b; margin-top:2px; outline:none;">فقط وقدره المبلغ الموضح أعلاه لا غير</div>
       </div>
       <div style="font-size:28px; font-weight:900; color:${color}; font-family:Tahoma, sans-serif; direction:ltr; display:flex; align-items:center; gap:6px;">
-        <span>{{grand_total}}</span>
         <span style="font-size:0.85em;">${SAR_SYMBOL_SVG}</span>
+        <span>{{grand_total}}</span>
       </div>
     </div>
   `;
@@ -367,8 +367,11 @@ function getVoucherBannerBlockHTML(color) {
 function getSarBadgeBlockHTML(color) {
   return `
     <div style="display:inline-flex; align-items:center; gap:8px; font-size:15px; font-weight:800; color:${color}; padding:8px 16px; background:#f8fafc; border:2px solid ${color}; border-radius:6px; margin-bottom:12px;">
-      <span contenteditable="true" style="outline:none;">المبلغ الإجمالي: {{grand_total}}</span>
-      <span style="font-size:1.15em;">${SAR_SYMBOL_SVG}</span>
+      <span contenteditable="true" style="outline:none;">المبلغ الإجمالي:</span>
+      <span style="display:inline-flex; align-items:center; gap:4px; direction:ltr;">
+        <span style="font-size:1.15em;">${SAR_SYMBOL_SVG}</span>
+        <span>{{grand_total}}</span>
+      </span>
     </div>
   `;
 }
@@ -448,11 +451,10 @@ function getBadgeBlockHTML(color) {
 }
 
 function getQrBlockHTML() {
-  return `<div class="builder-qr" style="display:inline-flex; flex-direction:column; align-items:center; gap:5px; padding:10px; background:#fff; color:#0f172a;">
-    <div class="builder-qr-preview" contenteditable="false">${qrSvg('RASEEN-PREVIEW', { scale: 3, margin: 1 })}</div>
+  return `<div class="builder-qr" style="display:inline-flex; align-items:center; justify-content:center; padding:10px; background:#fff; color:#0f172a;">
+    <div class="builder-qr-preview" contenteditable="false" style="width:90px; height:90px; display:flex; align-items:center; justify-content:center; font-family:'Segoe UI', Arial, sans-serif; font-weight:900; font-size:26px; color:#1e293b; border:1.5px dashed #cbd5e1; border-radius:6px; background:#f8fafc; letter-spacing:1px;">QR</div>
     <div class="builder-qr-value" style="display:none;">{{qr_code}}</div>
-    <input class="builder-qr-input" value="{{qr_code}}" title="اكتب محتوى الرمز أو اترك وسم الفاتورة" style="width:150px; font-size:11px; text-align:center;" />
-    <small contenteditable="true">امسح الرمز للتحقق</small>
+    <input class="builder-qr-input" value="{{qr_code}}" style="display:none;" />
   </div>`;
 }
 
@@ -469,7 +471,7 @@ function getBarcodeBlockHTML() {
 function selectBlock(block, table = null) {
   selectedBlock?.classList.remove('editor-block-selected');
   selectedBlock = block;
-  selectedTable = table || block?.querySelector('table');
+  selectedTable = table || (block?.matches('table') ? block : block?.querySelector('table'));
   selectedBlock?.classList.add('editor-block-selected');
   const styleSelect = $('#sel-table-style', view);
   if (styleSelect) {
@@ -576,7 +578,9 @@ function attachBlockControls(block) {
   if (qrInput) qrInput.onchange = () => {
     const value = qrInput.value.trim() || '{{qr_code}}';
     try {
-      $('.builder-qr-preview', block).innerHTML = qrSvg(value === '{{qr_code}}' ? 'RASEEN-PREVIEW' : value, { scale: 3, margin: 1 });
+      $('.builder-qr-preview', block).innerHTML = value === '{{qr_code}}'
+        ? '<div style="width:90px; height:90px; display:flex; align-items:center; justify-content:center; font-family:\'Segoe UI\', Arial, sans-serif; font-weight:900; font-size:26px; color:#1e293b; border:1.5px dashed #cbd5e1; border-radius:6px; background:#f8fafc; letter-spacing:1px;">QR</div>'
+        : qrSvg(value, { scale: 3, margin: 1 });
       $('.builder-qr-value', block).textContent = value;
     } catch {
       toastErr('محتوى الرمز طويل أو غير صالح');
@@ -916,12 +920,17 @@ function serializeCanvasToCleanHTML() {
 
   // Remove editor UI controls
   $$('.block-controls', clone).forEach(c => c.remove());
+  $$('.preset-section-controls', clone).forEach(c => c.remove());
+  $$('.preset-tbl-controls', clone).forEach(c => c.remove());
   $$('.preset-section', clone).forEach(section => {
-    section.classList.remove('preset-section', 'builder-moving');
+    section.classList.remove('preset-section', 'builder-moving', 'editor-block-selected');
     if (section.dataset.builderPositioned) {
       section.style.position = '';
       delete section.dataset.builderPositioned;
     }
+  });
+  $$('.preset-sub-shape', clone).forEach(el => {
+    el.classList.remove('preset-sub-shape', 'editor-block-selected');
   });
   $$('.logo-actions', clone).forEach(c => c.remove());
   $$('.btn-sub-ctrl', clone).forEach(c => c.remove());
@@ -959,7 +968,7 @@ function serializeCanvasToCleanHTML() {
     frameCSS = `border: 3px solid ${docMeta.primary_color}; border-top: 12px solid ${docMeta.primary_color};`;
   }
 
-  return `<!DOCTYPE html>
+  const finalHtml = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8"/>
@@ -1013,11 +1022,9 @@ function serializeCanvasToCleanHTML() {
 </head>
 <body>
   ${innerHtml}
-  <div style="margin-top:20px; text-align:center; font-size:10px; color:#94a3b8; border-top:1px solid #f1f5f9; padding-top:6px; position:relative; z-index:1;">
-    تم إنشاء وطباعة هذا المستند عبر نظام رصين المالي المعتمد
-  </div>
 </body>
 </html>`;
+  return cleanStrayTableRowsAndFixTables(finalHtml);
 }
 
 // ─── In-place Theme Color Applicator ──────────────────────────────────────
@@ -1181,6 +1188,14 @@ function renderView() {
 
         <!-- Right: Primary Actions -->
         <div style="display:flex; align-items:center; gap:6px;">
+          <button type="button" class="btn btn-sm btn-open-ai-prompt" style="background:linear-gradient(135deg, #6366f1, #8b5cf6); color:#fff; border:none; font-size:0.8rem; font-weight:800; padding:5px 13px; border-radius:5px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(99,102,241,0.35); transition:transform 0.1s;" title="نسخ برومبت الذكاء الاصطناعي لإنشاء وتوليد القالب">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+            برومبت الذكاء الاصطناعي
+          </button>
+          <button type="button" id="btn-open-paste-modal" class="btn btn-sm" style="background:#0284c7; color:#fff; border:none; font-size:0.8rem; font-weight:800; padding:5px 13px; border-radius:5px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(2,132,199,0.35); transition:transform 0.1s;" title="لصق كود HTML مباشرة للتحكم في جميع أشكاله وتعديله">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            لصق كود HTML
+          </button>
           <button type="button" class="btn btn-sm btn-clear-sheet" style="background:#1e293b; color:#94a3b8; border:1px solid #334155; font-size:0.78rem; padding:4px 10px;" title="إفراغ الصفحة للبدء من جديد">
             إفراغ
           </button>
@@ -1230,9 +1245,7 @@ function renderView() {
         <button type="button" class="btn-insert-blk" data-type="payments_table">جدول الدفعات والأقساط</button>
         <button type="button" class="btn-insert-blk" data-type="specs_table">جدول البنود والمواصفات</button>
         <button type="button" class="btn-insert-blk" data-type="totals">الإجماليات ورمز QR</button>
-        <button type="button" class="btn-insert-blk" data-type="sar_badge">${SAR_SYMBOL_SVG} شارة الريال</button>
-        <button type="button" class="btn-insert-blk" data-type="qr_code">رمز QR / باركود</button>
-        <button type="button" class="btn-insert-blk" data-type="barcode">باركود خطي</button>
+        <button type="button" class="btn-insert-blk" data-type="qr_code">رمز QR فقط</button>
         
         ${docMeta.type === 'documents' ? `
         <button type="button" class="btn-insert-blk" data-type="voucher_banner">شريط المبلغ</button>
@@ -1451,6 +1464,39 @@ function renderView() {
       </div>
     </div>
 
+    <!-- Direct HTML Code Paste & Import Modal -->
+    <div id="modal-paste-html" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.72); backdrop-filter:blur(4px); z-index:1000; align-items:center; justify-content:center; padding:16px;">
+      <div style="background:#111a2e; border:1px solid #233554; border-radius:10px; width:720px; max-width:96vw; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 25px 60px rgba(0,0,0,0.7); color:#f1f5f9; overflow:hidden;">
+        <div style="background:#0b1322; padding:14px 18px; border-bottom:1px solid #1e293b; display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0; font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px; color:#38bdf8;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            لصق واستيراد كود HTML (دعم كافة الأشكال والتصاميم)
+          </h3>
+          <button type="button" id="btn-close-paste-modal" style="background:transparent; border:none; color:#94a3b8; font-size:20px; cursor:pointer;">&times;</button>
+        </div>
+        <div style="padding:16px 20px; display:flex; flex-direction:column; gap:12px; font-size:13px; overflow-y:auto; flex:1;">
+          <div style="background:#0f172a; border:1px solid #1e293b; border-radius:6px; padding:8px 12px; font-size:12px; color:#94a3b8; line-height:1.6;">
+            الصق كود HTML كامل (يشمل &lt;style&gt; أو &lt;div&gt;). سيقوم النظام بتفعيل التحكم الكامل: التحريك، السحب، تكبير/تصغير كل شكل، تعديل النصوص مباشرة، وإدارة صفوف وأعمدة الجداول.
+          </div>
+          <div>
+            <label style="display:block; margin-bottom:4px; font-weight:700; color:#cbd5e1;">اسم القالب المستورد:</label>
+            <input type="text" id="inp-paste-tpl-name" placeholder="مثال: فاتورة ضريبية حديثة أو سند مالي..." style="width:100%; padding:7px 10px; background:#070d18; border:1px solid #334155; border-radius:5px; color:#fff;" />
+          </div>
+          <div>
+            <label style="display:block; margin-bottom:4px; font-weight:700; color:#cbd5e1;">كود HTML للقالب:</label>
+            <textarea id="txt-paste-html-code" placeholder="<!DOCTYPE html> أو <div class=...>" style="width:100%; height:240px; background:#060a12; border:1px solid #334155; border-radius:6px; color:#38bdf8; padding:10px; font-size:12px; font-family:monospace; resize:vertical; outline:none; line-height:1.5;"></textarea>
+          </div>
+        </div>
+        <div style="background:#0b1322; padding:12px 20px; border-top:1px solid #1e293b; display:flex; justify-content:space-between; align-items:center;">
+          <button type="button" id="btn-cancel-paste-modal" style="background:#1e293b; color:#cbd5e1; border:1px solid #334155; padding:6px 14px; border-radius:5px; cursor:pointer; font-size:12px;">إلغاء</button>
+          <button type="button" id="btn-confirm-import-code" style="background:linear-gradient(135deg, #0284c7, #0369a1); color:#fff; border:none; padding:8px 22px; border-radius:6px; cursor:pointer; font-weight:800; font-size:13px; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(2,132,199,0.35);">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            تطبيق واستيراد في المصمم
+          </button>
+        </div>
+      </div>
+    </div>
+
     <style>
       .visual-doc-editor > header #sel-doc-type { width: 190px !important; }
       .visual-doc-editor > header #sel-preset-template { width: 230px !important; }
@@ -1464,9 +1510,31 @@ function renderView() {
       .btn-drag { cursor:grab; }
       .btn-drag, .preset-drag { touch-action:none; cursor:grab; }
       .builder-moving { opacity:.65; }
+      .preset-section { position: relative; transition: outline 0.12s; border-radius: 4px; }
+      .preset-section:hover { outline: 1px dashed rgba(56, 189, 248, 0.45); }
+      .preset-section.editor-block-selected { outline: 2px solid #0284c7 !important; outline-offset: 2px; }
+      .preset-sub-shape { position: relative; transition: outline 0.12s; border-radius: 4px; cursor: pointer; }
+      .preset-sub-shape:hover { outline: 1px dashed rgba(14, 165, 233, 0.45); }
+      .preset-sub-shape.editor-block-selected { outline: 2px solid #0284c7 !important; outline-offset: 2px; }
       .preset-section:hover > .preset-section-controls,
       .preset-section:focus-within > .preset-section-controls { display:flex; }
-      .preset-section > .preset-section-controls { top:0; left:0; }
+      .preset-section > .preset-section-controls {
+        position: absolute; top: -14px; left: 8px; z-index: 60; display: none;
+        gap: 3px; background: #0f172a; padding: 2px 6px; border-radius: 5px;
+        border: 1px solid #334155; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      }
+      .preset-section:hover > .preset-tbl-controls,
+      .preset-section:focus-within > .preset-tbl-controls { display:flex !important; }
+      .preset-tbl-controls {
+        position: absolute; top: -14px; right: 8px; z-index: 60; display: none;
+        gap: 3px; background: #0f172a; padding: 2px 6px; border-radius: 5px;
+        border: 1px solid #334155; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      }
+      .preset-tbl-controls button {
+        padding: 2px 6px; font-size: 10px; background: #1e293b; color: #fff;
+        border: 1px solid #475569; border-radius: 3px; cursor: pointer;
+      }
+      .preset-tbl-controls button:hover { background: #2563eb; }
       .tab-btn {
         background: transparent;
         border: none;
@@ -1708,92 +1776,271 @@ async function loadPresetsDropdown() {
 }
 
 function applyPresetStyles(styles) {
-  presetStyles = styles;
+  presetStyles = styles || '';
   let customStyleTag = $('#preset-custom-style', view);
   if (!customStyleTag) {
     customStyleTag = document.createElement('style');
     customStyleTag.id = 'preset-custom-style';
     view.appendChild(customStyleTag);
   }
-  customStyleTag.textContent = `@scope (#editor-canvas-sheet .editor-block[data-block-type="preset"] .block-content) { ${styles.replace(/@page\s*\{[^}]*\}/g, '')} }`;
+  const clean = presetStyles.replace(/@page\s*\{[^}]*\}/g, '');
+  // Scope body and html selectors to #editor-canvas-sheet to ensure all card shapes, backgrounds, and themes work flawlessly
+  const scoped = clean
+    .replace(/(^|[\s,;{}])body\b/gi, '$1#editor-canvas-sheet')
+    .replace(/(^|[\s,;{}])html\b/gi, '$1#editor-canvas-sheet');
+  customStyleTag.textContent = scoped;
 }
 
 function attachPresetSectionDrag() {
-  const roots = $$('#editor-canvas-sheet .editor-block[data-block-type="preset"]', view)
-    .map(block => block.querySelector('.invoice-container, .voucher-card') || block.querySelector(':scope > .block-content'));
-  roots.forEach(root => [...root.children].forEach(section => {
-    if (!(section instanceof HTMLElement) || section.matches('script, style, table') || getComputedStyle(section).position === 'absolute') return;
-    section.classList.add('preset-section');
-    if (getComputedStyle(section).position === 'static') {
-      section.dataset.builderPositioned = 'true';
-      section.style.position = 'relative';
+  const canvas = $('#editor-canvas-sheet', view);
+  if (!canvas) return;
+
+  const presetBlocks = $$('#editor-canvas-sheet .editor-block[data-block-type="preset"]', view);
+  presetBlocks.forEach(block => {
+    // Find the actual container holding the sections
+    let root = block.querySelector('.invoice-container, .voucher-card, .receipt-card, .invoice-card, .invoice-box, .doc-container') ||
+               block.querySelector(':scope > .block-content > div') ||
+               block.querySelector(':scope > .block-content') ||
+               block;
+
+    // If root only has one single child wrapper (e.g. nested div), delve into it
+    if (root.children.length === 1 && root.firstElementChild && root.firstElementChild.children.length > 1) {
+      root = root.firstElementChild;
     }
-    let controls = section.querySelector(':scope > .preset-section-controls');
-    if (!controls) {
-      controls = document.createElement('div');
-      controls.className = 'block-controls preset-section-controls';
-      controls.contentEditable = 'false';
-      controls.innerHTML = '<button type="button" class="btn-ctrl preset-up" title="نقل القسم لأعلى">▲</button><button type="button" class="btn-ctrl preset-down" title="نقل القسم لأسفل">▼</button><button type="button" class="btn-ctrl preset-bottom" title="وضع القسم أسفل الورقة">⬇</button><button type="button" class="btn-ctrl preset-drag" title="اسحب القسم">⠿</button><button type="button" class="btn-ctrl preset-dup" title="نسخ القسم">⧉</button><button type="button" class="btn-ctrl preset-del" title="حذف القسم">×</button>';
-      section.appendChild(controls);
-    }
-    controls.querySelector('.preset-up').onclick = (e) => {
-      e.stopPropagation();
-      let previous = section.previousElementSibling;
-      while (previous && !previous.matches('.preset-section')) previous = previous.previousElementSibling;
-      if (previous) root.insertBefore(section, previous);
-    };
-    controls.querySelector('.preset-down').onclick = (e) => {
-      e.stopPropagation();
-      let next = section.nextElementSibling;
-      while (next && !next.matches('.preset-section')) next = next.nextElementSibling;
-      if (next) root.insertBefore(next, section);
-    };
-    let bottomButton = controls.querySelector('.preset-bottom');
-    if (!bottomButton) {
-      bottomButton = document.createElement('button');
-      bottomButton.type = 'button';
-      bottomButton.className = 'btn-ctrl preset-bottom';
-      bottomButton.title = 'وضع القسم أسفل الورقة';
-      bottomButton.textContent = '⬇';
-      controls.appendChild(bottomButton);
-    }
-    bottomButton.onclick = (e) => {
-      e.stopPropagation();
-      const gap = parseFloat(getComputedStyle(section).marginTop) || 0;
-      section.style.marginTop = `${gap + bottomRoom(section, '.preset-section')}px`;
-    };
-    controls.querySelector('.preset-dup').onclick = (e) => {
-      e.stopPropagation();
-      section.after(section.cloneNode(true));
-      attachPresetSectionDrag();
-    };
-    controls.querySelector('.preset-del').onclick = (e) => { e.stopPropagation(); section.remove(); };
-    bindMoveHandle(controls.querySelector('.preset-drag'), section, '.preset-section');
-  }));
+
+    const sections = [...root.children].filter(el =>
+      el instanceof HTMLElement &&
+      !el.matches('script, style') &&
+      !el.classList.contains('canvas-watermark-layer') &&
+      !el.classList.contains('canvas-bg-image-layer') &&
+      getComputedStyle(el).position !== 'absolute'
+    );
+
+    sections.forEach(section => {
+      section.classList.add('preset-section');
+      if (getComputedStyle(section).position === 'static') {
+        section.dataset.builderPositioned = 'true';
+        section.style.position = 'relative';
+      }
+
+      // Make section or its sub-shapes selectable on click to enable scale slider and inspector
+      section.onclick = (e) => {
+        e.stopPropagation();
+        const targetSub = e.target.closest('.preset-sub-shape, table, .card, .box, .panel, .kpi-card, .party-box, .info-pill, .badge, .qr-container, .builder-qr');
+        if (targetSub && targetSub !== section && section.contains(targetSub)) {
+          selectBlock(targetSub, targetSub.matches('table') ? targetSub : targetSub.querySelector('table'));
+        } else {
+          selectBlock(section, section.matches('table') ? section : section.querySelector('table'));
+        }
+      };
+
+      // Detect and equip sub-shapes inside grids or flex rows (e.g. 2 cards, 3 KPI boxes, badge containers)
+      const subShapes = section.querySelectorAll('.card, .box, .panel, .kpi-card, .party-box, .info-pill, .badge, .qr-container, .builder-qr, [class*="card"], [class*="box"], [class*="col-"]');
+      subShapes.forEach(sub => {
+        if (sub.matches('.preset-section-controls, .preset-tbl-controls, .block-controls, [contenteditable="true"]')) return;
+        sub.classList.add('preset-sub-shape');
+        sub.onclick = (ev) => {
+          ev.stopPropagation();
+          selectBlock(sub, sub.matches('table') ? sub : sub.querySelector('table'));
+        };
+      });
+
+      // Add section move & edit controls pill
+      let controls = section.querySelector(':scope > .preset-section-controls');
+      if (!controls) {
+        controls = document.createElement('div');
+        controls.className = 'block-controls preset-section-controls';
+        controls.contentEditable = 'false';
+        controls.innerHTML = `
+          <button type="button" class="btn-ctrl preset-up" title="نقل القسم لأعلى">▲</button>
+          <button type="button" class="btn-ctrl preset-down" title="نقل القسم لأسفل">▼</button>
+          <button type="button" class="btn-ctrl preset-bottom" title="وضع القسم أسفل الورقة">⬇</button>
+          <button type="button" class="btn-ctrl preset-drag" title="اسحب لترتيب القسم">⠿</button>
+          <button type="button" class="btn-ctrl preset-dup" title="تكرار ونسخ">⧉</button>
+          <button type="button" class="btn-ctrl preset-del" title="حذف">&times;</button>
+        `;
+        section.appendChild(controls);
+      }
+
+      controls.querySelector('.preset-up').onclick = (e) => {
+        e.stopPropagation();
+        let prev = section.previousElementSibling;
+        while (prev && !prev.matches('.preset-section')) prev = prev.previousElementSibling;
+        if (prev) {
+          root.insertBefore(section, prev);
+          selectBlock(section);
+          toastOk('تم نقل القسم لأعلى');
+        }
+      };
+
+      controls.querySelector('.preset-down').onclick = (e) => {
+        e.stopPropagation();
+        let next = section.nextElementSibling;
+        while (next && !next.matches('.preset-section')) next = next.nextElementSibling;
+        if (next) {
+          root.insertBefore(next, section);
+          selectBlock(section);
+          toastOk('تم نقل القسم لأسفل');
+        }
+      };
+
+      const btnBottom = controls.querySelector('.preset-bottom');
+      if (btnBottom) {
+        btnBottom.onclick = (e) => {
+          e.stopPropagation();
+          const gap = parseFloat(getComputedStyle(section).marginTop) || 0;
+          section.style.marginTop = `${gap + bottomRoom(section, '.preset-section')}px`;
+          toastOk('تم نقل القسم لأسفل الصفحة');
+        };
+      }
+
+      controls.querySelector('.preset-dup').onclick = (e) => {
+        e.stopPropagation();
+        const clone = section.cloneNode(true);
+        clone.querySelectorAll('.preset-section-controls, .preset-tbl-controls').forEach(c => c.remove());
+        section.after(clone);
+        attachPresetSectionDrag();
+        selectBlock(clone);
+        toastOk('تم تكرار ونسخ القسم');
+      };
+
+      controls.querySelector('.preset-del').onclick = (e) => {
+        e.stopPropagation();
+        section.remove();
+        selectBlock(null);
+        toastOk('تم حذف القسم');
+      };
+
+      bindMoveHandle(controls.querySelector('.preset-drag'), section, '.preset-section');
+
+      // If the section is or contains a table, equip it with granular table controls
+      const tbl = section.matches('table') ? section : section.querySelector('table');
+      if (tbl) {
+        let tblControls = section.querySelector(':scope > .preset-tbl-controls');
+        if (!tblControls) {
+          tblControls = document.createElement('div');
+          tblControls.className = 'preset-tbl-controls';
+          tblControls.contentEditable = 'false';
+          tblControls.innerHTML = `
+            <button type="button" class="btn-sub-ctrl tbl-add-row" title="إضافة صف جديد">+ صف</button>
+            <button type="button" class="btn-sub-ctrl tbl-del-row" title="حذف آخر صف">- صف</button>
+            <button type="button" class="btn-sub-ctrl tbl-add-col" title="إضافة عمود">+ عمود</button>
+            <button type="button" class="btn-sub-ctrl tbl-del-col" title="حذف آخر عمود">- عمود</button>
+            <button type="button" class="btn-sub-ctrl tbl-zebra" title="تبديل تظليل الصفوف">تظليل</button>
+          `;
+          section.appendChild(tblControls);
+
+          tblControls.querySelector('.tbl-add-row').onclick = (ev) => {
+            ev.stopPropagation();
+            const tbody = tbl.querySelector('tbody') || tbl;
+            const lastRow = tbody.lastElementChild;
+            if (lastRow) {
+              const newRow = lastRow.cloneNode(true);
+              newRow.querySelectorAll('td').forEach((td, idx) => {
+                td.contentEditable = 'true';
+                if (idx === 0 && !isNaN(parseInt(td.textContent.trim()))) {
+                  td.textContent = String(tbody.children.length + 1);
+                } else if (idx === 1 && td.textContent.trim().startsWith('PRD-')) {
+                  td.textContent = `PRD-0${tbody.children.length + 1}`;
+                }
+              });
+              tbody.appendChild(newRow);
+              toastOk('تمت إضافة صف جديد للجدول');
+            }
+          };
+
+          tblControls.querySelector('.tbl-del-row').onclick = (ev) => {
+            ev.stopPropagation();
+            const tbody = tbl.querySelector('tbody') || tbl;
+            if (tbody.children.length > 1) {
+              tbody.lastElementChild.remove();
+              toastOk('تم حذف آخر صف');
+            } else {
+              toastErr('يجب إبقاء صف واحد على الأقل');
+            }
+          };
+
+          tblControls.querySelector('.tbl-add-col').onclick = (ev) => {
+            ev.stopPropagation();
+            const theadTr = tbl.querySelector('thead tr') || tbl.querySelector('tr');
+            if (theadTr) {
+              const th = document.createElement('th');
+              th.contentEditable = 'true';
+              th.style.cssText = 'padding:6px 8px; border:1px solid #cbd5e1; outline:none; text-align:right; font-weight:bold;';
+              th.textContent = 'عمود جديد';
+              theadTr.appendChild(th);
+            }
+            tbl.querySelectorAll('tbody tr').forEach(tr => {
+              const td = document.createElement('td');
+              td.contentEditable = 'true';
+              td.style.cssText = 'padding:6px 8px; border:1px solid #cbd5e1; outline:none; text-align:right;';
+              td.textContent = '-';
+              tr.appendChild(td);
+            });
+            toastOk('تمت إضافة عمود جديد');
+          };
+
+          tblControls.querySelector('.tbl-del-col').onclick = (ev) => {
+            ev.stopPropagation();
+            const theadTr = tbl.querySelector('thead tr') || tbl.querySelector('tr');
+            if (theadTr && theadTr.children.length > 1) {
+              theadTr.lastElementChild.remove();
+              tbl.querySelectorAll('tbody tr').forEach(tr => {
+                if (tr.lastElementChild) tr.lastElementChild.remove();
+              });
+              toastOk('تم حذف آخر عمود');
+            } else {
+              toastErr('يجب إبقاء عمود واحد على الأقل');
+            }
+          };
+
+          tblControls.querySelector('.tbl-zebra').onclick = (ev) => {
+            ev.stopPropagation();
+            const style = tbl.dataset.style === 'zebra' ? 'financial' : 'zebra';
+            applyTableStyle(tbl, style);
+            toastOk(style === 'zebra' ? 'تم تفعيل التظليل المتبادل' : 'تم إلغاء التظليل');
+          };
+        }
+      }
+    });
+  });
 }
 
 function loadRawHtmlIntoCanvas(rawHtml, tplName) {
   const canvas = $('#editor-canvas-sheet', view);
   if (!canvas) return;
 
+  rawHtml = cleanStrayTableRowsAndFixTables(rawHtml);
+
   const parser = new DOMParser();
   const doc = parser.parseFromString(rawHtml, 'text/html');
   applyPresetStyles(Array.from(doc.querySelectorAll('style')).map(s => s.textContent).join('\n'));
 
-  // Extract body inner content or container
-  const container = doc.querySelector('.invoice-container') || doc.querySelector('.voucher-card') || doc.body;
+  // Extract body inner content or main container
+  const container = doc.querySelector('.invoice-container') ||
+                    doc.querySelector('.voucher-card') ||
+                    doc.querySelector('.receipt-card') ||
+                    doc.querySelector('.invoice-card') ||
+                    doc.querySelector('.invoice-box') ||
+                    doc.querySelector('.doc-card') ||
+                    doc.querySelector('.receipt-container') ||
+                    doc.querySelector('.bill-container') ||
+                    doc.body;
   const content = container === doc.body ? doc.body.innerHTML : container.outerHTML;
 
   canvas.replaceChildren(createBlockElement(content, 'preset'));
   canvas.style.padding = container === doc.body ? '' : '0';
   selectBlock(null);
 
-  // Make text elements directly editable
-  canvas.querySelectorAll('h1, h2, h3, h4, p, span, td, th, div').forEach(el => {
-    if (el.children.length === 0 || (el.children.length === 1 && el.querySelector('.sar-sym'))) {
+  // Make ALL text elements directly editable across all shapes & components
+  canvas.querySelectorAll('h1, h2, h3, h4, h5, h6, p, span, td, th, strong, b, small, label, div, a, li, blockquote, .num, .ar-title, .en-title, .party-val, .kpi-val, .info-value, .meta-val, .amount-value, .statement-value').forEach(el => {
+    if (!el.querySelector('div, table, section, header, footer, ul, ol') && el.textContent.trim().length > 0) {
       el.contentEditable = 'true';
+      el.setAttribute('spellcheck', 'false');
+      el.style.outline = 'none';
     }
   });
+
   attachPresetSectionDrag();
 
   if (tplName) {
@@ -1806,7 +2053,7 @@ function loadRawHtmlIntoCanvas(rawHtml, tplName) {
   // Re-apply background overlay
   applySheetBackground();
 
-  toastOk('تم تحميل القالب بنجاح للتصميم والتعديل!');
+  toastOk('تم تحميل القالب بنجاح مع تفعيل التحكم الكامل في التحريك، التعديل، والحجم لكل الأشكال!');
 }
 
 function restoreEditorContent(content) {
@@ -1825,6 +2072,43 @@ function attachAppEvents() {
   if (!view) return;
 
   const canvas = $('#editor-canvas-sheet', view);
+
+  $('.btn-open-ai-prompt', view)?.addEventListener('click', () => {
+    openAiPromptModal({
+      defaultType: docMeta.type
+    });
+  });
+
+  const pasteModal = $('#modal-paste-html', view);
+  $('#btn-open-paste-modal', view)?.addEventListener('click', () => {
+    if (pasteModal) {
+      pasteModal.style.display = 'flex';
+      const txt = $('#txt-paste-html-code', pasteModal);
+      if (txt) {
+        txt.value = '';
+        txt.focus();
+      }
+      const inp = $('#inp-paste-tpl-name', pasteModal);
+      if (inp) inp.value = docMeta.name_ar || '';
+    }
+  });
+
+  $('#btn-close-paste-modal', view)?.addEventListener('click', () => {
+    if (pasteModal) pasteModal.style.display = 'none';
+  });
+  $('#btn-cancel-paste-modal', view)?.addEventListener('click', () => {
+    if (pasteModal) pasteModal.style.display = 'none';
+  });
+
+  $('#btn-confirm-import-code', view)?.addEventListener('click', () => {
+    const txt = $('#txt-paste-html-code', view);
+    const htmlCode = txt?.value.trim();
+    if (!htmlCode) return toastErr('يرجى لصق كود HTML أولاً');
+    const inp = $('#inp-paste-tpl-name', view);
+    const customName = inp?.value.trim() || 'قالب مستورد مخصص';
+    loadRawHtmlIntoCanvas(htmlCode, customName);
+    if (pasteModal) pasteModal.style.display = 'none';
+  });
 
   $('#sel-table-style', view)?.addEventListener('change', (e) => {
     applyTableStyle(selectedTable, e.target.value);
@@ -2296,11 +2580,18 @@ function attachAppEvents() {
   const btnSave = $('.btn-save-sheet', view);
   if (btnSave) {
     btnSave.onclick = async () => {
+      const inpDocName = $('#inp-doc-name', view);
+      if (inpDocName && inpDocName.value && inpDocName.value.trim()) {
+        docMeta.name_ar = inpDocName.value.trim();
+      }
+
       if (!docMeta.name_ar || !docMeta.name_ar.trim()) {
         toastErr('يرجى كتابة اسم للقالب أولاً');
+        inpDocName?.focus();
         return;
       }
 
+      const chosenName = docMeta.name_ar.trim();
       saving = true;
       btnSave.disabled = true;
       btnSave.textContent = 'جاري الحفظ...';
@@ -2311,7 +2602,7 @@ function attachAppEvents() {
           id: editingId || undefined,
           type: docMeta.type,
           category: docMeta.type,
-          name_ar: docMeta.name_ar.trim(),
+          name_ar: chosenName,
           primary_color: docMeta.primary_color,
           html_content: generatedHTML,
           editor_content: canvas.innerHTML,
@@ -2324,7 +2615,7 @@ function attachAppEvents() {
           editingId = res.id;
         }
 
-        toastOk('تم حفظ القالب بنجاح في النظام وملفات القوالب!');
+        toastOk(`تم حفظ القالب «${chosenName}» بنجاح في النظام وملفات القوالب!`);
       } catch (err) {
         toastErr('فشل حفظ القالب: ' + (err.message || 'خطأ غير متوقع'));
       } finally {
@@ -2367,6 +2658,18 @@ export async function render(container) {
     frameColor: '#cbd5e1'
   };
 
+  const aiHtml = sessionStorage.getItem('raseen_imported_ai_html');
+  const aiType = sessionStorage.getItem('raseen_imported_ai_type');
+  if (aiHtml) {
+    sessionStorage.removeItem('raseen_imported_ai_html');
+    sessionStorage.removeItem('raseen_imported_ai_type');
+    docMeta.type = aiType || 'invoices';
+    docMeta.name_ar = aiType === 'documents' ? 'سند مالي بالذكاء الاصطناعي' : 'فاتورة بالذكاء الاصطناعي';
+    renderView();
+    loadRawHtmlIntoCanvas(aiHtml, docMeta.name_ar);
+    return;
+  }
+
   const requestedId = new URLSearchParams(window.location.hash.split('?')[1] || '').get('id');
   if (requestedId) {
     try {
@@ -2379,6 +2682,12 @@ export async function render(container) {
         renderView();
         restoreEditorContent(config.editor_content);
         if (config.preset_styles) applyPresetStyles(config.preset_styles);
+        return;
+      } else if (config.html_content) {
+        editingId = requestedId;
+        docMeta = { type: config.type || config.category || 'invoices', name_ar: config.name_ar || 'قالب مخصص', primary_color: config.primary_color || '#1a2638' };
+        renderView();
+        loadRawHtmlIntoCanvas(config.html_content, docMeta.name_ar);
         return;
       }
     } catch (err) {

@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<title>قالب سند مالي مخصص</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Cairo', Tahoma, Arial, sans-serif;
+    font-size: 12px;
+    color: #1e293b;
+    background-color: #ffffff;
+    padding: 12px;
+    direction: rtl;
+    position: relative;
+    min-height: 297mm;
+    
+  }
+  table { border-collapse: collapse; }
+  .sar-sym { display: inline-flex; align-items: center; vertical-align: middle; margin: 0 2px; }
+  .sar-sym svg { width: 0.88em; height: 0.88em; fill: currentColor; }
+  .canvas-watermark-layer {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-35deg);
+    font-size: 72px;
+    font-weight: 900;
+    color: #0f172a;
+    opacity: 0.07;
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+    z-index: 0;
+  }
+  .canvas-bg-image-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+  @media print {
+    body {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      padding: 0;
+    }
+  }
+  
+@page {
+    size: A4 portrait;
+    margin: 10mm;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    direction: rtl;
+    font-family: Tahoma, Arial, "Noto Sans Arabic", sans-serif;
+    color: #17212b;
+    background: #eef1f3;
+    line-height: 1.75;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+.page {
+    position: relative;
+    width: 100%;
+    max-width: 190mm;
+    margin: 18px auto;
+    padding: 13mm 12mm 11mm;
+    background: #ffffff;
+    border: 1px solid #c8d0d5;
+    box-shadow: 0 8px 28px rgba(23, 33, 43, 0.10);
+}
+
+.top-accent {
+    height: 5px;
+    margin: -13mm -12mm 9mm;
+    background: #174f5c;
+}
+
+.header {
+    display: grid;
+    grid-template-columns: 1fr 34mm;
+    gap: 10mm;
+    align-items: center;
+    padding-bottom: 7mm;
+    border-bottom: 1px solid #b8c2c7;
+}
+
+.company {
+    min-width: 0;
+}
+
+.seller-name {
+    margin: 0 0 2mm;
+    color: #174f5c;
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.seller-name-en {
+    margin-bottom: 2mm;
+    direction: ltr;
+    text-align: right;
+    color: #52616a;
+    font-size: 10.5px;
+    overflow-wrap: anywhere;
+}
+
+.company-info,
+.legal-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1mm 5mm;
+    color: #4c5961;
+    font-size: 10.5px;
+}
+
+.company-info span,
+.legal-info span {
+    overflow-wrap: anywhere;
+}
+
+.legal-info {
+    margin-top: 1.5mm;
+    color: #66747c;
+    font-size: 9.5px;
+}
+
+.logo-box {
+    min-height: 25mm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.logo-box img,
+.logo-box svg {
+    display: block;
+    max-width: 100%;
+    max-height: 27mm;
+    width: auto;
+    height: auto;
+}
+
+.title-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 9mm 0 6mm;
+}
+
+.title-row::before,
+.title-row::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #c8d0d5;
+}
+
+.document-title {
+    position: relative;
+    margin: 0 6mm;
+    padding: 2mm 9mm;
+    color: #174f5c;
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.document-title::after {
+    content: "";
+    position: absolute;
+    right: 30%;
+    left: 30%;
+    bottom: 0;
+    height: 3px;
+    background: #b8893d;
+}
+
+.meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border: 1px solid #aeb9bf;
+    border-radius: 6px;
+    margin-bottom: 7mm;
+}
+
+.meta-item {
+    min-width: 0;
+    padding: 4mm;
+    text-align: center;
+}
+
+.meta-item + .meta-item {
+    border-right: 1px solid #d3d9dd;
+}
+
+.label {
+    display: block;
+    margin-bottom: 1mm;
+    color: #66747c;
+    font-size: 9.5px;
+    font-weight: 700;
+}
+
+.value {
+    display: block;
+    color: #17212b;
+    font-size: 12px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.voucher-number {
+    color: #174f5c;
+    font-size: 14px;
+}
+
+.details {
+    margin-bottom: 7mm;
+    border-top: 1px solid #d3d9dd;
+}
+
+.detail-row {
+    display: grid;
+    grid-template-columns: 31mm 1fr;
+    border-bottom: 1px solid #d3d9dd;
+}
+
+.detail-label {
+    padding: 4.5mm 4mm;
+    color: #174f5c;
+    background: #f3f6f6;
+    font-weight: 800;
+    font-size: 11px;
+}
+
+.detail-value {
+    min-width: 0;
+    padding: 4.5mm 5mm;
+    font-size: 12px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.amount-box {
+    position: relative;
+    margin: 7mm 0;
+    padding: 6mm 7mm;
+    border: 2px solid #174f5c;
+    border-radius: 7px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.amount-box::before {
+    content: "";
+    position: absolute;
+    top: -2px;
+    right: 18mm;
+    width: 18mm;
+    height: 4px;
+    background: #b8893d;
+}
+
+.amount-heading {
+    margin-bottom: 2mm;
+    color: #66747c;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.amount-number {
+    color: #174f5c;
+    font-size: 25px;
+    font-weight: 800;
+    line-height: 1.4;
+}
+
+.money {
+    display: inline-flex;
+    direction: ltr;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+}
+
+.money > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.money svg {
+    width: 0.85em;
+    height: 0.85em;
+    max-width: 1em;
+    max-height: 1em;
+}
+
+.words {
+    margin-top: 4mm;
+    padding-top: 4mm;
+    border-top: 1px solid #cbd3d7;
+}
+
+.words-label {
+    margin-bottom: 1.5mm;
+    color: #66747c;
+    font-size: 9.5px;
+    font-weight: 700;
+}
+
+.words-value {
+    color: #17212b;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.9;
+    overflow-wrap: anywhere;
+}
+
+.approval {
+    margin-top: 12mm;
+    padding-top: 6mm;
+    border-top: 1px solid #b8c2c7;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.approval-title {
+    margin-bottom: 7mm;
+    color: #174f5c;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.signatures {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.signature {
+    min-height: 27mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.signature-label {
+    color: #66747c;
+    font-size: 9.5px;
+    font-weight: 700;
+}
+
+.receiver-name {
+    margin-top: 2mm;
+    min-height: 8mm;
+    font-size: 11px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.signature-line {
+    margin-top: 11mm;
+    border-bottom: 1px solid #7f8c93;
+}
+
+.stamp-space {
+    min-height: 27mm;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 1mm;
+    color: #66747c;
+    font-size: 9.5px;
+    font-weight: 700;
+}
+
+.footer-decoration {
+    display: flex;
+    align-items: center;
+    gap: 3mm;
+    margin-top: 10mm;
+}
+
+.footer-decoration .line {
+    height: 1px;
+    flex: 1;
+    background: #d3d9dd;
+}
+
+.geometry {
+    width: 22mm;
+    height: 8mm;
+    flex: 0 0 auto;
+}
+
+@media (max-width: 650px) {
+    .page {
+        margin: 0;
+        padding: 8mm;
+    }
+
+    .top-accent {
+        margin: -8mm -8mm 7mm;
+    }
+
+    .header {
+        grid-template-columns: 1fr 27mm;
+        gap: 5mm;
+    }
+
+    .meta {
+        grid-template-columns: 1fr;
+    }
+
+    .meta-item + .meta-item {
+        border-right: 0;
+        border-top: 1px solid #d3d9dd;
+    }
+
+    .detail-row {
+        grid-template-columns: 27mm 1fr;
+    }
+}
+
+@media print {
+    html,
+    body {
+        background: #ffffff !important;
+    }
+
+    body {
+        margin: 0;
+    }
+
+    .page {
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        box-shadow: none;
+        background: #ffffff;
+    }
+
+    .top-accent {
+        margin: 0 0 9mm;
+    }
+
+    .amount-box,
+    .approval,
+    .signatures,
+    .signature {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+}
+
+</style>
+</head>
+<body>
+  <div tabindex="0">
+    
+    <div class="block-content">
+      
+
+<main class="page">
+
+    <div class="top-accent"></div>
+
+    <header class="header">
+
+        <div class="company">
+            <h1 class="seller-name" spellcheck="false" style="outline: none;">{{seller_name}}</h1>
+
+            <div class="seller-name-en" spellcheck="false" style="outline: none;">{{seller_name_en}}</div>
+
+            <div class="company-info" spellcheck="false" style="outline: none;">
+                <span spellcheck="false" style="outline: none;">{{seller_address}}</span>
+                <span spellcheck="false" style="outline: none;">{{seller_phone}}</span>
+            </div>
+
+            <div class="legal-info" spellcheck="false" style="outline: none;">
+                <span spellcheck="false" style="outline: none;">{{seller_cr}}</span>
+                <span spellcheck="false" style="outline: none;">{{seller_tax}}</span>
+            </div>
+        </div>
+
+        <div class="logo-box" spellcheck="false" style="outline: none;">{{logo}}</div>
+
+    </header>
+
+    <div class="title-row" spellcheck="false" style="outline: none;">
+        <h2 class="document-title" spellcheck="false" style="outline: none;">سند قبض</h2>
+    </div>
+
+    <section class="meta">
+
+        <div class="meta-item" spellcheck="false" style="outline: none;">
+            <span class="label" spellcheck="false" style="outline: none;">رقم السند</span>
+            <bdi class="value voucher-number">{{voucher_number}}</bdi>
+        </div>
+
+        <div class="meta-item" spellcheck="false" style="outline: none;">
+            <span class="label" spellcheck="false" style="outline: none;">التاريخ</span>
+            <bdi class="value">{{voucher_date}}</bdi>
+        </div>
+
+        <div class="meta-item" spellcheck="false" style="outline: none;">
+            <span class="label" spellcheck="false" style="outline: none;">طريقة الدفع</span>
+            <span class="value" spellcheck="false" style="outline: none;">{{payment_method}}</span>
+        </div>
+
+    </section>
+
+    <section class="details">
+
+        <div class="detail-row">
+            <div class="detail-label" spellcheck="false" style="outline: none;">استلمنا من</div>
+            <div class="detail-value" spellcheck="false" style="outline: none;">{{received_from}}</div>
+        </div>
+
+        <div class="detail-row">
+            <div class="detail-label" spellcheck="false" style="outline: none;">وذلك مقابل</div>
+            <div class="detail-value" spellcheck="false" style="outline: none;">{{paid_for}}</div>
+        </div>
+
+    </section>
+
+    <section class="amount-box">
+
+        <div class="amount-heading" spellcheck="false" style="outline: none;">المبلغ المستلم</div>
+
+        <div class="amount-number" spellcheck="false" style="outline: none;">
+            <span class="money" spellcheck="false" style="outline: none;"><bdi>{{amount}}</bdi><span spellcheck="false" style="outline: none;">{{sar_symbol}}</span></span>
+        </div>
+
+        <div class="words">
+            <div class="words-label" spellcheck="false" style="outline: none;">المبلغ كتابةً</div>
+            <div class="words-value" spellcheck="false" style="outline: none;">{{amount_in_words}}</div>
+        </div>
+
+    </section>
+
+    <section class="approval">
+
+        <div class="approval-title" spellcheck="false" style="outline: none;">الاعتماد</div>
+
+        <div class="signatures">
+
+            <div class="signature">
+                <div class="signature-label" spellcheck="false" style="outline: none;">المستلم</div>
+                <div class="receiver-name" spellcheck="false" style="outline: none;">{{receiver_name}}</div>
+                <div class="signature-line"></div>
+            </div>
+
+            <div class="stamp-space" spellcheck="false" style="outline: none;">
+                <span spellcheck="false" style="outline: none;">الختم</span>
+            </div>
+
+        </div>
+
+    </section>
+
+    <div class="footer-decoration" aria-hidden="true">
+
+        <div class="line"></div>
+
+        <svg class="geometry" viewBox="0 0 120 36" xmlns="http://www.w3.org/2000/svg">
+
+            <path d="M2 18 L20 2 L38 18 L20 34 Z" fill="none" stroke="#174f5c" stroke-width="2"></path>
+
+            <path d="M30 18 L48 2 L66 18 L48 34 Z" fill="none" stroke="#b8893d" stroke-width="2"></path>
+
+            <path d="M58 18 L76 2 L94 18 L76 34 Z" fill="none" stroke="#174f5c" stroke-width="2"></path>
+
+            <path d="M86 18 L104 2 L118 18 L104 34 Z" fill="none" stroke="#b8893d" stroke-width="2"></path>
+
+        </svg>
+
+        <div class="line"></div>
+
+    </div>
+
+</main>
+
+
+
+    </div>
+  </div>
+</body>
+</html>

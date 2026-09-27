@@ -152,11 +152,18 @@ export async function shareInvoicePdfFile({ invoice, issuer, client, text, print
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
-          title: `فاتورة ${invoice.invoice_number} — ${issuer.name_ar}`,
-          text: text || `فاتورة ضريبية رقم ${invoice.invoice_number} من ${issuer.name_ar}`,
+          title: `فاتورة ${invoice.invoice_number} — ${issuer.name_ar || ''}`,
+          text: text || `فاتورة ضريبية رقم ${invoice.invoice_number} من ${issuer.name_ar || ''}`,
           files: [file],
         });
         toastOk('تمت مشاركة ملف الفاتورة PDF بنجاح');
+        return true;
+      } else if (navigator.share) {
+        await navigator.share({
+          title: `فاتورة ${invoice.invoice_number} — ${issuer.name_ar || ''}`,
+          text: text || `فاتورة ضريبية رقم ${invoice.invoice_number} من ${issuer.name_ar || ''}`,
+        });
+        toastOk('تمت مشاركة الفاتورة بنجاح');
         return true;
       }
 
@@ -258,73 +265,7 @@ export function openDownloadModal({ invoice, issuer, client, printSettings = nul
 }
 
 export function openShareModal({ invoice, issuer, client, printSettings = null, docHtml = null }) {
-  const m = modal({
-    title: `مشاركة الفاتورة: ${invoice.invoice_number}`,
-    slim: true,
-    body: html`
-      <div style="display:flex;flex-direction:column;gap:1rem">
-        <div class="alert alert-info" style="font-size:.85rem;line-height:1.6">
-          يمكنك إرسال الفاتورة للعميل عبر <b>واتساب</b> أو مشاركة <b>ملف PDF المعتمد</b> مباشرة عبر التطبيقات المثبتة بجهازك:
-        </div>
-
-        <div class="field">
-          <label style="font-weight:600;font-size:.85rem">رقم هاتف العميل (واتساب):</label>
-          <input type="text" id="share-phone-input" class="ltr" value="${client.phone || ''}" placeholder="05xxxxxxxx أو 9665xxxxxxxx" style="font-size:1rem;letter-spacing:1px;font-weight:bold" />
-          <span class="tiny muted" style="margin-top:2px">يتم التنسيق تلقائياً للمفتاح الدولي السعودي (+966)</span>
-        </div>
-
-        <div style="display:flex;flex-direction:column;gap:.6rem;margin-top:.2rem">
-          <button class="btn btn-primary" id="btn-send-whatsapp" type="button" style="display:flex;align-items:center;gap:8px;font-weight:bold;background:#25D366;border-color:#25D366;color:#fff;padding:.75rem 1.4rem;border-radius:8px;font-size:.95rem">
-            ${raw(icon.whatsapp({ size: 18 }))}
-            إرسال الفاتورة عبر واتساب (WhatsApp Web / App)
-          </button>
-          <button class="btn" id="btn-share-pdf-direct" type="button" style="display:flex;align-items:center;gap:8px;font-weight:bold;padding:.75rem 1.4rem;border-radius:8px;font-size:.95rem;background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.2)">
-            ${raw(icon.share({ size: 18 }))}
-            مشاركة ملف PDF عبر تطبيقات النظام
-          </button>
-          <button class="btn" id="btn-dl-pdf-direct" type="button" style="display:flex;align-items:center;gap:8px;font-weight:bold;padding:.75rem 1.4rem;border-radius:8px;font-size:.95rem;background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.2)">
-            ${raw(icon.download({ size: 18 }))}
-            تحميل ملف PDF للجهاز
-          </button>
-        </div>
-      </div>
-    `,
-    footer: `<button class="btn" data-close type="button">إغلاق</button>`,
-  });
-
-  // إرسال الفاتورة عبر واتساب مباشرة للعميل
-  $('#btn-send-whatsapp', m.el)?.addEventListener('click', () => {
-    const rawPhone = $('#share-phone-input', m.el)?.value?.trim() || '';
-    const cleanPhone = formatSaudiPhone(rawPhone);
-    if (!cleanPhone) {
-      toastErr('يرجى إدخال رقم جوال صالح للعميل (مثال: 0501234567)');
-      return;
-    }
-    const grandTotalStr = typeof invoice.grand_total === 'number' ? invoice.grand_total.toFixed(2) : (invoice.grand_total || '0.00');
-    const msg = [
-      `مرحباً ${client.name || 'عميلنا العزيز'}،`,
-      `مرفق لكم تفاصيل الفاتورة الضريبية رقم: *${invoice.invoice_number}*`,
-      issuer.name_ar ? `الصادرة من: *${issuer.name_ar}*` : '',
-      `تاريخ الإصدار: ${invoice.issue_date || ''}`,
-      `المبلغ الإجمالي: *${grandTotalStr} ريال*`,
-      invoice.payment_label ? `طريقة الدفع: ${invoice.payment_label}` : '',
-      `\nشكراً لتعاملكم معنا.`
-    ].filter(Boolean).join('\n');
-
-    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
-    window.open(waUrl, '_blank', 'noopener,noreferrer');
-    toastOk('تم فتح محادثة واتساب لإرسال الفاتورة 💬');
-  });
-
-  // مشاركة ملف PDF مباشرة عبر النظام (يدعم ويندوز وتطبيقات الهاتف)
-  $('#btn-share-pdf-direct', m.el).addEventListener('click', async () => {
-    await shareInvoicePdfFile({ invoice, issuer, client, printSettings, docHtml });
-  });
-
-  // تنزيل ملف PDF للجهاز
-  $('#btn-dl-pdf-direct', m.el)?.addEventListener('click', async () => {
-    await downloadInvoicePdf({ invoice, issuer, client, printSettings, docHtml });
-  });
+  return shareInvoicePdfFile({ invoice, issuer, client, printSettings, docHtml });
 }
 
 export async function render(view, ctx) {
@@ -462,7 +403,7 @@ export async function render(view, ctx) {
                 <span class="tiny muted">${(invoice.lines || []).length} بند</span></div>
               <div class="table-wrap">
                 <table class="tbl compact">
-                  <thead><tr><th>#</th><th>الصنف</th><th>الوحدة</th><th class="text-end">الكمية</th>
+                  <thead><tr><th>#</th><th>رقم الصنف</th><th>الصنف</th><th>الوحدة</th><th class="text-end">الكمية</th>
                     <th class="text-end">السعر <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
                     <th class="text-end">الخصم <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
                     <th class="text-end">قبل الضريبة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
@@ -472,7 +413,8 @@ export async function render(view, ctx) {
                   <tbody>
                     ${(invoice.lines || []).map((l, i) => raw(`<tr>
                       <td class="tiny">${i + 1}</td>
-                      <td><b>${esc(l.item_name)}</b>${l.item_code ? `<div class="tiny muted mono">${esc(l.item_code)}</div>` : ''}</td>
+                      <td class="mono tiny">${esc(l.item_code || '—')}</td>
+                      <td><b>${esc(l.item_name)}</b></td>
                       <td class="tiny">${esc(l.unit)}</td>
                       <td class="text-end num">${num(l.quantity)}</td>
                       <td class="text-end num">${amount(l.unit_price)}</td>
@@ -634,22 +576,14 @@ export async function render(view, ctx) {
       const isExcelTpl = tplId && tplId !== 'standard' && tplId !== 'modern' && tplId !== 'classic' && tplId !== 'compact';
 
       if (isExcelTpl) {
-        const cacheKey = `${invoice.id}_${tplId}`;
-        if (tplHtmlCache.has(cacheKey)) {
-          currentInvoiceDocHtml = tplHtmlCache.get(cacheKey);
-          iframe.srcdoc = currentInvoiceDocHtml;
-          return;
-        }
-
         // إظهار مؤشر تحميل نظيف بدلاً من وميض قالب قديم غير مرغوب
         iframe.srcdoc = getLoadingPreviewHtml('جارٍ تجهيز قالب الفاتورة الحقيقي...');
 
         try {
-          const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/render-html?style=${encodeURIComponent(tplId)}`);
+          const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/render-html?style=${encodeURIComponent(tplId)}&_t=${Date.now()}`);
           if (res.ok) {
-            const filledHtml = await res.text();
+            let filledHtml = await res.text();
             if (filledHtml && filledHtml.length > 500 && iframe) {
-              tplHtmlCache.set(cacheKey, filledHtml);
               currentInvoiceDocHtml = filledHtml;
               iframe.srcdoc = filledHtml;
               return;
@@ -769,14 +703,20 @@ export async function render(view, ctx) {
       }
     });
 
-    $('#share-invoice', view).addEventListener('click', () => {
-      openShareModal({
-        invoice,
-        issuer,
-        client,
-        printSettings: getPrintSettings(),
-        docHtml: currentInvoiceDocHtml,
-      });
+    $('#share-invoice', view).addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        await shareInvoicePdfFile({
+          invoice,
+          issuer,
+          client,
+          printSettings: getPrintSettings(),
+          docHtml: currentInvoiceDocHtml,
+        });
+      } finally {
+        btn.disabled = false;
+      }
     });
 
     $('#print-more', view).addEventListener('click', () => {

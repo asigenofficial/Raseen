@@ -68,11 +68,11 @@ export function num(value) {
   return nf0.format(n);
 }
 
-/** مبلغ مع العملة ورمز الريال السعودي الرسمي فيكتور SVG. */
+/** مبلغ مع العملة ورمز الريال السعودي الرسمي فيكتور SVG (الرمز على اليسار دائماً). */
 export function amount(value, currency = 'SAR', opt = {}) {
   const isSar = !currency || currency === 'SAR' || currency === 'ر.س' || currency === '﷼';
   const sym = isSar ? sarSvg({ size: opt.size || 13, ...opt }) : esc(currency);
-  return raw(`<span class="money-val"><span class="num">${money(value)}</span> <span class="cur-sym">${sym}</span></span>`);
+  return raw(`<span class="money-val"><span class="cur-sym">${sym}</span><span class="num">${money(value)}</span></span>`);
 }
 
 /** إدراج رمز الريال السعودي كعنصر HTML جاهز داخل القوالب. */
@@ -672,12 +672,97 @@ function generateSmartRowsJS(htmlSnippet, rawLines) {
   return filledRows.join('');
 }
 
+function ensureItemsRowsInTbodyJS(html) {
+  if (!html || typeof html !== 'string') return '';
+
+  // إذا لم يكن المستند قالباً يحتوي على وسوم {{...}}، فهو مستند جاهز ومعبأ مسبقاً، لا نلمس محتواه إطلاقاً
+  if (!html.includes('{{')) {
+    return html;
+  }
+
+  const tbodyRegex = /<tbody\b[^>]*>([\s\S]*?)<\/tbody>/gi;
+  let hasInTbody = false;
+  for (const m of html.matchAll(tbodyRegex)) {
+    if (m[1] && /items_rows|items_table_body|items_body|table_rows/i.test(m[1])) {
+      hasInTbody = true;
+      break;
+    }
+  }
+
+  if (hasInTbody) {
+    // الوسم موجود داخل tbody، نحذف أي وسم شارد خارج وسوم tbody
+    let clean = html.replace(/<tbody\b[^>]*>[\s\S]*?<\/tbody>/gi, (tb) => {
+      return tb.replace(/\{\{\s*(items_rows[a-zA-Z0-9_-]*|items_table_body[a-zA-Z0-9_-]*|items_body[a-zA-Z0-9_-]*|table_rows[a-zA-Z0-9_-]*)\s*\}\}/g, '___SAFE_ITEMS_ROWS___');
+    });
+    clean = clean.replace(/\{\{\s*(items_rows[a-zA-Z0-9_-]*|items_table_body[a-zA-Z0-9_-]*|items_body[a-zA-Z0-9_-]*|table_rows[a-zA-Z0-9_-]*)\s*\}\}/g, '');
+    return clean.replace(/___SAFE_ITEMS_ROWS___/g, '{{items_rows}}');
+  }
+
+  // إذا لم يكن هناك أي وسم لصفوف الأصناف في كامل الملف
+  const hasAnyRowTag = /items_rows|items_table_body|items_body|table_rows/i.test(html);
+  if (!hasAnyRowTag) {
+    // لا نحذف أي صفوف موجودة إذا كانت تحتوي بالفعل على خلايا حقيقية
+    return html;
+  }
+
+  // 1. نحذف أي وسم شارد خارج الجداول
+  let clean = html.replace(/\{\{\s*(items_rows[a-zA-Z0-9_-]*|items_table_body[a-zA-Z0-9_-]*|items_body[a-zA-Z0-9_-]*|table_rows[a-zA-Z0-9_-]*)\s*\}\}/g, '');
+
+  // 2. نبحث عن جدول الأصناف الرئيسي ونحقن {{items_rows}} داخل tbody فيه
+  let replaced = false;
+  clean = clean.replace(/(<table\b[^>]*>[\s\S]*?)(<tbody\b[^>]*>)([\s\S]*?)(<\/tbody>)([\s\S]*?<\/table>)/gi, (match, beforeTbody, openTbody, innerTbody, closeTbody, afterTbody) => {
+    if (replaced) return match;
+    const lower = match.toLowerCase();
+    if (lower.includes('صنف') || lower.includes('وصف') || lower.includes('بيان') || lower.includes('كمية') || lower.includes('سعر') || lower.includes('item') || lower.includes('qty') || lower.includes('price')) {
+      replaced = true;
+      return `${beforeTbody}${openTbody}\n{{items_rows}}\n${closeTbody}${afterTbody}`;
+    }
+    return match;
+  });
+
+  if (!replaced) {
+    clean = clean.replace(/(<tbody\b[^>]*>)([\s\S]*?)(<\/tbody>)/i, `$1\n{{items_rows}}\n$3`);
+  }
+
+  return clean;
+}
+
+/**
+ * تنظيف ذاتي متقدم: يضمن وضع وسوم الصفوف أو الصفوف المنفلتة <tr> داخل <tbody> لجدول الأصناف الرئيسي
+ * ويمنع تماماً ظهور سطور النصوص المتسلسلة والمبعثرة خارج الجداول.
+ */
+export function cleanStrayTableRowsAndFixTables(html) {
+  if (!html || typeof html !== 'string') return html;
+
+  // 1. التأكد أولاً من أن وسم {{items_rows}} يقع داخل tbody فقط
+  html = ensureItemsRowsInTbodyJS(html);
+
+  // 2. إذا كانت هناك صفوف <tr> حقيقية مكتوبة خارج وسوم <table> (مثلاً فوق الجدول مباشرة)
+  // نقوم بنقلها تلقائياً إلى داخل <tbody> الخاص بالجدول الرئيسي
+  const strayTrBeforeTable = /((?:<tr\b[\s\S]*?<\/tr>\s*)+)\s*(<table\b[^>]*>[\s\S]*?<tbody\b[^>]*>)([\s\S]*?)(<\/tbody>)/gi;
+  if (strayTrBeforeTable.test(html)) {
+    html = html.replace(strayTrBeforeTable, (match, strayTrs, tableBeforeTbody, tbodyContent, closeTbody) => {
+      return `${tableBeforeTbody}${tbodyContent}\n${strayTrs}\n${closeTbody}`;
+    });
+  }
+
+  // 3. حذف أي نصوص إعلانية أو ترويجية أو إشارة لاسم رصين / RASEEN في التذييل
+  html = html.replace(/<div\b[^>]*class=["'][^"']*footer-brand[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '');
+  html = html.replace(/<div\b[^>]*>\s*تم إنشاء وطباعة هذا المستند عبر نظام رصين[^<]*<\/div>/gi, '');
+
+  return html;
+}
+
 /**
  * محرك استبدال الوسوم الديناميكي الشامل لأي قالب HTML بدون أي قيود أو ثوابت.
  * يكتشف الوسوم والجداول وهيكلتها برمجياً ويستبدلها بالقيم الحقيقية تلقائياً.
  */
 export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, voucher = null, invoice = null, extra = {} } = {}) {
   if (!rawHtml) return '';
+
+  rawHtml = rawHtml.replace(/<img\b[^>]*src=["']\{\{\s*(logo|seller_logo|company_logo|شعار|الشعار)\s*\}\}["'][^>]*>/gi, '{{logo}}');
+  rawHtml = rawHtml.replace(/<img\b[^>]*src=["']\{\{\s*(qr_code|qr|qrcode|barcode|zatca_qr|zatca_code|zatca_payload|رمز_الاستجابة|الباركود|باركود)\s*\}\}["'][^>]*>/gi, '{{qr_code}}');
+  rawHtml = ensureItemsRowsInTbodyJS(rawHtml);
 
   const doc = voucher || invoice || {};
   const addr = [issuer.building_no, issuer.street, issuer.district, issuer.city].filter(Boolean).join(' - ')
@@ -871,15 +956,12 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
 
     if (k === 'qr_code' || k === 'barcode' || k === 'qr' || k === 'zatca_qr') {
       const qrPayload = invoice?.qr_payload || invoice?.qr_code || '';
-      if (qrPayload) {
+      const isTemplatePreview = !invoice || invoice.id === 'preview-inv' || invoice.id === 'preview' || invoice.is_preview || invoice.invoice_number === 'رقم الفاتورة' || !qrPayload;
+      if (!isTemplatePreview && qrPayload) {
         const svg = qrSvg(qrPayload, { scale: 3, margin: 1 });
         return `<div class="zatca-qr-container" style="display:inline-block; line-height:0;">${svg}</div>`;
       }
-      if (globalThis.ZQR && typeof globalThis.ZQR.svg === 'function') {
-        const sampleQr = globalThis.ZQR.svg('ZATCA-SAMPLE-INVOICE-PREVIEW', { ecl: 'M', margin: 1, scale: 3 });
-        return `<div class="zatca-qr-container" style="display:inline-block; line-height:0;">${sampleQr}</div>`;
-      }
-      return `<div style="width:90px; height:90px; border:1px solid #0f172a; display:inline-flex; align-items:center; justify-content:center; font-family:monospace; font-size:10px; font-weight:700;">ZATCA QR</div>`;
+      return `<div class="qr-placeholder" style="width:95px; height:95px; display:inline-flex; align-items:center; justify-content:center; font-family:'Segoe UI', Tahoma, sans-serif; font-size:28px; font-weight:900; color:#1e293b; background:#f8fafc; border:1.5px dashed #cbd5e1; border-radius:6px; box-sizing:border-box; letter-spacing:1px;">QR</div>`;
     }
 
     if (k === 'remaining_amount' || k === 'due_amount' || k === 'balance_due') {

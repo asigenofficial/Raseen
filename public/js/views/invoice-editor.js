@@ -169,20 +169,22 @@ export async function render(view, ctx) {
     const t = lineTotals(l, state.header_discount_percent);
     return `<tr data-key="${l.key}">
       <td class="text-center tiny">${i + 1}</td>
-      <td style="min-width:240px">
+      <td style="width:115px">
+        <input type="text" data-f="item_code" value="${esc(l.item_code || '')}" placeholder="رقم الصنف" autocomplete="off" />
+      </td>
+      <td style="min-width:220px">
         <div class="rel">
-          <input type="text" data-f="item_name" value="${esc(l.item_name)}" placeholder="اكتب اسم الصنف أو الكود…" autocomplete="off" />
+          <input type="text" data-f="item_name" value="${esc(l.item_name)}" placeholder="اكتب اسم الصنف أو ابحث عنه…" autocomplete="off" />
         </div>
-        ${l.item_code ? `<div class="tiny muted mono" style="margin-top:2px">${esc(l.item_code)}</div>` : ''}
       </td>
       <td style="width:80px"><input type="text" data-f="unit" value="${esc(l.unit)}" /></td>
       <td style="width:90px"><input type="number" data-f="quantity" value="${l.quantity}" step="0.001" min="0.001" /></td>
       <td style="width:110px"><input type="number" data-f="unit_price" value="${l.unit_price}" step="0.01" min="0" /></td>
       <td style="width:96px"><input type="number" data-f="discount" value="${l.discount}" step="0.01" min="0" /></td>
       <td style="width:80px"><input type="number" data-f="tax_rate" value="${l.tax_rate}" step="0.01" min="0" max="100" /></td>
-      <td class="text-end num" style="width:105px;white-space:nowrap">${money(t.taxable)}</td>
-      <td class="text-end num" style="width:95px;white-space:nowrap">${money(t.tax)}</td>
-      <td class="text-end num" style="width:110px;white-space:nowrap"><b>${money(t.total)}</b></td>
+      <td class="text-end num col-taxable" style="width:105px;white-space:nowrap">${money(t.taxable)}</td>
+      <td class="text-end num col-tax" style="width:95px;white-space:nowrap">${money(t.tax)}</td>
+      <td class="text-end num col-total" style="width:110px;white-space:nowrap"><b>${money(t.total)}</b></td>
       <td class="actions" style="width:120px">
         <button class="btn btn-sm" data-act="dup" type="button" title="تكرار البند">${icon.copy({ size: 13, style: 'vertical-align:text-bottom;margin-left:2px' })}تكرار</button>
         <button class="btn btn-sm btn-danger" data-act="rm" type="button" title="حذف البند">${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:2px' })}حذف</button>
@@ -364,10 +366,11 @@ export async function render(view, ctx) {
           <button class="btn btn-sm btn-primary" id="add-line" type="button">${icon.plus({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}إضافة بند جديد</button>
         </div>
         <div class="table-wrap">
-          <table class="tbl compact" id="lines-tbl" style="min-width:1020px">
+          <table class="tbl compact" id="lines-tbl" style="min-width:1080px">
             <thead><tr>
               <th style="width:32px">#</th>
-              <th style="min-width:240px">الصنف / الوصف</th>
+              <th style="width:115px">رقم الصنف</th>
+              <th style="min-width:220px">الصنف / الوصف</th>
               <th style="width:80px">الوحدة</th>
               <th style="width:90px">الكمية</th>
               <th style="width:110px">السعر</th>
@@ -576,14 +579,22 @@ export async function render(view, ctx) {
         showSuggestions(input, line);
         return;
       }
+      if (field === 'item_code') {
+        line.item_code = input.value;
+        saveDraft(state);
+        return;
+      }
       if (field === 'unit') line.unit = input.value;
       else line[field] = toNum(input.value);
       // تحديث خلايا الإجماليات لهذا الصف فقط
       const t = lineTotals(line, state.header_discount_percent);
-      const cells = input.closest('tr').querySelectorAll('td');
-      cells[7].textContent = money(t.taxable);
-      cells[8].textContent = money(t.tax);
-      cells[9].innerHTML = `<b>${money(t.total)}</b>`;
+      const tr = input.closest('tr');
+      const cellTaxable = tr.querySelector('.col-taxable');
+      const cellTax = tr.querySelector('.col-tax');
+      const cellTotal = tr.querySelector('.col-total');
+      if (cellTaxable) cellTaxable.textContent = money(t.taxable);
+      if (cellTax) cellTax.textContent = money(t.tax);
+      if (cellTotal) cellTotal.innerHTML = `<b>${money(t.total)}</b>`;
       refreshTotals();
     });
 

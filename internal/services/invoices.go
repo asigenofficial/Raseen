@@ -146,7 +146,8 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		return nil, errors.New("العميل غير موجود")
 	}
 
-	nowDt := time.Now()
+	riyadhLoc := time.FixedZone("Asia/Riyadh", 3*3600)
+	nowDt := time.Now().In(riyadhLoc)
 	issueDate := input.IssueDate
 	if issueDate == "" {
 		issueDate = nowDt.Format("2006-01-02")
@@ -156,8 +157,8 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		issueTime = nowDt.Format("15:04:05")
 	}
 	if len(issueTime) == 5 { issueTime += ":00" }
-	issuedAt, err := time.ParseInLocation("2006-01-02T15:04:05",issueDate+"T"+issueTime,time.Local)
-	if err != nil { return nil,errors.New("تاريخ أو وقت الفاتورة غير صالح") }
+	issuedAt, err := time.ParseInLocation("2006-01-02T15:04:05", issueDate+"T"+issueTime, riyadhLoc)
+	if err != nil { return nil, errors.New("تاريخ أو وقت الفاتورة غير صالح") }
 	issueDatetime := issuedAt.Format(time.RFC3339)
 
 	invoiceType := input.InvoiceType
@@ -295,14 +296,33 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		var pubKeyDer sql.NullString
 		_ = tx.QueryRow("SELECT private_key_enc, public_key_der FROM issuer_credentials WHERE issuer_id = ?", issuer.ID).
 			Scan(&privKeyEnc, &pubKeyDer)
+		var privPem string
 		if privKeyEnc.Valid && privKeyEnc.String != "" {
-			if privPem, err := crypto.DecryptSecret(privKeyEnc.String, s.masterKey); err == nil {
-				if sig, err := zatca.SignHash(privPem, invHash); err == nil {
-					signature = sig
-					signatureMode = "LOCAL"
-					qrParams.Signature = sig
-					qrParams.PublicKey = pubKeyDer.String
+			privPem, _ = crypto.DecryptSecret(privKeyEnc.String, s.masterKey)
+		}
+		// إذا لم تكن المفاتيح موجودة أو تعذر فك تشفيرها بمفتاح السيرفر، يتم توليد زوج جديد فوراً وحفظه
+		if privPem == "" || !pubKeyDer.Valid || pubKeyDer.String == "" {
+			if kp, err := zatca.GenerateKeyPair(); err == nil {
+				if enc, err := crypto.EncryptSecret(kp.PrivateKeyPem, s.masterKey); err == nil {
+					_, _ = tx.Exec(`
+						INSERT INTO issuer_credentials (issuer_id, private_key_enc, public_key_der, updated_at)
+						VALUES (?, ?, ?, ?)
+						ON CONFLICT(issuer_id) DO UPDATE SET
+							private_key_enc = excluded.private_key_enc,
+							public_key_der = excluded.public_key_der,
+							updated_at = excluded.updated_at
+					`, issuer.ID, enc, kp.PublicKeyDerBase64, db.NowIso())
+					privPem = kp.PrivateKeyPem
+					pubKeyDer = sql.NullString{String: kp.PublicKeyDerBase64, Valid: true}
 				}
+			}
+		}
+		if privPem != "" && pubKeyDer.Valid && pubKeyDer.String != "" {
+			if sig, err := zatca.SignHash(privPem, invHash); err == nil {
+				signature = sig
+				signatureMode = "LOCAL"
+				qrParams.Signature = sig
+				qrParams.PublicKey = pubKeyDer.String
 			}
 		}
 	}
@@ -1084,7 +1104,8 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	if len(issueTime) == 5 {
 		issueTime += ":00"
 	}
-	issuedAt, err := time.ParseInLocation("2006-01-02T15:04:05", issueDate+"T"+issueTime, time.Local)
+	riyadhLoc := time.FixedZone("Asia/Riyadh", 3*3600)
+	issuedAt, err := time.ParseInLocation("2006-01-02T15:04:05", issueDate+"T"+issueTime, riyadhLoc)
 	if err != nil {
 		return nil, errors.New("تاريخ أو وقت الفاتورة غير صالح")
 	}
@@ -1199,14 +1220,32 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		var pubKeyDer sql.NullString
 		_ = tx.QueryRow("SELECT private_key_enc, public_key_der FROM issuer_credentials WHERE issuer_id = ?", issuer.ID).
 			Scan(&privKeyEnc, &pubKeyDer)
+		var privPem string
 		if privKeyEnc.Valid && privKeyEnc.String != "" {
-			if privPem, err := crypto.DecryptSecret(privKeyEnc.String, s.masterKey); err == nil {
-				if sig, err := zatca.SignHash(privPem, invHash); err == nil {
-					signature = sig
-					signatureMode = "LOCAL"
-					qrParams.Signature = sig
-					qrParams.PublicKey = pubKeyDer.String
+			privPem, _ = crypto.DecryptSecret(privKeyEnc.String, s.masterKey)
+		}
+		if privPem == "" || !pubKeyDer.Valid || pubKeyDer.String == "" {
+			if kp, err := zatca.GenerateKeyPair(); err == nil {
+				if enc, err := crypto.EncryptSecret(kp.PrivateKeyPem, s.masterKey); err == nil {
+					_, _ = tx.Exec(`
+						INSERT INTO issuer_credentials (issuer_id, private_key_enc, public_key_der, updated_at)
+						VALUES (?, ?, ?, ?)
+						ON CONFLICT(issuer_id) DO UPDATE SET
+							private_key_enc = excluded.private_key_enc,
+							public_key_der = excluded.public_key_der,
+							updated_at = excluded.updated_at
+					`, issuer.ID, enc, kp.PublicKeyDerBase64, db.NowIso())
+					privPem = kp.PrivateKeyPem
+					pubKeyDer = sql.NullString{String: kp.PublicKeyDerBase64, Valid: true}
 				}
+			}
+		}
+		if privPem != "" && pubKeyDer.Valid && pubKeyDer.String != "" {
+			if sig, err := zatca.SignHash(privPem, invHash); err == nil {
+				signature = sig
+				signatureMode = "LOCAL"
+				qrParams.Signature = sig
+				qrParams.PublicKey = pubKeyDer.String
 			}
 		}
 	}

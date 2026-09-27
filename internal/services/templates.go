@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,6 +19,7 @@ import (
 
 	"raseen/internal/crypto"
 	"raseen/internal/db"
+	"raseen/internal/zatca"
 )
 
 const SarSymbolSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1124.14 1256.39" width="0.92em" height="0.92em" class="sar-sym-svg" style="vertical-align:-0.14em;display:inline-block;fill:currentColor;margin:0 2px;" aria-label="ريال سعودي" title="ريال سعودي" role="img"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg>`
@@ -64,7 +66,8 @@ var defaultTemplates = []TemplateCatalogItem{}
 // ─── Disk Sync ────────────────────────────────────────────────────────────────
 
 // SyncDiskTemplates scans data/templates/{invoices,documents} for *.html files
-// and registers them in the excel_templates catalog table.
+// and registers them in the excel_templates catalog table without overwriting
+// custom template names or IDs.
 func (s *TemplateService) SyncDiskTemplates() error {
 	dirs := []struct {
 		relPath  string
@@ -75,7 +78,41 @@ func (s *TemplateService) SyncDiskTemplates() error {
 		{filepath.Join(s.dataDir, "templates", "documents"), "documents", "سند HTML"},
 	}
 
-	_, _ = s.db.Exec(`DELETE FROM excel_templates WHERE file_path LIKE '%templates%invoices%' OR file_path LIKE '%templates%documents%'`)
+	type existingTpl struct {
+		id       string
+		nameAr   string
+		badge    string
+		category string
+		filePath string
+		colorHex string
+	}
+	existingByPath := make(map[string]existingTpl)
+	existingByID := make(map[string]existingTpl)
+
+	rows, err := s.db.Query(`SELECT id, name_ar, badge, category, file_path, color_hex FROM excel_templates`)
+	if err == nil {
+		for rows.Next() {
+			var t existingTpl
+			if errScan := rows.Scan(&t.id, &t.nameAr, &t.badge, &t.category, &t.filePath, &t.colorHex); errScan == nil {
+				existingByPath[filepath.Clean(t.filePath)] = t
+				existingByID[t.id] = t
+			}
+		}
+		rows.Close()
+	}
+
+	seenPathsOnDisk := make(map[string]bool)
+
+	isUuidStr := func(s string) bool {
+		s = strings.TrimSpace(s)
+		if len(s) == 36 && strings.Count(s, "-") == 4 {
+			return true
+		}
+		if strings.HasPrefix(s, "tpl_") && len(s) > 30 {
+			return true
+		}
+		return false
+	}
 
 	for _, d := range dirs {
 		entries, err := os.ReadDir(d.relPath)
@@ -86,34 +123,131 @@ func (s *TemplateService) SyncDiskTemplates() error {
 			if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".html") {
 				continue
 			}
-			fullPath := filepath.Join(d.relPath, entry.Name())
-			fi, err := entry.Info()
-			if err != nil {
-				continue
-			}
+			fullPath := filepath.Clean(filepath.Join(d.relPath, entry.Name()))
+			seenPathsOnDisk[fullPath] = true
 
 			baseName := strings.TrimSuffix(entry.Name(), ".html")
-			h := sha256.Sum256([]byte(d.category + "/" + entry.Name()))
-			id := "tpl_" + hex.EncodeToString(h[:4])
-			nameAr := strings.ReplaceAll(baseName, "_", " ")
-
 			contentBytes, _ := os.ReadFile(fullPath)
-			tags := extractHtmlPlaceholders(string(contentBytes))
+			htmlStr := string(contentBytes)
+			tags := extractHtmlPlaceholders(htmlStr)
 			headersJson, _ := json.Marshal(tags)
+
+			// Try to extract title from HTML if available
+			titleFromHtml := ""
+			titleRegex := regexp.MustCompile(`(?i)<title>(.*?)</title>`)
+			if m := titleRegex.FindStringSubmatch(htmlStr); len(m) > 1 {
+				titleFromHtml = strings.TrimSpace(m[1])
+			}
+
+			// Check if we have an existing record for this path or baseName
+			ex, hasExisting := existingByPath[fullPath]
+			if !hasExisting {
+				ex, hasExisting = existingByID[baseName]
+			}
+
+			// Check if this template has a saved builder config in meta table
+			var metaNameAr string
+			var metaColor string
+			var metaType string
+			var metaVal string
+			if errMeta := s.db.QueryRow("SELECT value FROM meta WHERE key = ? OR key = ?", "tpl_builder_config_"+baseName, "tpl_builder_config_"+ex.id).Scan(&metaVal); errMeta == nil && metaVal != "" {
+				var bc map[string]any
+				if errJson := json.Unmarshal([]byte(metaVal), &bc); errJson == nil {
+					if n, ok := bc["name_ar"].(string); ok && strings.TrimSpace(n) != "" {
+						metaNameAr = strings.TrimSpace(n)
+					}
+					if c, ok := bc["primary_color"].(string); ok && strings.TrimSpace(c) != "" {
+						metaColor = strings.TrimSpace(c)
+					}
+					if tp, ok := bc["type"].(string); ok && strings.TrimSpace(tp) != "" {
+						metaType = strings.TrimSpace(tp)
+					}
+				}
+			}
+
+			var id, nameAr, category, badge, colorHex string
+
+			if isUuidStr(baseName) {
+				// Custom template created via template-builder
+				id = baseName
+				if hasExisting && ex.id != "" && ex.id != baseName {
+					// Clean up legacy hash ID row to avoid duplicate entries
+					_, _ = s.db.Exec("DELETE FROM excel_templates WHERE id = ?", ex.id)
+				}
+
+				if hasExisting && !isUuidStr(ex.nameAr) && strings.TrimSpace(ex.nameAr) != "" && ex.nameAr != "قالب مخصص" {
+					nameAr = ex.nameAr
+				} else if metaNameAr != "" {
+					nameAr = metaNameAr
+				} else if titleFromHtml != "" && !isUuidStr(titleFromHtml) && titleFromHtml != "قالب فواتير مخصص" && titleFromHtml != "قالب سند مالي مخصص" {
+					nameAr = titleFromHtml
+				} else if hasExisting && ex.nameAr != "" && !isUuidStr(ex.nameAr) {
+					nameAr = ex.nameAr
+				} else {
+					nameAr = "قالب مخصص"
+				}
+
+				category = d.category
+				if metaType != "" {
+					category = metaType
+				}
+				badge = "مخصص"
+				if category == "documents" {
+					badge = "سند مخصص"
+				}
+				colorHex = "#059669"
+				if metaColor != "" {
+					colorHex = metaColor
+				} else if hasExisting && ex.colorHex != "" {
+					colorHex = ex.colorHex
+				}
+			} else {
+				// Preset / default file
+				if hasExisting && !isUuidStr(ex.nameAr) && strings.TrimSpace(ex.nameAr) != "" {
+					id = ex.id
+					nameAr = ex.nameAr
+					category = ex.category
+					badge = ex.badge
+					colorHex = ex.colorHex
+				} else if titleFromHtml != "" && !isUuidStr(titleFromHtml) {
+					h := sha256.Sum256([]byte(d.category + "/" + entry.Name()))
+					id = "tpl_" + hex.EncodeToString(h[:4])
+					nameAr = titleFromHtml
+					badge = d.badge
+					colorHex = "#059669"
+					category = d.category
+				} else {
+					h := sha256.Sum256([]byte(d.category + "/" + entry.Name()))
+					id = "tpl_" + hex.EncodeToString(h[:4])
+					nameAr = strings.ReplaceAll(baseName, "_", " ")
+					badge = d.badge
+					colorHex = "#059669"
+					category = d.category
+				}
+			}
 
 			_, _ = s.db.Exec(`
 				INSERT INTO excel_templates (id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, is_active, updated_at)
-				VALUES (?, ?, '', ?, ?, ?, ?, '#059669', ?, 1, ?)
+				VALUES (?, ?, '', 'قالب معتمد في النظام', ?, ?, ?, ?, ?, 1, ?)
 				ON CONFLICT(id) DO UPDATE SET
 					name_ar = excluded.name_ar,
 					file_path = excluded.file_path,
 					category = excluded.category,
+					badge = excluded.badge,
+					color_hex = excluded.color_hex,
 					headers_json = excluded.headers_json,
 					updated_at = excluded.updated_at
-			`, id, nameAr, "قالب HTML معتمد في النظام", d.badge, d.category, fullPath, string(headersJson), db.NowIso())
-			_ = fi
+			`, id, nameAr, badge, category, fullPath, colorHex, string(headersJson), db.NowIso())
 		}
 	}
+
+	// Clean up templates whose files were removed from disk (only for disk templates)
+	for p, t := range existingByPath {
+		if strings.Contains(p, "templates") && !seenPathsOnDisk[p] {
+			_, _ = s.db.Exec("DELETE FROM excel_templates WHERE id = ?", t.id)
+		}
+	}
+
 	return nil
 }
 
@@ -523,11 +657,46 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 			sellerLogoHtml = fmt.Sprintf(`<img src="%s" alt="Logo" style="max-height:75px;max-width:140px;object-fit:contain;" />`, *inv.IssuerSnapshot.LogoData)
 		}
 	}
+	if sellerLogoHtml == "" {
+		sellerLogoHtml = `<span style="font-size:26px;font-weight:900;color:#94a3b8;">شعار</span>`
+	}
 
 	qrB64 := ""
-	if inv.QrPayload != "" {
+	isTemplatePreview := inv.ID == "" || inv.ID == "preview" || inv.ID == "preview-inv" || inv.InvoiceNumber == "" || inv.InvoiceNumber == "رقم الفاتورة" || inv.QrPayload == ""
+	if !isTemplatePreview && inv.QrPayload != "" {
 		if qrPNG, err := qrcode.Encode(inv.QrPayload, qrcode.Medium, 120); err == nil {
 			qrB64 = `<img src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(qrPNG) + `" alt="QR" style="width:95px;height:95px;display:block;" />`
+		}
+	}
+	if qrB64 == "" {
+		if isTemplatePreview {
+			qrB64 = `<div class="qr-placeholder" style="width:95px;height:95px;display:flex;align-items:center;justify-content:center;font-family:'Segoe UI',Arial,sans-serif;font-weight:900;font-size:28px;color:#1e293b;border:1.5px dashed #cbd5e1;border-radius:6px;background:#f8fafc;box-sizing:border-box;letter-spacing:1px;">QR</div>`
+		} else {
+			sName := sellerName
+			if sName == "" {
+				sName = "شركة تجريبية"
+			}
+			sTax := sellerTax
+			if sTax == "" {
+				sTax = "300000000000003"
+			}
+			issTime := inv.IssueTime
+			if issTime == "" {
+				issTime = "12:00:00"
+			}
+			sampleParams := zatca.QrParams{
+				SellerName:  sName,
+				VatNumber:   sTax,
+				Timestamp:   inv.IssueDate + "T" + issTime,
+				Total:       fmt.Sprintf("%.2f", inv.GrandTotalMajor),
+				VatTotal:    fmt.Sprintf("%.2f", inv.TaxAmountMajor),
+				InvoiceHash: inv.InvoiceHash,
+				Signature:   inv.Signature,
+			}
+			fallbackPayload := zatca.BuildQrPayload(sampleParams)
+			if qrPNG, err := qrcode.Encode(fallbackPayload, qrcode.Medium, 120); err == nil {
+				qrB64 = `<img src="data:image/png;base64,` + base64.StdEncoding.EncodeToString(qrPNG) + `" alt="QR" style="width:95px;height:95px;display:block;" />`
+			}
 		}
 	}
 
@@ -545,9 +714,44 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		remainingAmount = inv.GrandTotalMajor - paidAmount
 	}
 
+	tpl = ensureItemsRowsInTbody(tpl)
 	smartRows := generateSmartRows(tpl, inv)
 
+	sellerMetaAr := ""
+	if sellerTax != "" || sellerCR != "" {
+		parts := []string{}
+		if sellerTax != "" {
+			parts = append(parts, "الرقم الضريبي: "+sellerTax)
+		}
+		if sellerCR != "" {
+			parts = append(parts, "س.ت: "+sellerCR)
+		}
+		sellerMetaAr = strings.Join(parts, " | ")
+	}
+
+	sellerMetaEn := ""
+	if sellerTax != "" || sellerCR != "" {
+		parts := []string{}
+		if sellerTax != "" {
+			parts = append(parts, "VAT: "+sellerTax)
+		}
+		if sellerCR != "" {
+			parts = append(parts, "C.R.: "+sellerCR)
+		}
+		sellerMetaEn = strings.Join(parts, " | ")
+	}
+
+	amountInWords := tafqeetArabic(inv.GrandTotalMajor)
+
+	// تنظيف ذاتي: إذا قام الذكاء الاصطناعي أو المستخدم بتغليف وسم الشعار أو الباركود داخل <img src="{{logo}}">
+	cleanImgLogoRegex := regexp.MustCompile(`(?i)<img\b[^>]*src=["']\{\{\s*(logo|seller_logo|company_logo|شعار|الشعار)\s*\}\}["'][^>]*>`)
+	tpl = cleanImgLogoRegex.ReplaceAllString(tpl, "{{logo}}")
+
+	cleanImgQrRegex := regexp.MustCompile(`(?i)<img\b[^>]*src=["']\{\{\s*(qr_code|qr|qrcode|barcode|zatca_qr|zatca_code|zatca_payload|رمز_الاستجابة|الباركود|باركود)\s*\}\}["'][^>]*>`)
+	tpl = cleanImgQrRegex.ReplaceAllString(tpl, "{{qr_code}}")
+
 	result := strings.NewReplacer(
+		// ─── بيانات الفاتورة والمستند الأساسية ───
 		"{{invoice_number}}", inv.InvoiceNumber,
 		"{{issue_date}}", inv.IssueDate,
 		"{{due_date}}", func() string {
@@ -557,6 +761,11 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 			return ""
 		}(),
 		"{{issue_time}}", inv.IssueTime,
+		"{{payment_method}}", inv.PaymentMethod,
+		"{{notes}}", inv.Notes,
+
+		// ─── المنشأة / المورد (الشعار وبيانات البائع) ───
+		"{{logo}}", sellerLogoHtml,
 		"{{seller_name}}", sellerName,
 		"{{seller_name_en}}", sellerNameEn,
 		"{{seller_tax}}", sellerTax,
@@ -567,7 +776,10 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		"{{seller_country}}", sellerCountry,
 		"{{seller_phone}}", sellerPhone,
 		"{{seller_email}}", sellerEmail,
-		"{{logo}}", sellerLogoHtml,
+		"{{seller_meta_ar}}", sellerMetaAr,
+		"{{seller_meta_en}}", sellerMetaEn,
+
+		// ─── العميل / المشتري ───
 		"{{buyer_name}}", buyerName,
 		"{{buyer_code}}", buyerCode,
 		"{{buyer_tax}}", buyerTax,
@@ -578,40 +790,67 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		"{{buyer_postal_code}}", buyerPostalCode,
 		"{{buyer_building_no}}", buyerBuildingNo,
 		"{{buyer_phone}}", buyerPhone,
+
+		// ─── المبالغ والإجماليات والعملة ───
 		"{{subtotal}}", fmt.Sprintf("%.2f", inv.SubtotalMajor),
 		"{{discount}}", fmt.Sprintf("%.2f", inv.DiscountAmountMajor),
 		"{{tax_amount}}", fmt.Sprintf("%.2f", inv.TaxAmountMajor),
 		"{{grand_total}}", fmt.Sprintf("%.2f", inv.GrandTotalMajor),
 		"{{paid_amount}}", fmt.Sprintf("%.2f", paidAmount),
 		"{{remaining_amount}}", fmt.Sprintf("%.2f", remainingAmount),
+		"{{amount_in_words}}", amountInWords,
+		"{{tafqeet}}", amountInWords,
 		"{{total_qty}}", func() string {
 			if totalQty == float64(int64(totalQty)) {
 				return fmt.Sprintf("%.0f", totalQty)
 			}
 			return fmt.Sprintf("%.2f", totalQty)
 		}(),
-		"{{payment_method}}", inv.PaymentMethod,
-		"{{notes}}", inv.Notes,
-		"{{items_table}}", generateItemsTable(inv),
+		"{{currency}}", "SAR",
+		"{{sar_symbol}}", SarSymbolSVG,
+		"{{currency_symbol}}", SarSymbolSVG,
+
+		// ─── جدول الأصناف والباركود ───
 		"{{items_rows}}", smartRows,
-		"{{items_rows_7col}}", smartRows,
-		"{{items_rows_luxury}}", smartRows,
-		"{{items_table_body}}", smartRows,
+		"{{items_table}}", generateItemsTable(inv),
 		"{{qr_code}}", qrB64,
+
+		// ─── سندات القبض والصرف والمستندات ───
 		"{{voucher_number}}", inv.InvoiceNumber,
 		"{{voucher_date}}", inv.IssueDate,
-		"{{received_from}}", buyerName,
 		"{{amount}}", fmt.Sprintf("%.2f", inv.GrandTotalMajor),
+		"{{received_from}}", buyerName,
 		"{{paid_for}}", inv.Notes,
 		"{{receiver_name}}", sellerName,
-		"{{currency_symbol}}", SarSymbolSVG,
-		"{{sar_symbol}}", SarSymbolSVG,
-		"{{currency}}", "SAR",
 	).Replace(tpl)
 
 	// استبدال أي وسم صفوف أصناف مهما كان اسمه
 	itemsRowsRegex := regexp.MustCompile(`\{\{\s*(items_rows[a-zA-Z0-9_-]*|items_table_body[a-zA-Z0-9_-]*|items_body[a-zA-Z0-9_-]*|table_rows[a-zA-Z0-9_-]*)\s*\}\}`)
 	result = itemsRowsRegex.ReplaceAllString(result, smartRows)
+
+	// استبدال ذكي لجميع وسوم الباركود ورمز الاستجابة السريع بكافة الصيغ الممكنة
+	qrTagRegex := regexp.MustCompile(`(?i)\{\{\s*(qr_code|qr|qrcode|barcode|zatca_qr|zatca_code|zatca_payload|رمز_الاستجابة|الباركود|باركود)\s*\}\}`)
+	result = qrTagRegex.ReplaceAllString(result, qrB64)
+
+	// استبدال ذكي لجميع وسوم الشعار بكافة الصيغ الممكنة
+	logoTagRegex := regexp.MustCompile(`(?i)\{\{\s*(logo|seller_logo|company_logo|شعار|الشعار)\s*\}\}`)
+	result = logoTagRegex.ReplaceAllString(result, sellerLogoHtml)
+
+	// إذا لم يحتوِ القالب على وسم باركود صريح ولكنه يحتوي على حاوية باركود في الكود (كلاس أو آيدي)
+	if !strings.Contains(tpl, "{{qr") && !strings.Contains(tpl, "{{barcode") && !strings.Contains(tpl, "{{zatca") && !strings.Contains(tpl, "{{باركود") {
+		qrContainerRegex := regexp.MustCompile(`(?i)(<div\b[^>]*(?:class|id)=["'][^"']*(?:qr-img-placeholder|qr-box|qr-frame|qr-wrap|qr-container|qr-code|qrcode)[^"']*["'][^>]*>)([\s\S]*?)(</div>)`)
+		if qrContainerRegex.MatchString(result) {
+			result = qrContainerRegex.ReplaceAllString(result, "${1}"+qrB64+"${3}")
+		}
+	}
+
+	// إذا لم يحتوِ القالب على وسم شعار صريح ولكنه يحتوي على حاوية شعار في الكود
+	if !strings.Contains(tpl, "{{logo") && !strings.Contains(tpl, "{{شعار") && !strings.Contains(tpl, "{{seller_logo") && !strings.Contains(tpl, "{{company_logo") {
+		logoContainerRegex := regexp.MustCompile(`(?i)(<div\b[^>]*(?:class|id)=["'][^"']*(?:logo-container|logo-slot|logo-placeholder|company-logo|seller-logo)[^"']*["'][^>]*>)([\s\S]*?)(</div>)`)
+		if logoContainerRegex.MatchString(result) {
+			result = logoContainerRegex.ReplaceAllString(result, "${1}"+sellerLogoHtml+"${3}")
+		}
+	}
 
 	// استبدال ذكي إضافي إذا كان القالب يحتوي على tbody ثابت أو فارغ بدون وسوم
 	tbodyRegex := regexp.MustCompile(`(?i)(<tbody\b[^>]*>)([\s\S]*?)(</tbody>)`)
@@ -738,6 +977,64 @@ func extractTableHeaders(htmlSnippet string) []string {
 	return nil
 }
 
+func ensureItemsRowsInTbody(tpl string) string {
+	tbodyRegex := regexp.MustCompile(`(?i)<tbody\b[^>]*>([\s\S]*?)</tbody>`)
+	hasInTbody := false
+	for _, m := range tbodyRegex.FindAllStringSubmatch(tpl, -1) {
+		if len(m) > 1 && strings.Contains(m[1], "items_rows") {
+			hasInTbody = true
+			break
+		}
+	}
+
+	if hasInTbody {
+		// الوسم موجود داخل tbody بالفعل، لكن قد يكون الذكاء الاصطناعي كتبه أيضاً خارج الجدول بالخطأ
+		// نحمي الوسم الموجود داخل tbody ونحذف أي وسم شارد خارج أي tbody
+		cleanTpl := tbodyRegex.ReplaceAllStringFunc(tpl, func(tb string) string {
+			return strings.ReplaceAll(tb, "{{items_rows}}", "___SAFE_ITEMS_ROWS___")
+		})
+		strayRegex := regexp.MustCompile(`\{\{\s*(items_rows[a-zA-Z0-9_-]*|items_table_body[a-zA-Z0-9_-]*|items_body[a-zA-Z0-9_-]*|table_rows[a-zA-Z0-9_-]*)\s*\}\}`)
+		cleanTpl = strayRegex.ReplaceAllString(cleanTpl, "")
+		return strings.ReplaceAll(cleanTpl, "___SAFE_ITEMS_ROWS___", "{{items_rows}}")
+	}
+
+	// إذا لم يكن موجوداً داخل أي tbody على الإطلاق:
+	// 1. نحذف أي وسم شارد خارج الجداول حتى لا يظهر مبعثراً كسطر نصي
+	strayRegex := regexp.MustCompile(`\{\{\s*(items_rows[a-zA-Z0-9_-]*|items_table_body[a-zA-Z0-9_-]*|items_body[a-zA-Z0-9_-]*|table_rows[a-zA-Z0-9_-]*)\s*\}\}`)
+	tpl = strayRegex.ReplaceAllString(tpl, "")
+
+	// 2. نبحث عن جدول الأصناف الرئيسي (الذي يحتوي على كلمات دالة كالأصناف والأسعار) ونضع {{items_rows}} داخل tbody فيه
+	tableRegex := regexp.MustCompile(`(?i)(<table\b[^>]*>[\s\S]*?)(<tbody\b[^>]*>)([\s\S]*?)(</tbody>)([\s\S]*?</table>)`)
+	replaced := false
+	tpl = tableRegex.ReplaceAllStringFunc(tpl, func(tbl string) string {
+		if replaced {
+			return tbl
+		}
+		lower := strings.ToLower(tbl)
+		if strings.Contains(lower, "صنف") || strings.Contains(lower, "وصف") || strings.Contains(lower, "بيان") || strings.Contains(lower, "كمية") || strings.Contains(lower, "سعر") || strings.Contains(lower, "item") || strings.Contains(lower, "qty") || strings.Contains(lower, "price") {
+			replaced = true
+			subMatch := tableRegex.FindStringSubmatch(tbl)
+			if len(subMatch) >= 6 {
+				return subMatch[1] + subMatch[2] + "\n{{items_rows}}\n" + subMatch[4] + subMatch[5]
+			}
+		}
+		return tbl
+	})
+
+	if !replaced {
+		firstTbodyRegex := regexp.MustCompile(`(?i)(<tbody\b[^>]*>)([\s\S]*?)(</tbody>)`)
+		tpl = firstTbodyRegex.ReplaceAllString(tpl, "${1}\n{{items_rows}}\n${3}")
+	}
+
+	footerBrandRegex := regexp.MustCompile(`(?i)<div\b[^>]*class=["'][^"']*footer-brand[^"']*["'][^>]*>[\s\S]*?</div>`)
+	tpl = footerBrandRegex.ReplaceAllString(tpl, "")
+
+	promoRegex := regexp.MustCompile(`(?i)<div\b[^>]*>\s*تم إنشاء وطباعة هذا المستند عبر نظام رصين[^<]*</div>`)
+	tpl = promoRegex.ReplaceAllString(tpl, "")
+
+	return tpl
+}
+
 func generateSmartRows(tpl string, inv *InvoiceView) string {
 	headers := extractTableHeaders(tpl)
 	var cols []colType
@@ -836,9 +1133,10 @@ func generateItemsTable(inv *InvoiceView) string {
 // ─── Builder Config (Save / Load) ─────────────────────────────────────────────
 
 func (s *TemplateService) GetBuilderConfig(id string) (map[string]any, error) {
+	cleanId := strings.TrimSuffix(strings.TrimSpace(id), ".html")
 	var val string
-	err := s.db.QueryRow("SELECT value FROM meta WHERE key = ?", "tpl_builder_config_"+id).Scan(&val)
-	if err == nil {
+	err := s.db.QueryRow("SELECT value FROM meta WHERE key = ? OR key = ?", "tpl_builder_config_"+cleanId, "tpl_builder_config_"+id).Scan(&val)
+	if err == nil && val != "" {
 		var res map[string]any
 		if err := json.Unmarshal([]byte(val), &res); err == nil {
 			// Normalise: wrap raw keys into builder_config if needed
@@ -852,12 +1150,34 @@ func (s *TemplateService) GetBuilderConfig(id string) (map[string]any, error) {
 			return res, nil
 		}
 	}
+
+	// Fallback: Check excel_templates and read HTML file from disk
+	var filePath, nameAr, category, colorHex string
+	rowErr := s.db.QueryRow("SELECT file_path, name_ar, category, color_hex FROM excel_templates WHERE id = ? OR id = ?", cleanId, id).Scan(&filePath, &nameAr, &category, &colorHex)
+	if rowErr == nil && filePath != "" {
+		if contentBytes, readErr := os.ReadFile(filePath); readErr == nil {
+			htmlStr := string(contentBytes)
+			cfg := map[string]any{
+				"id":            cleanId,
+				"name_ar":       nameAr,
+				"type":          category,
+				"category":      category,
+				"primary_color": colorHex,
+				"html_content":  htmlStr,
+				"editor_content": htmlStr,
+			}
+			return map[string]any{"builder_config": cfg}, nil
+		}
+	}
+
 	return map[string]any{}, err
 }
 
 // SaveBuilderConfig saves the builder config, writes the HTML template to disk,
 // and registers it in the catalog.
 func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
+	id = strings.TrimSuffix(strings.TrimSpace(id), ".html")
+
 	b, err := json.Marshal(config)
 	if err != nil {
 		return err
@@ -896,6 +1216,18 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 		// Generate a minimal default HTML template
 		htmlContent = buildDefaultHTMLFromConfig(cfgMap, category)
 	}
+	htmlContent = ensureItemsRowsInTbody(htmlContent)
+
+	// Ensure <title> matches nameAr
+	titleRegex := regexp.MustCompile(`(?i)<title>(.*?)</title>`)
+	if titleRegex.MatchString(htmlContent) {
+		htmlContent = titleRegex.ReplaceAllString(htmlContent, "<title>"+nameAr+"</title>")
+	} else if strings.Contains(strings.ToLower(htmlContent), "<head>") {
+		htmlContent = strings.Replace(htmlContent, "<head>", "<head>\n<title>"+nameAr+"</title>", 1)
+	} else {
+		htmlContent = "<title>" + nameAr + "</title>\n" + htmlContent
+	}
+
 	if err := os.WriteFile(filePath, []byte(htmlContent), 0644); err != nil {
 		return err
 	}
@@ -905,17 +1237,22 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 		badge = "سند مخصص"
 	}
 
+	tags := extractHtmlPlaceholders(htmlContent)
+	headersJson, _ := json.Marshal(tags)
+
 	// 2. Upsert in catalog
 	_, err = s.db.Exec(`
 		INSERT INTO excel_templates (id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, is_active, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', 1, CURRENT_TIMESTAMP)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name_ar = excluded.name_ar,
 			category = excluded.category,
+			badge = excluded.badge,
 			file_path = excluded.file_path,
 			color_hex = excluded.color_hex,
-			updated_at = CURRENT_TIMESTAMP
-	`, id, nameAr, id, "قالب HTML من محرر القوالب", badge, category, filePath, primaryColor)
+			headers_json = excluded.headers_json,
+			updated_at = excluded.updated_at
+	`, id, nameAr, id, "قالب HTML من محرر القوالب", badge, category, filePath, primaryColor, string(headersJson), db.NowIso())
 	if err != nil {
 		return err
 	}
@@ -1075,6 +1412,83 @@ func defaultVoucherHTMLTemplate() string {
 </div>
 </body>
 </html>`
+}
+
+var (
+	arabicOnes     = []string{"", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة", "عشرة", "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"}
+	arabicTens     = []string{"", "", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"}
+	arabicHundreds = []string{"", "مئة", "مئتان", "ثلاثمئة", "أربعمئة", "خمسمئة", "ستمئة", "سبعمئة", "ثمانمئة", "تسعمئة"}
+)
+
+func tafqeetUnder1000(n int64) string {
+	parts := []string{}
+	h := n / 100
+	rest := n % 100
+	if h > 0 && h < int64(len(arabicHundreds)) {
+		parts = append(parts, arabicHundreds[h])
+	}
+	if rest > 0 {
+		if rest < 20 {
+			parts = append(parts, arabicOnes[rest])
+		} else {
+			o := rest % 10
+			t := rest / 10
+			if o > 0 {
+				parts = append(parts, arabicOnes[o]+" و"+arabicTens[t])
+			} else {
+				parts = append(parts, arabicTens[t])
+			}
+		}
+	}
+	return strings.Join(parts, " و")
+}
+
+func tafqeetArabic(val float64) string {
+	total := int64(math.Round(val * 100))
+	riyals := total / 100
+	halalas := total % 100
+
+	if riyals == 0 && halalas == 0 {
+		return "فقط صفر ريال سعودي لا غير"
+	}
+
+	var chunks []string
+	millions := riyals / 1000000
+	thousands := (riyals % 1000000) / 1000
+	units := riyals % 1000
+
+	if millions > 0 {
+		if millions == 1 {
+			chunks = append(chunks, "مليون")
+		} else if millions == 2 {
+			chunks = append(chunks, "مليونان")
+		} else if millions >= 3 && millions <= 10 {
+			chunks = append(chunks, tafqeetUnder1000(millions)+" ملايين")
+		} else {
+			chunks = append(chunks, tafqeetUnder1000(millions)+" مليون")
+		}
+	}
+	if thousands > 0 {
+		if thousands == 1 {
+			chunks = append(chunks, "ألف")
+		} else if thousands == 2 {
+			chunks = append(chunks, "ألفان")
+		} else if thousands >= 3 && thousands <= 10 {
+			chunks = append(chunks, tafqeetUnder1000(thousands)+" آلاف")
+		} else {
+			chunks = append(chunks, tafqeetUnder1000(thousands)+" ألف")
+		}
+	}
+	if units > 0 {
+		chunks = append(chunks, tafqeetUnder1000(units))
+	}
+
+	text := strings.Join(chunks, " و")
+	res := "فقط " + text + " ريالاً سعودياً"
+	if halalas > 0 {
+		res += " و" + tafqeetUnder1000(halalas) + " هللة"
+	}
+	return res + " لا غير"
 }
 
 func init() {

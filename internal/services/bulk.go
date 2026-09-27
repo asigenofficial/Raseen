@@ -224,35 +224,56 @@ type PreviewRequest struct {
 	CategoryIDs      []string          `json:"category_ids"`
 	ItemIDs          []string          `json:"item_ids"`
 	CustomItems      []CustomItemInput `json:"custom_items"`
-	DistributionMode string            `json:"distribution_mode"`
-	MinItems         int               `json:"min_items"`
-	MaxItems         int               `json:"max_items"`
-	MinQty           float64           `json:"min_qty"`
-	MaxQty           float64           `json:"max_qty"`
-	MinInvoiceTotal  float64           `json:"min_invoice_total"`
-	MaxInvoiceTotal  float64           `json:"max_invoice_total"`
-	DiscountEnabled bool `json:"discount_enabled"`
-	DiscountMin float64 `json:"discount_min_percent"`
-	DiscountMax float64 `json:"discount_max_percent"`
-	DiscountProbability float64 `json:"discount_probability"`
-	PriceJitter float64 `json:"price_jitter_percent"`
-	FractionQty bool `json:"allow_fraction_qty"`
-	SkipWeekend bool `json:"skip_weekend"`
-	WorkStart int `json:"work_start_minutes"`
-	WorkEnd int `json:"work_end_minutes"`
-	PaymentMethods []string `json:"payment_methods"`
-	InvoiceType string `json:"invoice_type"`
-	Seed int64 `json:"seed"`
-	Notes string `json:"notes"`
+	DistributionMode   string            `json:"distribution_mode"`
+	StartInvoiceNumber string            `json:"start_invoice_number"`
+	MinItems           int               `json:"min_items"`
+	MaxItems           int               `json:"max_items"`
+	MinQty             float64           `json:"min_qty"`
+	MaxQty             float64           `json:"max_qty"`
+	MinInvoiceTotal    float64           `json:"min_invoice_total"`
+	MaxInvoiceTotal    float64           `json:"max_invoice_total"`
+	DiscountEnabled    bool              `json:"discount_enabled"`
+	DiscountMin        float64           `json:"discount_min_percent"`
+	DiscountMax        float64           `json:"discount_max_percent"`
+	DiscountProbability float64          `json:"discount_probability"`
+	PriceJitter        float64           `json:"price_jitter_percent"`
+	FractionQty        bool              `json:"allow_fraction_qty"`
+	SkipWeekend        bool              `json:"skip_weekend"`
+	WorkStart          int               `json:"work_start_minutes"`
+	WorkEnd            int               `json:"work_end_minutes"`
+	PaymentMethods     []string          `json:"payment_methods"`
+	InvoiceType        string            `json:"invoice_type"`
+	Seed               int64             `json:"seed"`
+	Notes              string            `json:"notes"`
 }
 
 type ItemCandidate struct {
-	ID *string
+	ID        *string
 	NameAr    string
 	ItemCode  string
 	Unit      string
 	SalePrice float64
 	TaxRate   float64
+}
+
+func formatSequenceNumber(pattern string, offset int) string {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return ""
+	}
+	i := len(pattern) - 1
+	for i >= 0 && pattern[i] >= '0' && pattern[i] <= '9' {
+		i--
+	}
+	prefix := pattern[:i+1]
+	digitsStr := pattern[i+1:]
+	if digitsStr == "" {
+		return fmt.Sprintf("%s-%04d", pattern, offset+1)
+	}
+	var num int64
+	fmt.Sscanf(digitsStr, "%d", &num)
+	newNum := num + int64(offset)
+	return fmt.Sprintf("%s%0*d", prefix, len(digitsStr), newNum)
 }
 
 func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error) {
@@ -261,7 +282,8 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 	}
 	if _,err:=s.issuers.GetIssuer(req.IssuerID);err!=nil{return nil,err}
 	if req.Count <= 0 || req.Count > 5000 { return nil,errors.New("عدد الفواتير يجب أن يكون من 1 إلى 5000") }
-	if req.DistributionMode != "" && req.DistributionMode != "random" && req.DistributionMode != "balanced" && req.DistributionMode != "uniform" { return nil,errors.New("نمط توزيع غير مدعوم") }
+	distMode := strings.ToLower(strings.TrimSpace(req.DistributionMode))
+	if distMode != "" && distMode != "random" && distMode != "balanced" && distMode != "uniform" && distMode != "sequential" { return nil,errors.New("نمط توزيع غير مدعوم") }
 	if !validAmount(req.MinInvoiceTotal)||!validAmount(req.MaxInvoiceTotal)||!validAmount(req.TargetTotal) || (req.MaxInvoiceTotal>0 && req.MinInvoiceTotal>req.MaxInvoiceTotal) {return nil,errors.New("حدود المبالغ غير صالحة")}
 	if !validAmount(req.DiscountMin)||!validAmount(req.DiscountMax)||req.DiscountMin>req.DiscountMax||req.DiscountMax>100||!validAmount(req.DiscountProbability)||req.DiscountProbability>1||!validAmount(req.PriceJitter)||req.PriceJitter>100{return nil,errors.New("إعدادات الخصومات والأسعار غير صالحة")}
 	if req.WorkEnd==0 {req.WorkStart,req.WorkEnd=8*60,18*60}
@@ -388,7 +410,12 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 
 		perm := rng.Perm(len(availableItems))
 		for l := 0; l < linesCount; l++ {
-			it := availableItems[perm[l%len(availableItems)]]
+			var it ItemCandidate
+			if distMode == "sequential" {
+				it = availableItems[(i*linesCount+l)%len(availableItems)]
+			} else {
+				it = availableItems[perm[l%len(availableItems)]]
+			}
 			qty := minQty
 			if maxQty > minQty {
 				qty = minQty + float64(rng.Intn(int(maxQty-minQty+1)))
@@ -407,7 +434,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 			lineTot:=models.ToMajor(taxable+models.Pct(taxable,taxRate))
 
 			lines = append(lines, map[string]any{
-				"item_id": it.ID,
+				"item_id":     it.ID,
 				"item_name":   it.NameAr,
 				"item_code":   it.ItemCode,
 				"unit":        it.Unit,
@@ -439,12 +466,17 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		fingerprint:=strings.Join(fingerprints,"|")
 		if seen[fingerprint]&&attempts < (i+1)*10 {i--;continue};seen[fingerprint]=true
 
+		invNumber := ""
+		if req.StartInvoiceNumber != "" {
+			invNumber = formatSequenceNumber(req.StartInvoiceNumber, i)
+		}
+
 		invoices = append(invoices, map[string]any{
 			"temp_id":         fmt.Sprintf("PREV-%04d", i+1),
-			"invoice_number":  "",
-			"invoice_type": req.InvoiceType,
-			"payment_method": req.PaymentMethods[rng.Intn(len(req.PaymentMethods))],
-			"notes": req.Notes,
+			"invoice_number":  invNumber,
+			"invoice_type":    req.InvoiceType,
+			"payment_method":  req.PaymentMethods[rng.Intn(len(req.PaymentMethods))],
+			"notes":           req.Notes,
 			"issue_date":      invDate,
 			"issue_time":      invTime,
 			"buyer_name":      clientName,
@@ -455,6 +487,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 			"tax_amount":      invTax,
 			"grand_total":     invTotal,
 			"items":           lines,
+			"lines":           lines,
 		})
 
 		totalSubtotal += invSubtotal
@@ -522,7 +555,9 @@ func (s *BulkService) CommitBatch(req CommitBatchRequest, username string) (map[
 		if err=json.Unmarshal(b,&row);err!=nil{return nil,err}
 		if (row.ClientID!="" && row.ClientID!=req.ClientID) || (row.IssuerID!="" && row.IssuerID!=req.IssuerID) {return nil,errors.New("فواتير الدفعة يجب أن تخص الشركة والعميل المحددين")}
 		row.IssuerID,row.ClientID=req.IssuerID,req.ClientID
-		row.Lines=row.Items
+		if len(row.Items) > 0 && len(row.Lines) == 0 {
+			row.Lines = row.Items
+		}
 		row.AutoReceipt=req.IssueVouchers
 		if req.IssueVouchers && (row.PaymentMethod=="" || row.PaymentMethod=="CREDIT") {row.PaymentMethod="TRANSFER"}
 		inv,err:=s.invoices.createInvoiceTx(tx,row.CreateInvoiceInput,username,"");if err!=nil{return nil,fmt.Errorf("الفاتورة %d: %w",idx+1,err)}

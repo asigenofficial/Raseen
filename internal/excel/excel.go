@@ -13,16 +13,17 @@ import (
 )
 
 type ParsedRow struct {
-	RowIndex      int     `json:"row_index"`
-	ClientName    string  `json:"client_name"`
-	ItemName      string  `json:"item_name"`
-	Quantity      float64 `json:"quantity"`
-	UnitPrice     float64 `json:"unit_price"`
-	TaxRate       float64 `json:"tax_rate"`
-	InvoiceNumber string  `json:"invoice_number"`
-	IssueDate     string  `json:"issue_date"`
-	Unit          string  `json:"unit"`
-	Notes         string  `json:"notes"`
+	RowIndex      int      `json:"row_index"`
+	ClientName    string   `json:"client_name"`
+	ItemCode      string   `json:"item_code"`
+	ItemName      string   `json:"item_name"`
+	Quantity      float64  `json:"quantity"`
+	UnitPrice     float64  `json:"unit_price"`
+	TaxRate       float64  `json:"tax_rate"`
+	InvoiceNumber string   `json:"invoice_number"`
+	IssueDate     string   `json:"issue_date"`
+	Unit          string   `json:"unit"`
+	Notes         string   `json:"notes"`
 	Errors        []string `json:"errors"`
 }
 
@@ -86,9 +87,10 @@ func AnalyzeSpreadsheet(r io.Reader, filename string, defaultTaxRate float64) (*
 
 	// Find headers row
 	headerIdx := -1
-	var colClient, colItem, colQty, colPrice, colVat, colInv, colDate, colUnit int = -1, -1, -1, -1, -1, -1, -1, -1
+	var colClient, colCode, colItem, colQty, colPrice, colVat, colInv, colDate, colUnit int = -1, -1, -1, -1, -1, -1, -1, -1, -1
 
 	clientSynonyms := []string{"العميل", "اسم العميل", "الزبون", "اسم الزبون", "client", "customer", "buyer"}
+	codeSynonyms := []string{"رقم الصنف", "كود الصنف", "كود", "رمز", "item code", "item_code", "item no", "code", "sku"}
 	itemSynonyms := []string{"الصنف", "اسم الصنف", "البيان", "الوصف", "item", "description", "product", "item_name"}
 	qtySynonyms := []string{"الكمية", "العدد", "qty", "quantity", "count"}
 	priceSynonyms := []string{"السعر", "سعر الوحدة", "سعر", "price", "unit price", "unit_price", "rate"}
@@ -112,7 +114,9 @@ func AnalyzeSpreadsheet(r io.Reader, filename string, defaultTaxRate float64) (*
 		for cIdx, cell := range row {
 			if matchesSynonym(cell, clientSynonyms) && cClient == -1 {
 				cClient = cIdx
-			} else if matchesSynonym(cell, itemSynonyms) && cItem == -1 {
+			} else if matchesSynonym(cell, codeSynonyms) && colCode == -1 {
+				colCode = cIdx
+			} else if matchesSynonym(cell, itemSynonyms) && cItem == -1 && !matchesSynonym(cell, codeSynonyms) {
 				cItem = cIdx
 			} else if matchesSynonym(cell, qtySynonyms) && cQty == -1 {
 				cQty = cIdx
@@ -138,6 +142,8 @@ func AnalyzeSpreadsheet(r io.Reader, filename string, defaultTaxRate float64) (*
 					colDate = cIdx
 				} else if matchesSynonym(cell, unitSynonyms) && colUnit == -1 {
 					colUnit = cIdx
+				} else if matchesSynonym(cell, codeSynonyms) && colCode == -1 {
+					colCode = cIdx
 				}
 			}
 			break
@@ -198,6 +204,7 @@ func AnalyzeSpreadsheet(r io.Reader, filename string, defaultTaxRate float64) (*
 		}
 
 		itemStr := getCell(colItem)
+		codeStr := getCell(colCode)
 		qtyStr := normalizeNumberStr(getCell(colQty))
 		priceStr := normalizeNumberStr(getCell(colPrice))
 		vatStr := normalizeNumberStr(getCell(colVat))
@@ -211,6 +218,7 @@ func AnalyzeSpreadsheet(r io.Reader, filename string, defaultTaxRate float64) (*
 		pRow := ParsedRow{
 			RowIndex:      rIdx + 1,
 			ClientName:    clientStr,
+			ItemCode:      codeStr,
 			ItemName:      itemStr,
 			InvoiceNumber: invStr,
 			IssueDate:     dateStr,
@@ -287,14 +295,14 @@ func GenerateTemplateExcel() ([]byte, error) {
 	sheet := "الفواتير"
 	f.SetSheetName("Sheet1", sheet)
 
-	headers := []string{"اسم العميل", "رقم الفاتورة", "تاريخ الفاتورة", "اسم الصنف", "الوحدة", "الكمية", "سعر الوحدة", "نسبة الضريبة"}
+	headers := []string{"اسم العميل", "رقم الفاتورة", "تاريخ الفاتورة", "رقم الصنف", "اسم الصنف", "الوحدة", "الكمية", "سعر الوحدة", "نسبة الضريبة"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		f.SetCellValue(sheet, cell, h)
 	}
 
 	// Sample row
-	sample := []any{"شركة الأفق المتميزة", "INV-0001", "2026-09-18", "خدمات استشارية محاسبية", "ساعة", 10, 250.0, 15}
+	sample := []any{"شركة الأفق المتميزة", "INV-0001", "2026-09-18", "ITM-001", "خدمات استشارية محاسبية", "ساعة", 10, 250.0, 15}
 	for i, v := range sample {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
 		f.SetCellValue(sheet, cell, v)

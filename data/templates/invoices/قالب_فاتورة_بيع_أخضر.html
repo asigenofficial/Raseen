@@ -46,21 +46,23 @@
     .corner-geo-top {
       position: absolute;
       top: 0;
-      left: 0;
-      width: 170px;
-      height: 170px;
-      pointer-events: none;
-      z-index: 1;
-    }
-
-    .corner-geo-bottom {
-      position: absolute;
-      bottom: 0;
       right: 0;
       width: 170px;
       height: 170px;
       pointer-events: none;
       z-index: 1;
+      transform: scaleX(-1);
+    }
+
+    .corner-geo-bottom {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 170px;
+      height: 170px;
+      pointer-events: none;
+      z-index: 1;
+      transform: scaleX(-1);
     }
 
     /* ─── الترويسة العلوية ─── */
@@ -186,7 +188,7 @@
     /* ─── بيانات الفاتورة والعميل ─── */
     .info-boxes-grid {
       display: grid;
-      grid-template-columns: 1fr 1.35fr;
+      grid-template-columns: 1.35fr 1fr;
       gap: 14px;
       margin-bottom: 14px;
       position: relative;
@@ -536,19 +538,6 @@
     <div>
       <!-- ── الترويسة العلوية ── -->
       <header class="header-section">
-        <!-- الجهة اليسرى: الشعار + شريط فاتورة بيع الزمردي -->
-        <div class="header-left-col">
-          <div class="logo-container">
-            <span>شعار</span>
-          </div>
-          <div class="banner-wrapper">
-            <div class="invoice-title-banner">
-              فاتورة بيع
-            </div>
-            <div class="banner-accent-wing"></div>
-          </div>
-        </div>
-
         <!-- الجهة اليمنى: اسم الشركة والبيانات مع أيقونات فيكتور زمردية مطابقة للصورة وبدون إيموجي -->
         <div class="header-right-col">
           <div class="company-title">{{seller_name}}</div>
@@ -609,10 +598,47 @@
             </div>
           </div>
         </div>
+
+        <!-- الجهة اليسرى: الشعار + شريط فاتورة بيع الزمردي -->
+        <div class="header-left-col">
+          <div class="logo-container">
+            {{logo}}
+          </div>
+          <div class="banner-wrapper">
+            <div class="invoice-title-banner">
+              فاتورة بيع
+            </div>
+            <div class="banner-accent-wing"></div>
+          </div>
+        </div>
       </header>
 
       <!-- ── بيانات الفاتورة + بيانات العميل ── -->
       <section class="info-boxes-grid">
+        <!-- صندوق بيانات العميل (5 أسطر مع رقم التواصل مطابقة تماماً للصورة) -->
+        <div class="client-meta-box">
+          <div class="client-meta-row">
+            <div class="client-meta-lbl">العميل :</div>
+            <div class="client-meta-val">{{buyer_name}}</div>
+          </div>
+          <div class="client-meta-row">
+            <div class="client-meta-lbl">رقم العميل :</div>
+            <div class="client-meta-val">{{buyer_code}}</div>
+          </div>
+          <div class="client-meta-row">
+            <div class="client-meta-lbl">عنوان العميل :</div>
+            <div class="client-meta-val">{{buyer_address}}</div>
+          </div>
+          <div class="client-meta-row">
+            <div class="client-meta-lbl">رقم التواصل :</div>
+            <div class="client-meta-val">{{buyer_phone}}</div>
+          </div>
+          <div class="client-meta-row">
+            <div class="client-meta-lbl">الرقم الضريبي :</div>
+            <div class="client-meta-val">{{buyer_tax}}</div>
+          </div>
+        </div>
+
         <!-- عمود بيانات الفاتورة مع أيقونات فيكتور زمردية مطابقة -->
         <div class="doc-meta-col">
           <div class="doc-meta-pill">
@@ -661,30 +687,6 @@
             </span>
           </div>
         </div>
-
-        <!-- صندوق بيانات العميل (5 أسطر مع رقم التواصل مطابقة تماماً للصورة) -->
-        <div class="client-meta-box">
-          <div class="client-meta-row">
-            <div class="client-meta-lbl">العميل :</div>
-            <div class="client-meta-val">{{buyer_name}}</div>
-          </div>
-          <div class="client-meta-row">
-            <div class="client-meta-lbl">رقم العميل :</div>
-            <div class="client-meta-val">{{buyer_code}}</div>
-          </div>
-          <div class="client-meta-row">
-            <div class="client-meta-lbl">عنوان العميل :</div>
-            <div class="client-meta-val">{{buyer_address}}</div>
-          </div>
-          <div class="client-meta-row">
-            <div class="client-meta-lbl">رقم التواصل :</div>
-            <div class="client-meta-val">{{buyer_phone}}</div>
-          </div>
-          <div class="client-meta-row">
-            <div class="client-meta-lbl">الرقم الضريبي :</div>
-            <div class="client-meta-val">{{buyer_tax}}</div>
-          </div>
-        </div>
       </section>
 
       <!-- ── جدول الأصناف والبنود (8 أعمدة و 10 أسطر مطابقة للصورة) ── -->
@@ -715,31 +717,8 @@
         <!-- الرمز الشريطي QR المربع -->
         <div class="qr-box-wrap">
           <div class="qr-img-placeholder">
-            <svg viewBox="0 0 100 100" width="95" height="95">
-              <rect x="0" y="0" width="30" height="30" fill="#064e3b" />
-              <rect x="5" y="5" width="20" height="20" fill="#fff" />
-              <rect x="10" y="10" width="10" height="10" fill="#064e3b" />
-
-              <rect x="70" y="0" width="30" height="30" fill="#064e3b" />
-              <rect x="75" y="5" width="20" height="20" fill="#fff" />
-              <rect x="80" y="10" width="10" height="10" fill="#064e3b" />
-
-              <rect x="0" y="70" width="30" height="30" fill="#064e3b" />
-              <rect x="5" y="75" width="20" height="20" fill="#fff" />
-              <rect x="10" y="80" width="10" height="10" fill="#064e3b" />
-
-              <rect x="35" y="10" width="10" height="15" fill="#064e3b" />
-              <rect x="50" y="5" width="15" height="10" fill="#064e3b" />
-              <rect x="40" y="35" width="20" height="20" fill="#064e3b" />
-              <rect x="45" y="40" width="10" height="10" fill="#fff" />
-              <rect x="70" y="45" width="15" height="15" fill="#064e3b" />
-              <rect x="15" y="45" width="15" height="15" fill="#064e3b" />
-              <rect x="35" y="75" width="15" height="10" fill="#064e3b" />
-              <rect x="55" y="70" width="10" height="20" fill="#064e3b" />
-              <rect x="75" y="75" width="20" height="15" fill="#064e3b" />
-            </svg>
+            {{qr_code}}
           </div>
-          <div class="qr-caption">امسح للتحقق من الفاتورة</div>
         </div>
 
         <!-- جدول الإجماليات -->

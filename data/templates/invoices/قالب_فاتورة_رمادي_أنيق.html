@@ -352,10 +352,34 @@
         <div class="header-tax-title">فاتورة ضريبية</div>
       </div>
 
-      <!-- ── شبكة بيانات الفاتورة والعميل (موزعة يميناً ويساراً بالضبط كالصورة) ── -->
+      <!-- ── شبكة بيانات الفاتورة والعميل (بيانات العميل يميناً وبيانات الفاتورة يساراً) ── -->
       <table class="meta-cards-table">
         <tr>
-          <!-- 1. صندوق بيانات الفاتورة (على اليمين) -->
+          <!-- 1. صندوق بيانات العميل (على اليمين) -->
+          <td style="width: 58%;">
+            <div class="meta-card">
+              <table class="meta-inner-table">
+                <tr>
+                  <td class="meta-lbl" style="width: 30%;">العميل</td>
+                  <td class="meta-val" style="width: 70%;"><strong>{{buyer_name}}</strong></td>
+                </tr>
+                <tr>
+                  <td class="meta-lbl">الرقم الضريبي</td>
+                  <td class="meta-val num">{{buyer_tax}}</td>
+                </tr>
+                <tr>
+                  <td class="meta-lbl">السجل التجاري</td>
+                  <td class="meta-val num">{{buyer_cr}}</td>
+                </tr>
+                <tr>
+                  <td class="meta-lbl">العنوان</td>
+                  <td class="meta-val" style="font-size: 9.5px;">{{buyer_address}}</td>
+                </tr>
+              </table>
+            </div>
+          </td>
+
+          <!-- 2. صندوق بيانات الفاتورة (على اليسار) -->
           <td style="width: 42%;">
             <div class="meta-card">
               <table class="meta-inner-table">
@@ -370,30 +394,6 @@
                 <tr>
                   <td class="meta-lbl">نوع الفاتورة</td>
                   <td class="meta-val"><strong>{{payment_method}}</strong></td>
-                </tr>
-              </table>
-            </div>
-          </td>
-
-          <!-- 2. صندوق بيانات العميل (على اليسار) -->
-          <td style="width: 58%;">
-            <div class="meta-card">
-              <table class="meta-inner-table">
-                <tr>
-                  <td class="meta-val" style="width: 70%;"><strong>{{buyer_name}}</strong></td>
-                  <td class="meta-lbl" style="width: 30%;">العميل</td>
-                </tr>
-                <tr>
-                  <td class="meta-val num">{{buyer_tax}}</td>
-                  <td class="meta-lbl">الرقم الضريبي</td>
-                </tr>
-                <tr>
-                  <td class="meta-val num">{{buyer_cr}}</td>
-                  <td class="meta-lbl">السجل التجاري</td>
-                </tr>
-                <tr>
-                  <td class="meta-val" style="font-size: 9.5px;">{{buyer_address}}</td>
-                  <td class="meta-lbl">العنوان</td>
                 </tr>
               </table>
             </div>

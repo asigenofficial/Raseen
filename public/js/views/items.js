@@ -17,7 +17,7 @@ function itemForm(data = {}, categories = []) {
   const v = (k, def = '') => (data[k] === undefined || data[k] === null ? def : data[k]);
   return html`
     <div class="row">
-      <div class="field" style="max-width:170px"><label>كود الصنف</label>
+      <div class="field" style="max-width:170px"><label>رقم / كود الصنف</label>
         <input type="text" name="item_code" value="${v('item_code')}" class="ltr" placeholder="تلقائي" /></div>
       <div class="field"><label class="req">اسم الصنف</label>
         <input type="text" name="name_ar" value="${v('name_ar')}" /></div>
@@ -363,7 +363,7 @@ export async function render(view, ctx) {
         </div>
         <div class="card pad0">
           <div class="table-wrap"><table class="tbl">
-            <thead><tr><th>الكود</th><th>الصنف</th><th>المجموعة</th><th>الوحدة</th><th>الباركود</th>
+            <thead><tr><th>رقم / كود الصنف</th><th>الصنف</th><th>المجموعة</th><th>الوحدة</th><th>الباركود</th>
               <th class="text-end">التكلفة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th class="text-end">سعر البيع <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th class="text-center">الضريبة</th><th></th></tr></thead>
             <tbody>${itemsRows()}</tbody>
           </table></div>

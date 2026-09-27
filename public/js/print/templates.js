@@ -146,7 +146,7 @@ export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBad
     return {
       thClass: 'e',
       thStyle: 'width:82px',
-      renderTd: (l) => `<td class="e"><span class="num">${money(l.unit_price)}</span> <small class="cur-sym">${curSym}</small></td>`,
+      renderTd: (l) => `<td class="e"><small class="cur-sym">${curSym}</small> <span class="num">${money(l.unit_price)}</span></td>`,
     };
   }
 
@@ -155,7 +155,7 @@ export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBad
     return {
       thClass: 'e',
       thStyle: 'width:62px',
-      renderTd: (l) => `<td class="e">${l.discount ? `<span class="num">${money(l.discount)}</span> <small class="cur-sym">${curSym}</small>` : '—'}</td>`,
+      renderTd: (l) => `<td class="e">${l.discount ? `<small class="cur-sym">${curSym}</small> <span class="num">${money(l.discount)}</span>` : '—'}</td>`,
     };
   }
 
@@ -184,7 +184,7 @@ export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBad
       thStyle: 'width:96px',
       renderTd: (l) => {
         const tot = l.total_line ?? l.line_total ?? l.total ?? ((l.quantity || 0) * (l.unit_price || 0) + (l.tax_amount || 0));
-        return `<td class="e"><b class="num">${money(tot)}</b> <small class="cur-sym">${curSym}</small></td>`;
+        return `<td class="e"><small class="cur-sym">${curSym}</small> <b class="num">${money(tot)}</b></td>`;
       },
     };
   }
@@ -194,7 +194,7 @@ export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBad
     return {
       thClass: 'e',
       thStyle: 'width:80px',
-      renderTd: (l) => `<td class="e"><span class="num">${money(l.tax_amount)}</span> <small class="cur-sym">${curSym}</small></td>`,
+      renderTd: (l) => `<td class="e"><small class="cur-sym">${curSym}</small> <span class="num">${money(l.tax_amount)}</span></td>`,
     };
   }
 
@@ -203,7 +203,7 @@ export function getColumnRenderer(header, colIndex, allHeaders, { curSym, curBad
     return {
       thClass: 'e',
       thStyle: 'width:86px',
-      renderTd: (l) => `<td class="e"><span class="num">${money(l.taxable)}</span> <small class="cur-sym">${curSym}</small></td>`,
+      renderTd: (l) => `<td class="e"><small class="cur-sym">${curSym}</small> <span class="num">${money(l.taxable)}</span></td>`,
     };
   }
 
@@ -474,7 +474,12 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
 
   const showQr = qrCfg.show_a4 !== false;
   const qrScale = qrCfg.scale || (qrCfg.size === 'large' ? 5 : qrCfg.size === 'small' ? 3 : 4);
-  const qr = showQr ? qrSvg(invoice.qr_payload, { scale: qrScale, margin: 1 }) : '';
+  const isTemplatePreview = !invoice || invoice.id === 'preview-inv' || invoice.id === 'preview' || invoice.is_preview || invoice.invoice_number === 'رقم الفاتورة' || !invoice.qr_payload;
+  const qr = showQr
+    ? (isTemplatePreview
+        ? '<div class="qr-placeholder" style="width:85px; height:85px; display:inline-flex; align-items:center; justify-content:center; font-family:\'Segoe UI\', Tahoma, sans-serif; font-size:26px; font-weight:900; color:#1e293b; background:#f8fafc; border:1.5px dashed #cbd5e1; border-radius:6px; box-sizing:border-box; letter-spacing:1px;">QR</div>'
+        : qrSvg(invoice.qr_payload, { scale: qrScale, margin: 1 }))
+    : '';
   const cur = invoice.currency === 'SAR' ? 'ر.س' : (invoice.currency || 'ر.س');
   const isSar = !invoice.currency || invoice.currency === 'SAR' || invoice.currency === 'ر.س' || invoice.currency === '﷼';
   const curSym = isSar ? sarSvg({ size: '0.95em' }) : esc(cur);
@@ -583,12 +588,12 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
         ${showUnit ? `<td class="c">${esc(l.unit || '')}</td>` : ''}
         <td class="e"><span class="num">${num(l.quantity)}</span></td>
         ${showCurrencyColumn ? `<td class="c">${curBadge}</td>` : ''}
-        <td class="e"><span class="num">${money(l.unit_price)}</span> <small class="cur-sym">${curSym}</small></td>
-        ${showDiscount ? `<td class="e">${l.discount ? `<span class="num">${money(l.discount)}</span> <small class="cur-sym">${curSym}</small>` : '—'}</td>` : ''}
-        ${showTaxable ? `<td class="e"><span class="num">${money(l.taxable)}</span> <small class="cur-sym">${curSym}</small></td>` : ''}
+        <td class="e"><small class="cur-sym">${curSym}</small> <span class="num">${money(l.unit_price)}</span></td>
+        ${showDiscount ? `<td class="e">${l.discount ? `<small class="cur-sym">${curSym}</small> <span class="num">${money(l.discount)}</span>` : '—'}</td>` : ''}
+        ${showTaxable ? `<td class="e"><small class="cur-sym">${curSym}</small> <span class="num">${money(l.taxable)}</span></td>` : ''}
         ${showTaxRate ? `<td class="c"><span class="num">${num(l.tax_rate)}%</span></td>` : ''}
-        ${showTaxAmount ? `<td class="e"><span class="num">${money(l.tax_amount)}</span> <small class="cur-sym">${curSym}</small></td>` : ''}
-        <td class="e"><b class="num">${money(l.total_line)}</b> <small class="cur-sym">${curSym}</small></td>
+        ${showTaxAmount ? `<td class="e"><small class="cur-sym">${curSym}</small> <span class="num">${money(l.tax_amount)}</span></td>` : ''}
+        <td class="e"><small class="cur-sym">${curSym}</small> <b class="num">${money(l.total_line)}</b></td>
       </tr>`).join('');
   }
 
@@ -709,7 +714,6 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
       <div class="left-col">
         ${showQr ? `<div class="qr qr-${esc(printCfg.qr_position || 'right')}">
           ${qr}
-          <div class="tiny muted c">رمز الاستجابة السريعة (متطلب هيئة الزكاة والضريبة والجمارك)</div>
         </div>` : ''}
         <div class="notes">
           ${showNotes && invoice.notes ? `<div class="note"><b>ملاحظات:</b> ${esc(invoice.notes)}</div>` : ''}
@@ -719,13 +723,13 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
       </div>
       <div class="right-col">
         <table class="totals">
-          <tr><td>الإجمالي قبل الخصم</td><td class="e num">${money(invoice.subtotal)} <small class="cur-sym">${curSym}</small></td></tr>
-          ${invoice.discount_amount > 0 ? `<tr><td>الخصم</td><td class="e num">${money(invoice.discount_amount)} <small class="cur-sym">${curSym}</small></td></tr>` : ''}
-          <tr><td>الإجمالي الخاضع للضريبة</td><td class="e num">${money(invoice.taxable_amount)} <small class="cur-sym">${curSym}</small></td></tr>
-          ${Array.from(taxGroups.values()).map((g) => `<tr><td>ضريبة القيمة المضافة (${num(g.rate)}%)</td><td class="e num">${money(g.tax)} <small class="cur-sym">${curSym}</small></td></tr>`).join('')}
-          <tr class="grand"><td>الإجمالي المستحق</td><td class="e num">${money(invoice.grand_total)} <span class="grand-cur">${curSym}</span></td></tr>
-          <tr><td>المسدد</td><td class="e num">${money(invoice.paid_amount)} <small class="cur-sym">${curSym}</small></td></tr>
-          <tr class="rem"><td>المتبقي</td><td class="e num">${money(invoice.remaining_amount)} <small class="cur-sym">${curSym}</small></td></tr>
+          <tr><td>الإجمالي قبل الخصم</td><td class="e num"><small class="cur-sym">${curSym}</small> ${money(invoice.subtotal)}</td></tr>
+          ${invoice.discount_amount > 0 ? `<tr><td>الخصم</td><td class="e num"><small class="cur-sym">${curSym}</small> ${money(invoice.discount_amount)}</td></tr>` : ''}
+          <tr><td>الإجمالي الخاضع للضريبة</td><td class="e num"><small class="cur-sym">${curSym}</small> ${money(invoice.taxable_amount)}</td></tr>
+          ${Array.from(taxGroups.values()).map((g) => `<tr><td>ضريبة القيمة المضافة (${num(g.rate)}%)</td><td class="e num"><small class="cur-sym">${curSym}</small> ${money(g.tax)}</td></tr>`).join('')}
+          <tr class="grand"><td>الإجمالي المستحق</td><td class="e num"><span class="grand-cur">${curSym}</span> ${money(invoice.grand_total)}</td></tr>
+          <tr><td>المسدد</td><td class="e num"><small class="cur-sym">${curSym}</small> ${money(invoice.paid_amount)}</td></tr>
+          <tr class="rem"><td>المتبقي</td><td class="e num"><small class="cur-sym">${curSym}</small> ${money(invoice.remaining_amount)}</td></tr>
         </table>
         ${showTafqeet ? `<div class="words">${esc(tafqeet(invoice.grand_total, cur))}</div>` : ''}
       </div>
@@ -801,9 +805,9 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
     .foot { margin-top: 5mm; border-top: 1px solid #cbd5e1; padding-top: 2.5mm; font-size: 8.4pt; }
     .cur-badge { display: inline-flex; align-items: center; justify-content: center; padding: 1.5px 6px; border-radius: 3.5px; background: #f1f5f9; color: #334155; font-size: 7.5pt; font-weight: 700; border: 1px solid #e2e8f0; vertical-align: middle; line-height: 1; }
     .cur-badge svg { vertical-align: middle; }
-    .cur-sym { display: inline-flex; align-items: center; justify-content: center; font-size: 7.5pt; color: #64748b; margin-inline-start: 3px; font-weight: 600; vertical-align: middle; }
+    .cur-sym { display: inline-flex; align-items: center; justify-content: center; font-size: 7.5pt; color: #64748b; margin-inline-end: 4px; font-weight: 600; vertical-align: middle; }
     .cur-sym svg { vertical-align: middle; }
-    .grand-cur { display: inline-flex; align-items: center; justify-content: center; font-size: 9.5pt; margin-inline-start: 4px; font-weight: 700; vertical-align: middle; }
+    .grand-cur { display: inline-flex; align-items: center; justify-content: center; font-size: 9.5pt; margin-inline-end: 4px; font-weight: 700; vertical-align: middle; }
     .grand-cur svg { fill: currentColor; vertical-align: middle; }
 
     /* أنماط القوالب الإضافية */
@@ -2077,7 +2081,12 @@ export function invoiceThermal({ invoice, issuer, client, printSettings = null, 
 
   const showQr = qrCfg.show_thermal !== false;
   const qrScale = qrCfg.thermal_scale || (qrCfg.size === 'large' ? 4 : qrCfg.size === 'small' ? 2 : 3);
-  const qr = showQr ? qrSvg(invoice.qr_payload, { scale: qrScale, margin: 1 }) : '';
+  const isTemplatePreview = !invoice || invoice.id === 'preview-inv' || invoice.id === 'preview' || invoice.is_preview || invoice.invoice_number === 'رقم الفاتورة' || !invoice.qr_payload;
+  const qr = showQr
+    ? (isTemplatePreview
+        ? '<div class="qr-placeholder" style="width:70px; height:70px; margin:0 auto; display:flex; align-items:center; justify-content:center; font-family:\'Segoe UI\', Tahoma, sans-serif; font-size:22px; font-weight:900; color:#1e293b; background:#f8fafc; border:1.5px dashed #cbd5e1; border-radius:4px; box-sizing:border-box; letter-spacing:1px;">QR</div>'
+        : qrSvg(invoice.qr_payload, { scale: qrScale, margin: 1 }))
+    : '';
   const isSar = !invoice.currency || invoice.currency === 'SAR' || invoice.currency === 'ر.س' || invoice.currency === '﷼';
   const cur = invoice.currency === 'SAR' ? 'ر.س' : invoice.currency;
   const curSym = isSar ? sarSvg({ size: '0.95em' }) : esc(cur);
@@ -2234,8 +2243,8 @@ export function voucherPrint({ voucher, issuer, client, style = 'voucher_saqr_sl
 
         <div class="lux-amt-box">
           <span class="lux-amt-lbl">المبلغ:</span>
-          <span class="lux-amt-val num">${money(voucher.total_amount)}</span>
           <span class="lux-amt-cur">${curSym}</span>
+          <span class="lux-amt-val num">${money(voucher.total_amount)}</span>
         </div>
 
         <div class="lux-tafqeet-bar">
@@ -2338,7 +2347,7 @@ export function voucherPrint({ voucher, issuer, client, style = 'voucher_saqr_sl
       <div class="saqr-kpi-grid">
         <div class="saqr-kpi">
           <div class="kpi-lbl">المبلغ المحصل</div>
-          <div class="kpi-val num big">${money(voucher.total_amount)}</div>
+          <div class="kpi-val num big">${curSym} ${money(voucher.total_amount)}</div>
         </div>
         <div class="saqr-kpi">
           <div class="kpi-lbl">رقم السند</div>
@@ -2368,7 +2377,7 @@ export function voucherPrint({ voucher, issuer, client, style = 'voucher_saqr_sl
         </tr>
         <tr>
           <td class="lbl">المبلغ</td>
-          <td class="val num"><b>${money(voucher.total_amount)}</b></td>
+          <td class="val num"><b>${curSym} ${money(voucher.total_amount)}</b></td>
           <td class="lbl">ملاحظات السند</td>
           <td class="val">${esc(voucher.notes || 'سداد فواتير')}</td>
         </tr>
@@ -2506,9 +2515,9 @@ export function statementPrint({ statement, issuer, client }) {
     </table>
 
     <div class="summary">
-      <div class="box"><span>إجمالي المدين (فواتير)</span><b class="num">${money(statement.totals.debit)} ${cur}</b></div>
-      <div class="box"><span>إجمالي الدائن (مسدد)</span><b class="num">${money(statement.totals.credit)} ${cur}</b></div>
-      <div class="box grand"><span>الرصيد المستحق</span><b class="num">${money(statement.totals.closing_balance)} ${cur}</b></div>
+      <div class="box"><span>إجمالي المدين (فواتير)</span><b class="num">${cur} ${money(statement.totals.debit)}</b></div>
+      <div class="box"><span>إجمالي الدائن (مسدد)</span><b class="num">${cur} ${money(statement.totals.credit)}</b></div>
+      <div class="box grand"><span>الرصيد المستحق</span><b class="num">${cur} ${money(statement.totals.closing_balance)}</b></div>
     </div>
     <div class="tiny muted">صدر بتاريخ ${esc(dateAr(new Date().toISOString()))} — هذا الكشف صادر من نظام Raseen.</div>
   </div>`;
@@ -2579,10 +2588,10 @@ export function bulkPreviewReport({ issuer, client, invoices, summary, options =
 
     <div class="summary-kpis">
       <div class="kpi"><span class="lab">عدد الفواتير</span><b class="num">${num(summary.count)}</b></div>
-      <div class="kpi"><span class="lab">قبل الضريبة</span><b class="num">${money(summary.grand_total - summary.tax_total)} ${cur}</b></div>
-      <div class="kpi"><span class="lab">إجمالي الخصومات</span><b class="num">${money(summary.discount_total)} ${cur}</b></div>
-      <div class="kpi"><span class="lab">إجمالي الضريبة</span><b class="num">${money(summary.tax_total)} ${cur}</b></div>
-      <div class="kpi grand"><span class="lab">الإجمالي النهائي</span><b class="num">${money(summary.grand_total)} ${cur}</b></div>
+      <div class="kpi"><span class="lab">قبل الضريبة</span><b class="num">${cur} ${money(summary.grand_total - summary.tax_total)}</b></div>
+      <div class="kpi"><span class="lab">إجمالي الخصومات</span><b class="num">${cur} ${money(summary.discount_total)}</b></div>
+      <div class="kpi"><span class="lab">إجمالي الضريبة</span><b class="num">${cur} ${money(summary.tax_total)}</b></div>
+      <div class="kpi grand"><span class="lab">الإجمالي النهائي</span><b class="num">${cur} ${money(summary.grand_total)}</b></div>
     </div>
 
     <table class="inv-table">

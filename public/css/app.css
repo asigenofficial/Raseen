@@ -2948,7 +2948,6 @@ tr.row-open>td {
 .cur-sym {
   display: inline-flex;
   align-items: center;
-  margin-inline-start: 0.25rem;
   color: inherit;
   opacity: 0.88;
   white-space: nowrap;
@@ -2959,12 +2958,19 @@ tr.row-open>td {
   align-items: center;
   justify-content: flex-end;
   gap: 0.25rem;
+  direction: ltr;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
+.money-val .cur-sym {
+  margin-inline-start: 0;
+  margin-inline-end: 0;
+}
+
 .stat-val .cur-sym {
-  margin-inline-start: 0.35rem;
+  margin-inline-start: 0;
+  margin-inline-end: 0;
   opacity: 0.85;
 }
 
@@ -2981,7 +2987,8 @@ tr.row-open>td {
 }
 
 .totals-box .line .cur-sym {
-  margin-inline-start: 0.25rem;
+  margin-inline-start: 0;
+  margin-inline-end: 0;
   opacity: 0.85;
 }
 

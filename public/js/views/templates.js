@@ -14,6 +14,7 @@ import {
   VOUCHER_TEMPLATES, voucherPrint,
 } from '../print/templates.js?v=5';
 import { PRESET_LOGOS } from '../print/logos.js';
+import { openAiPromptModal } from './ai-prompt-modal.js';
 
 const PALETTES = [
   { name: 'سماوي رسين الحديث', color: '#06b6d4', dark: '#0891b2', light: '#ecfeff' },
@@ -286,19 +287,12 @@ export async function render(view) {
   }
 
   function renderSearchBarHtml(activeTab) {
-    const uploadLabel = activeTab === 'vouchers' ? 'رفع قالب سند قبض جديد (.html) ⤒' : 'رفع قالب فاتورة جديد (.html) ⤒';
+    const uploadLabel = activeTab === 'vouchers' ? 'رفع قالب سند قبض جديد (.html)' : 'رفع قالب فاتورة جديد (.html)';
     return `
       <div class="card" style="padding:0.75rem 1rem; margin:0; background:rgba(255,255,255,0.02); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem;">
         <div style="position:relative; flex:1; min-width:240px; max-width:460px;">
           <input type="text" id="inp-hub-search" value="${esc(searchQuery)}" placeholder="بحث في أسماء القوالب أو الأعمدة المكتشفة..." style="width:100%; padding-inline-start:34px; font-size:0.86rem;" />
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); color:var(--muted);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        </div>
-        <div class="flex gap-sm" style="align-items:center;">
-          <label class="btn btn-sm btn-primary" style="margin:0; cursor:pointer; display:inline-flex; align-items:center; gap:5px; font-size:0.8rem;">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-            ${uploadLabel}
-            <input type="file" class="file-upload-tab-specific" accept=".html,.htm,.xlsx,.xls" style="display:none;" />
-          </label>
         </div>
       </div>
     `;
@@ -311,7 +305,7 @@ export async function render(view) {
           <h3>لا توجد قوالب تقارير مطابقة</h3>
           <p class="muted">يمكنك رفع أي تقرير Excel بصيغة .xlsx وسيقوم النظام باكتشاف خلاياه تلقائياً.</p>
           <label class="btn btn-primary mt" style="cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
-            رفع قالب تقرير الآن ⤒
+            رفع قالب تقرير الآن
             <input type="file" class="file-upload-tab-specific" accept=".xlsx,.xls" style="display:none;" />
           </label>
         </div>
@@ -617,7 +611,7 @@ export async function render(view) {
                     <div class="flex gap-sm" style="flex-wrap:wrap;">
                       <label class="btn btn-sm btn-primary" style="cursor:pointer; margin:0; display:inline-flex; align-items:center; gap:5px;">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-                        رفع شعار جديد ⤒
+                        رفع شعار جديد
                         <input type="file" id="file-logo-input" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;" />
                       </label>
                       ${activeIssuer.logo_data ? '<button type="button" class="btn btn-sm btn-danger" id="btn-remove-logo" style="margin:0;">إزالة الشعار</button>' : ''}
@@ -766,11 +760,6 @@ export async function render(view) {
                 ${raw(issuers.map((iss) => `<option value="${esc(iss.id)}"${iss.id === activeIssuer.id ? ' selected' : ''}>${esc(iss.name_ar)} (${esc(iss.code)})</option>`).join(''))}
               </select>
             </div>
-            <label class="btn btn-primary" style="margin:0; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-              رفع قالب جديد (.html) ⤒
-              <input type="file" id="file-upload-global" accept=".html,.htm,.xlsx,.xls" style="display:none;" />
-            </label>
             <button class="btn" id="btn-reset-templates" title="إعادة فحص ومزامنة القوالب من القرص يدوياً" type="button">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom; margin-inline-end:5px;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>إعادة فحص القرص
             </button>
@@ -1080,8 +1069,8 @@ export async function render(view) {
         wide: true,
         body: html`
           <div style="background:#0b101c; padding:1.5rem; border-radius:8px; display:flex; justify-content:center; overflow:auto; max-height:78vh;">
-            <div style="background:#fff; width:210mm; min-height:297mm; box-shadow:0 10px 40px rgba(0,0,0,0.6); border-radius:4px; overflow:hidden;">
-              <iframe id="fullscreen-iframe" style="width:100%; height:100%; min-height:850px; border:none; display:block; background:#fff;"></iframe>
+            <div style="background:#fff; width:210mm; height:297mm; min-height:297mm; box-shadow:0 10px 40px rgba(0,0,0,0.6); border-radius:4px; overflow:hidden;">
+              <iframe id="fullscreen-iframe" style="width:210mm; height:297mm; min-height:297mm; border:none; display:block; background:#fff;"></iframe>
             </div>
           </div>
         `,
@@ -2260,6 +2249,13 @@ export async function render(view) {
       } catch (err) {
         toastErr('فشل مزامنة القوالب: ' + err.message);
       }
+    });
+
+    // فتح نافذة برومبت الذكاء الاصطناعي
+    $('.btn-open-ai-prompt', view)?.addEventListener('click', () => {
+      openAiPromptModal({
+        defaultType: activeHubTab === 'vouchers' || activeHubTab === 'documents' ? 'documents' : 'invoices',
+      });
     });
 
     // تبديل الشركة المصدرة

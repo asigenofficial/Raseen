@@ -28,6 +28,9 @@ function calcLine(l) {
   const total = Math.round((taxable + tax) * 100) / 100;
   return {
     ...l,
+    item_code: l.item_code || '',
+    item_name: l.item_name || '',
+    unit: l.unit || 'حبة',
     quantity: qty,
     unit_price: price,
     discount: disc,
@@ -38,7 +41,8 @@ function calcLine(l) {
 }
 
 function recalcInvoice(inv) {
-  const lines = (inv.lines || []).map(calcLine);
+  const rawLines = inv.lines || inv.items || [];
+  const lines = rawLines.map(calcLine);
   const taxable = Math.round(lines.reduce((s, l) => s + (l.taxable_amount || 0), 0) * 100) / 100;
   const discount = Math.round(lines.reduce((s, l) => s + (l.discount || 0), 0) * 100) / 100;
   const subtotal = Math.round((taxable + discount) * 100) / 100;
@@ -47,6 +51,7 @@ function recalcInvoice(inv) {
   return {
     ...inv,
     lines,
+    items: lines,
     subtotal,
     discount_amount: discount,
     taxable_amount: taxable,
@@ -75,6 +80,7 @@ export async function render(view) {
     count: 25,
     target_total: 680000,
     use_target: true,
+    start_invoice_number: '',
     category_ids: [],
     item_ids: [],
     custom_items: [],
@@ -126,6 +132,7 @@ export async function render(view) {
     date_to: state.date_to,
     count: toNum(state.count, 0),
     target_total: state.use_target ? toNum(state.target_total, 0) : 0,
+    start_invoice_number: (state.start_invoice_number || '').trim(),
     category_ids: state.category_ids,
     item_ids: state.item_ids,
     custom_items: state.custom_items.map((it) => ({
@@ -193,38 +200,54 @@ export async function render(view) {
     if (!state.custom_items.length) {
       return `
         <div class="pad mt" style="background:rgba(255,255,255,0.02);border:1px dashed var(--line-strong);border-radius:var(--radius-sm);text-align:center">
-          <p class="muted tiny" style="margin:.4rem 0">لم يتم تحديد قائمة أصناف مخصصة بعد. سيتم استخدام أصناف الكتالوج العام تلقائياً، أو يمكنك اختيار أصناف وإضافة أسعارها المخصصة للدفعة من الأدوات أعلاه.</p>
+          <p class="muted tiny" style="margin:.4rem 0">لم يتم تحديد قائمة أصناف مخصصة بعد. سيتم استخدام أصناف الكتالوج العام تلقائياً، أو يمكنك إضافة أصناف يدوياً وتحديد أسعارها وأرقامها للدفعة من النموذج أعلاه.</p>
         </div>
       `;
     }
 
     return `
       <div class="table-wrap mt">
+        <div style="background:rgba(16, 185, 129, 0.08);border:1px solid rgba(16, 185, 129, 0.3);padding:.4rem .8rem;border-radius:var(--radius-sm);margin-bottom:.5rem;display:flex;align-items:center;gap:.6rem">
+          <span style="color:#10b981;font-weight:bold;font-size:.85rem">✓ حصر التوليد اليدوي:</span>
+          <span class="tiny" style="color:var(--text)">سيقتصر توليد فواتير هذه الدفعة <b>فقط وحصراً</b> على الأصناف المحددة أدناه بالأسعار والأرقام والوحدات الموضحة.</span>
+        </div>
         <table class="tbl compact" style="background:var(--card)">
           <thead>
             <tr>
-              <th style="width:35px">#</th>
-              <th>الصنف</th>
-              <th style="width:100px">الكود</th>
-              <th style="width:80px">الوحدة</th>
-              <th style="width:170px" class="text-end">سعر الوحدة المحدد للدفعة (${esc(cur)})</th>
-              <th style="width:80px" class="text-center">الضريبة</th>
-              <th style="width:50px"></th>
+              <th style="width:55px" class="text-center">ترتيب</th>
+              <th style="width:125px">رقم الصنف</th>
+              <th>اسم الصنف</th>
+              <th style="width:95px">الوحدة</th>
+              <th style="width:140px" class="text-end">سعر الوحدة (${esc(cur)})</th>
+              <th style="width:85px" class="text-center">الضريبة</th>
+              <th style="width:45px"></th>
             </tr>
           </thead>
           <tbody>
             ${state.custom_items.map((it, idx) => `
               <tr>
-                <td class="tiny">${idx + 1}</td>
-                <td><b>${esc(it.name_ar)}</b></td>
-                <td class="tiny mono muted">${esc(it.item_code || '—')}</td>
-                <td class="tiny">${esc(it.unit || 'حبة')}</td>
-                <td class="text-end">
-                  <input type="number" step="any" min="0.01" class="custom-item-price" data-idx="${idx}" value="${it.sale_price}" style="width:130px;text-align:right;padding:.25rem .5rem;font-size:.85rem;font-weight:bold" />
+                <td class="text-center" style="white-space:nowrap">
+                  <span class="tiny num font-bold" style="margin-left:3px">${idx + 1}</span>
+                  ${idx > 0 ? `<button class="btn btn-sm pad0" data-move-custom-item="${idx}:up" type="button" title="تحريك لأعلى" style="width:18px;height:18px;line-height:1;font-size:9px;padding:0">▲</button>` : ''}
+                  ${idx < state.custom_items.length - 1 ? `<button class="btn btn-sm pad0" data-move-custom-item="${idx}:down" type="button" title="تحريك لأسفل" style="width:18px;height:18px;line-height:1;font-size:9px;padding:0">▼</button>` : ''}
                 </td>
-                <td class="tiny text-center">${num(it.tax_rate !== undefined ? it.tax_rate : 15)}%</td>
+                <td>
+                  <input type="text" class="custom-item-prop mono" data-idx="${idx}" data-prop="item_code" value="${esc(it.item_code || '')}" placeholder="رقم الصنف" style="width:110px;padding:.2rem .4rem;font-size:.82rem" />
+                </td>
+                <td>
+                  <input type="text" class="custom-item-prop" data-idx="${idx}" data-prop="name_ar" value="${esc(it.name_ar)}" placeholder="اسم الصنف" style="width:100%;font-weight:600;padding:.2rem .4rem;font-size:.85rem" />
+                </td>
+                <td>
+                  <input type="text" class="custom-item-prop" data-idx="${idx}" data-prop="unit" value="${esc(it.unit || 'حبة')}" placeholder="الوحدة" style="width:80px;padding:.2rem .4rem;font-size:.82rem" />
+                </td>
+                <td class="text-end">
+                  <input type="number" step="any" min="0.01" class="custom-item-prop custom-item-price" data-idx="${idx}" data-prop="sale_price" value="${it.sale_price}" style="width:115px;text-align:right;padding:.25rem .5rem;font-size:.85rem;font-weight:bold" />
+                </td>
                 <td class="text-center">
-                  <button class="btn btn-sm btn-danger pad0" style="width:26px;height:26px;line-height:1" data-remove-custom-item="${idx}" type="button" title="حذف الصنف من الدفعة">✕</button>
+                  <input type="number" step="any" min="0" max="100" class="custom-item-prop" data-idx="${idx}" data-prop="tax_rate" value="${it.tax_rate !== undefined ? it.tax_rate : 15}" style="width:60px;text-align:center;padding:.2rem;font-size:.82rem" />%
+                </td>
+                <td class="text-center">
+                  <button class="btn btn-sm btn-danger pad0" style="width:24px;height:24px;line-height:1" data-remove-custom-item="${idx}" type="button" title="حذف الصنف من الدفعة">✕</button>
                 </td>
               </tr>
             `).join('')}
@@ -391,11 +414,13 @@ export async function render(view) {
                 </div>
 
                 <div class="row mt-sm" style="gap:.6rem;align-items:flex-end">
-                  <div class="field" style="max-width:140px;margin:0"><label class="tiny">التاريخ</label>
+                  <div class="field" style="max-width:130px;margin:0"><label class="tiny">رقم الفاتورة</label>
+                    <input type="text" class="inv-field mono" data-idx="${idx}" data-field="invoice_number" value="${esc(inv.invoice_number || '')}" placeholder="تلقائي" /></div>
+                  <div class="field" style="max-width:135px;margin:0"><label class="tiny">التاريخ</label>
                     <input type="date" class="inv-field" data-idx="${idx}" data-field="issue_date" value="${inv.issue_date}" /></div>
-                  <div class="field" style="max-width:110px;margin:0"><label class="tiny">الوقت</label>
+                  <div class="field" style="max-width:105px;margin:0"><label class="tiny">الوقت</label>
                     <input type="time" step="1" class="inv-field" data-idx="${idx}" data-field="issue_time" value="${inv.issue_time || '10:00:00'}" /></div>
-                  <div class="field" style="max-width:120px;margin:0"><label class="tiny">طريقة الدفع</label>
+                  <div class="field" style="max-width:115px;margin:0"><label class="tiny">طريقة الدفع</label>
                     <select class="inv-field" data-idx="${idx}" data-field="payment_method">
                       ${raw(Object.entries(PAY_LABELS).map(([k, v]) => `<option value="${esc(k)}" ${inv.payment_method === k ? 'selected' : ''}>${esc(v)}</option>`).join(''))}
                     </select></div>
@@ -408,9 +433,9 @@ export async function render(view) {
                     <div class="row align-center" style="margin-bottom:.5rem">
                       <b class="tiny">بنود الفاتورة #${idx + 1}:</b>
                       <div class="spacer"></div>
-                      <select id="quick-add-item-${idx}" style="max-width:250px;font-size:.8rem">
+                      <select id="quick-add-item-${idx}" style="max-width:280px;font-size:.8rem">
                         <option value="">-- اختر صنفاً للإضافة السريعة --</option>
-                        ${raw(store.items.map((it) => `<option value="${esc(it.id)}">${esc(it.name_ar)} — ${money(it.sale_price)}</option>`).join(''))}
+                        ${raw(store.items.map((it) => `<option value="${esc(it.id)}">${esc(it.item_code ? `[${it.item_code}] ` : '')}${esc(it.name_ar)} — ${money(it.sale_price)} (${esc(it.unit || 'حبة')})</option>`).join(''))}
                       </select>
                       <button class="btn btn-sm btn-primary" data-add-item="${idx}" type="button">+ إضافة صنف</button>
                     </div>
@@ -418,8 +443,8 @@ export async function render(view) {
                     <div class="table-wrap">
                       <table class="tbl compact" style="background:transparent">
                         <thead><tr>
-                          <th style="width:30px">#</th><th>الصنف</th><th style="width:70px">الوحدة</th>
-                          <th style="width:80px" class="text-end">الكمية</th><th style="width:100px" class="text-end">السعر</th>
+                          <th style="width:30px">#</th><th style="width:100px">رقم الصنف</th><th>الصنف</th><th style="width:75px">الوحدة</th>
+                          <th style="width:80px" class="text-end">الكمية</th><th style="width:95px" class="text-end">السعر</th>
                           <th style="width:80px" class="text-end">الخصم</th><th style="width:60px" class="text-center">الضريبة</th>
                           <th style="width:100px" class="text-end">الإجمالي</th><th style="width:40px"></th>
                         </tr></thead>
@@ -427,8 +452,9 @@ export async function render(view) {
                           ${inv.lines.map((l, lIdx) => `
                             <tr>
                               <td class="tiny">${lIdx + 1}</td>
-                              <td><b>${esc(l.item_name)}</b>${l.item_code ? `<div class="tiny muted mono">${esc(l.item_code)}</div>` : ''}</td>
-                              <td class="tiny">${esc(l.unit || 'حبة')}</td>
+                              <td><input type="text" style="padding:.2rem;font-size:.8rem;width:95px" class="line-input mono" data-inv="${idx}" data-line="${lIdx}" data-lfield="item_code" value="${esc(l.item_code || '')}" placeholder="رقم الصنف" /></td>
+                              <td><b>${esc(l.item_name)}</b></td>
+                              <td><input type="text" style="padding:.2rem;font-size:.8rem;width:70px" class="line-input" data-inv="${idx}" data-line="${lIdx}" data-lfield="unit" value="${esc(l.unit || 'حبة')}" /></td>
                               <td><input type="number" step="any" min="0.01" style="padding:.2rem;font-size:.8rem;text-align:right" class="line-input" data-inv="${idx}" data-line="${lIdx}" data-lfield="quantity" value="${l.quantity}" /></td>
                               <td><input type="number" step="any" min="0" style="padding:.2rem;font-size:.8rem;text-align:right" class="line-input" data-inv="${idx}" data-line="${lIdx}" data-lfield="unit_price" value="${l.unit_price}" /></td>
                               <td><input type="number" step="any" min="0" style="padding:.2rem;font-size:.8rem;text-align:right" class="line-input" data-inv="${idx}" data-line="${lIdx}" data-lfield="discount" value="${l.discount || 0}" /></td>
@@ -489,11 +515,14 @@ export async function render(view) {
           <div class="field" style="max-width:230px"><label>الميزانية الإجمالية (${esc(cur)})</label>
             <input type="number" id="target_total" value="${state.target_total}" min="0" step="0.01" ${raw(state.use_target ? '' : 'disabled')} />
             <label class="check tiny mt"><input type="checkbox" id="use_target" ${raw(state.use_target ? 'checked' : '')} /> مطابقة مبلغ إجمالي محدد بدقة</label></div>
-          <div class="field" style="max-width:170px"><label>نوع الفواتير</label>
+          <div class="field" style="max-width:160px"><label>نوع الفواتير</label>
             <select id="invoice_type">
               <option value="STANDARD" ${raw(state.invoice_type === 'STANDARD' ? 'selected' : '')}>ضريبية</option>
               <option value="SIMPLIFIED" ${raw(state.invoice_type === 'SIMPLIFIED' ? 'selected' : '')}>مبسطة</option>
             </select></div>
+          <div class="field" style="max-width:180px"><label>بداية تسلسل الفواتير (اختياري)</label>
+            <input type="text" id="start_invoice_number" class="mono" value="${esc(state.start_invoice_number || '')}" placeholder="مثال: INV-0101" />
+            <span class="hint">لتسلسل الترقيم إذا سبق إصدار فواتير للعميل</span></div>
           <div class="field"><label>ملاحظة عامة على كل فواتير الدفعة</label>
             <input type="text" id="notes" value="${esc(state.notes)}" /></div>
         </div>
@@ -518,25 +547,37 @@ export async function render(view) {
 
         <!-- شريط إضافة وتحديد أسعار الأصناف للدفعة -->
         <div class="row align-center mt-sm" style="gap:.6rem;flex-wrap:wrap;background:rgba(255,255,255,0.03);padding:.8rem;border-radius:var(--radius-sm);border:1px solid var(--line)">
-          <div class="field" style="flex:2;min-width:240px;margin:0">
-            <label class="tiny">اختر صنفاً من الدليل لإضافته وتحديد سعره للدفعة</label>
+          <div class="field" style="flex:2;min-width:200px;margin:0">
+            <label class="tiny">اختر من الدليل (تعبئة سريعة)</label>
             <select id="quick-catalog-item-select">
-              <option value="">-- اختر صنفاً من الدليل --</option>
-              ${raw(store.items.map((it) => `<option value="${esc(it.id)}" data-price="${it.sale_price}" data-unit="${esc(it.unit || 'حبة')}">${esc(it.name_ar)} (سعر الدليل: ${money(it.sale_price)} ${esc(cur)})</option>`).join(''))}
+              <option value="">-- اختر صنفاً من الدليل أو اكتب بياناته مباشرة --</option>
+              ${raw(store.items.map((it) => `<option value="${esc(it.id)}" data-code="${esc(it.item_code || '')}" data-price="${it.sale_price}" data-unit="${esc(it.unit || 'حبة')}" data-name="${esc(it.name_ar)}">${esc(it.item_code ? `[${it.item_code}] ` : '')}${esc(it.name_ar)} (سعر: ${money(it.sale_price)} ${esc(cur)})</option>`).join(''))}
             </select>
           </div>
-          <div class="field" style="max-width:140px;margin:0">
-            <label class="tiny">السعر المحدد (${esc(cur)})</label>
+          <div class="field" style="width:115px;margin:0">
+            <label class="tiny">رقم الصنف</label>
+            <input type="text" id="quick-catalog-item-code" class="mono" placeholder="رقم الصنف" />
+          </div>
+          <div class="field" style="flex:2;min-width:180px;margin:0">
+            <label class="tiny req">اسم الصنف أو الخدمة</label>
+            <input type="text" id="quick-catalog-item-name" placeholder="اسم الصنف بالعربية" />
+          </div>
+          <div class="field" style="width:90px;margin:0">
+            <label class="tiny">الوحدة</label>
+            <input type="text" id="quick-catalog-item-unit" placeholder="حبة" value="حبة" />
+          </div>
+          <div class="field" style="width:120px;margin:0">
+            <label class="tiny req">السعر المحدد (${esc(cur)})</label>
             <input type="number" step="any" min="0" id="quick-catalog-item-price" placeholder="سعر الوحدة" />
           </div>
           <div style="align-self:flex-end">
             <button class="btn btn-primary" id="btn-add-item-to-batch" type="button" style="font-weight:600;font-size:.85rem;height:38px">
-              ${raw(icon.plus({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}+ إضافة صنف
+              ${raw(icon.plus({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}+ إضافة للدفعة
             </button>
           </div>
           <div style="align-self:flex-end">
-            <button class="btn" id="btn-add-custom-adhoc" type="button" style="font-size:.85rem;height:38px">
-              ${raw(icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}+ صنف مخصص جديد
+            <button class="btn" id="btn-add-custom-adhoc" type="button" style="font-size:.85rem;height:38px" title="إضافة صنف مخصص حر مباشرة للدفعة">
+              ${raw(icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}+ صنف مخصص حر
             </button>
           </div>
           <div style="align-self:flex-end">
@@ -571,6 +612,10 @@ export async function render(view) {
           <div>
             <b>طريقة توزيع المنتجات على الفواتير:</b>
           </div>
+          <label class="check" style="margin:0;cursor:pointer">
+            <input type="radio" name="distribution_mode" value="SEQUENTIAL" ${state.distribution_mode === 'SEQUENTIAL' ? 'checked' : ''} />
+            <b>توزيع متسلسل</b> (إدراج الأصناف في الفواتير بنفس الترتيب الموضح بالجدول أعلاه)
+          </label>
           <label class="check" style="margin:0;cursor:pointer">
             <input type="radio" name="distribution_mode" value="BALANCED" ${state.distribution_mode === 'BALANCED' ? 'checked' : ''} />
             <b>توزيع متوازن</b> (ضمان توزيع كافة الأصناف المختارة بالتساوي على الفواتير)
@@ -649,7 +694,7 @@ export async function render(view) {
       }
     });
 
-    bindNumeric(['count', 'target_total', 'min_items', 'max_items', 'min_qty', 'max_qty',
+    bindNumeric(['count', 'target_total', 'start_invoice_number', 'min_items', 'max_items', 'min_qty', 'max_qty',
       'min_invoice_total', 'max_invoice_total', 'price_jitter_percent', 'discount_min_percent',
       'discount_max_percent', 'discount_probability', 'seed', 'notes']);
 
@@ -685,61 +730,142 @@ export async function render(view) {
       }
     };
 
-    // تغيير اختيار الصنف السريع لملء سعره التلقائي
+    // تغيير اختيار الصنف السريع لملء رقم الصنف واسمه وسعره ووحدته التلقائية
     delegate(view, 'change', '#quick-catalog-item-select', (e, sel) => {
       const opt = sel.selectedOptions[0];
+      const codeInput = $('#quick-catalog-item-code', view);
+      const nameInput = $('#quick-catalog-item-name', view);
+      const unitInput = $('#quick-catalog-item-unit', view);
       const priceInput = $('#quick-catalog-item-price', view);
-      if (opt && opt.dataset.price && priceInput) {
-        priceInput.value = opt.dataset.price;
+      if (opt && opt.value) {
+        if (codeInput) codeInput.value = opt.dataset.code || '';
+        if (nameInput) nameInput.value = opt.dataset.name || '';
+        if (unitInput) unitInput.value = opt.dataset.unit || 'حبة';
+        if (priceInput && opt.dataset.price) priceInput.value = opt.dataset.price;
       }
     });
 
-    // إضافة صنف من الدليل
+    // إضافة أو تحديث صنف للدفعة (سواءً من القائمة أو كتابة يدوية مباشرة)
     delegate(view, 'click', '#btn-add-item-to-batch', () => {
       const select = $('#quick-catalog-item-select', view);
-      if (!select || !select.value) {
-        toastErr('اختر صنفاً من القائمة أولاً');
+      const codeInput = $('#quick-catalog-item-code', view);
+      const nameInput = $('#quick-catalog-item-name', view);
+      const unitInput = $('#quick-catalog-item-unit', view);
+      const priceInput = $('#quick-catalog-item-price', view);
+
+      const it = (select && select.value) ? store.items.find((x) => x.id === select.value) : null;
+      const customName = (nameInput && nameInput.value.trim()) || (it ? it.name_ar : '');
+      if (!customName) {
+        toastErr('يرجى تحديد أو كتابة اسم الصنف');
         return;
       }
-      const it = store.items.find((x) => x.id === select.value);
-      if (!it) return;
-      const priceInput = $('#quick-catalog-item-price', view);
-      const customPrice = priceInput && priceInput.value !== '' ? Number(priceInput.value) : it.sale_price;
+      const customCode = codeInput ? codeInput.value.trim() : (it ? it.item_code || '' : '');
+      const customUnit = unitInput && unitInput.value.trim() ? unitInput.value.trim() : (it ? it.unit || 'حبة' : 'حبة');
+      const customPrice = priceInput && priceInput.value !== '' ? Number(priceInput.value) : (it ? it.sale_price : 0);
+      if (customPrice <= 0) {
+        toastErr('يرجى إدخال سعر وحدة صالح أكبر من الصفر');
+        return;
+      }
 
-      const existingIdx = state.custom_items.findIndex((x) => x.id === it.id);
+      const existingIdx = state.custom_items.findIndex((x) => (it && x.id === it.id) || (x.name_ar === customName && x.item_code === customCode));
       if (existingIdx >= 0) {
+        state.custom_items[existingIdx].item_code = customCode;
+        state.custom_items[existingIdx].name_ar = customName;
+        state.custom_items[existingIdx].unit = customUnit;
         state.custom_items[existingIdx].sale_price = customPrice;
-        toastOk(`تم تحديث سعر الصنف: ${it.name_ar}`);
+        toastOk(`تم تحديث بيانات الصنف: ${customName}`);
       } else {
         state.custom_items.push({
-          id: it.id,
-          item_code: it.item_code,
-          name_ar: it.name_ar,
-          unit: it.unit || 'حبة',
+          id: it ? it.id : null,
+          item_code: customCode,
+          name_ar: customName,
+          unit: customUnit,
           sale_price: customPrice,
-          tax_rate: it.tax_rate !== undefined ? it.tax_rate : 15,
+          tax_rate: (it && it.tax_rate !== undefined) ? it.tax_rate : 15,
         });
-        toastOk(`تمت إضافة الصنف: ${it.name_ar} بسعر ${money(customPrice)} ${cur}`);
+        toastOk(`تمت إضافة الصنف: ${customName} (كود: ${customCode || '—'}) بسعر ${money(customPrice)} ${cur}`);
       }
+
+      if (nameInput) nameInput.value = '';
+      if (codeInput) codeInput.value = '';
+      if (priceInput) priceInput.value = '';
+      if (select) select.value = '';
       refreshCustomItemsArea();
     });
 
-    // إضافة صنف مخصص بالكامل (غير موجود بالدليل)
-    delegate(view, 'click', '#btn-add-custom-adhoc', async () => {
-      const name = await promptDialog({ title: 'إضافة صنف مخصص للدفعة', label: 'اسم الصنف أو الخدمة', value: '' });
-      if (!name) return;
-      const priceStr = await promptDialog({ title: 'سعر الصنف', label: `سعر الوحدة (${cur})`, value: '100' });
-      const price = Number(priceStr) || 100;
-      state.custom_items.push({
-        id: null,
-        item_code: '',
-        name_ar: name,
-        unit: 'حبة',
-        sale_price: price,
-        tax_rate: 15,
+    // تغيير ترتيب الأصناف المحددة للدفعة (▲ / ▼)
+    delegate(view, 'click', '[data-move-custom-item]', (e, btn) => {
+      const [idxStr, dir] = btn.dataset.moveCustomItem.split(':');
+      const idx = Number(idxStr);
+      if (dir === 'up' && idx > 0) {
+        const temp = state.custom_items[idx];
+        state.custom_items[idx] = state.custom_items[idx - 1];
+        state.custom_items[idx - 1] = temp;
+        refreshCustomItemsArea();
+      } else if (dir === 'down' && idx < state.custom_items.length - 1) {
+        const temp = state.custom_items[idx];
+        state.custom_items[idx] = state.custom_items[idx + 1];
+        state.custom_items[idx + 1] = temp;
+        refreshCustomItemsArea();
+      }
+    });
+
+    // إضافة صنف مخصص بالكامل (طوالي مش من المجموعات)
+    delegate(view, 'click', '#btn-add-custom-adhoc', () => {
+      const m = modal({
+        title: 'إضافة صنف مخصص جديد للدفعة',
+        slim: true,
+        body: html`
+          <div class="row">
+            <div class="field" style="max-width:140px">
+              <label>رقم / كود الصنف</label>
+              <input type="text" name="item_code" class="mono" placeholder="مثال: ITM-001" />
+            </div>
+            <div class="field" style="flex:2">
+              <label class="req">اسم الصنف أو الخدمة</label>
+              <input type="text" name="name_ar" placeholder="اسم الصنف بالعربية" required />
+            </div>
+          </div>
+          <div class="row mt">
+            <div class="field">
+              <label class="req">سعر الوحدة (${esc(cur)})</label>
+              <input type="number" step="any" min="0.01" name="sale_price" value="100" required />
+            </div>
+            <div class="field">
+              <label>الوحدة</label>
+              <input type="text" name="unit" value="حبة" placeholder="حبة، كرتون، ساعة..." />
+            </div>
+            <div class="field" style="max-width:110px">
+              <label>الضريبة %</label>
+              <input type="number" step="any" min="0" max="100" name="tax_rate" value="15" />
+            </div>
+          </div>`,
+        footer: `<button class="btn" data-close type="button">إلغاء</button>
+                 <button class="btn btn-primary" data-save-adhoc type="button">إضافة الصنف</button>`,
       });
-      refreshCustomItemsArea();
-      toastOk(`تمت إضافة الصنف المخصص: ${name}`);
+      m.el.querySelector('[data-save-adhoc]').addEventListener('click', () => {
+        const values = formValues(m.body);
+        if (!values.name_ar || !values.name_ar.trim()) {
+          toastErr('اسم الصنف مطلوب');
+          return;
+        }
+        const price = Number(values.sale_price) || 0;
+        if (price <= 0) {
+          toastErr('أدخل سعر وحدة صالح أكبر من الصفر');
+          return;
+        }
+        state.custom_items.push({
+          id: null,
+          item_code: (values.item_code || '').trim(),
+          name_ar: values.name_ar.trim(),
+          unit: (values.unit || '').trim() || 'حبة',
+          sale_price: price,
+          tax_rate: values.tax_rate !== '' ? Number(values.tax_rate) : 15,
+        });
+        m.close();
+        refreshCustomItemsArea();
+        toastOk(`تمت إضافة الصنف: ${values.name_ar.trim()}`);
+      });
     });
 
     // استيراد جميع الأصناف النشطة
@@ -798,11 +924,16 @@ export async function render(view) {
       }
     });
 
-    // تعديل السعر في جدول الأصناف المخصصة
-    delegate(view, 'change', '.custom-item-price', (e, input) => {
+    // تعديل الحقول في جدول الأصناف المخصصة (الكود، الاسم، الوحدة، السعر)
+    delegate(view, 'input', '.custom-item-prop', (e, input) => {
       const idx = Number(input.dataset.idx);
+      const prop = input.dataset.prop;
       if (state.custom_items[idx]) {
-        state.custom_items[idx].sale_price = Number(input.value) || 0;
+        if (prop === 'sale_price') {
+          state.custom_items[idx].sale_price = Number(input.value) || 0;
+        } else {
+          state.custom_items[idx][prop] = input.value;
+        }
       }
     });
 
@@ -1097,11 +1228,15 @@ export async function render(view) {
       const lineIdx = Number(input.dataset.line);
       const lfield = input.dataset.lfield;
       if (!state.preview || !state.preview.invoices[invIdx] || !state.preview.invoices[invIdx].lines[lineIdx]) return;
-      state.preview.invoices[invIdx].lines[lineIdx][lfield] = Number(input.value) || 0;
-      recalcPreviewSummary();
-      // تحديث المجاميع المعروضة
-      const area = $('#preview-area', view);
-      if (area) area.innerHTML = previewHtml();
+      if (lfield === 'item_code' || lfield === 'unit' || lfield === 'item_name') {
+        state.preview.invoices[invIdx].lines[lineIdx][lfield] = input.value;
+      } else {
+        state.preview.invoices[invIdx].lines[lineIdx][lfield] = Number(input.value) || 0;
+        recalcPreviewSummary();
+        // تحديث المجاميع المعروضة
+        const area = $('#preview-area', view);
+        if (area) area.innerHTML = previewHtml();
+      }
     });
 
     delegate(view, 'click', '[data-add-item]', (e, btn) => {
