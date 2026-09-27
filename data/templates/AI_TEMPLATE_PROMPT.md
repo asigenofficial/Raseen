@@ -199,6 +199,11 @@
 ═══════════════════════════════════════════════════════════════
 قاعدة منع الباركود الخطي والاعتماد الحصري على رمز QR المربع النظيف (STRICT QR-ONLY & NO LINEAR BARCODE RULE):
 ═══════════════════════════════════════════════════════════════
+0. مقاس رمز الاستجابة السريع (QR Code) الإلزامي:
+   - يجب أن يكون مقاس حاوية رمز الـ QR لا يقل عن 125px × 125px (أو 33mm × 33mm) نهائياً مع padding: 4px وخلفية بيضاء، لضمان قراءة سريعة وموثوقة بنسبة 100% لكافة تطبيقات الهيئة (ZATCA) وكاميرات الجوال عند مسح باركود المرحلة الثانية الكثيف.
+   .qr-box { width: 125px; height: 125px; background: #ffffff; padding: 4px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
+   .qr-box svg, .qr-box img { width: 100% !important; height: 100% !important; display: block; }
+
 1. منع قاطع للباركود الخطي (NO Linear Barcodes):
    يُمنع منعاً باتاً ومطلقاً وضع أي باركود خطي (Barcode / Code128 / Code39) أو خطوط زخرفية أو أشرطة متقطعة تشبه الباركود الخطي في أي مكان في الفاتورة أو التذييل! الفواتير الضريبية تعتمد حصراً على رمز الاستجابة السريع (QR Code) فقط لا غير.
 
@@ -215,8 +220,8 @@
 
 4. يتم التحكم بأبعاد وتنسيق الصور داخلياً عبر CSS الحاوية فقط:
    .logo-shell img { max-width: 100%; max-height: 80px; object-fit: contain; }
-   .qr-box { width: 95px; height: 95px; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; display: flex; align-items: center; justify-content: center; background: #fff; overflow: hidden; margin: 0 auto; }
-   .qr-box img, .qr-box svg { width: 95px; height: 95px; object-fit: contain; display: block; }
+   .qr-box { width: 125px; height: 125px; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; display: flex; align-items: center; justify-content: center; background: #fff; overflow: hidden; margin: 0 auto; padding: 4px; box-sizing: border-box; }
+   .qr-box img, .qr-box svg { width: 100% !important; height: 100% !important; object-fit: contain; display: block; }
 
 ═══════════════════════════════════════════════════════════════
 الهيكل البرمجي الإلزامي لجدول الأصناف (Items Table Architecture):
@@ -373,7 +378,7 @@
     .header-grid { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
     .logo-box { width: 130px; }
     .logo-box img { max-width: 100%; max-height: 75px; object-fit: contain; }
-    .qr-box { width: 100px; height: 100px; }
+    .qr-box { width: 125px; height: 125px; }
     .qr-box img, .qr-box svg { width: 100% !important; height: 100% !important; display: block; }
     .meta-box { border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; margin-bottom: 16px; font-size: 12px; }
     .items-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11.5px; }
