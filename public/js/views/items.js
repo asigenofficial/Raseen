@@ -113,22 +113,29 @@ function openImportModal(onSuccess) {
     title: 'استيراد الأصناف من ملف Excel / CSV',
     body: html`
       <div class="stack">
-        <p class="tiny muted" style="margin:0">
-          يمكنك استيراد آلاف الأصناف دفعة واحدة. يقوم النظام تلقائياً بالتعرف على الأعمدة وتحديث الأصناف المتطابقة وإضافة الأصناف الجديدة.
-        </p>
-        <div class="row items-center" style="gap:1rem;background:var(--bg-subtle,#f8fafc);padding:.75rem;border-radius:6px;border:1px dashed var(--border,#cbd5e1)">
-          <div style="flex:1">
-            <label class="btn btn-sm btn-outline" style="cursor:pointer;display:inline-flex;align-items:center;gap:.4rem">
-              ${icon.upload({ size: 15 })}
-              <span>اختر ملف Excel أو CSV</span>
-              <input type="file" id="import-file-input" accept=".xlsx,.xls,.csv" style="display:none" />
-            </label>
-            <span id="selected-file-name" class="tiny muted" style="margin-right:.5rem">لم يتم اختيار ملف</span>
-          </div>
-          <a class="btn btn-sm btn-ghost" href="/api/items/template" download="items-import-template.xlsx">
-            ${icon.download({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}تحميل نموذج Excel فارغ
+        <div class="row items-center justify-between" style="margin-bottom:.4rem;">
+          <p class="tiny muted" style="margin:0;flex:1;">
+            يمكنك استيراد آلاف الأصناف دفعة واحدة. يقوم النظام تلقائياً بالتعرف على الأعمدة وتحديث الأصناف المتطابقة وإضافة الأصناف الجديدة.
+          </p>
+          <a class="btn btn-sm btn-outline" href="/api/items/template" download="items-import-template.xlsx" style="gap:.35rem;flex-shrink:0;">
+            ${icon.download({ size: 14 })}
+            <span>تحميل نموذج Excel فارغ</span>
           </a>
         </div>
+
+        <div class="dropzone" id="import-dropzone" style="margin-top:.4rem;">
+          <div class="dropzone-icon">
+            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--brand);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
+          </div>
+          <div style="font-weight:700;font-size:1rem;margin-bottom:.3rem;color:var(--text);">
+            انقر هنا لاختيار ملف Excel أو CSV، أو اسحبه وأفلته هنا
+          </div>
+          <div class="tiny muted" id="selected-file-name">
+            الصيغ المدعومة: .xlsx (Excel حديث), .csv
+          </div>
+          <input type="file" id="import-file-input" accept=".xlsx,.xls,.csv" style="display:none;" />
+        </div>
+
         <div id="import-preview-area" style="display:none"></div>
       </div>
     `,
@@ -138,16 +145,37 @@ function openImportModal(onSuccess) {
     `,
   });
 
+  const dropzone = m.el.querySelector('#import-dropzone');
   const fileInput = m.el.querySelector('#import-file-input');
   const fileNameEl = m.el.querySelector('#selected-file-name');
   const previewArea = m.el.querySelector('#import-preview-area');
   const commitBtn = m.el.querySelector('#commit-import-btn');
   let parsedItems = [];
 
-  fileInput.addEventListener('change', async (e) => {
+  dropzone.addEventListener('click', () => {
+    fileInput.value = '';
+    fileInput.click();
+  });
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+  });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  fileInput.addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    fileNameEl.textContent = file.name;
+    if (file) handleFile(file);
+  });
+
+  async function handleFile(file) {
+    fileNameEl.innerHTML = `<span style="color:var(--brand);font-weight:700;">ملف محدد: ${esc(file.name)} (${(file.size / 1024).toFixed(1)} ك.ب)</span>`;
     previewArea.style.display = 'block';
     previewArea.innerHTML = '<div class="text-center muted" style="padding:1.5rem">جارٍ قراءة وفحص ملف الأصناف…</div>';
     commitBtn.disabled = true;
@@ -179,8 +207,8 @@ function openImportModal(onSuccess) {
       }
 
       previewArea.innerHTML = html`
-        <div class="card pad0 mt" style="border:1px solid var(--border)">
-          <div style="padding:.6rem 1rem;background:var(--bg-subtle);display:flex;justify-content:space-between;align-items:center">
+        <div class="card pad0 mt" style="border:1px solid var(--line);background:var(--card-solid);">
+          <div style="padding:.6rem 1rem;background:rgba(255,255,255,0.03);display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);">
             <b>معاينة الأصناف الجاهزة للاستيراد (${parsedItems.length} صنف)</b>
             <span class="badge blue">${res.total_rows} سطر في الملف</span>
           </div>
@@ -188,7 +216,7 @@ function openImportModal(onSuccess) {
             <table class="tbl tiny">
               <thead><tr><th>#</th><th>كود</th><th>اسم الصنف</th><th>المجموعة</th><th>الوحدة</th><th>التكلفة</th><th>سعر البيع</th><th>الضريبة</th></tr></thead>
               <tbody>
-                ${parsedItems.slice(0, 20).map((it, idx) => `
+                ${parsedItems.slice(0, 25).map((it, idx) => `
                   <tr>
                     <td>${idx + 1}</td>
                     <td class="mono">${esc(it.item_code || 'تلقائي')}</td>
@@ -203,7 +231,7 @@ function openImportModal(onSuccess) {
               </tbody>
             </table>
           </div>
-          ${parsedItems.length > 20 ? `<div class="tiny muted text-center" style="padding:.4rem">تم عرض أول 20 صنفاً فقط من أصل ${parsedItems.length}…</div>` : ''}
+          ${parsedItems.length > 25 ? `<div class="tiny muted text-center" style="padding:.4rem">تم عرض أول 25 صنفاً فقط من أصل ${parsedItems.length}…</div>` : ''}
         </div>
         ${raw(errorsSnippet)}
       `;
@@ -216,7 +244,7 @@ function openImportModal(onSuccess) {
     } catch (err) {
       previewArea.innerHTML = `<div class="alert alert-danger tiny">${esc(err.message || 'فشل فحص الملف')}</div>`;
     }
-  });
+  }
 
   commitBtn.addEventListener('click', async () => {
     if (!parsedItems.length) return;

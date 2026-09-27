@@ -36,6 +36,7 @@ type AnalyzeResult struct {
 	InvoicesCount   int         `json:"invoices_count"`
 	TotalAmount     float64     `json:"total_amount"`
 	Rows            []ParsedRow `json:"rows"`
+	RawRows         [][]string  `json:"raw_rows,omitempty"`
 }
 
 var arabicDigits = strings.NewReplacer(
@@ -50,39 +51,135 @@ func normalizeNumberStr(s string) string {
 	return s
 }
 
-// AnalyzeSpreadsheet parses uploaded XLSX or CSV stream and extracts normalized invoice lines.
-func AnalyzeSpreadsheet(r io.Reader, filename string, defaultTaxRate float64) (*AnalyzeResult, error) {
-	var rawRows [][]string
+func cleanCellText(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "\ufeff")
+	s = strings.ReplaceAll(s, "\u0640", "") // tatweel
+	return strings.ToLower(strings.TrimSpace(s))
+}
 
-	isCsv := strings.HasSuffix(strings.ToLower(filename), ".csv")
+func matchesAny(cell string, synonyms []string) bool {
+	c := cleanCellText(cell)
+	if c == "" {
+		return false
+	}
+	for _, syn := range synonyms {
+		syn = strings.ToLower(strings.TrimSpace(syn))
+		if syn == "" {
+			continue
+		}
+		if c == syn || strings.Contains(c, syn) {
+			return true
+		}
+	}
+	return false
+}
+
+// readSpreadsheetRows reads raw rows from an XLSX, CSV or TSV reader safely.
+func readSpreadsheetRows(r io.Reader, filename string) ([][]string, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("تعذر قراءة بيانات الملف: %w", err)
+	}
+	if len(data) == 0 {
+		return nil, errors.New("الملف فارغ")
+	}
+
+	lowerName := strings.ToLower(filename)
+	isCsv := strings.HasSuffix(lowerName, ".csv") || strings.HasSuffix(lowerName, ".txt") || strings.HasSuffix(lowerName, ".tsv")
+
 	if isCsv {
-		csvReader := csv.NewReader(r)
-		csvReader.FieldsPerRecord = -1
-		var err error
-		rawRows, err = csvReader.ReadAll()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read CSV: %w", err)
+		// Strip UTF-8 BOM if present
+		if bytes.HasPrefix(data, []byte{0xEF, 0xBB, 0xBF}) {
+			data = data[3:]
 		}
-	} else {
-		f, err := excelize.OpenReader(r)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read Excel file: %w", err)
-		}
-		defer f.Close()
 
-		sheets := f.GetSheetList()
-		if len(sheets) == 0 {
-			return nil, errors.New("الملف لا يحتوي على أي صفحات")
+		// Detect delimiter (, or ; or \t)
+		firstLine := string(data)
+		if idx := strings.IndexAny(firstLine, "\r\n"); idx != -1 {
+			firstLine = firstLine[:idx]
 		}
-		var errSheet error
-		rawRows, errSheet = f.GetRows(sheets[0])
-		if errSheet != nil {
-			return nil, fmt.Errorf("failed to read sheet rows: %w", errSheet)
+		delim := ','
+		if strings.Count(firstLine, ";") > strings.Count(firstLine, ",") {
+			delim = ';'
+		} else if strings.Count(firstLine, "\t") > strings.Count(firstLine, ",") {
+			delim = '\t'
+		}
+
+		reader := csv.NewReader(bytes.NewReader(data))
+		reader.Comma = delim
+		reader.FieldsPerRecord = -1
+		reader.LazyQuotes = true
+		rows, err := reader.ReadAll()
+		if err != nil {
+			return nil, fmt.Errorf("خطأ في قراءة ملف CSV: %w", err)
+		}
+		return filterEmptyRows(rows), nil
+	}
+
+	// Excel XLSX
+	f, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		if strings.HasSuffix(lowerName, ".xls") && !strings.HasSuffix(lowerName, ".xlsx") {
+			return nil, errors.New("صيغة .xls القديمة غير مدعومة مباشرة، يرجى حفظ الملف بصيغة Excel الحديثة (.xlsx) أو (.csv)")
+		}
+		return nil, fmt.Errorf("خطأ في قراءة ملف Excel: %w", err)
+	}
+	defer f.Close()
+
+	sheets := f.GetSheetList()
+	if len(sheets) == 0 {
+		return nil, errors.New("الملف لا يحتوي على أي صفحات")
+	}
+
+	// Try active sheet first
+	activeIdx := f.GetActiveSheetIndex()
+	var sheetToUse string
+	if activeIdx >= 0 && activeIdx < len(sheets) {
+		sheetToUse = sheets[activeIdx]
+	} else {
+		sheetToUse = sheets[0]
+	}
+
+	rows, err := f.GetRows(sheetToUse)
+	if err != nil || len(rows) == 0 {
+		for _, s := range sheets {
+			if rList, errR := f.GetRows(s); errR == nil && len(rList) > 0 {
+				rows = rList
+				break
+			}
 		}
 	}
 
-	if len(rawRows) == 0 {
-		return nil, errors.New("الملف فارغ")
+	if len(rows) == 0 {
+		return nil, errors.New("لم يتم العثور على أي بيانات داخل صفحات الملف")
+	}
+
+	return filterEmptyRows(rows), nil
+}
+
+func filterEmptyRows(rows [][]string) [][]string {
+	var filtered [][]string
+	for _, row := range rows {
+		hasData := false
+		for _, cell := range row {
+			if strings.TrimSpace(cell) != "" {
+				hasData = true
+				break
+			}
+		}
+		if hasData {
+			filtered = append(filtered, row)
+		}
+	}
+	return filtered
+}
+
+// AnalyzeSpreadsheet parses uploaded XLSX or CSV stream and extracts normalized invoice lines.
+func AnalyzeSpreadsheet(r io.Reader, filename string, defaultTaxRate float64) (*AnalyzeResult, error) {
+	rawRows, err := readSpreadsheetRows(r, filename)
+	if err != nil {
+		return nil, err
 	}
 
 	// Find headers row
@@ -162,6 +259,7 @@ func AnalyzeSpreadsheet(r io.Reader, filename string, defaultTaxRate float64) (*
 	res := &AnalyzeResult{
 		HeadersRowIndex: headerIdx,
 		Headers:         rawRows[headerIdx],
+		RawRows:         rawRows,
 	}
 
 	lastClient := ""
@@ -365,103 +463,97 @@ type AnalyzeItemsResult struct {
 }
 
 func AnalyzeItemsSpreadsheet(r io.Reader, filename string, defaultTaxRate float64) (*AnalyzeItemsResult, error) {
-	var rawRows [][]string
-	isCsv := strings.HasSuffix(strings.ToLower(filename), ".csv")
-	if isCsv {
-		csvReader := csv.NewReader(r)
-		csvReader.FieldsPerRecord = -1
-		var err error
-		rawRows, err = csvReader.ReadAll()
-		if err != nil {
-			return nil, fmt.Errorf("خطأ في قراءة ملف CSV: %w", err)
-		}
-	} else {
-		f, err := excelize.OpenReader(r)
-		if err != nil {
-			return nil, fmt.Errorf("خطأ في قراءة ملف Excel: %w", err)
-		}
-		defer f.Close()
-		sheets := f.GetSheetList()
-		if len(sheets) == 0 {
-			return nil, errors.New("الملف لا يحتوي على أي صفحات")
-		}
-		var errSheet error
-		rawRows, errSheet = f.GetRows(sheets[0])
-		if errSheet != nil {
-			return nil, fmt.Errorf("تعذر قراءة بيانات الورقة: %w", errSheet)
-		}
+	rawRows, err := readSpreadsheetRows(r, filename)
+	if err != nil {
+		return nil, err
 	}
 
-	if len(rawRows) == 0 {
-		return nil, errors.New("الملف فارغ")
-	}
+	codeSyn := []string{"كود الصنف", "رقم الصنف", "رمز الصنف", "كود", "رمز", "الرمز", "item_code", "item code", "code", "sku", "product_code"}
+	nameEnSyn := []string{"اسم الصنف بالإنجليزي", "اسم الصنف بالانجليزي", "اسم انجليزي", "بالانجليزي", "انجليزي", "name_en", "english_name", "english"}
+	nameArSyn := []string{"اسم الصنف بالعربي", "اسم الصنف", "اسم المنتج", "الصنف", "المنتج", "الاسم", "اسم المادة", "المادة", "البيان", "الوصف", "item_name", "product_name", "name", "description"}
+	catSyn := []string{"المجموعة", "تصنيف", "التصنيف", "القسم", "الفئة", "category", "group"}
+	barSyn := []string{"باركود", "بار كود", "الباركود", "barcode", "upc", "ean"}
+	unitSyn := []string{"الوحدة", "وحدة القياس", "وحدة", "unit", "uom"}
+	costSyn := []string{"سعر التكلفة", "التكلفة", "سعر الشراء", "شراء", "cost_price", "cost", "purchase_price"}
+	saleSyn := []string{"سعر البيع", "سعر", "السعر", "مبيع", "سعر التجزئة", "sale_price", "price", "sale"}
+	taxSyn := []string{"نسبة الضريبة", "ضريبة", "الضريبة", "tax_rate", "tax", "vat"}
+	notesSyn := []string{"ملاحظات", "ملاحظة", "notes", "remark"}
 
-	codeSyn := []string{"كود", "رمز", "رقم الصنف", "كود الصنف", "code", "item_code", "sku"}
-	nameSyn := []string{"اسم الصنف", "الصنف", "البيان", "اسم المنتج", "item", "name", "product", "description"}
-	nameEnSyn := []string{"اسم انجليزي", "بالانجليزي", "name_en", "english"}
-	catSyn := []string{"المجموعة", "التصنيف", "القسم", "category", "group"}
-	barSyn := []string{"باركود", "بار كود", "barcode", "upc", "ean"}
-	unitSyn := []string{"الوحدة", "وحدة القياس", "unit"}
-	costSyn := []string{"سعر التكلفة", "التكلفة", "سعر الشراء", "شراء", "cost", "cost_price"}
-	saleSyn := []string{"سعر البيع", "سعر", "السعر", "مبيع", "price", "sale_price"}
-	taxSyn := []string{"الضريبة", "نسبة الضريبة", "vat", "tax", "tax_rate"}
-	notesSyn := []string{"ملاحظات", "وصف", "notes", "remark"}
-
-	matches := func(cell string, list []string) bool {
-		c := strings.ToLower(strings.TrimSpace(cell))
-		for _, s := range list {
-			if strings.Contains(c, s) {
-				return true
-			}
-		}
-		return false
-	}
-
-	headerIdx := -1
+	bestHeaderIdx := -1
+	bestScore := 0
 	var cCode, cName, cNameEn, cCat, cBar, cUnit, cCost, cSale, cTax, cNotes int = -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
 
-	for rIdx, row := range rawRows {
+	maxScan := len(rawRows)
+	if maxScan > 15 {
+		maxScan = 15
+	}
+
+	for rIdx := 0; rIdx < maxScan; rIdx++ {
+		row := rawRows[rIdx]
+		curCode, curName, curNameEn, curCat, curBar, curUnit, curCost, curSale, curTax, curNotes := -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+		score := 0
+
 		for cIdx, cell := range row {
-			if matches(cell, nameSyn) && cName == -1 {
-				cName = cIdx
+			trimmed := strings.TrimSpace(cell)
+			if trimmed == "" {
+				continue
+			}
+			if curCode == -1 && matchesAny(cell, codeSyn) {
+				curCode = cIdx
+				score += 2
+			} else if curNameEn == -1 && matchesAny(cell, nameEnSyn) {
+				curNameEn = cIdx
+				score += 2
+			} else if curCost == -1 && matchesAny(cell, costSyn) {
+				curCost = cIdx
+				score += 2
+			} else if curSale == -1 && matchesAny(cell, saleSyn) {
+				curSale = cIdx
+				score += 2
+			} else if curCat == -1 && matchesAny(cell, catSyn) {
+				curCat = cIdx
+				score += 2
+			} else if curBar == -1 && matchesAny(cell, barSyn) {
+				curBar = cIdx
+				score += 2
+			} else if curUnit == -1 && matchesAny(cell, unitSyn) {
+				curUnit = cIdx
+				score += 1
+			} else if curTax == -1 && matchesAny(cell, taxSyn) {
+				curTax = cIdx
+				score += 1
+			} else if curNotes == -1 && matchesAny(cell, notesSyn) {
+				curNotes = cIdx
+				score += 1
+			} else if curName == -1 && matchesAny(cell, nameArSyn) {
+				curName = cIdx
+				score += 3
 			}
 		}
-		if cName != -1 {
-			headerIdx = rIdx
-			for cIdx, cell := range row {
-				if cIdx == cName {
-					continue
-				}
-				if matches(cell, nameEnSyn) && cNameEn == -1 {
-					cNameEn = cIdx
-				} else if matches(cell, codeSyn) && cCode == -1 {
-					cCode = cIdx
-				} else if matches(cell, catSyn) && cCat == -1 {
-					cCat = cIdx
-				} else if matches(cell, barSyn) && cBar == -1 {
-					cBar = cIdx
-				} else if matches(cell, unitSyn) && cUnit == -1 {
-					cUnit = cIdx
-				} else if matches(cell, costSyn) && cCost == -1 {
-					cCost = cIdx
-				} else if matches(cell, saleSyn) && cSale == -1 {
-					cSale = cIdx
-				} else if matches(cell, taxSyn) && cTax == -1 {
-					cTax = cIdx
-				} else if matches(cell, notesSyn) && cNotes == -1 {
-					cNotes = cIdx
-				}
-			}
-			break
+
+		if curName != -1 && score > bestScore {
+			bestScore = score
+			bestHeaderIdx = rIdx
+			cCode, cName, cNameEn = curCode, curName, curNameEn
+			cCat, cBar, cUnit = curCat, curBar, curUnit
+			cCost, cSale, cTax, cNotes = curCost, curSale, curTax, curNotes
 		}
 	}
 
-	if headerIdx == -1 {
-		return nil, errors.New("لم يتم العثور على عمود اسم الصنف في رأس الجدول")
+	if bestHeaderIdx == -1 {
+		if len(rawRows) > 0 && len(rawRows[0]) >= 2 {
+			bestHeaderIdx = 0
+			cName = 0
+			if len(rawRows[0]) > 1 {
+				cSale = 1
+			}
+		} else {
+			return nil, errors.New("لم يتم العثور على عمود اسم الصنف في رأس الجدول. يرجى التأكد من وجود عمود (اسم الصنف) أو (الصنف)")
+		}
 	}
 
 	res := &AnalyzeItemsResult{Rows: make([]ParsedItemRow, 0)}
-	for i := headerIdx + 1; i < len(rawRows); i++ {
+	for i := bestHeaderIdx + 1; i < len(rawRows); i++ {
 		row := rawRows[i]
 		getCell := func(col int) string {
 			if col >= 0 && col < len(row) {
@@ -583,106 +675,100 @@ type AnalyzeClientsResult struct {
 }
 
 func AnalyzeClientsSpreadsheet(r io.Reader, filename string) (*AnalyzeClientsResult, error) {
-	var rawRows [][]string
-	isCsv := strings.HasSuffix(strings.ToLower(filename), ".csv")
-	if isCsv {
-		csvReader := csv.NewReader(r)
-		csvReader.FieldsPerRecord = -1
-		var err error
-		rawRows, err = csvReader.ReadAll()
-		if err != nil {
-			return nil, fmt.Errorf("خطأ في قراءة ملف CSV: %w", err)
-		}
-	} else {
-		f, err := excelize.OpenReader(r)
-		if err != nil {
-			return nil, fmt.Errorf("خطأ في قراءة ملف Excel: %w", err)
-		}
-		defer f.Close()
-		sheets := f.GetSheetList()
-		if len(sheets) == 0 {
-			return nil, errors.New("الملف لا يحتوي على أي صفحات")
-		}
-		var errSheet error
-		rawRows, errSheet = f.GetRows(sheets[0])
-		if errSheet != nil {
-			return nil, fmt.Errorf("تعذر قراءة بيانات الورقة: %w", errSheet)
-		}
+	rawRows, err := readSpreadsheetRows(r, filename)
+	if err != nil {
+		return nil, err
 	}
 
-	if len(rawRows) == 0 {
-		return nil, errors.New("الملف فارغ")
-	}
+	codeSyn := []string{"كود العميل", "رمز العميل", "رقم العميل", "كود", "رمز", "معرف العميل", "client_code", "client code", "customer_code", "customer code", "code"}
+	nameEnSyn := []string{"اسم انجليزي", "الاسم بالانجليزي", "بالانجليزي", "انجليزي", "name_en", "english_name", "english", "latin_name"}
+	nameSyn := []string{"اسم العميل", "العميل", "الاسم", "اسم الزبون", "الزبون", "اسم الشركة", "اسم المؤسسة", "اسم المنشأة", "الشركة", "المؤسسة", "المشتري", "اسم المشتري", "client", "customer", "buyer", "client_name", "customer_name", "name"}
+	phoneSyn := []string{"رقم الجوال", "جوال", "هاتف", "رقم الهاتف", "تلفون", "موبايل", "رقم التواصل", "تواصل", "phone", "mobile", "tel", "cell"}
+	emailSyn := []string{"البريد الإلكتروني", "البريد الالكتروني", "بريد", "ايميل", "الإيميل", "الايميل", "email", "mail", "e-mail"}
+	taxSyn := []string{"الرقم الضريبي", "الرقم الضريبي للعميل", "ضريبي", "رقم ضريبي", "الضريبة", "tax_number", "tax number", "vat", "vat_number", "vat_no", "trn"}
+	crSyn := []string{"السجل التجاري", "رقم السجل التجاري", "سجل تجاري", "سجل", "رقم السجل", "cr", "commercial_register", "cr_number"}
+	citySyn := []string{"المدينة", "مدينة", "city"}
+	streetSyn := []string{"العنوان", "الشارع", "الحي", "street", "address", "district", "location"}
+	balSyn := []string{"الرصيد الافتتاحي", "رصيد افتتاحي", "الرصيد", "رصيد", "افتتاحي", "opening_balance", "opening balance", "balance"}
+	notesSyn := []string{"ملاحظات", "ملاحظة", "وصف", "بيان", "notes", "remark", "description"}
 
-	codeSyn := []string{"كود", "رمز", "كود العميل", "رقم العميل", "code", "client_code"}
-	nameSyn := []string{"اسم العميل", "العميل", "الزبون", "client", "name", "customer"}
-	nameEnSyn := []string{"انجليزي", "بالانجليزي", "name_en", "english"}
-	phoneSyn := []string{"جوال", "هاتف", "تلفون", "موبايل", "phone", "mobile"}
-	emailSyn := []string{"بريد", "ايميل", "email"}
-	taxSyn := []string{"الرقم الضريبي", "ضريبي", "tax_number", "vat"}
-	crSyn := []string{"السجل التجاري", "سجل", "cr", "commercial_register"}
-	citySyn := []string{"المدينة", "city"}
-	streetSyn := []string{"الشارع", "العنوان", "الحي", "street", "address"}
-	balSyn := []string{"الرصيد الافتتاحي", "رصيد", "opening_balance", "balance"}
-	notesSyn := []string{"ملاحظات", "notes"}
-
-	matches := func(cell string, list []string) bool {
-		c := strings.ToLower(strings.TrimSpace(cell))
-		for _, s := range list {
-			if strings.Contains(c, s) {
-				return true
-			}
-		}
-		return false
-	}
-
-	headerIdx := -1
+	bestHeaderIdx := -1
+	bestScore := 0
 	var cCode, cName, cNameEn, cPhone, cEmail, cTax, cCR, cCity, cStreet, cBal, cNotes int = -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
 
-	for rIdx, row := range rawRows {
+	maxScan := len(rawRows)
+	if maxScan > 15 {
+		maxScan = 15
+	}
+
+	for rIdx := 0; rIdx < maxScan; rIdx++ {
+		row := rawRows[rIdx]
+		curCode, curName, curNameEn, curPhone, curEmail, curTax, curCR, curCity, curStreet, curBal, curNotes := -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+		score := 0
+
 		for cIdx, cell := range row {
-			if matches(cell, nameSyn) && cName == -1 {
-				cName = cIdx
+			trimmed := strings.TrimSpace(cell)
+			if trimmed == "" {
+				continue
+			}
+			if curCode == -1 && matchesAny(cell, codeSyn) {
+				curCode = cIdx
+				score += 2
+			} else if curNameEn == -1 && matchesAny(cell, nameEnSyn) {
+				curNameEn = cIdx
+				score += 2
+			} else if curPhone == -1 && matchesAny(cell, phoneSyn) {
+				curPhone = cIdx
+				score += 2
+			} else if curEmail == -1 && matchesAny(cell, emailSyn) {
+				curEmail = cIdx
+				score += 2
+			} else if curTax == -1 && matchesAny(cell, taxSyn) {
+				curTax = cIdx
+				score += 2
+			} else if curCR == -1 && matchesAny(cell, crSyn) {
+				curCR = cIdx
+				score += 2
+			} else if curCity == -1 && matchesAny(cell, citySyn) {
+				curCity = cIdx
+				score += 1
+			} else if curStreet == -1 && matchesAny(cell, streetSyn) {
+				curStreet = cIdx
+				score += 1
+			} else if curBal == -1 && matchesAny(cell, balSyn) {
+				curBal = cIdx
+				score += 2
+			} else if curNotes == -1 && matchesAny(cell, notesSyn) {
+				curNotes = cIdx
+				score += 1
+			} else if curName == -1 && matchesAny(cell, nameSyn) {
+				curName = cIdx
+				score += 3
 			}
 		}
-		if cName != -1 {
-			headerIdx = rIdx
-			for cIdx, cell := range row {
-				if cIdx == cName {
-					continue
-				}
-				if matches(cell, nameEnSyn) && cNameEn == -1 {
-					cNameEn = cIdx
-				} else if matches(cell, codeSyn) && cCode == -1 {
-					cCode = cIdx
-				} else if matches(cell, phoneSyn) && cPhone == -1 {
-					cPhone = cIdx
-				} else if matches(cell, emailSyn) && cEmail == -1 {
-					cEmail = cIdx
-				} else if matches(cell, taxSyn) && cTax == -1 {
-					cTax = cIdx
-				} else if matches(cell, crSyn) && cCR == -1 {
-					cCR = cIdx
-				} else if matches(cell, citySyn) && cCity == -1 {
-					cCity = cIdx
-				} else if matches(cell, streetSyn) && cStreet == -1 {
-					cStreet = cIdx
-				} else if matches(cell, balSyn) && cBal == -1 {
-					cBal = cIdx
-				} else if matches(cell, notesSyn) && cNotes == -1 {
-					cNotes = cIdx
-				}
-			}
-			break
+
+		if curName != -1 && score > bestScore {
+			bestScore = score
+			bestHeaderIdx = rIdx
+			cCode, cName, cNameEn, cPhone, cEmail = curCode, curName, curNameEn, curPhone, curEmail
+			cTax, cCR, cCity, cStreet, cBal, cNotes = curTax, curCR, curCity, curStreet, curBal, curNotes
 		}
 	}
 
-	if headerIdx == -1 {
-		return nil, errors.New("لم يتم العثور على عمود اسم العميل في رأس الجدول")
+	if bestHeaderIdx == -1 {
+		if len(rawRows) > 0 && len(rawRows[0]) >= 1 {
+			bestHeaderIdx = 0
+			cName = 0
+			if len(rawRows[0]) > 1 {
+				cPhone = 1
+			}
+		} else {
+			return nil, errors.New("لم يتم العثور على عمود اسم العميل في رأس الجدول. يرجى التأكد من وجود عمود (اسم العميل) أو (الاسم)")
+		}
 	}
 
 	res := &AnalyzeClientsResult{Rows: make([]ParsedClientRow, 0)}
-	for i := headerIdx + 1; i < len(rawRows); i++ {
+	for i := bestHeaderIdx + 1; i < len(rawRows); i++ {
 		row := rawRows[i]
 		getCell := func(col int) string {
 			if col >= 0 && col < len(row) {

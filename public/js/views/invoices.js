@@ -380,7 +380,10 @@ export async function render(view, ctx) {
       const fileInput = m.el.querySelector('#import-file');
       const previewBox = m.el.querySelector('#import-preview-box');
       const commitBtn = m.el.querySelector('#btn-commit-import');
-      dropzone.addEventListener('click', () => fileInput.click());
+      dropzone.addEventListener('click', () => {
+        fileInput.value = '';
+        fileInput.click();
+      });
       dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
       dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
       dropzone.addEventListener('drop', (e) => {
@@ -418,7 +421,7 @@ export async function render(view, ctx) {
             return;
           }
 
-          if (!rawTable || rawTable.length < 2) {
+          if ((!rawTable || rawTable.length < 2) && (!smartRows || smartRows.length === 0)) {
             previewBox.innerHTML = '<div class="alert alert-danger">الملف فارغ أو لا يحتوي على أسطر بيانات كافية</div>';
             return;
           }
