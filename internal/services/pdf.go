@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -60,6 +61,24 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 	inPath := filepath.Join(tmpDir, fmt.Sprintf("raseen_%d.html", time.Now().UnixNano()))
 	outPath := filepath.Join(tmpDir, fmt.Sprintf("raseen_%d.pdf", time.Now().UnixNano()))
 
+	// التأكد من وجود ترميز utf-8 وحقن الخط العربي Cairo والخطوط البديلة لضمان عدم ظهور المربعات في بيئة الخادم (Linux/Docker)
+	fontInjection := `<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
+body, table, th, td, div, span, p, strong, b, h1, h2, h3, h4, h5, h6 {
+  font-family: 'Cairo', 'Noto Sans Arabic', 'Amiri', 'KacstOne', 'DejaVu Sans', 'Segoe UI', Tahoma, Arial, sans-serif !important;
+}
+</style>`
+
+	if strings.Contains(htmlContent, "<head>") {
+		htmlContent = strings.Replace(htmlContent, "<head>", "<head>\n"+fontInjection, 1)
+	} else if strings.Contains(htmlContent, "<HEAD>") {
+		htmlContent = strings.Replace(htmlContent, "<HEAD>", "<HEAD>\n"+fontInjection, 1)
+	} else {
+		htmlContent = fontInjection + "\n" + htmlContent
+	}
+
 	if err := os.WriteFile(inPath, []byte(htmlContent), 0644); err != nil {
 		return nil, fmt.Errorf("تعذر إنشاء ملف مؤقت للطباعة: %w", err)
 	}
@@ -75,12 +94,14 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 		"--no-pdf-header-footer",
 		"--disable-extensions",
 		"--disable-sync",
+		"--allow-file-access-from-files",
+		"--disable-web-security",
 		"--run-all-compositor-stages-before-draw",
 		fmt.Sprintf("--print-to-pdf=%s", outPath),
 		inPath,
 	}
 	if runtime.GOOS != "windows" {
-		args = append(args, "--no-sandbox")
+		args = append(args, "--no-sandbox", "--disable-dev-shm-usage")
 	}
 
 	cmd := exec.CommandContext(ctx, browser, args...)

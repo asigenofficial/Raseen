@@ -189,7 +189,7 @@ export const INVOICE_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة
    - رقم الفاتورة: {{invoice_number}}
    - تاريخ الإصدار: {{issue_date}}
    - وقت الإصدار: {{issue_time}}
-   - طريقة الدفع: {{payment_method}}
+   - نوع الفاتورة: {{payment_method}}
    - إجمالي عدد القطع: {{total_qty}}
    - ⚠️ تنبيه صارم: يُمنع نهائياً وضع "تاريخ الاستحقاق" أو "كود العميل" في القالب.
 
@@ -233,7 +233,7 @@ export const INVOICE_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة
      * الصندوق الأيمن (بيانات الفاتورة):
        - رقم الفاتورة: {{invoice_number}}
        - تاريخ الإصدار: {{issue_date}}
-       - نوع الفاتورة / طريقة الدفع: {{payment_method}}
+       - نوع الفاتورة: {{payment_method}}
      * الصندوق الأيسر (بيانات العميل):
        - العميل: {{buyer_name}}
        - الرقم الضريبي: {{buyer_tax}}

@@ -48,7 +48,7 @@
 | `{{invoice_number}}` | رقم الفاتورة التسلسلي | INV-2026-0001 |
 | `{{issue_date}}` | تاريخ الإصدار (YYYY-MM-DD) | 2026-09-26 |
 | `{{issue_time}}` | وقت الإصدار (HH:MM:SS) | 13:45:00 |
-| `{{payment_method}}` | طريقة الدفع | نقداً / آجل / تحويل بنكي / مدى |
+| `{{payment_method}}` | نوع الفاتورة (نقداً / آجلة / إلخ) | نقداً / آجلة / تحويل بنكي / شبكة |
 | `{{qr_code}}` | رمز الاستجابة السريع المعتمد من هيئة الزكاة والضريبة والجمارك (ZATCA QR) كصورة `<img>` Base64 جاهزة | `<img src="data:image/png;base64,..." alt="QR" />` |
 | `{{notes}}` | ملاحظات الفاتورة أو البيان | توريد مواد بناء حسب الاتفاقية |
 
@@ -284,7 +284,7 @@
    - رقم الفاتورة: {{invoice_number}}
    - تاريخ الإصدار: {{issue_date}}
    - وقت الإصدار: {{issue_time}}
-   - طريقة الدفع: {{payment_method}}
+   - نوع الفاتورة: {{payment_method}}
    - إجمالي عدد القطع: {{total_qty}}
    - ⚠️ تنبيه صارم: يُمنع نهائياً وضع "تاريخ الاستحقاق" أو "كود العميل" في القالب.
 
@@ -328,7 +328,7 @@
      * الصندوق الأيمن (بيانات الفاتورة):
        - رقم الفاتورة: {{invoice_number}}
        - تاريخ الإصدار: {{issue_date}}
-       - نوع الفاتورة / طريقة الدفع: {{payment_method}}
+       - نوع الفاتورة: {{payment_method}}
      * الصندوق الأيسر (بيانات العميل):
        - العميل: {{buyer_name}}
        - الرقم الضريبي: {{buyer_tax}}
@@ -411,7 +411,7 @@
       <!-- بيانات المورد والعميل -->
       <div><strong>المورد:</strong> {{seller_name}} | <strong>الرقم الضريبي:</strong> {{seller_tax}}</div>
       <div><strong>العميل:</strong> {{buyer_name}} | <strong>الرقم الضريبي:</strong> {{buyer_tax}}</div>
-      <div><strong>التاريخ:</strong> {{issue_date}} {{issue_time}} | <strong>طريقة الدفع:</strong> {{payment_method}}</div>
+      <div><strong>التاريخ:</strong> {{issue_date}} {{issue_time}} | <strong>نوع الفاتورة:</strong> {{payment_method}}</div>
     </div>
 
     <table class="items-table">

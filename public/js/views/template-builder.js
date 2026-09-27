@@ -30,7 +30,7 @@ const SYSTEM_TAGS = [
   { label: 'الخصم', tag: '{{discount}}' },
   { label: 'مبلغ الضريبة 15%', tag: '{{tax_amount}}' },
   { label: 'المبلغ الإجمالي', tag: '{{grand_total}}' },
-  { label: 'طريقة الدفع', tag: '{{payment_method}}' },
+  { label: 'نوع الفاتورة', tag: '{{payment_method}}' },
   { label: 'ملاحظات / شروط', tag: '{{notes}}' },
   { label: 'رمز التحقق QR', tag: '{{qr_code}}' },
   { label: 'رمز الريال السعودي', tag: '{{currency_symbol}}' },

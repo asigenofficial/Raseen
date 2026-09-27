@@ -12,11 +12,16 @@ RUN go build -ldflags="-w -s" -o raseen .
 # ─── مرحلة التشغيل ────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
 
-# تثبيت Chromium لتوليد PDF
+# تثبيت Chromium والخطوط العربية (Kacst, Amiri, Noto) وأدوات الخطوط لمنع ظهور النصوص كمربعات في الـ PDF
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-liberation \
-    fonts-noto-cjk \
+    fonts-kacst \
+    fonts-amiri \
+    fonts-noto-core \
+    fonts-dejavu-core \
+    fonts-freefont-ttf \
+    fontconfig \
     libglib2.0-0 \
     libnss3 \
     libatk1.0-0 \
@@ -31,6 +36,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgbm1 \
     libasound2 \
     ca-certificates \
+    curl \
+    && fc-cache -f -v \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

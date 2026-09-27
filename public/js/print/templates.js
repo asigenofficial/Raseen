@@ -714,7 +714,7 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
           <tr><td>رقم الفاتورة</td><td class="ltr"><b>${esc(invoice.invoice_number)}</b></td></tr>
           <tr><td>تاريخ الإصدار</td><td>${esc(dateAr(invoice.issue_date))}</td></tr>
           <tr><td>وقت الإصدار</td><td class="ltr">${esc(invoice.issue_time)}</td></tr>
-          <tr><td>طريقة الدفع</td><td>${esc(invoice.payment_label || invoice.payment_method || 'نقداً')}</td></tr>
+          <tr><td>نوع الفاتورة (السداد)</td><td>${esc(invoice.payment_label || ({ CREDIT: 'آجلة', CASH: 'نقداً', CARD: 'شبكة', TRANSFER: 'تحويل بنكي', CHEQUE: 'شيك' }[(invoice.payment_method || '').toUpperCase()]) || invoice.payment_method || 'نقداً')}</td></tr>
           <tr><td>نوع الفاتورة</td><td>${invoice.invoice_type === 'SIMPLIFIED' ? 'فاتورة ضريبية مبسطة' : 'فاتورة ضريبية معتمدة'}</td></tr>
           <tr><td>الحالة</td><td>${esc(invoice.status_label || invoice.status)}</td></tr>
           <tr><td>العملة الأساسية</td><td class="ltr"><b style="display:inline-flex;align-items:center;vertical-align:middle;">${curSym}</b> (${esc(invoice.currency || 'SAR')})</td></tr>

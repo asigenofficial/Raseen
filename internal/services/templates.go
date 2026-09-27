@@ -855,6 +855,25 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 
 	amountInWords := tafqeetArabic(inv.GrandTotalMajor)
 
+	paymentMethodAr := "نقداً"
+	if inv.PaymentMethod != "" {
+		pm := strings.ToUpper(strings.TrimSpace(inv.PaymentMethod))
+		switch pm {
+		case "CREDIT":
+			paymentMethodAr = "آجلة"
+		case "CASH":
+			paymentMethodAr = "نقداً"
+		case "CARD", "POS", "MADA":
+			paymentMethodAr = "شبكة"
+		case "TRANSFER", "BANK":
+			paymentMethodAr = "تحويل بنكي"
+		case "CHEQUE", "CHECK":
+			paymentMethodAr = "شيك"
+		default:
+			paymentMethodAr = inv.PaymentMethod
+		}
+	}
+
 	// تنظيف ذاتي: إذا قام الذكاء الاصطناعي أو المستخدم بتغليف وسم الشعار أو الباركود داخل <img src="{{logo}}">
 	cleanImgLogoRegex := regexp.MustCompile(`(?i)<img\b[^>]*src=["']\{\{\s*(logo|seller_logo|company_logo|شعار|الشعار)\s*\}\}["'][^>]*>`)
 	tpl = cleanImgLogoRegex.ReplaceAllString(tpl, "{{logo}}")
@@ -873,7 +892,16 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 			return ""
 		}(),
 		"{{issue_time}}", inv.IssueTime,
-		"{{payment_method}}", inv.PaymentMethod,
+		"{{payment_method}}", paymentMethodAr,
+		"{{payment_method_label}}", paymentMethodAr,
+		"{{payment_label}}", paymentMethodAr,
+		"{{payment_type}}", paymentMethodAr,
+		"{{invoice_type}}", func() string {
+			if inv.InvoiceType == "SIMPLIFIED" {
+				return "فاتورة ضريبية مبسطة"
+			}
+			return "فاتورة ضريبية"
+		}(),
 		"{{notes}}", inv.Notes,
 
 		// ─── المنشأة / المورد (الشعار وبيانات البائع) ───
@@ -1449,7 +1477,7 @@ func defaultInvoiceHTMLTemplate() string {
     <div><strong>فاتورة ضريبية</strong></div>
     <div>رقم الفاتورة: <strong>{{invoice_number}}</strong></div>
     <div>تاريخ الإصدار: <strong>{{issue_date}}</strong></div>
-    <div>طريقة الدفع: <strong>{{payment_method}}</strong></div>
+    <div>نوع الفاتورة: <strong>{{payment_method}}</strong></div>
   </div>
 </div>
 

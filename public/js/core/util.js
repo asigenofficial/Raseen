@@ -986,7 +986,24 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       return (p.includes('card') || p.includes('pos') || p.includes('شبكة') || p.includes('مدى')) ? '✓' : '';
     }
     if (k === 'payment_method' || k === 'payment_type' || k === 'payment_label' || k === 'payment_mode') {
-      return voucher?.payment_label || voucher?.payment_type || invoice?.payment_label || invoice?.payment_method || '';
+      const rawVal = voucher?.payment_label || voucher?.payment_type || invoice?.payment_label || invoice?.payment_method || '';
+      const upper = String(rawVal).trim().toUpperCase();
+      const payMap = {
+        'CREDIT': 'آجلة',
+        'CASH': 'نقداً',
+        'CARD': 'شبكة',
+        'POS': 'شبكة',
+        'MADA': 'شبكة',
+        'TRANSFER': 'تحويل بنكي',
+        'BANK': 'تحويل بنكي',
+        'CHEQUE': 'شيك',
+        'CHECK': 'شيك'
+      };
+      return payMap[upper] || rawVal || 'نقداً';
+    }
+    if (k === 'invoice_type') {
+      const it = (invoice?.invoice_type || '').toUpperCase();
+      return it === 'SIMPLIFIED' ? 'فاتورة ضريبية مبسطة' : 'فاتورة ضريبية';
     }
     if (k === 'notes' || k === 'paid_for' || k === 'description' || k === 'memo' || k === 'statement') {
       return doc.notes || '';
