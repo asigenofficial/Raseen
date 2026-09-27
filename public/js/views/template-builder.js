@@ -22,7 +22,6 @@ const SYSTEM_TAGS = [
   { label: 'هاتف المنشأة', tag: '{{seller_phone}}' },
   { label: 'رقم الفاتورة', tag: '{{invoice_number}}' },
   { label: 'تاريخ الإصدار', tag: '{{issue_date}}' },
-  { label: 'تاريخ الاستحقاق', tag: '{{due_date}}' },
   { label: 'اسم العميل', tag: '{{buyer_name}}' },
   { label: 'الرقم الضريبي للعميل', tag: '{{buyer_tax}}' },
   { label: 'سجل العميل', tag: '{{buyer_cr}}' },

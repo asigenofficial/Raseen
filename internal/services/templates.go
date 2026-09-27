@@ -1342,7 +1342,6 @@ func defaultInvoiceHTMLTemplate() string {
     <div><strong>فاتورة ضريبية</strong></div>
     <div>رقم الفاتورة: <strong>{{invoice_number}}</strong></div>
     <div>تاريخ الإصدار: <strong>{{issue_date}}</strong></div>
-    <div>تاريخ الاستحقاق: <strong>{{due_date}}</strong></div>
     <div>طريقة الدفع: <strong>{{payment_method}}</strong></div>
   </div>
 </div>
