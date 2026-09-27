@@ -297,7 +297,7 @@
    - المبلغ المتبقي: {{remaining_amount}}
    - تفقيط المبلغ كتابة بالريال السعودي: {{amount_in_words}}
    - رمز العملة أو أيقونة الريال السعودي الفيكتور: {{sar_symbol}} أو {{currency}}
-   - ترتيب كل مبلغ في القالب: الرقم أولاً ثم رمز الريال إلى يمينه بصرياً. مثال HTML: `<span class="money"><bdi>{{grand_total}}</bdi><span>{{sar_symbol}}</span></span>`، ومعه CSS: `.money { display: inline-flex; direction: ltr; align-items: center; gap: 3px; white-space: nowrap; }`. استبدل وسم المبلغ حسب السطر؛ لا تستخدم `flex-direction: row-reverse` ولا تضع الرمز قبل الرقم في صفحات RTL.
+   - ترتيب كل مبلغ في القالب: رمز الريال السعودي دائماً على يسار الرقم بصرياً (مثل ﷼ 169.64). مثال HTML: `<span class="money"><span>{{sar_symbol}}</span><bdi>{{grand_total}}</bdi></span>`، ومعه CSS: `.money { display: inline-flex; direction: ltr; align-items: center; gap: 3px; white-space: nowrap; }`. استبدل وسم المبلغ حسب السطر؛ لا تضع الرمز على يمين الرقم إطلاقاً.
 
 ═══════════════════════════════════════════════════════════════
 الهيكل المعماري المعتمد للفاتورة (Corporate Invoice Layout Blueprint):
@@ -349,11 +349,11 @@
 5. القسم السفلي المالي والتحقق (Dual Bottom Summary Section):
    - صندوقان متجاوران أسفل جدول الأصناف مباشرة:
      * الصندوق الأيمن (جدول الإجماليات المالي):
-       - شبكة أسطر منظمة تعرض الرقم أولاً ثم {{sar_symbol}} إلى يمينه بصرياً:
-         - الإجمالي (قبل الضريبة): {{subtotal}} ثم {{sar_symbol}}
-         - الخصم: {{discount}} ثم {{sar_symbol}}
-         - الضريبة (15%): {{tax_amount}} ثم {{sar_symbol}}
-         - الصافي / الإجمالي النهائي: {{grand_total}} ثم {{sar_symbol}} بخط عريض بارز
+       - شبكة أسطر منظمة: الرمز {{sar_symbol}} دائماً على يسار الرقم في كل سطر:
+         - الإجمالي (قبل الضريبة): <span class="money"><span>{{sar_symbol}}</span><bdi>{{subtotal}}</bdi></span>
+         - الخصم: <span class="money"><span>{{sar_symbol}}</span><bdi>{{discount}}</bdi></span>
+         - الضريبة (15%): <span class="money"><span>{{sar_symbol}}</span><bdi>{{tax_amount}}</bdi></span>
+         - الصافي / الإجمالي النهائي: <span class="money"><span>{{sar_symbol}}</span><bdi>{{grand_total}}</bdi></span> بخط عريض بارز
      * الصندوق الأيسر (رمز التحقق والملاحظات):
        - مربع رمز الاستجابة السريع النقي: <div class="qr-box">{{qr_code}}</div> بمقاس قياسي ثابت لا يقل عن 125px × 125px (أو 33mm × 33mm) في CSS (.qr-box { width: 125px; height: 125px; min-width: 125px; min-height: 125px; flex-shrink: 0; background: #ffffff; padding: 4px; box-sizing: border-box; }) مع .qr-box svg, .qr-box img { width: 100% !important; height: 100% !important; display: block; } بدون أي نصوص أو كتابات أو شارات أسفله إطلاقاً لضمان القراءة الفورية لكافة تطبيقات فحص ZATCA وكاميرات الجوال.
        - صندوق الملاحظات والشروط: {{notes}} بجانبه مع كلمة "ملاحظات"، مع إعطاء مساحة حرة للملاحظات دون أن تضغط على أبعاد الباركود أو تقلص حجمه إطلاقاً.
