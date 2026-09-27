@@ -97,27 +97,28 @@ function openClientImportModal(onSuccess) {
     title: 'استيراد العملاء من ملف Excel / CSV',
     body: html`
       <div class="stack">
-        <div class="row items-center justify-between" style="margin-bottom:.4rem;">
-          <p class="tiny muted" style="margin:0;flex:1;">
-            يمكنك استيراد قاعدة العملاء دفعة واحدة. يقوم النظام تلقائياً بالتعرف على الأعمدة وتحديث العملاء الحاليين وإضافة الجدد.
-          </p>
-          <a class="btn btn-sm btn-outline" href="/api/clients/template" download="clients-import-template.xlsx" style="gap:.35rem;flex-shrink:0;">
-            ${icon.download({ size: 14 })}
-            <span>تحميل نموذج Excel فارغ</span>
-          </a>
-        </div>
-
-        <div class="dropzone" id="client-import-dropzone" style="margin-top:.4rem;">
-          <div class="dropzone-icon">
-            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--brand);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
+        <div class="dropzone" id="client-import-dropzone" style="margin-top:.4rem;padding:2rem 1.2rem;cursor:pointer;">
+          <div class="dropzone-icon" style="margin-bottom:.6rem;">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--brand);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
           </div>
-          <div style="font-weight:700;font-size:1rem;margin-bottom:.3rem;color:var(--text);">
-            انقر هنا لاختيار ملف Excel أو CSV، أو اسحبه وأفلته هنا
+          <button type="button" class="btn btn-primary" id="btn-browse-client-file" style="margin-bottom:.8rem;font-size:1rem;padding:.65rem 1.4rem;pointer-events:none;">
+            ${icon.upload({ size: 18 })}
+            <span>فتح واختيار ملف Excel أو CSV من جهازك</span>
+          </button>
+          <div style="font-size:.9rem;color:var(--muted);margin-bottom:.3rem;">
+            أو اسحب ملف الإكسل وأفلته مباشرة هنا
           </div>
-          <div class="tiny muted" id="client-selected-file">
+          <div class="tiny dim" id="client-selected-file">
             الصيغ المدعومة: .xlsx (Excel حديث), .csv
           </div>
           <input type="file" id="client-import-file" accept=".xlsx,.xls,.csv" style="display:none;" />
+        </div>
+
+        <div class="row items-center justify-between" style="padding:.2rem .4rem;margin-top:.2rem;">
+          <span class="tiny muted">يقوم النظام تلقائياً بالتعرف على الأعمدة وتحديث العملاء الحاليين وإضافة الجدد</span>
+          <a class="tiny muted" href="/api/clients/template" download="clients-import-template.xlsx" style="text-decoration:underline;">
+            ${icon.download({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px;' })}تنزيل نموذج Excel تجريبي فارغ
+          </a>
         </div>
 
         <div id="client-import-preview" style="display:none"></div>

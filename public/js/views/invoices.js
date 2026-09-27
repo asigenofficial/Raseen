@@ -352,21 +352,26 @@ export async function render(view, ctx) {
         title: 'استيراد الفواتير من ملف Excel / CSV',
         body: html`
           <div class="stack">
-            <div class="row" style="align-items:center;justify-content:space-between;background:#f8fafc;padding:.7rem .9rem;border-radius:var(--radius-sm);border:1px solid var(--line);gap:.6rem;flex-wrap:wrap">
+            <div class="row" style="align-items:center;justify-content:space-between;background:rgba(255,255,255,0.03);padding:.7rem .9rem;border-radius:var(--radius-sm);border:1px solid var(--line);gap:.6rem;flex-wrap:wrap">
               <div>
                 <b>الشركة المصدرة:</b> <span class="mono">${esc(activeIssuer.name_ar)}</span>
               </div>
               <div class="flex" style="gap:.4rem;align-items:center;flex-wrap:wrap">
-                <a class="btn btn-sm btn-primary" id="btn-dl-template" href="/api/invoices/template?purpose=import&format=xlsx" download="invoice-import.xlsx">تنزيل نموذج الاستيراد</a>
+                <a class="btn btn-sm btn-outline" id="btn-dl-template" href="/api/invoices/template?purpose=import&format=xlsx" download="invoice-import.xlsx">تنزيل نموذج Excel فارغ</a>
               </div>
             </div>
 
-            <p class="hint">1. نزّل النموذج وأدخل بياناتك وكود العميل المسجل. 2. ارفع الملف وراجع الإجماليات. 3. اعتمد الاستيراد. استخدم رقم المجموعة نفسه لبنود الفاتورة الواحدة.</p><div class="dropzone" id="import-dropzone">
-              <div class="dropzone-icon">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--brand);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
+            <p class="hint">1. جهّز ملف Excel بفواتيرك. 2. افتح الملف وراجع المعاينة والإجماليات. 3. اضغط اعتماد الاستيراد.</p>
+            <div class="dropzone" id="import-dropzone" style="cursor:pointer;padding:2rem 1.2rem;">
+              <div class="dropzone-icon" style="margin-bottom:.6rem;">
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--brand);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
               </div>
-              <div style="font-weight:600;margin-bottom:.2rem">اسحب وأفلت ملف Excel هنا، أو انقر للاختيار</div>
-              <div class="tiny muted">الصيغ المدعومة: .xlsx (Excel الأصلي المعتمد), .xls, .csv</div>
+              <button type="button" class="btn btn-primary" style="margin-bottom:.8rem;font-size:1rem;padding:.65rem 1.4rem;pointer-events:none;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>فتح واختيار ملف Excel للفواتير</span>
+              </button>
+              <div style="font-size:.9rem;color:var(--muted);margin-bottom:.3rem">اسحب وأفلت ملف Excel هنا، أو انقر للاختيار</div>
+              <div class="tiny dim">الصيغ المدعومة: .xlsx (Excel الأصلي المعتمد), .csv</div>
               <input type="file" id="import-file" accept=".xlsx,.xls,.csv,.tsv,.xml" style="display:none" />
             </div>
 
