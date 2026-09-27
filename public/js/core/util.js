@@ -641,8 +641,11 @@ function generateSmartRowsJS(htmlSnippet, rawLines) {
           return `<td class="c" style="padding:6px 8px;text-align:center;">${idx + 1}</td>`;
         case 'code':
           return `<td class="c" style="padding:6px 8px;text-align:center;font-family:Tahoma,sans-serif;">${esc(itemCode)}</td>`;
-        case 'name':
-          return `<td class="r" style="padding:6px 8px;font-weight:600;text-align:right;">${esc(itemName)}</td>`;
+        case 'name': {
+          const hasCodeCol = cols.includes('code');
+          const codeSub = (!hasCodeCol && itemCode && itemCode !== '—') ? `<div style="font-size:0.75rem;color:#6b7280;font-family:Tahoma,sans-serif;direction:ltr;text-align:right;">${esc(itemCode)}</div>` : '';
+          return `<td class="r" style="padding:6px 8px;font-weight:600;text-align:right;">${esc(itemName)}${codeSub}</td>`;
+        }
         case 'unit':
           return `<td class="c" style="padding:6px 8px;text-align:center;">${esc(unit)}</td>`;
         case 'price':

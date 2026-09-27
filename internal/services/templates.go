@@ -885,7 +885,7 @@ func detectColumnType(th string) colType {
 	if strings.Contains(clean, "شامل") || strings.Contains(clean, "مع الضريبة") || strings.Contains(clean, "صافي") || strings.Contains(clean, "with vat") || strings.Contains(clean, "total with") || strings.Contains(clean, "gross") {
 		return colTotal
 	}
-	if strings.Contains(clean, "كود") || strings.Contains(clean, "رمز") || strings.Contains(clean, "item code") || strings.Contains(clean, "sku") || strings.Contains(clean, "barcode") || strings.Contains(clean, "item no") {
+	if strings.Contains(clean, "رقم الصنف") || strings.Contains(clean, "رقم البند") || strings.Contains(clean, "كود") || strings.Contains(clean, "رمز") || strings.Contains(clean, "item code") || strings.Contains(clean, "item_code") || strings.Contains(clean, "sku") || strings.Contains(clean, "barcode") || strings.Contains(clean, "item no") || strings.Contains(clean, "item_no") || strings.Contains(clean, "part no") {
 		return colCode
 	}
 	if clean == "#" || clean == "م" || clean == "ت" || clean == "م." || strings.Contains(clean, "تسلسل") || clean == "no" || clean == "no." || clean == "sr" || clean == "sn" {
@@ -1038,10 +1038,14 @@ func ensureItemsRowsInTbody(tpl string) string {
 func generateSmartRows(tpl string, inv *InvoiceView) string {
 	headers := extractTableHeaders(tpl)
 	var cols []colType
+	hasCodeCol := false
 	if len(headers) > 0 {
 		cols = make([]colType, len(headers))
 		for i, h := range headers {
 			cols[i] = detectColumnType(h)
+			if cols[i] == colCode {
+				hasCodeCol = true
+			}
 		}
 	} else {
 		cols = []colType{colIndex, colName, colQty, colUnit, colPrice, colTaxable, colDiscount, colTaxAmount, colTaxRate, colTotal}
@@ -1065,7 +1069,11 @@ func generateSmartRows(tpl string, inv *InvoiceView) string {
 				}
 				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%s</td>`, html.EscapeString(code)))
 			case colName:
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;font-weight:600;text-align:right;">%s</td>`, html.EscapeString(item.ItemName)))
+				nameHtml := html.EscapeString(item.ItemName)
+				if !hasCodeCol && item.ItemCode != "" {
+					nameHtml += fmt.Sprintf(`<div style="font-size:0.75rem;color:#6b7280;font-family:Tahoma,sans-serif;direction:ltr;text-align:right;">%s</div>`, html.EscapeString(item.ItemCode))
+				}
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;font-weight:600;text-align:right;">%s</td>`, nameHtml))
 			case colUnit:
 				u := item.Unit
 				if u == "" {
@@ -1118,7 +1126,11 @@ func generateItemsTable(inv *InvoiceView) string {
 		}
 		sb.WriteString(fmt.Sprintf(`<tr style="background:%s;">`, bg))
 		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">%d</td>`, i+1))
-		sb.WriteString(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">` + item.ItemName + `</td>`)
+		nameHtml := html.EscapeString(item.ItemName)
+		if item.ItemCode != "" {
+			nameHtml += fmt.Sprintf(`<div style="font-size:10px;color:#64748b;direction:ltr;text-align:right;">%s</div>`, html.EscapeString(item.ItemCode))
+		}
+		sb.WriteString(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">` + nameHtml + `</td>`)
 		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;text-align:center;">%.2f</td>`, item.Quantity))
 		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">%.2f</td>`, item.UnitPriceMajor))
 		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">%.2f</td>`, item.TaxAmountMajor))
