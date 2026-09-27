@@ -104,10 +104,10 @@ export const INVOICE_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة
 ═══════════════════════════════════════════════════════════════
 قاعدة منع الباركود الخطي والاعتماد الحصري على رمز QR المربع النظيف (STRICT QR-ONLY & NO LINEAR BARCODE RULE):
 ═══════════════════════════════════════════════════════════════
-0. مقاس رمز الاستجابة السريع (QR Code) الإلزامي:
-   - يجب أن يكون مقاس حاوية رمز الـ QR لا يقل عن 125px × 125px (أو 33mm × 33mm) نهائياً مع padding: 4px وخلفية بيضاء، لضمان قراءة سريعة وموثوقة بنسبة 100% لكافة تطبيقات الهيئة (ZATCA) وكاميرات الجوال عند مسح باركود المرحلة الثانية الكثيف.
-   .qr-box { width: 125px; height: 125px; background: #ffffff; padding: 4px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
-   .qr-box svg, .qr-box img { width: 100% !important; height: 100% !important; display: block; }
+0. مقاس رمز الاستجابة السريع (QR Code) الإلزامي وتعميم الأبعاد:
+   - يجب أن يكون مقاس حاوية رمز الـ QR ثابتاً لا يقل عن 125px × 125px (أو 33mm × 33mm) نهائياً مع منع الانكماش (flex-shrink: 0; min-width: 125px; min-height: 125px;) وخلفية بيضاء صريحة #ffffff مع حشوة padding: 4px، لضمان قراءة سريعة وموثوقة بنسبة 100% لكافة تطبيقات الهيئة (ZATCA) وكاميرات الجوال عند مسح باركود المرحلة الثانية الكثيف.
+   .qr-box { width: 125px; height: 125px; min-width: 125px; min-height: 125px; flex-shrink: 0; background: #ffffff; padding: 4px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; overflow: hidden; }
+   .qr-box svg, .qr-box img { width: 100% !important; height: 100% !important; display: block; object-fit: contain; }
 
 1. منع قاطع للباركود الخطي (NO Linear Barcodes):
    يُمنع منعاً باتاً ومطلقاً وضع أي باركود خطي (Barcode / Code128 / Code39) أو خطوط زخرفية أو أشرطة متقطعة تشبه الباركود الخطي في أي مكان في الفاتورة أو التذييل! الفواتير الضريبية تعتمد حصراً على رمز الاستجابة السريع (QR Code) فقط لا غير.
@@ -125,7 +125,7 @@ export const INVOICE_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة
 
 4. يتم التحكم بأبعاد وتنسيق الصور داخلياً عبر CSS الحاوية فقط:
    .logo-shell img { max-width: 100%; max-height: 80px; object-fit: contain; }
-   .qr-box { width: 125px; height: 125px; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; display: flex; align-items: center; justify-content: center; background: #fff; overflow: hidden; margin: 0 auto; padding: 4px; box-sizing: border-box; }
+   .qr-box { width: 125px; height: 125px; min-width: 125px; min-height: 125px; flex-shrink: 0; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; display: flex; align-items: center; justify-content: center; background: #ffffff; overflow: hidden; margin: 0 auto; padding: 4px; box-sizing: border-box; }
    .qr-box img, .qr-box svg { width: 100% !important; height: 100% !important; object-fit: contain; display: block; }
 
 ═══════════════════════════════════════════════════════════════
@@ -258,8 +258,8 @@ export const INVOICE_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة
          - مبلغ الضريبة: {{tax_amount}} ثم {{sar_symbol}}
          - الصافي / الإجمالي النهائي: {{grand_total}} ثم {{sar_symbol}} بخط عريض بارز
      * الصندوق الأيسر (رمز التحقق والملاحظات):
-       - مربع رمز الاستجابة السريع النقي: <div class="qr-box">{{qr_code}}</div> فقط كمربع مستقل وأنيق بدون أي نصوص أو كتابات أو شارات أسفله إطلاقاً.
-       - صندوق الملاحظات والشروط: {{notes}} بجانبه مع كلمة "ملاحظات".
+       - مربع رمز الاستجابة السريع النقي: <div class="qr-box">{{qr_code}}</div> بمقاس قياسي ثابت لا يقل عن 125px × 125px (أو 33mm × 33mm) في CSS (.qr-box { width: 125px; height: 125px; min-width: 125px; min-height: 125px; flex-shrink: 0; background: #ffffff; padding: 4px; box-sizing: border-box; }) مع .qr-box svg, .qr-box img { width: 100% !important; height: 100% !important; display: block; } بدون أي نصوص أو كتابات أو شارات أسفله إطلاقاً لضمان القراءة الفورية لكافة تطبيقات فحص ZATCA وكاميرات الجوال.
+       - صندوق الملاحظات والشروط: {{notes}} بجانبه مع كلمة "ملاحظات"، مع إعطاء مساحة حرة للملاحظات دون أن تضغط على أبعاد الباركود أو تقلص حجمه إطلاقاً.
 
 المخرج المطلوب:
 كود HTML كامل ونظيف واحترافي يبدأ مباشرة بـ <!DOCTYPE html> وينتهي بـ </html> دون أي شروحات نصية خارجية ليكون جاهزاً للنسخ والاستخدام الفوري.`;
