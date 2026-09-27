@@ -23,8 +23,25 @@ function docShell({ title, pageCss, body, autoPrint = true }) {
 </style></head><body>${body.html}${autoPrint ? '' : ''}</body></html>`;
 }
 
-const addressLine = (o) => [o.building_no, o.street, o.district, o.city, o.postal_code, o.country]
-  .filter(Boolean).join(' - ');
+const addressLine = (o) => {
+  if (!o) return '';
+  const parts = [];
+  if (o.city && String(o.city).trim()) parts.push(String(o.city).trim());
+  if (o.district && String(o.district).trim()) {
+    const d = String(o.district).trim();
+    parts.push(d.startsWith('حي') ? d : `حي ${d}`);
+  }
+  if (o.street && String(o.street).trim()) {
+    const s = String(o.street).trim();
+    parts.push(s.startsWith('شارع') || s.startsWith('طريق') ? s : `شارع ${s}`);
+  }
+  if (o.building_no && String(o.building_no).trim()) {
+    const b = String(o.building_no).trim();
+    parts.push(b.startsWith('مبنى') || b.startsWith('رقم') ? b : `مبنى ${b}`);
+  }
+  if (o.postal_code && String(o.postal_code).trim()) parts.push(String(o.postal_code).trim());
+  return parts.join(' - ');
+};
 
 export function formatIban(iban) {
   if (!iban) return '';

@@ -627,12 +627,82 @@ func GenerateQRSVG(payload string) string {
 	return sb.String()
 }
 
+// formatNationalAddress يُنسق العنوان الوطني بالترتيب المعتمد: المدينة - الحي - الشارع - رقم المبنى - الرمز البريدي
+func formatNationalAddress(city, district, street, buildingNo, postalCode string) string {
+	parts := []string{}
+	if c := strings.TrimSpace(city); c != "" {
+		parts = append(parts, c)
+	}
+	if d := strings.TrimSpace(district); d != "" {
+		if !strings.HasPrefix(d, "حي") {
+			parts = append(parts, "حي "+d)
+		} else {
+			parts = append(parts, d)
+		}
+	}
+	if s := strings.TrimSpace(street); s != "" {
+		if !strings.HasPrefix(s, "شارع") && !strings.HasPrefix(s, "طريق") {
+			parts = append(parts, "شارع "+s)
+		} else {
+			parts = append(parts, s)
+		}
+	}
+	if b := strings.TrimSpace(buildingNo); b != "" {
+		if !strings.HasPrefix(b, "مبنى") && !strings.HasPrefix(b, "رقم") {
+			parts = append(parts, "مبنى "+b)
+		} else {
+			parts = append(parts, b)
+		}
+	}
+	if p := strings.TrimSpace(postalCode); p != "" {
+		parts = append(parts, p)
+	}
+	return strings.Join(parts, " - ")
+}
+
+// formatNationalAddressEn formats the national address in English: City - District - Street - Building No - Postal Code
+func formatNationalAddressEn(cityEn, districtEn, streetEn, buildingNo, postalCode string) string {
+	parts := []string{}
+	if c := strings.TrimSpace(cityEn); c != "" {
+		parts = append(parts, c)
+	}
+	if d := strings.TrimSpace(districtEn); d != "" {
+		low := strings.ToLower(d)
+		if !strings.Contains(low, "district") && !strings.Contains(low, "dist") {
+			parts = append(parts, d+" Dist.")
+		} else {
+			parts = append(parts, d)
+		}
+	}
+	if s := strings.TrimSpace(streetEn); s != "" {
+		low := strings.ToLower(s)
+		if !strings.Contains(low, "st") && !strings.Contains(low, "street") && !strings.Contains(low, "rd") {
+			parts = append(parts, s+" St.")
+		} else {
+			parts = append(parts, s)
+		}
+	}
+	if b := strings.TrimSpace(buildingNo); b != "" {
+		low := strings.ToLower(b)
+		if !strings.HasPrefix(low, "bldg") {
+			parts = append(parts, "Bldg. "+b)
+		} else {
+			parts = append(parts, b)
+		}
+	}
+	if p := strings.TrimSpace(postalCode); p != "" {
+		parts = append(parts, p)
+	}
+	return strings.Join(parts, " - ")
+}
+
 // ─── Tag Substitution Engine ──────────────────────────────────────────────────
 
 func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 	buyerName := inv.BuyerName
 	buyerTax := inv.BuyerTaxNumber
 	buyerAddress := inv.BuyerAddress
+	buyerPhone, buyerCode, buyerCity, buyerStreet, buyerDistrict, buyerPostalCode, buyerBuildingNo := "", "", "", "", "", "", ""
 	if inv.ClientSnapshot != nil {
 		if buyerName == "" {
 			buyerName = inv.ClientSnapshot.Name
@@ -640,16 +710,6 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		if buyerTax == "" {
 			buyerTax = inv.ClientSnapshot.TaxNumber
 		}
-		if buyerAddress == "" {
-			buyerAddress = inv.ClientSnapshot.Address
-			if buyerAddress == "" {
-				buyerAddress = inv.ClientSnapshot.City
-			}
-		}
-	}
-
-	buyerPhone, buyerCode, buyerCity, buyerStreet, buyerDistrict, buyerPostalCode, buyerBuildingNo := "", "", "", "", "", "", ""
-	if inv.ClientSnapshot != nil {
 		buyerCode = inv.ClientSnapshot.ClientCode
 		buyerCity = inv.ClientSnapshot.City
 		buyerStreet = inv.ClientSnapshot.Street
@@ -659,6 +719,15 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		buyerPhone = inv.ClientSnapshot.Phone
 		if buyerPhone == "" {
 			buyerPhone = inv.ClientSnapshot.Mobile
+		}
+		formattedBuyer := formatNationalAddress(buyerCity, buyerDistrict, buyerStreet, buyerBuildingNo, buyerPostalCode)
+		if formattedBuyer != "" {
+			buyerAddress = formattedBuyer
+		} else if buyerAddress == "" {
+			buyerAddress = inv.ClientSnapshot.Address
+			if buyerAddress == "" {
+				buyerAddress = inv.ClientSnapshot.City
+			}
 		}
 	}
 	if buyerCode == "" {
@@ -672,16 +741,23 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		sellerName = inv.IssuerSnapshot.NameAr
 		sellerNameEn = inv.IssuerSnapshot.NameEn
 		sellerTax = inv.IssuerSnapshot.TaxNumber
-		sellerAddress = inv.IssuerSnapshot.Street + " " + inv.IssuerSnapshot.City
-		sellerAddressEn = inv.IssuerSnapshot.AddressEn
-		if sellerAddressEn == "" {
-			sellerAddressEn = inv.IssuerSnapshot.StreetEn + " " + inv.IssuerSnapshot.CityEn
-		}
-		sellerCR = inv.IssuerSnapshot.CommercialRegister
 		sellerCity = inv.IssuerSnapshot.City
 		sellerCountry = inv.IssuerSnapshot.Country
+		sellerCR = inv.IssuerSnapshot.CommercialRegister
 		sellerPhone = inv.IssuerSnapshot.Phone
 		sellerEmail = inv.IssuerSnapshot.Email
+
+		sellerAddress = formatNationalAddress(inv.IssuerSnapshot.City, inv.IssuerSnapshot.District, inv.IssuerSnapshot.Street, inv.IssuerSnapshot.BuildingNo, inv.IssuerSnapshot.PostalCode)
+		if sellerAddress == "" {
+			sellerAddress = strings.TrimSpace(inv.IssuerSnapshot.Street + " " + inv.IssuerSnapshot.City)
+		}
+		sellerAddressEn = formatNationalAddressEn(inv.IssuerSnapshot.CityEn, inv.IssuerSnapshot.DistrictEn, inv.IssuerSnapshot.StreetEn, inv.IssuerSnapshot.BuildingNo, inv.IssuerSnapshot.PostalCode)
+		if sellerAddressEn == "" {
+			sellerAddressEn = inv.IssuerSnapshot.AddressEn
+			if sellerAddressEn == "" {
+				sellerAddressEn = strings.TrimSpace(inv.IssuerSnapshot.StreetEn + " " + inv.IssuerSnapshot.CityEn)
+			}
+		}
 		if inv.IssuerSnapshot.LogoData != nil && *inv.IssuerSnapshot.LogoData != "" {
 			sellerLogoHtml = fmt.Sprintf(`<img src="%s" alt="Logo" style="max-height:75px;max-width:140px;object-fit:contain;" />`, *inv.IssuerSnapshot.LogoData)
 		}

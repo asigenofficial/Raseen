@@ -802,10 +802,29 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
   rawHtml = ensureItemsRowsInTbodyJS(rawHtml);
 
   const doc = voucher || invoice || {};
-  const addr = [issuer.building_no, issuer.street, issuer.district, issuer.city].filter(Boolean).join(' - ')
-    || issuer.address || issuer.city || '';
-  const clientAddr = [client.building_no, client.street, client.district, client.city].filter(Boolean).join(' - ')
-    || client.address || client.city || '';
+  const formatAddrObj = (o = {}) => {
+    if (!o) return '';
+    const parts = [];
+    if (o.city && o.city.trim()) parts.push(o.city.trim());
+    if (o.district && o.district.trim()) {
+      const d = o.district.trim();
+      parts.push(d.startsWith('حي') ? d : `حي ${d}`);
+    }
+    if (o.street && o.street.trim()) {
+      const s = o.street.trim();
+      parts.push(s.startsWith('شارع') || s.startsWith('طريق') ? s : `شارع ${s}`);
+    }
+    if (o.building_no && String(o.building_no).trim()) {
+      const b = String(o.building_no).trim();
+      parts.push(b.startsWith('مبنى') || b.startsWith('رقم') ? b : `مبنى ${b}`);
+    }
+    if (o.postal_code && String(o.postal_code).trim()) {
+      parts.push(String(o.postal_code).trim());
+    }
+    return parts.join(' - ');
+  };
+  const addr = formatAddrObj(issuer) || issuer.address || issuer.city || '';
+  const clientAddr = formatAddrObj(client) || client.address || client.city || '';
 
   const docTotal = Number(voucher?.total_amount ?? invoice?.grand_total ?? 0);
   const docDate = voucher?.voucher_date || invoice?.issue_date || new Date().toISOString().slice(0, 10);

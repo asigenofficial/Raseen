@@ -214,8 +214,21 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 	invUUID := crypto.UUID()
 
 	// Build UBL and ZATCA fields
-	sellerAddr := strings.TrimSpace(strings.Join([]string{issuer.BuildingNo, issuer.Street, issuer.District, issuer.City, issuer.PostalCode, issuer.Country}, " - "))
-	buyerAddr := strings.TrimSpace(strings.Join([]string{client.BuildingNo, client.Street, client.District, client.City, client.PostalCode, client.Country}, " - "))
+	sellerParts := []string{}
+	for _, p := range []string{issuer.City, issuer.District, issuer.Street, issuer.BuildingNo, issuer.PostalCode, issuer.Country} {
+		if strings.TrimSpace(p) != "" {
+			sellerParts = append(sellerParts, strings.TrimSpace(p))
+		}
+	}
+	sellerAddr := strings.Join(sellerParts, " - ")
+
+	buyerParts := []string{}
+	for _, p := range []string{client.City, client.District, client.Street, client.BuildingNo, client.PostalCode, client.Country} {
+		if strings.TrimSpace(p) != "" {
+			buyerParts = append(buyerParts, strings.TrimSpace(p))
+		}
+	}
+	buyerAddr := strings.Join(buyerParts, " - ")
 	if buyerAddr == "" {
 		buyerAddr = client.Address
 	}
@@ -1157,8 +1170,21 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		return nil, err
 	}
 
-	sellerAddr := strings.TrimSpace(strings.Join([]string{issuer.BuildingNo, issuer.Street, issuer.District, issuer.City, issuer.PostalCode, issuer.Country}, " - "))
-	buyerAddr := strings.TrimSpace(strings.Join([]string{client.BuildingNo, client.Street, client.District, client.City, client.PostalCode, client.Country}, " - "))
+	sellerPartsUpdate := []string{}
+	for _, p := range []string{issuer.City, issuer.District, issuer.Street, issuer.BuildingNo, issuer.PostalCode, issuer.Country} {
+		if strings.TrimSpace(p) != "" {
+			sellerPartsUpdate = append(sellerPartsUpdate, strings.TrimSpace(p))
+		}
+	}
+	sellerAddr := strings.Join(sellerPartsUpdate, " - ")
+
+	buyerPartsUpdate := []string{}
+	for _, p := range []string{client.City, client.District, client.Street, client.BuildingNo, client.PostalCode, client.Country} {
+		if strings.TrimSpace(p) != "" {
+			buyerPartsUpdate = append(buyerPartsUpdate, strings.TrimSpace(p))
+		}
+	}
+	buyerAddr := strings.Join(buyerPartsUpdate, " - ")
 	if buyerAddr == "" {
 		buyerAddr = client.Address
 	}
