@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-liberation \
     fonts-kacst \
-    fonts-amiri \
+    fonts-hosny-amiri \
     fonts-noto-core \
     fonts-dejavu-core \
     fonts-freefont-ttf \
