@@ -1034,10 +1034,13 @@ func computeInvoiceLines(lines []CreateInvoiceLineInput, pricesIncludeTax bool, 
 			unit = "حبة"
 		}
 
+		// sanitize item_id: تجاهل أي قيمة فارغة أو تحتوي مسافات فقط
 		var itemID *string
-		if l.ItemID != nil && strings.TrimSpace(*l.ItemID) != "" {
+		if l.ItemID != nil {
 			t := strings.TrimSpace(*l.ItemID)
-			itemID = &t
+			if t != "" {
+				itemID = &t
+			}
 		}
 
 		cl := computedInvoiceLine{
