@@ -348,10 +348,10 @@ export async function render(view, ctx) {
 
       ${raw(invoice.status === 'CANCELLED' ? '<div class="alert alert-danger">هذه الفاتورة ملغاة — تم عكس قيدها في كشف حساب العميل، ورقمها وبصمتها محفوظان في السلسلة.</div>' : '')}
 
-      <div class="grid" style="grid-template-columns:minmax(0,2.4fr) minmax(280px,1fr);align-items:start;gap:1.2rem">
+      <div class="inv-view-grid">
         <div>
           <!-- شريط أدوات الفاتورة والقالب -->
-          <div class="card" style="padding:.65rem .85rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem;border-color:var(--line-strong)">
+          <div class="card inv-view-toolbar" style="padding:.65rem .85rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem;border-color:var(--line-strong)">
             <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
               <div class="tab-pill-group" style="display:flex;gap:3px;background:var(--bg);padding:3px;border-radius:8px;border:1px solid var(--line)">
                 <button type="button" class="btn btn-sm ${activeViewMode === 'template' ? 'btn-primary' : 'btn-ghost'}" id="tab-btn-template" style="padding:.35rem .75rem;border-radius:6px;font-size:.82rem">
@@ -389,7 +389,7 @@ export async function render(view, ctx) {
 
           <!-- شاشة عرض الفاتورة بالقالب الرسمي المعتمد -->
           <div id="pane-template-preview" style="display:${activeViewMode === 'template' ? 'block' : 'none'}">
-            <div class="tpl-paper-wrapper" id="inv-paper-wrapper" style="border-radius:10px;border:1px solid var(--line-strong);min-height:850px;max-height:1050px">
+            <div class="tpl-paper-wrapper inv-view-paper" id="inv-paper-wrapper" style="border-radius:10px;border:1px solid var(--line-strong)">
               <div class="tpl-paper-frame" id="inv-paper-frame" style="transform: scale(${zoomLevel / 100})">
                 <iframe id="inv-iframe" class="tpl-iframe" title="معاينة الفاتورة بالقالب"></iframe>
               </div>
@@ -449,13 +449,13 @@ export async function render(view, ctx) {
             <h3>بيانات الفاتورة الإلكترونية</h3>
             <dl class="kv">
               <dt>التسلسل (ICV)</dt><dd class="mono">${invoice.sequence_no}</dd>
-              <dt>بصمة الفاتورة (Hash)</dt><dd class="mono tiny" style="word-break:break-all">${invoice.invoice_hash}</dd>
-              <dt>بصمة الفاتورة السابقة (PIH)</dt><dd class="mono tiny" style="word-break:break-all">${invoice.previous_invoice_hash}</dd>
+              <dt>بصمة الفاتورة (Hash)</dt><dd class="mono tiny" style="word-break:break-all;overflow-wrap:anywhere;display:block;max-width:100%">${invoice.invoice_hash}</dd>
+              <dt>بصمة الفاتورة السابقة (PIH)</dt><dd class="mono tiny" style="word-break:break-all;overflow-wrap:anywhere;display:block;max-width:100%">${invoice.previous_invoice_hash}</dd>
               <dt>وضع التوقيع</dt><dd>
                 ${raw(invoice.signature_mode === 'PRODUCTION' ? '<span class="badge green">شهادة إنتاج</span>'
           : invoice.signature_mode === 'LOCAL' ? '<span class="badge amber">توقيع محلي (بدون شهادة معتمدة)</span>'
             : '<span class="badge gray">المرحلة الأولى — بدون توقيع</span>')}</dd>
-              <dt>حمولة QR (Base64)</dt><dd class="mono tiny" style="word-break:break-all">${invoice.qr_payload}</dd>
+              <dt>حمولة QR (Base64)</dt><dd class="mono tiny" style="word-break:break-all;overflow-wrap:anywhere;display:block;max-width:100%;max-height:80px;overflow-y:auto;background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:6px;border:1px solid var(--line);line-height:1.4">${invoice.qr_payload}</dd>
             </dl>
             <div class="flex mt">
               <button class="btn btn-sm" id="copy-hash" type="button">${raw(icon.copy({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}نسخ البصمة</button>
@@ -605,9 +605,9 @@ export async function render(view, ctx) {
     function fitZoom() {
       const wrapper = $('#inv-paper-wrapper', view);
       if (wrapper && wrapper.clientWidth > 100) {
-        const availableW = wrapper.clientWidth - 28;
+        const availableW = wrapper.clientWidth - 20;
         const targetW = 794;
-        const calculatedScale = Math.min(1.15, Math.max(0.45, Math.round((availableW / targetW) * 94) / 100));
+        const calculatedScale = Math.min(1.15, Math.max(0.28, Math.round((availableW / targetW) * 95) / 100));
         zoomLevel = Math.round(calculatedScale * 100);
         const zText = $('#inv-zoom-text', view);
         if (zText) zText.textContent = `${zoomLevel}%`;
@@ -653,10 +653,12 @@ export async function render(view, ctx) {
       const m = modal({
         title: `معاينة الفاتورة: ${invoice.invoice_number}`,
         wide: true,
-        body: html`<iframe style="width:100%;height:82vh;border:none;background:#fff;border-radius:4px" srcdoc="${esc(docHtml)}"></iframe>`,
+        body: '<iframe id="fs-inv-frame" style="width:100%;height:82vh;border:none;background:#fff;border-radius:4px"></iframe>',
         footer: `<button class="btn btn-primary" id="fs-print-inv" type="button">${raw(icon.printer({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}طباعة الفاتورة</button>
                  <button class="btn" data-close type="button">إلغاء</button>`,
       });
+      const ifr = $('#fs-inv-frame', m.el);
+      if (ifr) ifr.srcdoc = docHtml;
       $('#fs-print-inv', m.el).addEventListener('click', () => printDoc(docHtml));
     });
 

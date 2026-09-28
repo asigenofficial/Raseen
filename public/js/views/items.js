@@ -125,7 +125,7 @@ function openImportModal(onSuccess) {
             أو اسحب ملف الإكسل وأفلته مباشرة هنا
           </div>
           <div class="tiny dim" id="selected-file-name">
-            الصيغ المدعومة: .xlsx (Excel حديث), .csv
+            الصيغ المدعومة: ملفات Excel (.xlsx, .xls) أو .csv
           </div>
           <input type="file" id="import-file-input" accept=".xlsx,.xls,.csv" style="display:none;" />
         </div>

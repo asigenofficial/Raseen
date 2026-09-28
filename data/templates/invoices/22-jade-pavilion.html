@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>فاتورة ضريبية</title><style>
+:root{--primary:#164d47;--accent:#ad965c;--tint:#edf5f1}
+
+@page{size:A4 portrait;margin:0}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+html,body{margin:0;padding:0}body{font:11px/1.65 'Segoe UI',Tahoma,sans-serif;text-align:right;color:#27343e;background:#e9edf0}
+.invoice-container{width:210mm;min-height:297mm;padding:12mm;overflow:visible;display:flex;flex-direction:column;justify-content:space-between;position:relative;isolation:isolate;background:#fff;margin:0 auto;--border:#cbd2d9}
+.invoice-container:before{content:'';position:absolute;inset:5mm;border:1px solid var(--primary);pointer-events:none;z-index:-1}
+.top-content-wrap,.bottom-content-wrap{flex-shrink:0}.bottom-content-wrap{margin-top:auto;padding-top:7mm;position:relative}
+.corner-art{position:absolute;width:70mm;height:40mm;z-index:-1;pointer-events:none}.upper{right:5mm;top:5mm;transform:scaleX(-1)}.lower{bottom:-7mm;left:-7mm;transform:scaleY(-1)}
+.watermark{position:absolute;top:108mm;left:55mm;width:100mm;height:100mm;opacity:.025;color:var(--primary);z-index:-1;pointer-events:none}
+.masthead{display:grid;grid-template-columns:minmax(0,1fr) 134px minmax(0,1fr);gap:15px;align-items:start;padding-bottom:14px;break-inside:avoid;page-break-inside:avoid}
+.seller h2{margin:0 0 7px;font-size:19px;line-height:1.45;color:var(--primary)}.seller p{margin:4px 0;overflow-wrap:anywhere}.seller-en{direction:ltr;text-align:left;font-size:10px}.seller-en h2{font-size:16px}
+.identity{text-align:center}.logo-shell{height:68px;max-width:115px;margin:0 auto 10px;display:flex;align-items:center;justify-content:center;color:var(--primary)}.logo-shell img,.logo-shell svg{max-width:100%;max-height:64px;object-fit:contain}
+.identity h1{font-size:19px;margin:0;line-height:1.5;color:var(--primary)}.identity h1 small{display:block;font:9px/1.8 Arial,sans-serif;letter-spacing:1.8px;margin-top:3px}
+.contact-strip{display:flex;justify-content:space-between;flex-wrap:wrap;gap:5px 10px;margin:10px 0 17px;padding:6px 10px;border:1px solid var(--border);border-radius:18px;font-size:10px}.contact-strip span{display:inline-flex;align-items:center;gap:3px;overflow-wrap:anywhere}
+.icon{width:13px;height:13px;flex-shrink:0;vertical-align:-2px;margin-inline-end:3px}.metadata{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}.meta-panel{border:1px solid var(--border);border-radius:4px;min-width:0;break-inside:avoid;page-break-inside:avoid;background:#fff}
+.panel-heading{display:flex;align-items:center;gap:4px;padding:7px 11px;margin:0;font-size:11px;color:var(--primary);background:var(--tint);clip-path:polygon(0 0,97% 0,100% 100%,0 100%)}
+dl{margin:0;padding:10px 12px}.field{display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;align-items:baseline}.field:last-child{margin:0}.field dt{font-size:10px;color:#56636c;flex-shrink:0}.field dd{margin:0;font-weight:600;min-width:0;overflow-wrap:anywhere}.field.full{display:block}.field.full dd{margin-top:3px;font-weight:400}
+bdi{font-family:Tahoma,Arial,sans-serif;font-variant-numeric:tabular-nums}.field.full bdi{font-family:inherit}
+.items-main-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px;line-height:1.55}.items-main-table thead{display:table-header-group}.items-main-table th,.items-main-table td{border:1px solid var(--border);padding:8px 3px;vertical-align:top;overflow-wrap:anywhere;text-align:center}.items-main-table th{background:var(--tint);color:var(--primary);font-weight:700;vertical-align:middle}.items-main-table td{font-family:Tahoma,Arial,sans-serif;font-variant-numeric:tabular-nums;direction:ltr}.items-main-table td:nth-child(3){direction:rtl;text-align:right;font-family:'Segoe UI',Tahoma,sans-serif}.items-main-table tr{break-inside:avoid;page-break-inside:avoid}.items-main-table tbody tr:nth-child(even){background:#fbfcfd}
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;break-inside:avoid;page-break-inside:avoid}.totals-panel,.verification-panel{border:1px solid var(--border);border-radius:4px;background:white;min-width:0;padding:12px}
+.totals-panel h2,.notes h2{display:flex;align-items:center;margin:0 0 10px;font-size:11px;color:var(--primary)}.total-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:10px;padding:5px 3px;border-bottom:1px solid #e6e9ec}.total-row>span:first-child{max-width:66%}.total-emphasis{margin:7px -3px;padding:10px 6px;font-weight:750;font-size:11px}.money{display:inline-flex;direction:ltr;align-items:center;gap:3px;white-space:nowrap;font:11px Tahoma,Arial,sans-serif;font-variant-numeric:tabular-nums}.money>span{display:inline-flex}.money img,.money svg{width:12px;height:12px;object-fit:contain}.total-emphasis .money{font-size:15px;font-weight:700}.words{margin:10px 0 0;font-size:10px;overflow-wrap:anywhere}
+.verification-panel{display:flex;align-items:flex-start;gap:12px}.notes{flex:1;min-width:0;overflow-wrap:anywhere}.notes-content{font-size:10px;line-height:1.85;white-space:pre-wrap}
+.qr-box{width:125px;height:125px;min-width:125px;min-height:125px;flex-shrink:0;background:#ffffff;padding:4px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;border:1px solid var(--border,#cbd5e1);border-radius:4px;overflow:hidden;margin:0 auto}.qr-box svg,.qr-box img{width:100%!important;height:100%!important;display:block;object-fit:contain}
+.footer{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--border);padding-top:8px;margin-top:12px;color:#53616a;font-size:9px}.footer p{margin:0;overflow-wrap:anywhere}
+@media screen{body{padding:20px 0}.invoice-container{box-shadow:0 12px 40px #14233720}}
+@media print{body{background:white}.invoice-container{margin:0;box-shadow:none;box-decoration-break:clone;-webkit-box-decoration-break:clone}.items-main-table,.top-content-wrap{break-inside:auto;page-break-inside:auto}.bottom-content-wrap{break-inside:avoid;page-break-inside:avoid}}
+
+
+ .masthead{border-bottom:4px double var(--accent)}.identity{background:var(--tint);padding:12px 7px;border-radius:35px 35px 3px 3px}.panel-heading{background:var(--primary);color:#fff;clip-path:polygon(4% 0,100% 0,100% 100%,0 100%)}.meta-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}.meta-fields .field{display:block;border-bottom:1px solid #d3e1da;padding:3px 0}.meta-fields .field:first-child{grid-column:1/-1}.meta-fields dd{margin-top:4px}.total-emphasis{background:var(--primary);color:#fff;border-left:5px solid var(--accent)}.totals-panel{border-top:4px solid var(--primary)}.verification-panel{border-top:4px solid var(--accent)}.invoice-container:before{border-color:var(--primary);border-right-width:3px}
+ 
+
+/* Integrated decorative SVG; invoice data remains in the foreground. */
+.luxury-art{position:absolute;width:92mm;height:57mm;pointer-events:none;z-index:-1}
+.luxury-top{top:5.2mm;right:5.2mm}
+.luxury-bottom{bottom:-6.8mm;left:-6.8mm;transform:rotate(180deg)}
+.luxury-watermark{position:absolute;top:107mm;left:48mm;width:114mm;height:114mm;color:var(--primary);opacity:.026;pointer-events:none;z-index:-1}
+.top-content-wrap{position:static}
+.bottom-content-wrap{position:relative}
+.items-main-table tbody td{background-color:#ffffff}
+.items-main-table tbody tr:nth-child(even) td{background-color:#fafbfc}
+.qr-box{background:#ffffff!important}
+
+</style></head><body>
+<div class="invoice-container">
+ <div class="top-content-wrap">
+<svg class="luxury-art luxury-top" viewBox="0 0 420 260" aria-hidden="true" focusable="false">
+ <defs>
+  <linearGradient id="lux-21-t-tone" x1="1" y1="0" x2="0" y2="1"><stop stop-color="#164d47"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+  <linearGradient id="lux-21-t-metal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ad965c"/><stop offset=".5" stop-color="#eee0be"/><stop offset="1" stop-color="#ad965c"/></linearGradient>
+ </defs>
+ <path d="M420 0H30C96 10 192 26 245 77s83 105 175 140Z" fill="url(#lux-21-t-tone)" opacity=".15"/>
+   <path d="M420 0H145C207 20 254 47 288 86s70 77 132 87Z" fill="url(#lux-21-t-metal)" opacity=".24"/>
+   <path d="M420 0H274c50 21 54 64 146 104Z" fill="url(#lux-21-t-tone)" opacity=".18"/>
+   <path d="M68 3C173 13 235 71 283 116s77 74 133 98M167 2c96 35 102 71 159 113s64 41 90 45" fill="none" stroke="url(#lux-21-t-metal)" stroke-width="1.1" opacity=".43"/>
+ </svg><svg class="luxury-watermark" viewBox="0 0 320 320" fill="none" stroke="currentColor" stroke-width="1.1" aria-hidden="true" focusable="false">
+ <g transform="rotate(22.5 160 160)">
+ <path d="m160 13 43 43 61 0 0 61 43 43-43 43 0 61-61 0-43 43-43-43-61 0 0-61-43-43 43-43 0-61 61 0Z"/>
+ <path d="m160 36 124 124-124 124L36 160Z M72 72h176v176H72Z"/>
+ <path transform="rotate(0 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(45 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(90 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(135 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(180 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(225 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(270 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(315 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><circle cx="160" cy="160" r="42"/><path d="m160 125 35 35-35 35-35-35Z"/>
+ </g></svg>
+ 
+ 
+ <header class="masthead">
+  <div class="seller"><h2>{{seller_name}}</h2><p><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0 M12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4"/></svg>{{seller_address}}</p><p><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z M9 15l6-6 M9 9h.1 M15 15h.1"/></svg>الرقم الضريبي: <bdi>{{seller_tax}}</bdi></p><p><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v16H4Z M8 5V3h8v2 M8 10h8 M8 14h8 M8 18h4"/></svg>السجل التجاري: <bdi>{{seller_cr}}</bdi></p></div>
+  <div class="identity"><div class="logo-shell">{{logo}}</div><h1>فاتورة ضريبية<small lang="en" dir="ltr">TAX INVOICE</small></h1></div>
+  <div class="seller seller-en" lang="en" dir="ltr"><h2>{{seller_name_en}}</h2><p>{{seller_address_en}}</p><p><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z M9 15l6-6 M9 9h.1 M15 15h.1"/></svg>VAT: <bdi>{{seller_tax}}</bdi></p><p><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v16H4Z M8 5V3h8v2 M8 10h8 M8 14h8 M8 18h4"/></svg>CR: <bdi>{{seller_cr}}</bdi></p></div>
+ </header>
+ <div class="contact-strip"><span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0 M12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4"/></svg>{{seller_city}} - {{seller_country}}</span><span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3l4 1 1 5-3 2a15 15 0 0 0 6 6l2-3 5 1 1 4c-1 3-6 2-10-1S2 8 3 5Z"/></svg><bdi>{{seller_phone}}</bdi></span><span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18v14H3Z M3 6l9 7 9-7"/></svg><bdi>{{seller_email}}</bdi></span></div>
+ <section class="metadata" aria-label="بيانات الفاتورة والعميل">
+  <section class="meta-panel"><h2 class="panel-heading"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h10l4 4v14H5Z M15 3v5h4 M8 12h8 M8 16h6"/></svg>بيانات الفاتورة</h2><dl class="meta-fields invoice-fields">
+  <div class="field"><dt>رقم الفاتورة</dt><dd><bdi>{{invoice_number}}</bdi></dd></div><div class="field"><dt>تاريخ الإصدار</dt><dd><bdi>{{issue_date}}</bdi></dd></div><div class="field"><dt>وقت الإصدار</dt><dd><bdi>{{issue_time}}</bdi></dd></div><div class="field"><dt>طريقة الدفع</dt><dd><bdi>{{payment_method}}</bdi></dd></div><div class="field"><dt>إجمالي عدد القطع</dt><dd><bdi>{{total_qty}}</bdi></dd></div>
+  </dl></section>
+  <section class="meta-panel"><h2 class="panel-heading"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21v-3a8 8 0 0 1 16 0v3 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8"/></svg>بيانات العميل</h2><dl>
+  <div class="field full"><dt>اسم العميل</dt><dd><bdi>{{buyer_name}}</bdi></dd></div><div class="field"><dt><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z M9 15l6-6 M9 9h.1 M15 15h.1"/></svg>الرقم الضريبي</dt><dd><bdi>{{buyer_tax}}</bdi></dd></div><div class="field"><dt><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3l4 1 1 5-3 2a15 15 0 0 0 6 6l2-3 5 1 1 4c-1 3-6 2-10-1S2 8 3 5Z"/></svg>الهاتف</dt><dd><bdi>{{buyer_phone}}</bdi></dd></div><div class="field full"><dt><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0 M12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4"/></svg>العنوان الوطني</dt><dd><bdi>{{buyer_address}}</bdi></dd></div>
+  </dl></section>
+ </section>
+ <table class="items-main-table" aria-label="أصناف الفاتورة"><colgroup><col style="width:4%"><col style="width:10%"><col style="width:26%"><col style="width:12%"><col style="width:7%"><col style="width:14%"><col style="width:12%"><col style="width:15%"></colgroup><thead><tr><th scope="col">م</th><th scope="col">كود الصنف</th><th scope="col">البيان</th><th scope="col">سعر الوحدة</th><th scope="col">الكمية</th><th scope="col">قبل الضريبة</th><th scope="col">مبلغ الضريبة</th><th scope="col">شامل الضريبة</th></tr></thead><tbody>{{items_rows}}</tbody></table>
+ </div>
+ <div class="bottom-content-wrap">
+<svg class="luxury-art luxury-bottom" viewBox="0 0 420 260" aria-hidden="true" focusable="false">
+ <defs>
+  <linearGradient id="lux-21-b-tone" x1="1" y1="0" x2="0" y2="1"><stop stop-color="#164d47"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+  <linearGradient id="lux-21-b-metal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ad965c"/><stop offset=".5" stop-color="#eee0be"/><stop offset="1" stop-color="#ad965c"/></linearGradient>
+ </defs>
+ <path d="M420 0H30C96 10 192 26 245 77s83 105 175 140Z" fill="url(#lux-21-b-tone)" opacity=".15"/>
+   <path d="M420 0H145C207 20 254 47 288 86s70 77 132 87Z" fill="url(#lux-21-b-metal)" opacity=".24"/>
+   <path d="M420 0H274c50 21 54 64 146 104Z" fill="url(#lux-21-b-tone)" opacity=".18"/>
+   <path d="M68 3C173 13 235 71 283 116s77 74 133 98M167 2c96 35 102 71 159 113s64 41 90 45" fill="none" stroke="url(#lux-21-b-metal)" stroke-width="1.1" opacity=".43"/>
+ </svg>
+ 
+ <section class="summary" aria-label="الإجماليات والملاحظات">
+  <div class="totals-panel"><h2><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h10l4 4v14H5Z M15 3v5h4 M8 12h8 M8 16h6"/></svg>الملخص المالي</h2>
+  <div class="total-row"><span>المجموع الخاضع للضريبة قبل الضريبة</span><span class="money"><span>{{sar_symbol}}</span><bdi>{{subtotal}}</bdi></span></div><div class="total-row"><span>إجمالي الخصم</span><span class="money"><span>{{sar_symbol}}</span><bdi>{{discount}}</bdi></span></div><div class="total-row"><span>ضريبة القيمة المضافة</span><span class="money"><span>{{sar_symbol}}</span><bdi>{{tax_amount}}</bdi></span></div><div class="total-row total-emphasis"><span>الإجمالي شامل الضريبة</span><span class="money"><span>{{sar_symbol}}</span><bdi>{{grand_total}}</bdi></span></div><div class="total-row"><span>المبلغ المدفوع</span><span class="money"><span>{{sar_symbol}}</span><bdi>{{paid_amount}}</bdi></span></div><div class="total-row"><span>المبلغ المتبقي</span><span class="money"><span>{{sar_symbol}}</span><bdi>{{remaining_amount}}</bdi></span></div>
+  <p class="words">{{amount_in_words}}</p></div>
+  <div class="verification-panel"><div class="notes"><h2><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3h16v13l-5 5H4Z M15 21v-5h5 M8 7h8 M8 11h8"/></svg>ملاحظات</h2><div class="notes-content">{{notes}}</div></div><div class="qr-box">{{qr_code}}</div></div>
+ </section>
+ <footer class="footer"><p>{{seller_name}}</p><p>رقم الفاتورة: <bdi>{{invoice_number}}</bdi></p></footer>
+ </div>
+</div>
+</body></html>

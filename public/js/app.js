@@ -153,7 +153,7 @@ function renderShell() {
           </button>
           <div class="issuer-pick">
             <label for="issuer-select">الشركة الحالية</label>
-            <select id="issuer-select" style="min-width:230px">${raw(issuerOptions())}</select>
+            <select id="issuer-select">${raw(issuerOptions())}</select>
           </div>
           <div class="spacer"></div>
           <button class="theme-toggle" id="theme-toggle" type="button" aria-label="تبديل الثيم" title="تبديل الثيم الداكن / الفاتح">

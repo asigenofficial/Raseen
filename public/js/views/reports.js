@@ -667,6 +667,7 @@ export async function render(view, ctx) {
                   <button type="button" class="tpl-zoom-btn" id="modal-zoom-out" style="padding:3px 8px; border:none; background:none; color:var(--text); cursor:pointer; font-weight:bold;">−</button>
                   <span class="tpl-zoom-val" id="modal-zoom-text" style="font-size:0.75rem; padding:0 6px; font-variant-numeric:tabular-nums;">${currentZoom}%</span>
                   <button type="button" class="tpl-zoom-btn" id="modal-zoom-in" style="padding:3px 8px; border:none; background:none; color:var(--text); cursor:pointer; font-weight:bold;">+</button>
+                  <button type="button" class="tpl-zoom-btn" id="modal-zoom-fit" style="padding:3px 8px; border:none; border-inline-start:1px solid var(--line); background:none; color:var(--text); cursor:pointer; font-size:0.7rem;">العرض</button>
                 </div>
                 <button class="btn btn-sm btn-primary" id="btn-modal-print-doc" type="button" style="display:inline-flex; align-items:center; gap:4px; font-size:0.78rem;">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
@@ -677,9 +678,9 @@ export async function render(view, ctx) {
                 </button>
               </div>
             </div>
-            <div style="background:#0b101c; border:1px solid var(--line); border-radius:8px; padding:1.2rem; display:flex; justify-content:center; overflow:auto; max-height:72vh;">
-              <div id="modal-paper-wrapper" style="transform: scale(${currentZoom / 100}); transform-origin: top center; transition: transform 0.15s ease;">
-                <div style="background:#fff; width:210mm; min-height:297mm; box-shadow:0 12px 40px rgba(0,0,0,0.65); border-radius:4px; overflow:hidden;">
+            <div class="modal-paper-stage" id="modal-report-stage">
+              <div class="modal-paper-scaler" id="modal-paper-wrapper" style="transform: scale(${currentZoom / 100});">
+                <div class="modal-paper-sheet ${spec.landscape ? 'landscape' : ''}">
                   <iframe id="modal-doc-iframe" style="width:100%; height:100%; min-height:920px; border:none; display:block; background:#fff;"></iframe>
                 </div>
               </div>
@@ -697,15 +698,27 @@ export async function render(view, ctx) {
       if (iframe) iframe.srcdoc = docHtml;
 
       const updateZoom = (z) => {
-        currentZoom = Math.max(40, Math.min(130, z));
+        currentZoom = Math.max(25, Math.min(130, z));
         const zText = $('#modal-zoom-text', m.el);
         const pWrap = $('#modal-paper-wrapper', m.el);
         if (zText) zText.textContent = `${currentZoom}%`;
         if (pWrap) pWrap.style.transform = `scale(${currentZoom / 100})`;
       };
 
+      const fitReportZoom = () => {
+        const stage = $('#modal-report-stage', m.el);
+        if (stage && stage.clientWidth > 60) {
+          const availableW = stage.clientWidth - 20;
+          const targetW = spec.landscape ? 1123 : 794;
+          const scale = Math.min(1.15, Math.max(0.25, Math.round((availableW / targetW) * 95) / 100));
+          updateZoom(Math.round(scale * 100));
+        }
+      };
+
       $('#modal-zoom-in', m.el)?.addEventListener('click', () => updateZoom(currentZoom + 10));
       $('#modal-zoom-out', m.el)?.addEventListener('click', () => updateZoom(currentZoom - 10));
+      $('#modal-zoom-fit', m.el)?.addEventListener('click', fitReportZoom);
+      setTimeout(fitReportZoom, 40);
       $('#btn-modal-print-doc', m.el)?.addEventListener('click', () => printDoc(docHtml));
       $('#btn-modal-pdf-doc', m.el)?.addEventListener('click', async (e) => {
         e.currentTarget.disabled = true;

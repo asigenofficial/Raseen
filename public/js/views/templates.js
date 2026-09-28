@@ -302,7 +302,7 @@ export async function render(view) {
       return `
         <div class="doc-tpl-empty">
           <h3>لا توجد قوالب تقارير مطابقة</h3>
-          <p class="muted">يمكنك رفع أي تقرير Excel بصيغة .xlsx وسيقوم النظام باكتشاف خلاياه تلقائياً.</p>
+          <p class="muted">يمكنك رفع أي تقرير Excel بصيغة .xlsx أو .xls وسيقوم النظام باكتشاف خلاياه تلقائياً.</p>
           <label class="btn btn-primary mt" style="cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
             رفع قالب تقرير الآن
             <input type="file" class="file-upload-tab-specific" accept=".xlsx,.xls" style="display:none;" />
@@ -754,7 +754,7 @@ export async function render(view) {
           </div>
           <div class="page-actions" style="flex-wrap:wrap; gap:.5rem;">
             <a class="btn btn-primary" href="#/template-builder">إنشاء قالب فاتورة أو مستند</a>
-            <div class="field" style="margin:0; min-width:210px;">
+            <div class="field" style="margin:0; min-width:160px; flex:1 1 auto;">
               <select id="sel-issuer">
                 ${raw(issuers.map((iss) => `<option value="${esc(iss.id)}"${iss.id === activeIssuer.id ? ' selected' : ''}>${esc(iss.name_ar)} (${esc(iss.code)})</option>`).join(''))}
               </select>
@@ -1064,13 +1064,30 @@ export async function render(view) {
         qrSettings: qrCfg,
       });
 
+      let fsZoom = 80;
       const m = modal({
         title: `معاينة الفاتورة: ${tpl?.name_ar || tpl?.name || 'قالب الفاتورة'}`,
         wide: true,
         body: html`
-          <div style="background:#0b101c; padding:1.5rem; border-radius:8px; display:flex; justify-content:center; overflow:auto; max-height:78vh;">
-            <div style="background:#fff; width:210mm; height:297mm; min-height:297mm; box-shadow:0 10px 40px rgba(0,0,0,0.6); border-radius:4px; overflow:hidden;">
-              <iframe id="fullscreen-iframe" style="width:210mm; height:297mm; min-height:297mm; border:none; display:block; background:#fff;"></iframe>
+          <div style="padding:0.2rem 0;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; background:rgba(255,255,255,0.03); padding:0.5rem 0.85rem; border-radius:8px; border:1px solid var(--line); flex-wrap:wrap; gap:0.5rem;">
+              <div class="flex gap-xs" style="align-items:center;">
+                <span class="badge green" style="font-weight:700;">معاينة A4 رسمية</span>
+                <span class="tiny muted">${esc(tpl?.name_ar || tpl?.name || '')}</span>
+              </div>
+              <div class="tpl-zoom-controls" style="margin:0;">
+                <button type="button" class="tpl-zoom-btn" id="fs-zoom-out" title="تصغير">−</button>
+                <span class="tpl-zoom-val" id="fs-zoom-text">${fsZoom}%</span>
+                <button type="button" class="tpl-zoom-btn" id="fs-zoom-in" title="تكبير">+</button>
+                <button type="button" class="tpl-zoom-btn" id="fs-zoom-fit" title="ملاءمة الشاشة" style="border-inline-start:1px solid var(--line-strong); font-size:.72rem;">العرض</button>
+              </div>
+            </div>
+            <div class="modal-paper-stage" id="fs-paper-stage">
+              <div class="modal-paper-scaler" id="fs-paper-scaler" style="transform: scale(${fsZoom / 100});">
+                <div class="modal-paper-sheet">
+                  <iframe id="fullscreen-iframe" style="width:100%; height:100%; min-height:920px; border:none; display:block; background:#fff;"></iframe>
+                </div>
+              </div>
             </div>
           </div>
         `,
@@ -1089,6 +1106,27 @@ export async function render(view) {
           </div>
         `,
       });
+
+      const updateFsZoom = (z) => {
+        fsZoom = Math.max(25, Math.min(130, z));
+        const zText = $('#fs-zoom-text', m.el);
+        const scaler = $('#fs-paper-scaler', m.el);
+        if (zText) zText.textContent = `${fsZoom}%`;
+        if (scaler) scaler.style.transform = `scale(${fsZoom / 100})`;
+      };
+      const fitFsZoom = () => {
+        const stage = $('#fs-paper-stage', m.el);
+        if (stage && stage.clientWidth > 60) {
+          const availableW = stage.clientWidth - 20;
+          const targetW = 794;
+          const scale = Math.min(1.15, Math.max(0.25, Math.round((availableW / targetW) * 95) / 100));
+          updateFsZoom(Math.round(scale * 100));
+        }
+      };
+      $('#fs-zoom-in', m.el)?.addEventListener('click', () => updateFsZoom(fsZoom + 10));
+      $('#fs-zoom-out', m.el)?.addEventListener('click', () => updateFsZoom(fsZoom - 10));
+      $('#fs-zoom-fit', m.el)?.addEventListener('click', fitFsZoom);
+      setTimeout(fitFsZoom, 40);
 
       const fIframe = $('#fullscreen-iframe', m.el);
       if (tpl && tpl.id) {
@@ -1192,13 +1230,30 @@ export async function render(view) {
       docHtml = voucherPrint({ voucher: placeholderVoucher, issuer: placeholderIssuer, client: placeholderClient, style: tplId });
     }
 
+    let vfsZoom = 80;
     const m = modal({
       title: `معاينة سند القبض: ${tpl.name_ar || tpl.name || tplId}`,
       wide: true,
       body: html`
-        <div style="background:#0b101c; padding:1.5rem; border-radius:8px; display:flex; justify-content:center; overflow:auto; max-height:78vh;">
-          <div style="background:#fff; width:210mm; min-height:297mm; box-shadow:0 10px 40px rgba(0,0,0,0.6); border-radius:4px; overflow:hidden;">
-            <iframe id="fullscreen-voucher-iframe" style="width:100%; height:100%; min-height:850px; border:none; display:block; background:#fff;"></iframe>
+        <div style="padding:0.2rem 0;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; background:rgba(255,255,255,0.03); padding:0.5rem 0.85rem; border-radius:8px; border:1px solid var(--line); flex-wrap:wrap; gap:0.5rem;">
+            <div class="flex gap-xs" style="align-items:center;">
+              <span class="badge blue" style="font-weight:700;">معاينة سند قبض رسمية</span>
+              <span class="tiny muted">${esc(tpl.name_ar || tpl.name || tplId)}</span>
+            </div>
+            <div class="tpl-zoom-controls" style="margin:0;">
+              <button type="button" class="tpl-zoom-btn" id="vfs-zoom-out" title="تصغير">−</button>
+              <span class="tpl-zoom-val" id="vfs-zoom-text">${vfsZoom}%</span>
+              <button type="button" class="tpl-zoom-btn" id="vfs-zoom-in" title="تكبير">+</button>
+              <button type="button" class="tpl-zoom-btn" id="vfs-zoom-fit" title="ملاءمة الشاشة" style="border-inline-start:1px solid var(--line-strong); font-size:.72rem;">العرض</button>
+            </div>
+          </div>
+          <div class="modal-paper-stage" id="vfs-paper-stage">
+            <div class="modal-paper-scaler" id="vfs-paper-scaler" style="transform: scale(${vfsZoom / 100});">
+              <div class="modal-paper-sheet">
+                <iframe id="fullscreen-voucher-iframe" style="width:100%; height:100%; min-height:850px; border:none; display:block; background:#fff;"></iframe>
+              </div>
+            </div>
           </div>
         </div>
       `,
@@ -1216,6 +1271,28 @@ export async function render(view) {
         </div>
       `,
     });
+
+    const updateVfsZoom = (z) => {
+      vfsZoom = Math.max(25, Math.min(130, z));
+      const zText = $('#vfs-zoom-text', m.el);
+      const scaler = $('#vfs-paper-scaler', m.el);
+      if (zText) zText.textContent = `${vfsZoom}%`;
+      if (scaler) scaler.style.transform = `scale(${vfsZoom / 100})`;
+    };
+    const fitVfsZoom = () => {
+      const stage = $('#vfs-paper-stage', m.el);
+      if (stage && stage.clientWidth > 60) {
+        const availableW = stage.clientWidth - 20;
+        const targetW = 794;
+        const scale = Math.min(1.15, Math.max(0.25, Math.round((availableW / targetW) * 95) / 100));
+        updateVfsZoom(Math.round(scale * 100));
+      }
+    };
+    $('#vfs-zoom-in', m.el)?.addEventListener('click', () => updateVfsZoom(vfsZoom + 10));
+    $('#vfs-zoom-out', m.el)?.addEventListener('click', () => updateVfsZoom(vfsZoom - 10));
+    $('#vfs-zoom-fit', m.el)?.addEventListener('click', fitVfsZoom);
+    setTimeout(fitVfsZoom, 40);
+
     const ifr = $('#fullscreen-voucher-iframe', m.el);
     if (ifr) ifr.srcdoc = docHtml;
     $('#btn-modal-print-voucher', m.el)?.addEventListener('click', () => printDoc(docHtml));
@@ -1487,15 +1564,16 @@ export async function render(view) {
     });
 
     let currentZoom = 80;
+    const isLandscape = (tpl.headers || []).length > 6;
 
     const m = modal({
       title: `معاينة بصرية للمستند: ${tpl.name_ar || tpl.name}`,
       wide: true,
       body: html`
         <div style="padding:0.2rem 0;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem; background:rgba(255,255,255,0.03); padding:0.6rem 0.9rem; border-radius:8px; border:1px solid var(--line); flex-wrap:wrap; gap:0.5rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; background:rgba(255,255,255,0.03); padding:0.5rem 0.85rem; border-radius:8px; border:1px solid var(--line); flex-wrap:wrap; gap:0.5rem;">
             <div class="flex gap" style="align-items:center;">
-              <span class="badge green" style="font-weight:700;">معاينة A4 رسمية كصورة مستند طبق الأصل</span>
+              <span class="badge green" style="font-weight:700;">معاينة ${isLandscape ? 'A4 عرضية' : 'A4 رسمية'}</span>
               <span class="tiny muted">المنشأة: ${esc(activeIssuer.name_ar)}</span>
             </div>
             <div class="flex gap-xs" style="align-items:center;">
@@ -1503,6 +1581,7 @@ export async function render(view) {
                 <button type="button" class="tpl-zoom-btn" id="modal-zoom-out" title="تصغير">−</button>
                 <span class="tpl-zoom-val" id="modal-zoom-text">${currentZoom}%</span>
                 <button type="button" class="tpl-zoom-btn" id="modal-zoom-in" title="تكبير">+</button>
+                <button type="button" class="tpl-zoom-btn" id="modal-zoom-fit" title="ملاءمة الشاشة" style="border-inline-start:1px solid var(--line-strong); font-size:.72rem;">العرض</button>
               </div>
               <button class="btn btn-sm btn-primary" id="btn-modal-print-doc" type="button" style="display:inline-flex; align-items:center; gap:4px; font-size:0.78rem;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
@@ -1514,9 +1593,9 @@ export async function render(view) {
             </div>
           </div>
 
-          <div style="background:#0b101c; border:1px solid var(--line); border-radius:8px; padding:1.2rem; display:flex; justify-content:center; overflow:auto; max-height:72vh;">
-            <div id="modal-paper-wrapper" style="transform: scale(${currentZoom / 100}); transform-origin: top center; transition: transform 0.15s ease;">
-              <div style="background:#fff; width:210mm; min-height:297mm; box-shadow:0 12px 40px rgba(0,0,0,0.65); border-radius:4px; overflow:hidden;">
+          <div class="modal-paper-stage" id="modal-paper-stage">
+            <div class="modal-paper-scaler" id="modal-paper-wrapper" style="transform: scale(${currentZoom / 100});">
+              <div class="modal-paper-sheet ${isLandscape ? 'landscape' : ''}">
                 <iframe id="modal-doc-iframe" style="width:100%; height:100%; min-height:920px; border:none; display:block; background:#fff;"></iframe>
               </div>
             </div>
@@ -1537,15 +1616,27 @@ export async function render(view) {
     if (iframe) iframe.srcdoc = docHtml;
 
     const updateZoom = (z) => {
-      currentZoom = Math.max(40, Math.min(130, z));
+      currentZoom = Math.max(25, Math.min(130, z));
       const zText = $('#modal-zoom-text', m.el);
       const pWrap = $('#modal-paper-wrapper', m.el);
       if (zText) zText.textContent = `${currentZoom}%`;
       if (pWrap) pWrap.style.transform = `scale(${currentZoom / 100})`;
     };
 
+    const fitModalZoom = () => {
+      const stage = $('#modal-paper-stage', m.el);
+      if (stage && stage.clientWidth > 60) {
+        const availableW = stage.clientWidth - 20;
+        const targetW = isLandscape ? 1123 : 794;
+        const scale = Math.min(1.15, Math.max(0.25, Math.round((availableW / targetW) * 95) / 100));
+        updateZoom(Math.round(scale * 100));
+      }
+    };
+
     $('#modal-zoom-in', m.el)?.addEventListener('click', () => updateZoom(currentZoom + 10));
     $('#modal-zoom-out', m.el)?.addEventListener('click', () => updateZoom(currentZoom - 10));
+    $('#modal-zoom-fit', m.el)?.addEventListener('click', fitModalZoom);
+    setTimeout(fitModalZoom, 40);
 
     $('#btn-modal-print-doc', m.el)?.addEventListener('click', () => {
       printDoc(docHtml);
@@ -1913,7 +2004,7 @@ export async function render(view) {
   async function handleExcelUpload(file, categoryHint = 'auto') {
     if (!file) return;
     if (!/\.(html|htm|xlsx|xls)$/i.test(file.name)) {
-      toastErr('يرجى اختيار ملف قالب بصيغة .html أو .xlsx');
+      toastErr('يرجى اختيار ملف قالب بصيغة .html أو .xlsx أو .xls');
       return;
     }
 
@@ -2501,12 +2592,23 @@ export async function render(view) {
           if (frame) frame.style.transform = `scale(${zoomLevel / 100})`;
         }
       });
-      $('#zoom-fit', view)?.addEventListener('click', () => {
-        zoomLevel = 62;
-        $('#zoom-text', view).textContent = '62%';
-        const frame = $('#paper-frame', view);
-        if (frame) frame.style.transform = 'scale(0.62)';
-      });
+      function fitTemplateZoom() {
+        const wrapper = $('#paper-wrapper', view);
+        if (wrapper && wrapper.clientWidth > 80) {
+          const availableW = wrapper.clientWidth - 20;
+          const targetW = 794;
+          const scale = Math.min(1.15, Math.max(0.26, Math.round((availableW / targetW) * 95) / 100));
+          zoomLevel = Math.round(scale * 100);
+          const zText = $('#zoom-text', view);
+          if (zText) zText.textContent = `${zoomLevel}%`;
+          const frame = $('#paper-frame', view);
+          if (frame) frame.style.transform = `scale(${zoomLevel / 100})`;
+        }
+      }
+
+      $('#zoom-fit', view)?.addEventListener('click', fitTemplateZoom);
+      window.addEventListener('resize', fitTemplateZoom);
+      setTimeout(fitTemplateZoom, 50);
     }
   }
 

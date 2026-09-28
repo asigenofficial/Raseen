@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>فاتورة ضريبية</title>
+  <style>
+    :root {
+      --primary: #193f46;
+      --accent: #ad895b;
+      --ink: #25343c;
+      --muted: #58676e;
+      --border: #c9d4d4;
+      --wash: #f0f5f4;
+    }
+    @page { size: A4 portrait; margin: 0; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #e8edee; color: var(--ink); font: 11px/1.65 'Segoe UI', Tahoma, sans-serif; text-align: right; }
+    .invoice-container {
+      width: 210mm; min-height: 297mm; padding: 12mm;
+      overflow: visible; display: flex; flex-direction: column;
+      justify-content: space-between; position: relative; isolation: isolate;
+      background: #fff; margin: 0 auto;
+    }
+    .invoice-container::before {
+      content: ''; position: absolute; inset: 5mm; border: 1px solid var(--primary);
+      border-top: 3px solid var(--primary); pointer-events: none; z-index: -1;
+    }
+    .top-content-wrap, .bottom-content-wrap { flex-shrink: 0; }
+    .bottom-content-wrap { margin-top: auto; padding-top: 7mm; position: relative; }
+    .svg-library { position: absolute; width: 0; height: 0; }
+    .icon { display: inline-block; width: 13px; height: 13px; flex-shrink: 0; vertical-align: -2px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .art { position: absolute; width: 73mm; height: 42mm; pointer-events: none; z-index: -1; }
+    .art-top { top: 5mm; right: 5mm; }
+    .art-bottom { bottom: -7mm; left: -7mm; transform: rotate(180deg); }
+    .watermark { position: absolute; width: 108mm; height: 108mm; top: 105mm; left: 51mm; opacity: .025; color: var(--primary); z-index: -1; pointer-events: none; }
+    .masthead { display: grid; grid-template-columns: minmax(0,1fr) 140px minmax(0,1fr); gap: 15px; align-items: start; break-inside: avoid; page-break-inside: avoid; }
+    .seller h2 { margin: 0 0 9px; color: var(--primary); font-size: 19px; line-height: 1.45; font-weight: 750; }
+    .seller p { margin: 4px 0; overflow-wrap: anywhere; }
+    .seller .icon { margin-inline-end: 3px; color: var(--muted); }
+    .seller-en { direction: ltr; text-align: left; font-size: 10px; }
+    .seller-en h2 { font-size: 16px; }
+    .identity { padding: 2px 9px 12px; text-align: center; position: relative; }
+    .identity::after { content: ''; position: absolute; bottom: 0; left: 23%; right: 23%; height: 3px; background: var(--accent); clip-path: polygon(5% 0,100% 0,95% 100%,0 100%); }
+    .logo-shell { height: 70px; max-width: 106px; margin: 0 auto 11px; display: flex; align-items: center; justify-content: center; position: relative; color: var(--primary); }
+    .logo-shell::before, .logo-shell::after { content: ''; position: absolute; top: 50%; width: 14px; height: 1px; background: var(--accent); }
+    .logo-shell::before { right: -12px; } .logo-shell::after { left: -12px; }
+    .logo-shell img, .logo-shell svg { max-width: 100%; max-height: 70px; object-fit: contain; }
+    h1 { color: var(--primary); font-size: 20px; line-height: 1.5; margin: 0; }
+    h1 small { display: block; margin-top: 2px; font: 9px/1.8 Arial, sans-serif; letter-spacing: 1.9px; }
+    bdi, .number { font-family: Tahoma, Arial, sans-serif; font-variant-numeric: tabular-nums; }
+    .contact-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px 12px; margin: 16px 0 19px; padding: 8px 0; border-block: 1px solid var(--border); color: var(--muted); font-size: 10px; }
+    .contact-strip > span { display: inline-flex; gap: 5px; align-items: center; min-width: 0; overflow-wrap: anywhere; }
+    .metadata { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+    .meta-panel { min-width: 0; background: white; border: 1px solid var(--border); border-radius: 4px; break-inside: avoid; page-break-inside: avoid; }
+    .panel-heading { margin: 0; padding: 8px 12px; display: flex; gap: 6px; align-items: center; font-size: 11px; font-weight: 700; background: var(--wash); color: var(--primary); border-bottom: 1px solid var(--border); }
+    .invoice-panel .panel-heading { background: var(--primary); color: white; clip-path: polygon(0 0,96% 0,100% 100%,0 100%); }
+    dl { margin: 0; padding: 10px 12px; }
+    .field { display: flex; justify-content: space-between; align-items: baseline; gap: 9px; padding: 4px 0; }
+    dt { color: var(--muted); font-size: 10px; flex-shrink: 0; }
+    dt .icon { margin-inline-end: 3px; }
+    dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+    .invoice-id { border-bottom: 1px solid var(--border); padding-bottom: 7px; margin-bottom: 3px; }
+    .invoice-id dd { font-size: 13px; color: var(--primary); }
+    .field.address { display: block; }
+    .address dd { margin-top: 3px; font-weight: 400; }
+    .items-main-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 9px; line-height: 1.55; }
+    thead { display: table-header-group; }
+    .items-main-table th { background: var(--wash); color: var(--primary); padding: 9px 3px; font-weight: 700; text-align: center; vertical-align: middle; border: 1px solid var(--border); border-top: 2px solid var(--primary); }
+    .items-main-table th:last-child { background: var(--primary); color: #fff; }
+    .items-main-table td { padding: 8px 3px; border: 1px solid var(--border); text-align: center; vertical-align: top; overflow-wrap: anywhere; direction: ltr; font-family: Tahoma, Arial, sans-serif; font-variant-numeric: tabular-nums; }
+    .items-main-table td:nth-child(3) { direction: rtl; text-align: right; font-family: 'Segoe UI', Tahoma, sans-serif; }
+    .items-main-table td:last-child { background: #f0f5f4; font-weight: 700; }
+    .items-main-table tbody tr:nth-child(even) { background: #fafcfc; }
+    .items-main-table tr { break-inside: avoid; page-break-inside: avoid; }
+    .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: stretch; break-inside: avoid; page-break-inside: avoid; }
+    .totals-panel, .verification-panel { min-width: 0; border: 1px solid var(--border); border-radius: 4px; background: white; }
+    .totals-panel { border-top: 3px solid var(--accent); padding: 12px; }
+    .section-title { display: flex; align-items: center; gap: 5px; margin: 0 0 8px; color: var(--primary); font-size: 11px; }
+    .total-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 5px 2px; border-bottom: 1px solid #e5eaeb; font-size: 10px; }
+    .total-row > span:first-child { max-width: 65%; }
+    .money { display: inline-flex; direction: ltr; align-items: center; gap: 3px; white-space: nowrap; font: 11px Tahoma, Arial, sans-serif; font-variant-numeric: tabular-nums; }
+    .money > span { display: inline-flex; align-items: center; }
+    .money svg, .money img { width: 12px; height: 12px; object-fit: contain; }
+    .grand-total { padding: 11px 8px; margin: 8px -3px; background: var(--primary); color: white; border-left: 4px solid var(--accent); font-weight: 700; font-size: 11px; }
+    .grand-total .money { font-size: 16px; font-weight: 700; }
+    .amount-words { font-size: 10px; margin: 10px 0 0; overflow-wrap: anywhere; }
+    .verification-panel { display: flex; align-items: flex-start; gap: 12px; padding: 14px 12px; border-top: 3px solid var(--primary); }
+    .notes { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .notes-content { white-space: pre-wrap; font-size: 10px; line-height: 1.9; }
+    .qr-box { width: 125px; height: 125px; min-width: 125px; min-height: 125px; flex-shrink: 0; background: #ffffff; padding: 4px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border, #cbd5e1); border-radius: 4px; overflow: hidden; margin: 0 auto; }
+    .qr-box svg, .qr-box img { width: 100% !important; height: 100% !important; display: block; object-fit: contain; }
+    .footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 13px; padding-top: 8px; border-top: 1px solid var(--accent); font-size: 9px; color: var(--muted); }
+    .footer p { margin: 0; overflow-wrap: anywhere; }
+    @media screen { body { padding: 20px 0; } .invoice-container { box-shadow: 0 12px 45px #18343f20; } }
+    @media print {
+      html, body { background: #fff; }
+      .invoice-container { margin: 0; box-shadow: none; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+      .top-content-wrap, .items-main-table { break-inside: auto; page-break-inside: auto; }
+      .bottom-content-wrap { break-inside: avoid; page-break-inside: avoid; }
+    }
+  
+/* Integrated decorative SVG; invoice data remains in the foreground. */
+.luxury-art{position:absolute;width:92mm;height:57mm;pointer-events:none;z-index:-1}
+.luxury-top{top:5.2mm;right:5.2mm}
+.luxury-bottom{bottom:-6.8mm;left:-6.8mm;transform:rotate(180deg)}
+.luxury-watermark{position:absolute;top:107mm;left:48mm;width:114mm;height:114mm;color:var(--primary);opacity:.026;pointer-events:none;z-index:-1}
+.top-content-wrap{position:static}
+.bottom-content-wrap{position:relative}
+.items-main-table tbody td{background-color:#ffffff}
+.items-main-table tbody tr:nth-child(even) td{background-color:#fafbfc}
+.qr-box{background:#ffffff!important}
+
+</style>
+</head>
+<body>
+<div class="invoice-container">
+  <div class="top-content-wrap">
+<svg class="luxury-art luxury-top" viewBox="0 0 420 260" aria-hidden="true" focusable="false">
+ <defs>
+  <linearGradient id="lux-25-t-tone" x1="1" y1="0" x2="0" y2="1"><stop stop-color="#193f46"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+  <linearGradient id="lux-25-t-metal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ad895b"/><stop offset=".5" stop-color="#eee0be"/><stop offset="1" stop-color="#ad895b"/></linearGradient>
+ </defs>
+ <path d="M420 0H0C90 57 164 8 237 64S315 151 420 230Z" fill="url(#lux-25-t-tone)" opacity=".18"/>
+   <path d="M420 0H94C188 28 200 8 275 70s85 80 145 107Z" fill="url(#lux-25-t-metal)" opacity=".25"/>
+   <path d="M420 0H198C285 44 280 73 420 110Z" fill="url(#lux-25-t-tone)" opacity=".22"/>
+   <path d="M51 6C157 59 213 29 274 87S366 172 415 200" fill="none" stroke="url(#lux-25-t-metal)" stroke-width="1.3" opacity=".45"/>
+   <path d="M135 4C229 30 254 39 298 84S359 119 418 148" fill="none" stroke="#ad895b" stroke-width=".7" opacity=".3"/>
+ </svg><svg class="luxury-watermark" viewBox="0 0 320 320" fill="none" stroke="currentColor" stroke-width="1.1" aria-hidden="true" focusable="false">
+ <g transform="rotate(22.5 160 160)">
+ <path d="m160 13 43 43 61 0 0 61 43 43-43 43 0 61-61 0-43 43-43-43-61 0 0-61-43-43 43-43 0-61 61 0Z"/>
+ <path d="m160 36 124 124-124 124L36 160Z M72 72h176v176H72Z"/>
+ <path transform="rotate(0 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(45 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(90 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(135 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(180 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(225 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(270 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><path transform="rotate(315 160 160)" d="M160 29Q200 72 160 116Q120 72 160 29Z"/><circle cx="160" cy="160" r="42"/><path d="m160 125 35 35-35 35-35-35Z"/>
+ </g></svg>
+    <svg class="svg-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <symbol id="i-doc" viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5Z M15 3v5h4 M8 12h8 M8 16h6"/></symbol>
+        <symbol id="i-tax" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z M9 15l6-6 M9 9h.1 M15 15h.1"/></symbol>
+        <symbol id="i-cr" viewBox="0 0 24 24"><path d="M4 5h16v16H4Z M8 5V3h8v2 M8 10h8 M8 14h8 M8 18h4"/></symbol>
+        <symbol id="i-pin" viewBox="0 0 24 24"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2"/></symbol>
+        <symbol id="i-phone" viewBox="0 0 24 24"><path d="m5 3 4 1 1 5-3 2a15 15 0 0 0 6 6l2-3 5 1 1 4c-1 3-6 2-10-1S2 8 3 5Z"/></symbol>
+        <symbol id="i-mail" viewBox="0 0 24 24"><path d="M3 5h18v14H3Z M3 6l9 7 9-7"/></symbol>
+        <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M4 21v-3a8 8 0 0 1 16 0v3"/></symbol>
+        <symbol id="i-note" viewBox="0 0 24 24"><path d="M4 3h16v13l-5 5H4Z M15 21v-5h5 M8 7h8 M8 11h8"/></symbol>
+      </defs>
+    </svg>
+    
+    
+    <header class="masthead">
+      <div class="seller">
+        <h2>{{seller_name}}</h2>
+        <p><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg>{{seller_address}}</p>
+        <p><svg class="icon" aria-hidden="true"><use href="#i-tax"/></svg>الرقم الضريبي: <bdi>{{seller_tax}}</bdi></p>
+        <p><svg class="icon" aria-hidden="true"><use href="#i-cr"/></svg>السجل التجاري: <bdi>{{seller_cr}}</bdi></p>
+      </div>
+      <div class="identity">
+        <div class="logo-shell">{{logo}}</div>
+        <h1>فاتورة ضريبية<small lang="en" dir="ltr">TAX INVOICE</small></h1>
+      </div>
+      <div class="seller seller-en" lang="en" dir="ltr">
+        <h2>{{seller_name_en}}</h2>
+        <p>{{seller_address_en}}</p>
+        <p><svg class="icon" aria-hidden="true"><use href="#i-tax"/></svg>VAT: <bdi>{{seller_tax}}</bdi></p>
+        <p><svg class="icon" aria-hidden="true"><use href="#i-cr"/></svg>CR: <bdi>{{seller_cr}}</bdi></p>
+      </div>
+    </header>
+    <div class="contact-strip">
+      <span><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg>{{seller_city}} - {{seller_country}}</span>
+      <span><svg class="icon" aria-hidden="true"><use href="#i-phone"/></svg><bdi>{{seller_phone}}</bdi></span>
+      <span><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg><bdi>{{seller_email}}</bdi></span>
+    </div>
+    <section class="metadata" aria-label="بيانات الفاتورة والعميل">
+      <section class="meta-panel invoice-panel">
+        <h2 class="panel-heading"><svg class="icon" aria-hidden="true"><use href="#i-doc"/></svg>بيانات الفاتورة</h2>
+        <dl>
+          <div class="field invoice-id"><dt>رقم الفاتورة</dt><dd><bdi>{{invoice_number}}</bdi></dd></div>
+          <div class="field"><dt>تاريخ الإصدار</dt><dd><bdi>{{issue_date}}</bdi></dd></div>
+          <div class="field"><dt>وقت الإصدار</dt><dd><bdi>{{issue_time}}</bdi></dd></div>
+          <div class="field"><dt>نوع الفاتورة</dt><dd>{{payment_method}}</dd></div>
+          <div class="field"><dt>إجمالي عدد القطع</dt><dd><bdi>{{total_qty}}</bdi></dd></div>
+        </dl>
+      </section>
+      <section class="meta-panel">
+        <h2 class="panel-heading"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>بيانات العميل</h2>
+        <dl>
+          <div class="field address"><dt>اسم العميل</dt><dd>{{buyer_name}}</dd></div>
+          <div class="field"><dt><svg class="icon" aria-hidden="true"><use href="#i-tax"/></svg>الرقم الضريبي</dt><dd><bdi>{{buyer_tax}}</bdi></dd></div>
+          <div class="field"><dt><svg class="icon" aria-hidden="true"><use href="#i-phone"/></svg>الهاتف</dt><dd><bdi>{{buyer_phone}}</bdi></dd></div>
+          <div class="field address"><dt><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg>العنوان الوطني</dt><dd>{{buyer_address}}</dd></div>
+        </dl>
+      </section>
+    </section>
+    <table class="items-main-table" aria-label="أصناف الفاتورة">
+      <colgroup><col style="width:4%"><col style="width:10%"><col style="width:26%"><col style="width:12%"><col style="width:7%"><col style="width:14%"><col style="width:12%"><col style="width:15%"></colgroup>
+      <thead><tr><th scope="col">م</th><th scope="col">كود الصنف</th><th scope="col">البيان</th><th scope="col">سعر الوحدة</th><th scope="col">الكمية</th><th scope="col">قبل الضريبة</th><th scope="col">مبلغ الضريبة</th><th scope="col">شامل الضريبة</th></tr></thead>
+      <tbody>{{items_rows}}</tbody>
+    </table>
+  </div>
+  <div class="bottom-content-wrap">
+<svg class="luxury-art luxury-bottom" viewBox="0 0 420 260" aria-hidden="true" focusable="false">
+ <defs>
+  <linearGradient id="lux-25-b-tone" x1="1" y1="0" x2="0" y2="1"><stop stop-color="#193f46"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+  <linearGradient id="lux-25-b-metal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ad895b"/><stop offset=".5" stop-color="#eee0be"/><stop offset="1" stop-color="#ad895b"/></linearGradient>
+ </defs>
+ <path d="M420 0H0C90 57 164 8 237 64S315 151 420 230Z" fill="url(#lux-25-b-tone)" opacity=".18"/>
+   <path d="M420 0H94C188 28 200 8 275 70s85 80 145 107Z" fill="url(#lux-25-b-metal)" opacity=".25"/>
+   <path d="M420 0H198C285 44 280 73 420 110Z" fill="url(#lux-25-b-tone)" opacity=".22"/>
+   <path d="M51 6C157 59 213 29 274 87S366 172 415 200" fill="none" stroke="url(#lux-25-b-metal)" stroke-width="1.3" opacity=".45"/>
+   <path d="M135 4C229 30 254 39 298 84S359 119 418 148" fill="none" stroke="#ad895b" stroke-width=".7" opacity=".3"/>
+ </svg>
+    
+    <section class="summary" aria-label="الإجماليات والملاحظات">
+      <div class="totals-panel">
+        <h2 class="section-title"><svg class="icon" aria-hidden="true"><use href="#i-doc"/></svg>الملخص المالي</h2>
+        <div class="total-row"><span>المجموع الخاضع للضريبة قبل الضريبة</span><span class="money"><span>{{sar_symbol}}</span><bdi>{{subtotal}}</bdi></span></div>
+        <div class="total-row"><span>إجمالي الخصم</span><span class="money"><span>{{sar_symbol}}</span><bdi>{{discount}}</bdi></span></div>
+        <div class="total-row"><span>ضريبة القيمة المضافة</span><span class="money"><span>{{sar_symbol}}</span><bdi>{{tax_amount}}</bdi></span></div>
+        <div class="total-row grand-total"><span>الإجمالي شامل الضريبة</span><span class="money"><span>{{sar_symbol}}</span><bdi>{{grand_total}}</bdi></span></div>
+        <div class="total-row"><span>المبلغ المدفوع</span><span class="money"><span>{{sar_symbol}}</span><bdi>{{paid_amount}}</bdi></span></div>
+        <div class="total-row"><span>المبلغ المتبقي</span><span class="money"><span>{{sar_symbol}}</span><bdi>{{remaining_amount}}</bdi></span></div>
+        <p class="amount-words">{{amount_in_words}}</p>
+      </div>
+      <div class="verification-panel">
+        <div class="notes"><h2 class="section-title"><svg class="icon" aria-hidden="true"><use href="#i-note"/></svg>ملاحظات</h2><div class="notes-content">{{notes}}</div></div>
+        <div class="qr-box">{{qr_code}}</div>
+      </div>
+    </section>
+    <footer class="footer"><p>{{seller_name}}</p><p>رقم الفاتورة: <bdi>{{invoice_number}}</bdi></p></footer>
+  </div>
+</div>
+</body>
+</html>

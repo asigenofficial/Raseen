@@ -235,13 +235,23 @@ export async function showVoucher(id, onChange) {
             ⭐ اعتماد كقالب افتراضي للمنشأة
           </button>
         </div>
-        <div style="font-size:12px;color:var(--muted)">
-          ${voucher.client_name} — <b class="num">${amount(voucher.total_amount, 'SAR', { size: 13 })}</b>
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+          <div style="font-size:12px;color:var(--muted)">
+            ${voucher.client_name} — <b class="num">${amount(voucher.total_amount, 'SAR', { size: 13 })}</b>
+          </div>
+          <div class="tpl-zoom-controls" style="margin:0;">
+            <button type="button" class="tpl-zoom-btn" id="vp-zoom-out" title="تصغير">−</button>
+            <span class="tpl-zoom-val" id="vp-zoom-text">80%</span>
+            <button type="button" class="tpl-zoom-btn" id="vp-zoom-in" title="تكبير">+</button>
+            <button type="button" class="tpl-zoom-btn" id="vp-zoom-fit" title="ملاءمة الشاشة" style="border-inline-start:1px solid var(--line-strong); font-size:.72rem;">العرض</button>
+          </div>
         </div>
       </div>
-      <div style="background:#0b101c;padding:16px;border-radius:8px;display:flex;justify-content:center;overflow:auto;max-height:75vh;border:1px solid var(--border-color, #334155)">
-        <div style="background:#fff;width:210mm;min-height:297mm;box-shadow:0 10px 30px rgba(0,0,0,0.5);border-radius:4px;overflow:hidden">
-          <iframe id="v-preview-iframe" style="width:100%;height:100%;min-height:850px;border:none;display:block;background:#fff"></iframe>
+      <div class="modal-paper-stage" id="vp-stage">
+        <div class="modal-paper-scaler" id="vp-scaler" style="transform: scale(0.80);">
+          <div class="modal-paper-sheet">
+            <iframe id="v-preview-iframe" style="width:100%;height:100%;min-height:850px;border:none;display:block;background:#fff"></iframe>
+          </div>
         </div>
       </div>
     `,
@@ -256,6 +266,28 @@ export async function showVoucher(id, onChange) {
       </div>
     `,
   });
+
+  let vpZoom = 80;
+  const updateVpZoom = (z) => {
+    vpZoom = Math.max(25, Math.min(130, z));
+    const zText = $('#vp-zoom-text', m.body);
+    const scaler = $('#vp-scaler', m.body);
+    if (zText) zText.textContent = `${vpZoom}%`;
+    if (scaler) scaler.style.transform = `scale(${vpZoom / 100})`;
+  };
+  const fitVpZoom = () => {
+    const stage = $('#vp-stage', m.body);
+    if (stage && stage.clientWidth > 60) {
+      const availableW = stage.clientWidth - 20;
+      const targetW = 794;
+      const scale = Math.min(1.15, Math.max(0.25, Math.round((availableW / targetW) * 95) / 100));
+      updateVpZoom(Math.round(scale * 100));
+    }
+  };
+  $('#vp-zoom-in', m.body)?.addEventListener('click', () => updateVpZoom(vpZoom + 10));
+  $('#vp-zoom-out', m.body)?.addEventListener('click', () => updateVpZoom(vpZoom - 10));
+  $('#vp-zoom-fit', m.body)?.addEventListener('click', fitVpZoom);
+  setTimeout(fitVpZoom, 40);
 
   const iframe = $('#v-preview-iframe', m.body);
   if (iframe) iframe.srcdoc = currentHtml;
@@ -561,7 +593,7 @@ export async function render(view, ctx) {
           <p class="muted" style="margin-bottom:14px;font-size:13px">
             اختر قالب سند القبض المطلوب لتنزيل ملف الـ Excel الأصلي (.xlsx) المعتمد أو صيغة SpreadsheetML (.xls):
           </p>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div class="grid grid-2" style="gap:14px">
             <div class="card" style="border:2px solid #0284c7;border-radius:10px;padding:16px;background:#f0f9ff">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
                 <span class="badge" style="background:#0284c7;color:#fff;font-weight:700">عينة توريدات الصقر</span>

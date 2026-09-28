@@ -371,7 +371,7 @@ export async function render(view, ctx) {
                 <span>فتح واختيار ملف Excel للفواتير</span>
               </button>
               <div style="font-size:.9rem;color:var(--muted);margin-bottom:.3rem">اسحب وأفلت ملف Excel هنا، أو انقر للاختيار</div>
-              <div class="tiny dim">الصيغ المدعومة: .xlsx (Excel الأصلي المعتمد), .csv</div>
+              <div class="tiny dim">الصيغ المدعومة: ملفات Excel (.xlsx, .xls) أو .csv</div>
               <input type="file" id="import-file" accept=".xlsx,.xls,.csv,.tsv,.xml" style="display:none" />
             </div>
 

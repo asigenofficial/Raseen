@@ -1,4 +1,4 @@
-﻿// ==========================================================================
+// ==========================================================================
 //  Raseen — نافذة برومبت الذكاء الاصطناعي الموحد لتوليد القوالب
 //  AI Prompt Studio for Invoices & Vouchers Templates
 // ==========================================================================
@@ -398,7 +398,7 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
           <textarea id="txt-ai-prompt" readonly style="width: 100%; height: 280px; background: #090e1a; border: 1px solid #1e293b; border-radius: 8px; color: #e2e8f0; padding: 12px 14px; font-size: 12px; font-family: Consolas, monospace, sans-serif; line-height: 1.6; resize: vertical; outline: none;"></textarea>
 
           <!-- Quick 3-Step Guide -->
-          <div style="background: rgba(30, 41, 59, 0.5); border: 1px dashed #334155; border-radius: 8px; padding: 10px 14px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-size: 11.5px; color: #cbd5e1;">
+          <div style="background: rgba(30, 41, 59, 0.5); border: 1px dashed #334155; border-radius: 8px; padding: 10px 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; font-size: 11.5px; color: #cbd5e1;">
             <div style="display: flex; align-items: flex-start; gap: 6px;">
               <span style="background: #4f46e5; color: #fff; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; flex-shrink: 0;">1</span>
               <span>انسخ البرومبت بالزر الأخضر أعلاه.</span>

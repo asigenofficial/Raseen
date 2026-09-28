@@ -368,6 +368,59 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, list)
 	})
 
+	mux.HandleFunc("GET /api/issuers/template", func(w http.ResponseWriter, r *http.Request) {
+		b, err := excel.GenerateIssuerTemplateExcel()
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"issuers-import-template.xlsx\"")
+		w.WriteHeader(200)
+		_, _ = w.Write(b)
+	})
+
+	mux.HandleFunc("POST /api/issuers/analyze-excel", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			FileBase64 string `json:"file_base64"`
+			Filename   string `json:"filename"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		data, err := base64.StdEncoding.DecodeString(req.FileBase64)
+		if err != nil {
+			data, err = base64.RawStdEncoding.DecodeString(req.FileBase64)
+			if err != nil {
+				s.err(w, 400, "ترميز الملف غير صالح")
+				return
+			}
+		}
+		res, err := excel.AnalyzeIssuersSpreadsheet(bytes.NewReader(data), req.Filename)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("POST /api/issuers/import", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Issuers []services.ImportIssuerInput `json:"issuers"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		res, err := s.issuers.BatchImportIssuers(req.Issuers)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
 	mux.HandleFunc("GET /api/issuers/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		iss, err := s.issuers.GetIssuer(id)

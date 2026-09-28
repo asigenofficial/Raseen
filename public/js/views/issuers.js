@@ -6,6 +6,7 @@ import { store, loadIssuers, invalidate, can, setActiveIssuer } from '../core/st
 import {
   html, raw, esc, modal, formValues, toastOk, toastErr,
   confirmDialog, $, $$, delegate, dateTimeAr, icon,
+  exportExcel, exportCsv,
 } from '../core/util.js';
 
 const CITIES = ['الرياض', 'جدة', 'مكة المكرمة', 'المدينة المنورة', 'الدمام', 'الخبر', 'الظهران', 'بريدة', 'أبها', 'تبوك', 'حائل', 'نجران', 'جيزان', 'الطائف', 'الأحساء', 'الجبيل', 'ينبع'];
@@ -279,6 +280,162 @@ async function verifyChain(issuer) {
   });
 }
 
+function openIssuerImportModal(onSuccess) {
+  const m = modal({
+    title: 'استيراد الشركات المصدرة من ملف Excel / CSV',
+    body: html`
+      <div class="stack">
+        <div class="dropzone" id="issuer-import-dropzone" style="margin-top:.4rem;padding:2rem 1.2rem;cursor:pointer;">
+          <div class="dropzone-icon" style="margin-bottom:.6rem;">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--brand);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
+          </div>
+          <button type="button" class="btn btn-primary" id="btn-browse-issuer-file" style="margin-bottom:.8rem;font-size:1rem;padding:.65rem 1.4rem;pointer-events:none;">
+            ${icon.upload({ size: 18 })}
+            <span>فتح واختيار ملف Excel أو CSV من جهازك</span>
+          </button>
+          <div style="font-size:.9rem;color:var(--muted);margin-bottom:.3rem;">
+            أو اسحب ملف الإكسل وأفلته مباشرة هنا
+          </div>
+          <div class="tiny dim" id="issuer-selected-file">
+            الصيغ المدعومة: ملفات Excel (.xlsx, .xls) أو .csv
+          </div>
+          <input type="file" id="issuer-import-file" accept=".xlsx,.xls,.csv" style="display:none;" />
+        </div>
+
+        <div class="row items-center justify-between" style="padding:.2rem .4rem;margin-top:.2rem;">
+          <span class="tiny muted">يقوم النظام تلقائياً بالتعرف على الأعمدة وتحديث الشركات الحالية وإضافة الجديدة</span>
+          <a class="tiny muted" href="/api/issuers/template" download="issuers-import-template.xlsx" style="text-decoration:underline;">
+            ${icon.download({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px;' })}تنزيل نموذج Excel تجريبي فارغ
+          </a>
+        </div>
+
+        <div id="issuer-import-preview" style="display:none"></div>
+      </div>
+    `,
+    footer: `
+      <button class="btn" data-close type="button">إلغاء</button>
+      <button class="btn btn-primary" id="commit-issuer-import" type="button" disabled>اعتماد وإضافة الشركات</button>
+    `,
+  });
+
+  const dropzone = m.el.querySelector('#issuer-import-dropzone');
+  const fileInput = m.el.querySelector('#issuer-import-file');
+  const fileNameEl = m.el.querySelector('#issuer-selected-file');
+  const previewArea = m.el.querySelector('#issuer-import-preview');
+  const commitBtn = m.el.querySelector('#commit-issuer-import');
+  let parsedIssuers = [];
+
+  dropzone.addEventListener('click', () => {
+    fileInput.value = '';
+    fileInput.click();
+  });
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+  });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) handleFile(file);
+  });
+
+  async function handleFile(file) {
+    fileNameEl.innerHTML = `<span style="color:var(--brand);font-weight:700;">ملف محدد: ${esc(file.name)} (${(file.size / 1024).toFixed(1)} ك.ب)</span>`;
+    previewArea.style.display = 'block';
+    previewArea.innerHTML = '<div class="text-center muted" style="padding:1.5rem">جارٍ قراءة وفحص ملف الشركات…</div>';
+    commitBtn.disabled = true;
+
+    try {
+      const b64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => {
+          const res = r.result || '';
+          const commaIdx = res.indexOf(',');
+          resolve(commaIdx !== -1 ? res.slice(commaIdx + 1) : res);
+        };
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+
+      const res = await api.post('/api/issuers/analyze-excel', { file_base64: b64, filename: file.name });
+      parsedIssuers = (res.rows || []).filter((r) => !r.errors || r.errors.length === 0);
+
+      const errorRows = (res.rows || []).filter((r) => r.errors && r.errors.length > 0);
+      let errorsSnippet = '';
+      if (errorRows.length) {
+        errorsSnippet = `
+          <div class="alert alert-danger tiny mt" style="max-height:100px;overflow-y:auto">
+            <b>تحذير: تم استبعاد ${errorRows.length} صف لاحتوائها على أخطاء:</b>
+            <ul>${errorRows.slice(0, 5).map((er) => `<li>صف ${er.row_index}: ${esc(er.name_ar || 'بدون اسم')} (${er.errors.join('، ')})</li>`).join('')}</ul>
+          </div>
+        `;
+      }
+
+      previewArea.innerHTML = html`
+        <div class="card pad0 mt" style="border:1px solid var(--line);background:var(--card-solid);">
+          <div style="padding:.6rem 1rem;background:rgba(255,255,255,0.03);display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);">
+            <b>معاينة الشركات الجاهزة للاستيراد (${parsedIssuers.length} شركة)</b>
+            <span class="badge blue">${res.total_rows} سطر في الملف</span>
+          </div>
+          <div class="table-wrap" style="max-height:220px;overflow-y:auto">
+            <table class="tbl tiny">
+              <thead><tr><th>#</th><th>كود</th><th>الاسم بالعربية</th><th>الاسم بالإنجليزية</th><th>الرقم الضريبي</th><th>السجل التجاري</th><th>المدينة</th><th>الهاتف</th></tr></thead>
+              <tbody>
+                ${parsedIssuers.slice(0, 25).map((iss, idx) => `
+                  <tr>
+                    <td>${idx + 1}</td>
+                    <td class="mono">${esc(iss.code || 'تلقائي')}</td>
+                    <td><b>${esc(iss.name_ar)}</b></td>
+                    <td class="ltr">${esc(iss.name_en || '—')}</td>
+                    <td class="mono">${esc(iss.tax_number || '—')}</td>
+                    <td class="mono">${esc(iss.commercial_register || '—')}</td>
+                    <td>${esc(iss.city || '—')}</td>
+                    <td class="ltr">${esc(iss.phone || '—')}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${parsedIssuers.length > 25 ? `<div class="tiny muted text-center" style="padding:.4rem">تم عرض أول 25 شركة فقط من أصل ${parsedIssuers.length}…</div>` : ''}
+        </div>
+        ${raw(errorsSnippet)}
+      `;
+
+      if (parsedIssuers.length > 0) {
+        commitBtn.disabled = false;
+      } else {
+        previewArea.innerHTML += '<div class="alert alert-danger tiny mt">لم يتم العثور على أي شركات صالحة للاستيراد في الملف</div>';
+      }
+    } catch (err) {
+      previewArea.innerHTML = `<div class="alert alert-danger tiny">${esc(err.message || 'فشل فحص الملف')}</div>`;
+    }
+  }
+
+  commitBtn.addEventListener('click', async () => {
+    if (!parsedIssuers.length) return;
+    commitBtn.disabled = true;
+    commitBtn.textContent = 'جارٍ الحفظ والاعتماد…';
+    try {
+      const res = await api.post('/api/issuers/import', { issuers: parsedIssuers });
+      toastOk(`تم استيراد ${res.created + res.updated} شركة بنجاح (جديدة: ${res.created}، محدثة: ${res.updated})`);
+      m.close();
+      onSuccess?.();
+    } catch (err) {
+      toastErr(err.message || 'فشل استيراد الشركات');
+      commitBtn.disabled = false;
+      commitBtn.textContent = 'اعتماد وإضافة الشركات';
+    }
+  });
+}
+
 export async function render(view) {
   const draw = async () => {
     const rawIssuers = await api.get('/api/issuers');
@@ -294,13 +451,19 @@ export async function render(view) {
         </div>
         <div class="page-actions">
           ${raw(writable ? `<button class="btn btn-primary" id="add-issuer" type="button">${icon.plus({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}إضافة شركة</button>` : '')}
+          ${raw(writable ? `<button class="btn btn-outline" id="import-issuers-btn" type="button">${icon.upload({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}استيراد Excel</button>` : '')}
+          <button class="btn" id="exp-xls" type="button">${raw(icon.fileSpreadsheet({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}تصدير Excel</button>
+          <button class="btn" id="exp-csv" type="button">${raw(icon.fileText({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}CSV</button>
         </div>
       </div>
 
       ${raw(!issuers.length ? `<div class="card"><div class="empty">
         <h3>لا توجد شركات مصدرة بعد</h3>
         <p class="muted">أضف أول شركة لتتمكن من إصدار الفواتير وسندات القبض.</p>
-        ${writable ? `<button class="btn btn-primary" id="add-issuer-2" type="button">${icon.plus({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}إضافة شركة</button>` : ''}
+        <div class="row gap mt justify-center">
+          ${writable ? `<button class="btn btn-primary" id="add-issuer-2" type="button">${icon.plus({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}إضافة شركة</button>` : ''}
+          ${writable ? `<button class="btn btn-outline" id="import-issuers-btn-2" type="button">${icon.upload({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}استيراد Excel</button>` : ''}
+        </div>
       </div></div>` : '')}
 
       ${raw(issuers.length ? `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:0.65rem;">
@@ -348,6 +511,56 @@ export async function render(view) {
     if (addBtn) addBtn.addEventListener('click', () => openIssuerModal(null, draw));
     const add2 = $('#add-issuer-2', view);
     if (add2) add2.addEventListener('click', () => openIssuerModal(null, draw));
+
+    const triggerImport = () => {
+      openIssuerImportModal(async () => {
+        invalidate('issuers');
+        await loadIssuers(true);
+        draw();
+      });
+    };
+    const impBtn = $('#import-issuers-btn', view);
+    if (impBtn) impBtn.addEventListener('click', triggerImport);
+    const impBtn2 = $('#import-issuers-btn-2', view);
+    if (impBtn2) impBtn2.addEventListener('click', triggerImport);
+
+    const expHeaders = [
+      'كود الشركة', 'الاسم الرسمي بالعربية', 'الاسم بالإنجليزية', 'الرقم الضريبي', 'السجل التجاري',
+      'المدينة', 'الحي', 'الشارع', 'رقم المبنى', 'الرمز البريدي',
+      'الهاتف', 'البريد الإلكتروني', 'الموقع الإلكتروني', 'نسبة الضريبة%', 'بادئة الفاتورة', 'الحالة',
+    ];
+    const expRows = () => issuers.map((i) => [
+      i.code,
+      i.name_ar,
+      i.name_en || '',
+      i.tax_number || '',
+      i.commercial_register || '',
+      i.city || '',
+      i.district || '',
+      i.street || '',
+      i.building_no || '',
+      i.postal_code || '',
+      i.phone || '',
+      i.email || '',
+      i.website || '',
+      i.default_tax_rate ?? 15,
+      i.invoice_prefix || 'INV',
+      i.is_active ? 'نشطة' : 'معطلة',
+    ]);
+
+    const expXls = $('#exp-xls', view);
+    if (expXls) {
+      expXls.addEventListener('click', () => {
+        exportExcel('الشركات_المصدرة', 'الشركات والمنشآت المصدرة', expHeaders, expRows());
+      });
+    }
+
+    const expCsv = $('#exp-csv', view);
+    if (expCsv) {
+      expCsv.addEventListener('click', () => {
+        exportCsv('الشركات_المصدرة', expHeaders, expRows());
+      });
+    }
 
     delegate(view, 'click', '[data-act]', async (e, btn) => {
       const issuer = issuers.find((x) => x.id === btn.dataset.id);

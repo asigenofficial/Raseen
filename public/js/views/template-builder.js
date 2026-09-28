@@ -73,11 +73,15 @@ function createBlockElement(htmlContent, blockType = 'block') {
   const wrapper = document.createElement('div');
   wrapper.className = 'editor-block';
   wrapper.dataset.blockType = blockType;
+  if (blockType === 'totals' || blockType === 'signatures') {
+    wrapper.classList.add('pinned-bottom');
+    wrapper.style.marginTop = 'auto';
+  }
   wrapper.innerHTML = `
     <div class="block-controls" contenteditable="false">
       <button type="button" class="btn-ctrl btn-move-up" title="نقل لأعلى">▲</button>
       <button type="button" class="btn-ctrl btn-move-down" title="نقل لأسفل">▼</button>
-      <button type="button" class="btn-ctrl btn-place-bottom" title="وضع العنصر أسفل الورقة">⬇</button>
+      <button type="button" class="btn-ctrl btn-place-bottom" title="وضع وتثبيت العنصر أسفل الورقة">⬇</button>
       <button type="button" class="btn-ctrl btn-drag" title="اسحب لترتيب العنصر أو إنزاله في فراغ الورقة">⠿</button>
       <button type="button" class="btn-ctrl btn-dup" title="تكرار العنصر">⧉</button>
       <button type="button" class="btn-ctrl btn-del-blk" title="حذف العنصر">&times;</button>
@@ -478,6 +482,28 @@ function selectBlock(block, table = null) {
     scale.value = block ? Number.parseInt(block.style.zoom || '100', 10) : 100;
     $('#out-block-scale', view).textContent = `${scale.value}%`;
   }
+  const inpBg = $('#inp-sel-el-bg', view);
+  if (inpBg) {
+    inpBg.disabled = !block;
+    if (block) {
+      const bg = block.style.backgroundColor || (window.getComputedStyle ? getComputedStyle(block).backgroundColor : '');
+      const hex = normalizeColorToHex(bg);
+      if (hex && hex.startsWith('#') && hex.length === 7) inpBg.value = hex;
+    }
+  }
+  const inpCol = $('#inp-sel-el-color', view);
+  if (inpCol) {
+    inpCol.disabled = !block;
+    if (block) {
+      const col = block.style.color || (window.getComputedStyle ? getComputedStyle(block).color : '');
+      const hex = normalizeColorToHex(col);
+      if (hex && hex.startsWith('#') && hex.length === 7) inpCol.value = hex;
+    }
+  }
+  const btnDel = $('#btn-del-selected', view);
+  if (btnDel) {
+    btnDel.disabled = !block || block.id === 'editor-canvas-sheet';
+  }
 }
 
 function bottomRoom(item, selector) {
@@ -559,14 +585,21 @@ function attachBlockControls(block) {
     bottomButton = document.createElement('button');
     bottomButton.type = 'button';
     bottomButton.className = 'btn-ctrl btn-place-bottom';
-    bottomButton.title = 'وضع العنصر أسفل الورقة';
+    bottomButton.title = 'وضع وتثبيت العنصر أسفل الورقة';
     bottomButton.textContent = '⬇';
     $('.block-controls', block).appendChild(bottomButton);
   }
   if (bottomButton) bottomButton.onclick = (e) => {
     e.stopPropagation();
-    const gap = parseFloat(getComputedStyle(block).marginTop) || 0;
-    block.style.marginTop = `${gap + bottomRoom(block, '.editor-block')}px`;
+    if (block.classList.contains('pinned-bottom') || block.style.marginTop === 'auto') {
+      block.classList.remove('pinned-bottom');
+      block.style.marginTop = '';
+      toastOk('تم إلغاء التثبيت أسفل الورقة');
+    } else {
+      block.classList.add('pinned-bottom');
+      block.style.marginTop = 'auto';
+      toastOk('تم تثبيت العنصر أسفل الورقة');
+    }
   };
   const qrInput = $('.builder-qr-input', block);
   if (qrInput) qrInput.onchange = () => {
@@ -610,6 +643,10 @@ function attachBlockControls(block) {
       const prev = block.previousElementSibling;
       if (prev && !prev.classList.contains('canvas-watermark-layer') && !prev.classList.contains('canvas-bg-image-layer')) {
         block.parentNode.insertBefore(block, prev);
+        if (block.classList.contains('pinned-bottom')) {
+          block.classList.remove('pinned-bottom');
+          block.style.marginTop = '';
+        }
       }
     };
   }
@@ -941,14 +978,39 @@ function serializeCanvasToCleanHTML() {
   // Remove contenteditable attributes
   $$('[contenteditable]', clone).forEach(el => el.removeAttribute('contenteditable'));
 
-  // Clean internal class names
+  // Clean internal class names and preserve bottom pinning
   $$('.editor-block', clone).forEach(el => {
+    if (el.classList.contains('pinned-bottom') || el.dataset.blockType === 'totals' || el.dataset.blockType === 'signatures' || el.style.marginTop === 'auto') {
+      el.style.marginTop = 'auto';
+      el.style.marginBottom = '0';
+    }
     el.removeAttribute('class');
     el.removeAttribute('data-block-type');
   });
 
   const innerHtml = clone.innerHTML;
   const extraStyles = presetStyles;
+
+  // If this template has presetStyles (imported or AI generated), output clean HTML matching the original structure
+  if (extraStyles && extraStyles.trim().length > 30) {
+    const containerClasses = Array.from(canvas.classList).filter(c => c !== 'editor-a4-sheet' && c !== 'has-preset').join(' ') || 'invoice-container';
+    const finalHtml = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<title>${esc(docMeta.name_ar)}</title>
+<style>
+${extraStyles}
+</style>
+</head>
+<body>
+  <div class="${containerClasses}" style="${canvas.style.cssText}">
+    ${innerHtml}
+  </div>
+</body>
+</html>`;
+    return cleanStrayTableRowsAndFixTables(finalHtml);
+  }
 
   // Frame styles for print export
   let frameCSS = '';
@@ -971,6 +1033,8 @@ function serializeCanvasToCleanHTML() {
   @page { size: A4 portrait; margin: 10mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
+    display: flex;
+    flex-direction: column;
     font-family: 'Cairo', Tahoma, Arial, sans-serif;
     font-size: 12px;
     color: #1e293b;
@@ -978,7 +1042,8 @@ function serializeCanvasToCleanHTML() {
     padding: 12px;
     direction: rtl;
     position: relative;
-    min-height: 297mm;
+    min-height: 277mm;
+    box-sizing: border-box;
     ${frameCSS}
   }
   table { border-collapse: collapse; }
@@ -1011,7 +1076,6 @@ function serializeCanvasToCleanHTML() {
       padding: 0;
     }
   }
-  ${extraStyles}
 </style>
 </head>
 <body>
@@ -1021,35 +1085,130 @@ function serializeCanvasToCleanHTML() {
   return cleanStrayTableRowsAndFixTables(finalHtml);
 }
 
-// ─── In-place Theme Color Applicator ──────────────────────────────────────
+// ─── Color Normalization & Theme Extraction Helpers ───────────────────────
+
+function normalizeColorToHex(col) {
+  if (!col) return '';
+  col = String(col).trim();
+  if (col.startsWith('#')) {
+    if (col.length === 4) {
+      return ('#' + col[1] + col[1] + col[2] + col[2] + col[3] + col[3]).toLowerCase();
+    }
+    return col.toLowerCase();
+  }
+  const rgbMatch = col.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (rgbMatch) {
+    const r = parseInt(rgbMatch[1], 10).toString(16).padStart(2, '0');
+    const g = parseInt(rgbMatch[2], 10).toString(16).padStart(2, '0');
+    const b = parseInt(rgbMatch[3], 10).toString(16).padStart(2, '0');
+    return `#${r}${g}${b}`.toLowerCase();
+  }
+  return col.toLowerCase();
+}
+
+function detectPrimaryColorFromHTML(rawHtml, doc) {
+  if (!rawHtml) return null;
+  // 1. Check CSS variables
+  const varMatch = rawHtml.match(/--(?:primary|primary-color|theme-color|brand-color)\s*:\s*(#[0-9a-fA-F]{3,8}|rgb\([^)]+\))/i);
+  if (varMatch) {
+    const hex = normalizeColorToHex(varMatch[1]);
+    if (hex && hex.startsWith('#')) return hex;
+  }
+
+  // 2. Check thead / th background
+  const th = doc.querySelector('thead tr, th, .tbl-head-row, .grand-total, .doc-title-banner, .banner, .header');
+  if (th) {
+    const bg = th.style.backgroundColor || th.style.background || th.getAttribute('bgcolor');
+    if (bg && !bg.includes('#fff') && !bg.includes('white') && !bg.includes('#000') && !bg.includes('transparent')) {
+      const hex = normalizeColorToHex(bg);
+      if (hex && hex.startsWith('#')) return hex;
+    }
+  }
+
+  // 3. Check hex colors in style tags
+  const hexes = rawHtml.match(/#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g) || [];
+  const candidateHexes = hexes.filter(h => {
+    const lower = normalizeColorToHex(h);
+    return lower !== '#fff' && lower !== '#ffffff' && lower !== '#000' && lower !== '#000000' &&
+           lower !== '#f8fafc' && lower !== '#f1f5f9' && lower !== '#e2e8f0' && lower !== '#cbd5e1' &&
+           lower !== '#94a3b8' && lower !== '#64748b' && lower !== '#475569' && lower !== '#334155' &&
+           lower !== '#1e293b' && lower !== '#0f172a';
+  });
+  if (candidateHexes.length > 0) {
+    const counts = {};
+    candidateHexes.forEach(h => {
+      const norm = normalizeColorToHex(h);
+      counts[norm] = (counts[norm] || 0) + 1;
+    });
+    const sorted = Object.entries(counts).sort((a,b) => b[1] - a[1]);
+    if (sorted.length > 0) return sorted[0][0];
+  }
+  return null;
+}
+
+// ─── In-place Theme Color Applicator (Comprehensive Global Color Engine) ─────
 
 function applyThemeColorInPlace(newColor) {
+  const oldColor = docMeta.primary_color;
   docMeta.primary_color = newColor;
 
   const indicator = $('#theme-color-indicator', view);
   if (indicator) indicator.style.background = newColor;
 
+  const inpCustom = $('#inp-custom-color', view);
+  if (inpCustom) inpCustom.value = newColor;
+
+  $$('.btn-palette-col', view).forEach(b => {
+    b.style.border = (b.dataset.color.toLowerCase() === newColor.toLowerCase()) ? '2px solid #fff' : '1px solid rgba(0,0,0,0.5)';
+  });
+
   const canvas = $('#editor-canvas-sheet', view);
   if (!canvas) return;
 
-  $$('.tbl-head-row, thead tr', canvas).forEach(el => {
-    el.style.backgroundColor = newColor;
+  const oldHex = normalizeColorToHex(oldColor);
+  const newHex = normalizeColorToHex(newColor);
+
+  // 1. Set CSS custom properties on canvas container so all CSS variables update dynamically
+  ['--primary', '--primary-color', '--theme-color', '--accent', '--accent-color', '--brand-color', '--header-bg'].forEach(v => {
+    canvas.style.setProperty(v, newColor);
   });
 
-  $$('.doc-title-banner, [style*="clip-path"], .invoice-title-banner', canvas).forEach(el => {
-    el.style.backgroundColor = newColor;
-  });
+  // 2. Update presetStyles and #preset-custom-style
+  if (presetStyles && oldHex && oldHex !== newHex) {
+    presetStyles = presetStyles.replace(new RegExp(oldHex, 'gi'), newHex);
+    applyPresetStyles(presetStyles);
+  }
 
-  $$('.totals-grand-row, [style*="grand_total"]', canvas).forEach(el => {
-    el.style.backgroundColor = newColor;
-  });
+  // 3. Update all inline styles, attributes, and SVGs across the entire canvas
+  if (oldHex && oldHex !== newHex) {
+    const regexOld = new RegExp(oldHex, 'gi');
+    canvas.querySelectorAll('*').forEach(el => {
+      const styleAttr = el.getAttribute('style');
+      if (styleAttr && styleAttr.toLowerCase().includes(oldHex)) {
+        el.setAttribute('style', styleAttr.replace(regexOld, newHex));
+      }
+      const fill = el.getAttribute('fill');
+      if (fill && fill.toLowerCase() === oldHex) {
+        el.setAttribute('fill', newHex);
+      }
+      const stroke = el.getAttribute('stroke');
+      if (stroke && stroke.toLowerCase() === oldHex) {
+        el.setAttribute('stroke', newHex);
+      }
+    });
+  }
 
-  $$('.pill-icon-wrap, [data-block-type="info_pills"] span[style*="border-inline-end"]', canvas).forEach(el => {
-    el.style.color = newColor;
+  // 4. Update default builder block classes if present
+  $$('.tbl-head-row, thead.tbl-head-row tr', canvas).forEach(el => {
+    el.style.backgroundColor = newColor;
   });
 
   $$('[data-block-type="header"] div[style*="font-size:22px"]', canvas).forEach(el => {
     el.style.color = newColor;
+  });
+
+  $$('[data-block-type="totals"] .totals-grand-row', canvas).forEach(el => {
+    el.style.backgroundColor = newColor;
   });
 
   $$('[data-block-type="voucher_banner"]', canvas).forEach(el => {
@@ -1067,6 +1226,12 @@ function applyThemeColorInPlace(newColor) {
   $$('[data-block-type="divider"] hr', canvas).forEach(hr => {
     hr.style.borderTopColor = newColor;
   });
+
+  // Border of main container if it was themed
+  const mainCard = canvas.querySelector('.invoice-container, .voucher-card, .receipt-card, .invoice-card');
+  if (mainCard && mainCard.style.borderColor) {
+    mainCard.style.borderColor = newColor;
+  }
 
   if (sheetBg.frameStyle === 'theme') {
     applySheetBackground();
@@ -1153,26 +1318,26 @@ function renderView() {
       <header style="background:#131c2e; border-bottom:1px solid #1e293b; padding:0.45rem 1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; z-index:30;">
         
         <!-- Branding & Core Controls -->
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0;">
-          <div id="theme-color-indicator" style="background:${docMeta.primary_color}; width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:14px; box-shadow:0 2px 8px rgba(0,0,0,0.4);">
+        <div class="builder-core-controls">
+          <div id="theme-color-indicator" style="background:${docMeta.primary_color}; width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:14px; box-shadow:0 2px 8px rgba(0,0,0,0.4); flex-shrink:0;">
             R
           </div>
           <span style="font-weight:800; font-size:0.95rem; white-space:nowrap;">محرر ومصمم القوالب</span>
           
-          <select id="sel-doc-type" style="width:190px; max-width:100%; flex:none; padding:4px 8px; font-size:0.8rem; font-weight:700; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:5px;">
+          <select id="sel-doc-type" style="padding:4px 8px; font-size:0.8rem; font-weight:700; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:5px;">
             <option value="invoices" ${docMeta.type === 'invoices' ? 'selected' : ''}>قالب فاتورة ضريبية</option>
             <option value="documents" ${docMeta.type === 'documents' ? 'selected' : ''}>قالب سند مالي / قبض</option>
           </select>
 
-          <select id="sel-preset-template" style="width:230px; max-width:100%; flex:none; padding:4px 8px; font-size:0.8rem; font-weight:700; background:#0f172a; color:#38bdf8; border:1px solid #0284c7; border-radius:5px; cursor:pointer;" title="تحميل قالب جاهز ومعتمد للتعديل عليه">
+          <select id="sel-preset-template" style="padding:4px 8px; font-size:0.8rem; font-weight:700; background:#0f172a; color:#38bdf8; border:1px solid #0284c7; border-radius:5px; cursor:pointer;" title="تحميل قالب جاهز ومعتمد للتعديل عليه">
             <option value="">قوالب جاهزة معتمدة ▾</option>
           </select>
 
-          <input type="text" id="inp-doc-name" value="${esc(docMeta.name_ar)}" placeholder="اسم القالب..." style="padding:4px 10px; font-size:0.8rem; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:5px; width:160px; max-width:100%; flex:none;" />
+          <input type="text" id="inp-doc-name" value="${esc(docMeta.name_ar)}" placeholder="اسم القالب..." style="padding:4px 10px; font-size:0.8rem; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:5px;" />
         </div>
 
         <!-- Center: Quick Color Palette -->
-        <div style="display:flex; align-items:center; gap:5px;">
+        <div class="builder-palette-controls">
           <span style="font-size:0.75rem; color:#94a3b8; font-weight:700;">الثيم:</span>
           ${PALETTE.map(c => `
             <button type="button" class="btn-palette-col" data-color="${c}" style="width:17px; height:17px; border-radius:50%; background:${c}; border:${docMeta.primary_color === c ? '2px solid #fff' : '1px solid rgba(0,0,0,0.5)'}; cursor:pointer; padding:0; transition:transform 0.15s;" title="${c}"></button>
@@ -1181,7 +1346,7 @@ function renderView() {
         </div>
 
         <!-- Right: Primary Actions -->
-        <div style="display:flex; align-items:center; gap:6px;">
+        <div class="builder-actions-row">
           <button type="button" class="btn btn-sm btn-open-ai-prompt" style="background:linear-gradient(135deg, #6366f1, #8b5cf6); color:#fff; border:none; font-size:0.8rem; font-weight:800; padding:5px 13px; border-radius:5px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(99,102,241,0.35); transition:transform 0.1s;" title="نسخ برومبت الذكاء الاصطناعي لإنشاء وتوليد القالب">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
             برومبت الذكاء الاصطناعي
@@ -1390,7 +1555,7 @@ function renderView() {
       </div>
 
       <!-- Main Canvas Workspace (Real A4 Sheet) -->
-      <div class="builder-workspace" style="flex:1; min-height:0; overflow:auto; padding:24px 10px; display:flex; justify-content:center; align-items:flex-start; background:#0b1120;">
+      <div class="builder-workspace" id="builder-workspace" style="flex:1; min-height:0; overflow:auto; padding:20px 8px; display:flex; justify-content:center; align-items:flex-start; background:#0b1120;">
         <div class="editor-a4-sheet" id="editor-canvas-sheet">
           <!-- Blocks and background layers populate here -->
         </div>
@@ -1406,12 +1571,18 @@ function renderView() {
           </select>
           <button type="button" id="btn-copy-block" class="btn-tag-chip">نسخ العنصر</button>
           <button type="button" id="btn-paste-block" class="btn-tag-chip">لصق العنصر</button>
+          <label for="inp-sel-el-bg" title="لون خلفية العنصر أو الخلية المحددة">خلفية العنصر</label>
+          <input type="color" id="inp-sel-el-bg" value="#ffffff" disabled style="width:20px; height:20px; border:none; background:transparent; cursor:pointer; padding:0;" title="تغيير لون خلفية العنصر المحدد" />
+          <label for="inp-sel-el-color" title="لون نص أو حدود العنصر المحدد">لون العنصر</label>
+          <input type="color" id="inp-sel-el-color" value="#000000" disabled style="width:20px; height:20px; border:none; background:transparent; cursor:pointer; padding:0;" title="تغيير لون نص أو حدود العنصر المحدد" />
+          <button type="button" id="btn-del-selected" class="btn-tag-chip" style="background:#dc2626; color:#fff;" disabled title="حذف العنصر المحدد">حذف المحدد</button>
           <label for="rng-block-scale">حجم العنصر</label>
           <input type="range" id="rng-block-scale" min="60" max="140" step="10" value="100" disabled />
           <output id="out-block-scale">100%</output>
           <label for="rng-builder-zoom">التكبير</label>
-          <input type="range" id="rng-builder-zoom" min="50" max="150" step="10" value="100" />
+          <input type="range" id="rng-builder-zoom" min="25" max="150" step="5" value="100" />
           <output id="out-builder-zoom">100%</output>
+          <button type="button" id="btn-builder-zoom-fit" class="btn-tag-chip" style="background:#0284c7; color:#fff; font-weight:700;">ملاءمة</button>
         </div>
       </div>
 
@@ -1492,13 +1663,100 @@ function renderView() {
     </div>
 
     <style>
-      .visual-doc-editor > header #sel-doc-type { width: 190px !important; }
-      .visual-doc-editor > header #sel-preset-template { width: 230px !important; }
-      .visual-doc-editor > header #inp-doc-name { width: 160px !important; }
+      .builder-core-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+      .builder-core-controls #sel-doc-type { width: 180px; }
+      .builder-core-controls #sel-preset-template { width: 210px; }
+      .builder-core-controls #inp-doc-name { width: 150px; }
+      .builder-palette-controls { display:flex; align-items:center; gap:5px; }
+      .builder-actions-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
       .builder-bottom-bar { flex:none; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:8px 16px; background:#131c2e; border-top:1px solid #334155; font-size:0.75rem; color:#94a3b8; }
       .builder-bottom-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
       .builder-bottom-actions select { width:auto; padding:4px 8px; background:#0f172a; color:#fff; border:1px solid #475569; border-radius:5px; }
-      #rng-builder-zoom, #rng-block-scale { width:90px; }
+      #rng-builder-zoom, #rng-block-scale { width:80px; }
+
+      @media (max-width: 860px) {
+        .visual-doc-editor {
+          height: auto !important;
+          min-height: calc(100vh - 65px);
+        }
+        .visual-doc-editor > header {
+          padding: 0.5rem 0.6rem !important;
+          flex-direction: column;
+          align-items: stretch !important;
+          gap: 8px !important;
+        }
+        .builder-core-controls {
+          width: 100%;
+          gap: 6px;
+        }
+        .builder-core-controls #sel-doc-type,
+        .builder-core-controls #sel-preset-template,
+        .builder-core-controls #inp-doc-name {
+          width: 100% !important;
+          max-width: 100% !important;
+          flex: 1 1 100% !important;
+        }
+        .builder-palette-controls {
+          justify-content: center;
+          padding: 3px 0;
+          width: 100%;
+        }
+        .builder-actions-row {
+          width: 100%;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+        }
+        .builder-actions-row .btn {
+          flex: 1 1 calc(50% - 4px);
+          font-size: 0.74rem !important;
+          padding: 5px 8px !important;
+          text-align: center;
+          justify-content: center;
+        }
+        .builder-actions-row .btn-save-sheet {
+          flex: 1 1 100% !important;
+          font-size: 0.84rem !important;
+          padding: 8px 12px !important;
+        }
+        .visual-doc-editor > nav {
+          padding: 0 0.4rem;
+          overflow-x: auto;
+          flex-wrap: nowrap;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+        }
+        .visual-doc-editor > nav::-webkit-scrollbar {
+          display: none;
+        }
+        .visual-doc-editor > nav > div:last-child {
+          display: none;
+        }
+        .tab-btn {
+          padding: 6px 10px;
+          font-size: 0.76rem;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .builder-workspace {
+          padding: 12px 6px !important;
+        }
+        .builder-bottom-bar {
+          padding: 6px 8px;
+          font-size: 0.7rem;
+        }
+        .builder-bottom-bar > span {
+          display: none;
+        }
+        .builder-bottom-actions {
+          width: 100%;
+          justify-content: space-between;
+          gap: 4px;
+        }
+        #rng-builder-zoom, #rng-block-scale {
+          width: 55px;
+        }
+      }
       .visual-doc-editor > header, .visual-doc-editor > nav, .visual-doc-editor > .tab-panel { flex-shrink:0; }
       .editor-block-selected { outline:2px solid #38bdf8 !important; outline-offset:3px; }
       .btn-drag { cursor:grab; }
@@ -1620,6 +1878,8 @@ function renderView() {
 
       /* ── A4 Sheet Styling ── */
       .editor-a4-sheet {
+        display: flex;
+        flex-direction: column;
         width: 210mm;
         min-height: 297mm;
         background: #ffffff;
@@ -1633,6 +1893,18 @@ function renderView() {
         font-size: 13px;
         box-sizing: border-box;
         overflow: hidden;
+        margin: 0 auto;
+        flex-shrink: 0;
+        transform-origin: top center;
+      }
+      .editor-a4-sheet.has-preset,
+      .editor-a4-sheet.invoice-container,
+      .editor-a4-sheet[class*="container"],
+      .editor-a4-sheet[class*="card"] {
+        padding: unset;
+        overflow: visible;
+        background: #ffffff;
+        box-shadow: 0 16px 45px rgba(0,0,0,0.7);
       }
       .editor-block {
         position: relative;
@@ -1640,6 +1912,14 @@ function renderView() {
         border: 1px dashed transparent;
         transition: border 0.15s;
         margin-bottom: 8px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .editor-block.pinned-bottom,
+      .editor-block[data-block-type="totals"],
+      .editor-block[data-block-type="signatures"] {
+        margin-top: auto !important;
+        margin-bottom: 0 !important;
       }
       .editor-block:hover {
         border-color: rgba(5, 150, 105, 0.4);
@@ -1743,13 +2023,19 @@ function populateInitialBlocks() {
     canvas.appendChild(createBlockElement(getImageBlockHTML(), 'logo'));
     canvas.appendChild(createBlockElement(getVoucherBannerBlockHTML(col), 'voucher_banner'));
     canvas.appendChild(createBlockElement(getVoucherFieldsBlockHTML(), 'voucher_fields'));
-    canvas.appendChild(createBlockElement(getSignaturesBlockHTML(), 'signatures'));
+    const sig = createBlockElement(getSignaturesBlockHTML(), 'signatures');
+    sig.classList.add('pinned-bottom');
+    sig.style.marginTop = 'auto';
+    canvas.appendChild(sig);
   } else {
     canvas.appendChild(createBlockElement(getHeaderBlockHTML(col), 'header'));
     canvas.appendChild(createBlockElement(getInfoPillsBlockHTML(col), 'info_pills'));
     canvas.appendChild(createBlockElement(getBuyerBlockHTML(col), 'buyer'));
     canvas.appendChild(createBlockElement(getItemsTableBlockHTML(col), 'items_table'));
-    canvas.appendChild(createBlockElement(getTotalsBlockHTML(col), 'totals'));
+    const totals = createBlockElement(getTotalsBlockHTML(col), 'totals');
+    totals.classList.add('pinned-bottom');
+    totals.style.marginTop = 'auto';
+    canvas.appendChild(totals);
   }
 }
 
@@ -1778,10 +2064,40 @@ function applyPresetStyles(styles) {
     view.appendChild(customStyleTag);
   }
   const clean = presetStyles.replace(/@page\s*\{[^}]*\}/g, '');
-  // Scope body and html selectors to #editor-canvas-sheet to ensure all card shapes, backgrounds, and themes work flawlessly
-  const scoped = clean
-    .replace(/(^|[\s,;{}])body\b/gi, '$1#editor-canvas-sheet')
-    .replace(/(^|[\s,;{}])html\b/gi, '$1#editor-canvas-sheet');
+  
+  // If the imported styles contain container classes (.invoice-container, .voucher-card, etc.),
+  // map body/html to #builder-workspace, and map the container class directly to #editor-canvas-sheet!
+  const hasInvoiceContainer = /\.invoice-container\b/i.test(clean);
+  const hasVoucherCard = /\.voucher-card\b/i.test(clean);
+  const hasReceiptCard = /\.receipt-card\b/i.test(clean);
+  const hasDocCard = /\.doc-card\b/i.test(clean);
+
+  let scoped = clean;
+  if (hasInvoiceContainer || hasVoucherCard || hasReceiptCard || hasDocCard) {
+    scoped = scoped
+      .replace(/(^|[\s,;{}])body\b/gi, '$1#builder-workspace')
+      .replace(/(^|[\s,;{}])html\b/gi, '$1#builder-workspace');
+    if (hasInvoiceContainer) {
+      scoped = scoped.replace(/\.invoice-container\b/g, '#editor-canvas-sheet');
+    }
+    if (hasVoucherCard) {
+      scoped = scoped.replace(/\.voucher-card\b/g, '#editor-canvas-sheet');
+    }
+    if (hasReceiptCard) {
+      scoped = scoped.replace(/\.receipt-card\b/g, '#editor-canvas-sheet');
+    }
+    if (hasDocCard) {
+      scoped = scoped.replace(/\.doc-card\b/g, '#editor-canvas-sheet');
+    }
+  } else {
+    scoped = scoped
+      .replace(/(^|[\s,;{}])body\b/gi, '$1#editor-canvas-sheet')
+      .replace(/(^|[\s,;{}])html\b/gi, '$1#editor-canvas-sheet');
+  }
+
+  // Also bind :root variables to #editor-canvas-sheet so variables cascade properly
+  scoped = scoped.replace(/:root\b/g, ':root, #editor-canvas-sheet');
+
   customStyleTag.textContent = scoped;
 }
 
@@ -1789,18 +2105,61 @@ function attachPresetSectionDrag() {
   const canvas = $('#editor-canvas-sheet', view);
   if (!canvas) return;
 
-  const presetBlocks = $$('#editor-canvas-sheet .editor-block[data-block-type="preset"]', view);
-  presetBlocks.forEach(block => {
-    // Find the actual container holding the sections
-    let root = block.querySelector('.invoice-container, .voucher-card, .receipt-card, .invoice-card, .invoice-box, .doc-container') ||
-               block.querySelector(':scope > .block-content > div') ||
-               block.querySelector(':scope > .block-content') ||
-               block;
+  const root = canvas;
 
-    // If root only has one single child wrapper (e.g. nested div), delve into it
-    if (root.children.length === 1 && root.firstElementChild && root.firstElementChild.children.length > 1) {
-      root = root.firstElementChild;
-    }
+  // Enhance Barcode elements in imported templates with click-to-edit
+  canvas.querySelectorAll('.barcode, .builder-barcode, .barcode-wrap, [class*="barcode"], [id*="barcode"]').forEach(bc => {
+    bc.style.cursor = 'pointer';
+    bc.title = 'انقر لتعديل قيمة الباركود أو نوعه';
+    bc.onclick = (e) => {
+      e.stopPropagation();
+      selectBlock(bc);
+      const currentVal = bc.textContent.trim().replace(/\*/g, '') || 'PRD-01';
+      const newVal = prompt('أدخل قيمة الباركود الجديدة (Code 39):', currentVal);
+      if (newVal !== null && newVal.trim().length > 0) {
+        try {
+          const cleanVal = newVal.trim().toUpperCase();
+          bc.innerHTML = `
+            <div class="builder-barcode-preview">${code39Svg(cleanVal)}</div>
+            <small class="builder-barcode-label" style="display:block; text-align:center;">${cleanVal}</small>
+          `;
+          toastOk('تم تحديث الباركود');
+        } catch (err) {
+          toastErr(err.message || 'خطأ في توليد الباركود');
+        }
+      }
+    };
+  });
+
+  // Enhance QR code elements in imported templates with click-to-edit
+  canvas.querySelectorAll('.qr-code, .qr-container, .builder-qr, [class*="qr"], [id*="qr"]').forEach(qr => {
+    qr.style.cursor = 'pointer';
+    qr.title = 'انقر لتعديل محتوى رمز QR';
+    qr.onclick = (e) => {
+      e.stopPropagation();
+      selectBlock(qr);
+      const newVal = prompt('أدخل محتوى أو رابط رمز الاستجابة السريعة QR (أو اتركه {{qr_code}} للربط التلقائي):', '{{qr_code}}');
+      if (newVal !== null) {
+        try {
+          const cleanVal = newVal.trim() || '{{qr_code}}';
+          qr.innerHTML = cleanVal === '{{qr_code}}'
+            ? '<div style="width:90px; height:90px; display:flex; align-items:center; justify-content:center; font-family:\'Segoe UI\', Arial, sans-serif; font-weight:900; font-size:26px; color:#1e293b; border:1.5px dashed #cbd5e1; border-radius:6px; background:#f8fafc; letter-spacing:1px;">QR</div>'
+            : qrSvg(cleanVal, { scale: 3, margin: 1 });
+          toastOk('تم تحديث رمز QR');
+        } catch {
+          toastErr('محتوى QR طويل أو غير صالح');
+        }
+      }
+    };
+  });
+
+  // Make inner cards and tables selectable for color and style adjustments
+  canvas.querySelectorAll('.card, .box, .panel, .kpi-card, .party-box, .info-pill, .badge, table').forEach(sub => {
+    sub.onclick = (ev) => {
+      ev.stopPropagation();
+      selectBlock(sub, sub.matches('table') ? sub : sub.querySelector('table'));
+    };
+  });
 
     const sections = [...root.children].filter(el =>
       el instanceof HTMLElement &&
@@ -1997,7 +2356,6 @@ function attachPresetSectionDrag() {
         }
       }
     });
-  });
 }
 
 function loadRawHtmlIntoCanvas(rawHtml, tplName) {
@@ -2010,6 +2368,19 @@ function loadRawHtmlIntoCanvas(rawHtml, tplName) {
   const doc = parser.parseFromString(rawHtml, 'text/html');
   applyPresetStyles(Array.from(doc.querySelectorAll('style')).map(s => s.textContent).join('\n'));
 
+  // Detect and synchronize primary theme color from imported template
+  const detectedCol = detectPrimaryColorFromHTML(rawHtml, doc);
+  if (detectedCol) {
+    docMeta.primary_color = detectedCol;
+    const indicator = $('#theme-color-indicator', view);
+    if (indicator) indicator.style.background = detectedCol;
+    const inpCustom = $('#inp-custom-color', view);
+    if (inpCustom) inpCustom.value = detectedCol;
+    $$('.btn-palette-col', view).forEach(b => {
+      b.style.border = (b.dataset.color.toLowerCase() === detectedCol.toLowerCase()) ? '2px solid #fff' : '1px solid rgba(0,0,0,0.5)';
+    });
+  }
+
   // Extract body inner content or main container
   const container = doc.querySelector('.invoice-container') ||
                     doc.querySelector('.voucher-card') ||
@@ -2018,12 +2389,38 @@ function loadRawHtmlIntoCanvas(rawHtml, tplName) {
                     doc.querySelector('.invoice-box') ||
                     doc.querySelector('.doc-card') ||
                     doc.querySelector('.receipt-container') ||
-                    doc.querySelector('.bill-container') ||
-                    doc.body;
-  const content = container === doc.body ? doc.body.innerHTML : container.outerHTML;
+                    doc.querySelector('.bill-container');
 
-  canvas.replaceChildren(createBlockElement(content, 'preset'));
-  canvas.style.padding = container === doc.body ? '' : '0';
+  if (container) {
+    canvas.className = 'editor-a4-sheet has-preset ' + (container.className || '');
+    canvas.style.cssText = container.style.cssText;
+    canvas.style.width = '210mm';
+    canvas.style.minHeight = '297mm';
+    canvas.style.position = 'relative';
+    canvas.style.boxSizing = 'border-box';
+    canvas.style.margin = '0 auto';
+    canvas.style.zoom = '100%';
+    canvas.innerHTML = container.innerHTML;
+  } else {
+    canvas.className = 'editor-a4-sheet has-preset';
+    canvas.style.cssText = doc.body.style.cssText;
+    canvas.style.width = '210mm';
+    canvas.style.minHeight = '297mm';
+    canvas.style.position = 'relative';
+    canvas.style.boxSizing = 'border-box';
+    canvas.style.margin = '0 auto';
+    canvas.style.zoom = '100%';
+    canvas.innerHTML = doc.body.innerHTML;
+  }
+
+  // Ensure block zoom is reset to 100%
+  const rngBlock = $('#rng-block-scale', view);
+  if (rngBlock) {
+    rngBlock.value = 100;
+    rngBlock.disabled = true;
+    $('#out-block-scale', view).textContent = '100%';
+  }
+
   selectBlock(null);
 
   // Make ALL text elements directly editable across all shapes & components
@@ -2047,7 +2444,7 @@ function loadRawHtmlIntoCanvas(rawHtml, tplName) {
   // Re-apply background overlay
   applySheetBackground();
 
-  toastOk('تم تحميل القالب بنجاح مع تفعيل التحكم الكامل في التحريك، التعديل، والحجم لكل الأشكال!');
+  toastOk('تم استيراد القالب وتفعيل التحكم الكامل بالألوان، الأقسام، الباركود، والـ QR!');
 }
 
 function restoreEditorContent(content) {
@@ -2122,11 +2519,36 @@ function attachAppEvents() {
     selectBlock(clone);
     clone.scrollIntoView({ block: 'nearest' });
   });
+  function applyBuilderZoom(zp) {
+    zoomPercent = Math.max(20, Math.min(150, zp));
+    if (canvas) {
+      canvas.style.zoom = `${zoomPercent}%`;
+    }
+    const rng = $('#rng-builder-zoom', view);
+    const out = $('#out-builder-zoom', view);
+    if (rng) rng.value = zoomPercent;
+    if (out) out.textContent = `${zoomPercent}%`;
+  }
+
+  function fitBuilderZoom() {
+    const ws = $('#builder-workspace', view) || $('.builder-workspace', view);
+    if (!ws || ws.clientWidth < 60) return;
+    const availableW = ws.clientWidth - 20;
+    const targetW = 794;
+    let scale = Math.min(1.15, Math.max(0.24, Math.round((availableW / targetW) * 96) / 100));
+    if (availableW >= 860) {
+      scale = 1.0;
+    }
+    applyBuilderZoom(Math.round(scale * 100));
+  }
+
   $('#rng-builder-zoom', view)?.addEventListener('input', (e) => {
-    zoomPercent = Number(e.target.value);
-    canvas.style.zoom = `${zoomPercent}%`;
-    $('#out-builder-zoom', view).textContent = `${zoomPercent}%`;
+    applyBuilderZoom(Number(e.target.value));
   });
+  $('#btn-builder-zoom-fit', view)?.addEventListener('click', fitBuilderZoom);
+  window.addEventListener('resize', fitBuilderZoom);
+  setTimeout(fitBuilderZoom, 60);
+
   $('#rng-block-scale', view)?.addEventListener('input', (e) => {
     if (!selectedBlock) return;
     selectedBlock.style.zoom = `${e.target.value}%`;
@@ -2176,9 +2598,6 @@ function attachAppEvents() {
         const rawHtml = await api.text('/api/invoices/templates/' + tplId + '/render-html');
         if (rawHtml) {
           loadRawHtmlIntoCanvas(rawHtml, opt?.dataset?.name || opt?.textContent);
-          if (opt?.dataset?.color) {
-            applyThemeColorInPlace(opt.dataset.color);
-          }
         }
       } catch (err) {
         toastErr('تعذر تحميل القالب: ' + (err.message || 'خطأ في الاتصال'));
@@ -2208,16 +2627,41 @@ function attachAppEvents() {
     };
   }
 
+  // Selected element background and text color inputs
+  $('#inp-sel-el-bg', view)?.addEventListener('input', (e) => {
+    if (!selectedBlock) return;
+    selectedBlock.style.backgroundColor = e.target.value;
+  });
+
+  $('#inp-sel-el-color', view)?.addEventListener('input', (e) => {
+    if (!selectedBlock) return;
+    selectedBlock.style.color = e.target.value;
+    if (selectedBlock.style.borderColor) selectedBlock.style.borderColor = e.target.value;
+    selectedBlock.querySelectorAll('svg, path').forEach(s => s.setAttribute('fill', e.target.value));
+  });
+
+  $('#btn-del-selected', view)?.addEventListener('click', () => {
+    if (!selectedBlock || selectedBlock.id === 'editor-canvas-sheet') return;
+    const target = selectedBlock;
+    selectBlock(null);
+    target.remove();
+    toastOk('تم حذف العنصر المحدد');
+  });
+
+  // Global canvas element selection
+  canvas?.addEventListener('click', (e) => {
+    if (e.target.closest('.block-controls, .btn-sub-ctrl, .preset-tbl-controls, .logo-actions')) return;
+    const target = e.target.closest('.preset-sub-shape, .preset-section, table, th, td, .card, .box, .panel, .kpi-card, .party-box, .info-pill, .badge, .qr-container, .builder-qr, .barcode, .builder-barcode, .editor-block') || e.target;
+    if (target && target !== canvas) {
+      selectBlock(target, target.matches('table') ? target : target.querySelector('table'));
+    }
+  });
+
   // Theme color palette buttons
   $$('.btn-palette-col', view).forEach(btn => {
     btn.onclick = () => {
       const col = btn.dataset.color;
       applyThemeColorInPlace(col);
-      $$('.btn-palette-col', view).forEach(b => {
-        b.style.border = (b.dataset.color === col) ? '2px solid #fff' : '1px solid rgba(0,0,0,0.5)';
-      });
-      const customCol = $('#inp-custom-color', view);
-      if (customCol) customCol.value = col;
       toastOk('تم تطبيق لون الثيم على القالب');
     };
   });
@@ -2669,19 +3113,14 @@ export async function render(container) {
     try {
       const response = await api.get('/api/templates/builder/' + encodeURIComponent(requestedId));
       const config = response.builder_config || response;
-      if (config.editor_content) {
-        editingId = requestedId;
-        docMeta = { type: config.type || 'invoices', name_ar: config.name_ar || 'قالب مخصص', primary_color: config.primary_color || '#1a2638' };
-        sheetBg = { ...sheetBg, ...config.bg_config };
-        renderView();
-        restoreEditorContent(config.editor_content);
-        if (config.preset_styles) applyPresetStyles(config.preset_styles);
-        return;
-      } else if (config.html_content) {
+      const htmlToLoad = config.html_content || config.editor_content;
+      if (htmlToLoad) {
         editingId = requestedId;
         docMeta = { type: config.type || config.category || 'invoices', name_ar: config.name_ar || 'قالب مخصص', primary_color: config.primary_color || '#1a2638' };
+        if (config.bg_config) sheetBg = { ...sheetBg, ...config.bg_config };
         renderView();
-        loadRawHtmlIntoCanvas(config.html_content, docMeta.name_ar);
+        loadRawHtmlIntoCanvas(htmlToLoad, docMeta.name_ar);
+        if (config.preset_styles) applyPresetStyles(config.preset_styles);
         return;
       }
     } catch (err) {

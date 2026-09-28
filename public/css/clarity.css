@@ -312,9 +312,8 @@ html[data-theme="light"] .tab-pill-group {
 @media (max-width: 720px) {
   html[data-theme="light"] .page-head { align-items: stretch; }
   html[data-theme="light"] .page-actions { width: 100%; flex-wrap: wrap; }
-  html[data-theme="light"] .row > .field { max-width: none !important; min-width: 150px; }
-  html[data-theme="light"] .issuer-pick { min-width: 0; flex: 1; }
-  html[data-theme="light"] #issuer-select { min-width: 0 !important; width: 100%; }
+  html[data-theme="light"] .issuer-pick { min-width: 0; }
+  html[data-theme="light"] #issuer-select { min-width: 120px !important; max-width: 160px; }
   html[data-theme="light"] .user-meta { display: none; }
 }
 

@@ -3,13 +3,16 @@ package excel
 import (
 	"bytes"
 	"encoding/csv"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
 
+	"github.com/shakinm/xlsReader/xls"
 	"github.com/xuri/excelize/v2"
+	"golang.org/x/net/html"
 )
 
 type ParsedRow struct {
@@ -75,7 +78,7 @@ func matchesAny(cell string, synonyms []string) bool {
 	return false
 }
 
-// readSpreadsheetRows reads raw rows from an XLSX, CSV or TSV reader safely.
+// readSpreadsheetRows reads raw rows from XLSX, XLS (binary BIFF / HTML table / SpreadsheetML), CSV or TSV safely.
 func readSpreadsheetRows(r io.Reader, filename string) ([][]string, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -86,76 +89,313 @@ func readSpreadsheetRows(r io.Reader, filename string) ([][]string, error) {
 	}
 
 	lowerName := strings.ToLower(filename)
-	isCsv := strings.HasSuffix(lowerName, ".csv") || strings.HasSuffix(lowerName, ".txt") || strings.HasSuffix(lowerName, ".tsv")
-
-	if isCsv {
-		// Strip UTF-8 BOM if present
-		if bytes.HasPrefix(data, []byte{0xEF, 0xBB, 0xBF}) {
-			data = data[3:]
-		}
-
-		// Detect delimiter (, or ; or \t)
-		firstLine := string(data)
-		if idx := strings.IndexAny(firstLine, "\r\n"); idx != -1 {
-			firstLine = firstLine[:idx]
-		}
-		delim := ','
-		if strings.Count(firstLine, ";") > strings.Count(firstLine, ",") {
-			delim = ';'
-		} else if strings.Count(firstLine, "\t") > strings.Count(firstLine, ",") {
-			delim = '\t'
-		}
-
-		reader := csv.NewReader(bytes.NewReader(data))
-		reader.Comma = delim
-		reader.FieldsPerRecord = -1
-		reader.LazyQuotes = true
-		rows, err := reader.ReadAll()
+	isExplicitCsv := strings.HasSuffix(lowerName, ".csv") || strings.HasSuffix(lowerName, ".txt") || strings.HasSuffix(lowerName, ".tsv")
+	if isExplicitCsv {
+		rows, err := readCsvData(data)
 		if err != nil {
-			return nil, fmt.Errorf("خطأ في قراءة ملف CSV: %w", err)
+			return nil, err
 		}
 		return filterEmptyRows(rows), nil
 	}
 
-	// Excel XLSX
-	f, err := excelize.OpenReader(bytes.NewReader(data))
-	if err != nil {
-		if strings.HasSuffix(lowerName, ".xls") && !strings.HasSuffix(lowerName, ".xlsx") {
-			return nil, errors.New("صيغة .xls القديمة غير مدعومة مباشرة، يرجى حفظ الملف بصيغة Excel الحديثة (.xlsx) أو (.csv)")
+	// Sample beginning of file to detect text-based formats (HTML table or XML Spreadsheet)
+	sampleLen := len(data)
+	if sampleLen > 4096 {
+		sampleLen = 4096
+	}
+	sampleStr := strings.ToLower(string(data[:sampleLen]))
+
+	// 1. Check for HTML Table (.xls formatted as HTML table, exported by web apps / ERPs / Raseen)
+	if strings.Contains(sampleStr, "<html") || strings.Contains(sampleStr, "<table") {
+		if rows, err := parseHTMLTable(data); err == nil && len(rows) > 0 {
+			return filterEmptyRows(rows), nil
 		}
-		return nil, fmt.Errorf("خطأ في قراءة ملف Excel: %w", err)
-	}
-	defer f.Close()
-
-	sheets := f.GetSheetList()
-	if len(sheets) == 0 {
-		return nil, errors.New("الملف لا يحتوي على أي صفحات")
 	}
 
-	// Try active sheet first
-	activeIdx := f.GetActiveSheetIndex()
-	var sheetToUse string
-	if activeIdx >= 0 && activeIdx < len(sheets) {
-		sheetToUse = sheets[activeIdx]
-	} else {
-		sheetToUse = sheets[0]
+	// 2. Check for XML Spreadsheet 2003 (SpreadsheetML)
+	if strings.Contains(sampleStr, "<workbook") && strings.Contains(sampleStr, "<table") {
+		if rows, err := parseXMLSpreadsheet(data); err == nil && len(rows) > 0 {
+			return filterEmptyRows(rows), nil
+		}
 	}
 
-	rows, err := f.GetRows(sheetToUse)
-	if err != nil || len(rows) == 0 {
+	// 3. Try Excel XLSX (Modern OpenXML zip archive)
+	if bytes.HasPrefix(data, []byte{0x50, 0x4B, 0x03, 0x04}) || strings.HasSuffix(lowerName, ".xlsx") {
+		if f, err := excelize.OpenReader(bytes.NewReader(data)); err == nil {
+			defer f.Close()
+			sheets := f.GetSheetList()
+			if len(sheets) > 0 {
+				activeIdx := f.GetActiveSheetIndex()
+				var sheetToUse string
+				if activeIdx >= 0 && activeIdx < len(sheets) {
+					sheetToUse = sheets[activeIdx]
+				} else {
+					sheetToUse = sheets[0]
+				}
+				rows, err := f.GetRows(sheetToUse)
+				if err != nil || len(rows) == 0 {
+					for _, s := range sheets {
+						if rList, errR := f.GetRows(s); errR == nil && len(rList) > 0 {
+							rows = rList
+							break
+						}
+					}
+				}
+				if len(rows) > 0 {
+					return filterEmptyRows(rows), nil
+				}
+			}
+		}
+	}
+
+	// 4. Try Legacy Binary XLS (BIFF8 / BIFF5)
+	if bytes.HasPrefix(data, []byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}) || strings.HasSuffix(lowerName, ".xls") {
+		if rows, err := parseBinaryXLS(data); err == nil && len(rows) > 0 {
+			return filterEmptyRows(rows), nil
+		}
+	}
+
+	// 5. Fallback attempts:
+	if rows, err := parseHTMLTable(data); err == nil && len(rows) > 0 {
+		return filterEmptyRows(rows), nil
+	}
+	if rows, err := parseXMLSpreadsheet(data); err == nil && len(rows) > 0 {
+		return filterEmptyRows(rows), nil
+	}
+	if f, err := excelize.OpenReader(bytes.NewReader(data)); err == nil {
+		defer f.Close()
+		sheets := f.GetSheetList()
 		for _, s := range sheets {
 			if rList, errR := f.GetRows(s); errR == nil && len(rList) > 0 {
-				rows = rList
+				return filterEmptyRows(rList), nil
+			}
+		}
+	}
+	if rows, err := parseBinaryXLS(data); err == nil && len(rows) > 0 {
+		return filterEmptyRows(rows), nil
+	}
+	if rows, err := readCsvData(data); err == nil && len(rows) > 0 {
+		return filterEmptyRows(rows), nil
+	}
+
+	return nil, fmt.Errorf("تعذر قراءة بيانات الملف: تنسيق الملف غير مدعوم أو تالف")
+}
+
+func readCsvData(data []byte) ([][]string, error) {
+	if bytes.HasPrefix(data, []byte{0xEF, 0xBB, 0xBF}) {
+		data = data[3:]
+	}
+
+	firstLine := string(data)
+	if idx := strings.IndexAny(firstLine, "\r\n"); idx != -1 {
+		firstLine = firstLine[:idx]
+	}
+	delim := ','
+	if strings.Count(firstLine, ";") > strings.Count(firstLine, ",") {
+		delim = ';'
+	} else if strings.Count(firstLine, "\t") > strings.Count(firstLine, ",") {
+		delim = '\t'
+	}
+
+	reader := csv.NewReader(bytes.NewReader(data))
+	reader.Comma = delim
+	reader.FieldsPerRecord = -1
+	reader.LazyQuotes = true
+	rows, err := reader.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("خطأ في قراءة ملف CSV: %w", err)
+	}
+	return rows, nil
+}
+
+func parseHTMLTable(data []byte) ([][]string, error) {
+	if bytes.HasPrefix(data, []byte{0xEF, 0xBB, 0xBF}) {
+		data = data[3:]
+	}
+
+	doc, err := html.Parse(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("خطأ في تحليل جدول HTML: %w", err)
+	}
+
+	var rows [][]string
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && strings.EqualFold(n.Data, "tr") {
+			var row []string
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				if c.Type == html.ElementNode && (strings.EqualFold(c.Data, "td") || strings.EqualFold(c.Data, "th")) {
+					txt := strings.TrimSpace(getHTMLText(c))
+					txt = strings.ReplaceAll(txt, "\u00a0", " ")
+					row = append(row, strings.TrimSpace(txt))
+				}
+			}
+			if len(row) > 0 {
+				hasData := false
+				for _, cell := range row {
+					if cell != "" {
+						hasData = true
+						break
+					}
+				}
+				if hasData {
+					rows = append(rows, row)
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+
+	if len(rows) == 0 {
+		return nil, errors.New("لم يتم العثور على أسطر داخل جدول الملف")
+	}
+	return rows, nil
+}
+
+func getHTMLText(n *html.Node) string {
+	if n == nil {
+		return ""
+	}
+	if n.Type == html.TextNode {
+		return n.Data
+	}
+	var sb strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		sb.WriteString(getHTMLText(c))
+	}
+	return sb.String()
+}
+
+func parseXMLSpreadsheet(data []byte) ([][]string, error) {
+	if bytes.HasPrefix(data, []byte{0xEF, 0xBB, 0xBF}) {
+		data = data[3:]
+	}
+
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	var rows [][]string
+	var currentRow []string
+	var inCell, inData bool
+	var currentText strings.Builder
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
 				break
+			}
+			if len(rows) > 0 {
+				break
+			}
+			return nil, err
+		}
+
+		switch elem := token.(type) {
+		case xml.StartElement:
+			name := elem.Name.Local
+			switch name {
+			case "Row":
+				currentRow = []string{}
+			case "Cell":
+				inCell = true
+				currentText.Reset()
+				for _, attr := range elem.Attr {
+					if attr.Name.Local == "Index" {
+						if idx, err := strconv.Atoi(attr.Value); err == nil && idx > 1 {
+							for len(currentRow) < idx-1 {
+								currentRow = append(currentRow, "")
+							}
+						}
+					}
+				}
+			case "Data":
+				if inCell {
+					inData = true
+					currentText.Reset()
+				}
+			}
+		case xml.EndElement:
+			name := elem.Name.Local
+			switch name {
+			case "Row":
+				if len(currentRow) > 0 {
+					hasData := false
+					for _, c := range currentRow {
+						if strings.TrimSpace(c) != "" {
+							hasData = true
+							break
+						}
+					}
+					if hasData {
+						rows = append(rows, currentRow)
+					}
+				}
+				currentRow = nil
+			case "Cell":
+				if inCell {
+					val := strings.TrimSpace(currentText.String())
+					currentRow = append(currentRow, val)
+					inCell = false
+					inData = false
+				}
+			case "Data":
+				inData = false
+			}
+		case xml.CharData:
+			if inData {
+				currentText.Write(elem)
 			}
 		}
 	}
 
 	if len(rows) == 0 {
-		return nil, errors.New("لم يتم العثور على أي بيانات داخل صفحات الملف")
+		return nil, errors.New("لم يتم العثور على أسطر صالحة في ملف XML Spreadsheet")
 	}
+	return rows, nil
+}
 
-	return filterEmptyRows(rows), nil
+func parseBinaryXLS(data []byte) ([][]string, error) {
+	wb, err := xls.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("تعذر فتح ملف XLS الثنائي: %w", err)
+	}
+	var rows [][]string
+	for i := 0; i < wb.GetNumberSheets(); i++ {
+		sheet, err := wb.GetSheet(i)
+		if err != nil {
+			continue
+		}
+		for r := 0; r <= sheet.GetNumberRows(); r++ {
+			row, err := sheet.GetRow(r)
+			if err != nil {
+				continue
+			}
+			var rowData []string
+			cols := row.GetCols()
+			for _, cell := range cols {
+				rowData = append(rowData, strings.TrimSpace(cell.GetString()))
+			}
+			hasData := false
+			for _, c := range rowData {
+				if c != "" {
+					hasData = true
+					break
+				}
+			}
+			if hasData {
+				rows = append(rows, rowData)
+			}
+		}
+		if len(rows) > 0 {
+			break
+		}
+	}
+	if len(rows) == 0 {
+		return nil, errors.New("لم يتم العثور على بيانات داخل صفحات ملف XLS")
+	}
+	return rows, nil
 }
 
 func filterEmptyRows(rows [][]string) [][]string {
@@ -847,5 +1087,230 @@ func GenerateClientTemplateExcel() ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+type ParsedIssuerRow struct {
+	RowIndex           int      `json:"row_index"`
+	Code               string   `json:"code"`
+	NameAr             string   `json:"name_ar"`
+	NameEn             string   `json:"name_en"`
+	TaxNumber          string   `json:"tax_number"`
+	CommercialRegister string   `json:"commercial_register"`
+	City               string   `json:"city"`
+	District           string   `json:"district"`
+	Street             string   `json:"street"`
+	BuildingNo         string   `json:"building_no"`
+	PostalCode         string   `json:"postal_code"`
+	Phone              string   `json:"phone"`
+	Email              string   `json:"email"`
+	Website            string   `json:"website"`
+	DefaultTaxRate     float64  `json:"default_tax_rate"`
+	InvoicePrefix      string   `json:"invoice_prefix"`
+	Errors             []string `json:"errors"`
+}
+
+type AnalyzeIssuersResult struct {
+	TotalRows int               `json:"total_rows"`
+	ValidRows int               `json:"valid_rows"`
+	ErrorRows int               `json:"error_rows"`
+	Rows      []ParsedIssuerRow `json:"rows"`
+}
+
+func AnalyzeIssuersSpreadsheet(r io.Reader, filename string) (*AnalyzeIssuersResult, error) {
+	rawRows, err := readSpreadsheetRows(r, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	codeSyn := []string{"كود الشركة", "رمز الشركة", "كود المنشأة", "كود", "رمز", "معرف الشركة", "issuer_code", "company_code", "code"}
+	nameArSyn := []string{"الاسم الرسمي بالعربية", "الاسم الرسمي", "اسم الشركة بالعربي", "اسم الشركة", "اسم المنشأة", "الشركة", "المنشأة", "الاسم بالعربي", "الاسم", "name_ar", "company_name", "company", "name"}
+	nameEnSyn := []string{"الاسم بالإنجليزية", "الاسم بالانجليزي", "اسم انجليزي", "بالانجليزي", "انجليزي", "name_en", "company_name_en", "english_name", "english"}
+	taxSyn := []string{"الرقم الضريبي", "الرقم الضريبي للمنشأة", "ضريبي", "رقم ضريبي", "الضريبة", "tax_number", "tax number", "vat", "vat_number", "vat_no", "trn"}
+	crSyn := []string{"السجل التجاري", "رقم السجل التجاري", "سجل تجاري", "سجل", "رقم السجل", "cr", "commercial_register", "cr_number"}
+	citySyn := []string{"المدينة", "مدينة", "city"}
+	districtSyn := []string{"الحي", "حي", "district"}
+	streetSyn := []string{"الشارع", "العنوان", "street", "address"}
+	bldgSyn := []string{"رقم المبنى", "المبنى", "building_no", "building"}
+	postalSyn := []string{"الرمز البريدي", "رمز بريدي", "postal_code", "zip", "zip_code"}
+	phoneSyn := []string{"الهاتف", "رقم الهاتف", "الجوال", "رقم الجوال", "تلفون", "موبايل", "phone", "mobile", "tel"}
+	emailSyn := []string{"البريد الإلكتروني", "البريد الالكتروني", "بريد", "ايميل", "الإيميل", "الايميل", "email", "mail"}
+	websiteSyn := []string{"الموقع الإلكتروني", "الموقع الالكتروني", "الموقع", "موقع", "website", "url", "site"}
+	taxRateSyn := []string{"نسبة الضريبة", "ضريبة", "الضريبة", "tax_rate", "tax"}
+	invPrefixSyn := []string{"بادئة الفاتورة", "بادئة", "invoice_prefix", "prefix"}
+
+	bestHeaderIdx := -1
+	bestScore := 0
+	var cCode, cNameAr, cNameEn, cTax, cCR, cCity, cDistrict, cStreet, cBldg, cPostal, cPhone, cEmail, cWeb, cTaxRate, cInvPrefix int = -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+
+	maxScan := len(rawRows)
+	if maxScan > 15 {
+		maxScan = 15
+	}
+
+	for rIdx := 0; rIdx < maxScan; rIdx++ {
+		row := rawRows[rIdx]
+		curCode, curNameAr, curNameEn, curTax, curCR, curCity, curDistrict, curStreet, curBldg, curPostal, curPhone, curEmail, curWeb, curTaxRate, curInvPrefix := -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+		score := 0
+
+		for cIdx, cell := range row {
+			trimmed := strings.TrimSpace(cell)
+			if trimmed == "" {
+				continue
+			}
+			if curCode == -1 && matchesAny(cell, codeSyn) {
+				curCode = cIdx
+				score += 2
+			} else if curNameEn == -1 && matchesAny(cell, nameEnSyn) {
+				curNameEn = cIdx
+				score += 2
+			} else if curTax == -1 && matchesAny(cell, taxSyn) {
+				curTax = cIdx
+				score += 2
+			} else if curCR == -1 && matchesAny(cell, crSyn) {
+				curCR = cIdx
+				score += 2
+			} else if curPhone == -1 && matchesAny(cell, phoneSyn) {
+				curPhone = cIdx
+				score += 2
+			} else if curEmail == -1 && matchesAny(cell, emailSyn) {
+				curEmail = cIdx
+				score += 2
+			} else if curCity == -1 && matchesAny(cell, citySyn) {
+				curCity = cIdx
+				score += 1
+			} else if curDistrict == -1 && matchesAny(cell, districtSyn) {
+				curDistrict = cIdx
+				score += 1
+			} else if curStreet == -1 && matchesAny(cell, streetSyn) {
+				curStreet = cIdx
+				score += 1
+			} else if curBldg == -1 && matchesAny(cell, bldgSyn) {
+				curBldg = cIdx
+				score += 1
+			} else if curPostal == -1 && matchesAny(cell, postalSyn) {
+				curPostal = cIdx
+				score += 1
+			} else if curWeb == -1 && matchesAny(cell, websiteSyn) {
+				curWeb = cIdx
+				score += 1
+			} else if curTaxRate == -1 && matchesAny(cell, taxRateSyn) {
+				curTaxRate = cIdx
+				score += 1
+			} else if curInvPrefix == -1 && matchesAny(cell, invPrefixSyn) {
+				curInvPrefix = cIdx
+				score += 1
+			} else if curNameAr == -1 && matchesAny(cell, nameArSyn) {
+				curNameAr = cIdx
+				score += 3
+			}
+		}
+
+		if curNameAr != -1 && score > bestScore {
+			bestScore = score
+			bestHeaderIdx = rIdx
+			cCode, cNameAr, cNameEn, cTax, cCR = curCode, curNameAr, curNameEn, curTax, curCR
+			cCity, cDistrict, cStreet, cBldg, cPostal = curCity, curDistrict, curStreet, curBldg, curPostal
+			cPhone, cEmail, cWeb, cTaxRate, cInvPrefix = curPhone, curEmail, curWeb, curTaxRate, curInvPrefix
+		}
+	}
+
+	if bestHeaderIdx == -1 {
+		return nil, errors.New("تعذر التعرف على صف العناوين أو اسم الشركة. تأكد من وجود عمود باسم «اسم الشركة» أو «الشركة».")
+	}
+
+	res := &AnalyzeIssuersResult{
+		TotalRows: len(rawRows) - (bestHeaderIdx + 1),
+		Rows:      make([]ParsedIssuerRow, 0),
+	}
+
+	for rIdx := bestHeaderIdx + 1; rIdx < len(rawRows); rIdx++ {
+		row := rawRows[rIdx]
+		pRow := ParsedIssuerRow{
+			RowIndex:       rIdx + 1,
+			DefaultTaxRate: 15.0,
+			InvoicePrefix:  "INV",
+		}
+
+		getVal := func(col int) string {
+			if col >= 0 && col < len(row) {
+				return strings.TrimSpace(row[col])
+			}
+			return ""
+		}
+
+		pRow.Code = getVal(cCode)
+		pRow.NameAr = getVal(cNameAr)
+		pRow.NameEn = getVal(cNameEn)
+		pRow.TaxNumber = normalizeNumberStr(getVal(cTax))
+		pRow.CommercialRegister = normalizeNumberStr(getVal(cCR))
+		pRow.City = getVal(cCity)
+		pRow.District = getVal(cDistrict)
+		pRow.Street = getVal(cStreet)
+		pRow.BuildingNo = normalizeNumberStr(getVal(cBldg))
+		pRow.PostalCode = normalizeNumberStr(getVal(cPostal))
+		pRow.Phone = normalizeNumberStr(getVal(cPhone))
+		pRow.Email = getVal(cEmail)
+		pRow.Website = getVal(cWeb)
+
+		taxStr := normalizeNumberStr(getVal(cTaxRate))
+		if taxStr != "" {
+			if tVal, err := strconv.ParseFloat(taxStr, 64); err == nil && tVal >= 0 {
+				pRow.DefaultTaxRate = tVal
+			}
+		}
+
+		invPfx := getVal(cInvPrefix)
+		if invPfx != "" {
+			pRow.InvoicePrefix = invPfx
+		}
+
+		if pRow.NameAr == "" {
+			pRow.Errors = append(pRow.Errors, "اسم الشركة مطلوب")
+		}
+
+		if len(pRow.Errors) == 0 {
+			res.ValidRows++
+		} else {
+			res.ErrorRows++
+		}
+		res.Rows = append(res.Rows, pRow)
+	}
+
+	return res, nil
+}
+
+func GenerateIssuerTemplateExcel() ([]byte, error) {
+	f := excelize.NewFile()
+	sheet := "الشركات المصدرة"
+	f.SetSheetName("Sheet1", sheet)
+
+	headers := []string{
+		"كود الشركة", "الاسم الرسمي بالعربية", "الاسم بالإنجليزية", "الرقم الضريبي", "السجل التجاري",
+		"المدينة", "الحي", "الشارع", "رقم المبنى", "الرمز البريدي",
+		"الهاتف", "البريد الإلكتروني", "الموقع الإلكتروني", "نسبة الضريبة", "بادئة الفاتورة",
+	}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(sheet, cell, h)
+	}
+
+	samples := [][]any{
+		{"ZS-001", "شركة الأفق للتجارة والصناعة", "Al-Ofuq Trading & Industry Co.", "310123456700003", "1010123456", "الرياض", "العليا", "طريق الملك فهد", "1234", "12345", "0112345678", "info@alofuq.sa", "www.alofuq.sa", 15.0, "INV"},
+		{"ZS-002", "مؤسسة الصقر للخدمات اللوجستية", "Al-Saqr Logistics Est.", "311123456700003", "2050123456", "جدة", "البلد", "طريق الميناء", "5678", "21456", "0123456789", "contact@saqr.sa", "www.saqr.sa", 15.0, "INV"},
+	}
+
+	for rIdx, sample := range samples {
+		for cIdx, v := range sample {
+			cell, _ := excelize.CoordinatesToCellName(cIdx+1, rIdx+2)
+			f.SetCellValue(sheet, cell, v)
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 
 
