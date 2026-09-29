@@ -3162,7 +3162,14 @@ tr.row-open>td {
 
   #tpl-select-wrap {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  #tpl-select-wrap select {
+    width: 100%;
+    min-width: 0 !important;
   }
 
   #tpl-zoom-wrap {

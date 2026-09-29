@@ -388,17 +388,23 @@ export async function render(view, ctx) {
                 </button>
               </div>
 
-              <div id="tpl-select-wrap" style="display:${activeViewMode === 'template' ? 'flex' : 'none'};align-items:center;gap:6px">
-                <span style="font-size:.8rem;color:var(--muted);font-weight:600">القالب:</span>
-                <select id="sel-invoice-tpl" class="input input-sm" style="padding:.28rem .6rem;font-size:.82rem;border-radius:6px;background:var(--card);color:var(--text);border:1px solid var(--line-strong)">
-                  <optgroup label="القوالب الرسمية المعتمدة (متعددة الصفحات A4)">
+              <div id="tpl-select-wrap" style="display:${activeViewMode === 'template' ? 'flex' : 'none'};align-items:center;gap:10px;flex-wrap:wrap">
+                <span style="font-weight:700;font-size:13px;color:var(--primary, #0d9488);white-space:nowrap;display:flex;align-items:center;gap:5px">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+                  قالب الفاتورة:
+                </span>
+                <select id="sel-invoice-tpl" class="input input-sm" style="min-width:320px;max-width:500px;font-size:13px;padding:6px 12px;border-radius:6px;border:1px solid var(--border-color, #475569);background:var(--card-bg, #0f172a);color:var(--text, #f8fafc);font-weight:700;cursor:pointer;flex-shrink:0">
+                  ${availableTemplates.length ? `
+                  <optgroup label="قوالب الفواتير المعتمدة والمخصصة (${availableTemplates.length} قالب)">
+                    ${availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name_ar || t.name || t.id)} (${esc(t.badge || 'فاتورة HTML')})</option>`).join('')}
+                  </optgroup>` : ''}
+                  <optgroup label="القوالب الرسمية القياسية (Standard A4)">
                     ${INVOICE_TEMPLATES.map((t) => `<option value="${t.id}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
                   </optgroup>
-                  ${availableTemplates.length ? `
-                  <optgroup label="القوالب المخصصة والمستوردة">
-                    ${availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name_ar || t.id)}</option>`).join('')}
-                  </optgroup>` : ''}
                 </select>
+                <button class="btn btn-sm" id="btn-adopt-invoice-tpl" type="button" style="font-size:12px;padding:6px 12px;background:rgba(13,148,136,0.15);border:1px solid var(--primary, #0d9488);color:var(--primary, #0d9488);font-weight:700;white-space:nowrap;border-radius:6px;flex-shrink:0" title="اعتماد هذا القالب كقالب افتراضي لجميع فواتير المنشأة">
+                  ⭐ اعتماد كقالب افتراضي للمنشأة
+                </button>
               </div>
             </div>
 
@@ -649,6 +655,33 @@ export async function render(view, ctx) {
     $('#sel-invoice-tpl', view)?.addEventListener('change', (e) => {
       selectedTplStyle = e.target.value;
       updateInvoicePreview();
+    });
+
+    // اعتماد القالب المختار كافتراضي للمنشأة
+    $('#btn-adopt-invoice-tpl', view)?.addEventListener('click', async () => {
+      const btn = $('#btn-adopt-invoice-tpl', view);
+      if (btn) btn.disabled = true;
+      try {
+        const tpl = availableTemplates.find((t) => t.id === selectedTplStyle);
+        issuerPrintCfg.template_style = selectedTplStyle;
+        if (tpl) {
+          issuerPrintCfg.primary_color = tpl.color_hex || issuerPrintCfg.primary_color;
+          issuerPrintCfg.dark_color = tpl.style_meta?.header_fill || tpl.color_hex;
+          issuerPrintCfg.light_color = tpl.style_meta?.light_color || tpl.style_meta?.banner_fill || '';
+          issuerPrintCfg.template_title = tpl.name_ar || tpl.name;
+        }
+        await api.put(`/api/issuers/${issuer.id}`, {
+          ...issuer,
+          print_settings: issuerPrintCfg,
+        });
+        issuer.print_settings = issuerPrintCfg;
+        const tplName = tpl?.name_ar || INVOICE_TEMPLATES.find((t) => t.id === selectedTplStyle)?.name || selectedTplStyle;
+        toastOk(`تم اعتماد قالب «${tplName}» كقالب افتراضي لجميع فواتير المنشأة بنجاح ⭐`);
+      } catch (err) {
+        toastErr('فشل اعتماد القالب: ' + (err.message || 'حدث خطأ'));
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     });
 
     // أدوات التكبير والتصغير والملاءمة
