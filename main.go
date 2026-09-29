@@ -75,6 +75,21 @@ func main() {
 	}
 	defer database.Close()
 
+	// النسخ الاحتياطي التلقائي الدوري لحماية بيانات الفواتير والعملاء من أي فقدان
+	go func() {
+		time.Sleep(3 * time.Second)
+		if res, err := database.CreateBackup(); err == nil {
+			log.Printf("[AutoBackup] تم أخذ نسخة احتياطية أولية تلقائية: %s (%d بايت)", res.Filename, res.SizeBytes)
+		}
+		ticker := time.NewTicker(2 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if res, err := database.CreateBackup(); err == nil {
+				log.Printf("[AutoBackup] تم أخذ نسخة احتياطية دورية تلقائية: %s (%d بايت)", res.Filename, res.SizeBytes)
+			}
+		}
+	}()
+
 	// Prepare public static filesystem (prefer local public folder in dev)
 	var publicFS fs.FS
 	if fi, err := os.Stat("public"); err == nil && fi.IsDir() {

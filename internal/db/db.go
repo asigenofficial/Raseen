@@ -8,6 +8,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -157,12 +159,39 @@ func (d *DB) CreateBackup() (*BackupResult, error) {
 		return nil, err
 	}
 
+	// Keep latest 50 backups to prevent disk overflow while ensuring safety
+	pruneOldBackups(d.cfg.BackupDir, 50)
+
 	return &BackupResult{
 		Filename:  filename,
 		Path:      destPath,
 		SizeBytes: stat.Size(),
 		CreatedAt: NowIso(),
 	}, nil
+}
+
+func pruneOldBackups(dir string, keepCount int) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+
+	var backupFiles []string
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "raseen_backup_") && strings.HasSuffix(entry.Name(), ".db") {
+			backupFiles = append(backupFiles, entry.Name())
+		}
+	}
+
+	if len(backupFiles) <= keepCount {
+		return
+	}
+
+	sort.Strings(backupFiles)
+	toDelete := len(backupFiles) - keepCount
+	for i := 0; i < toDelete; i++ {
+		_ = os.Remove(filepath.Join(dir, backupFiles[i]))
+	}
 }
 
 func (d *DB) Audit(userName, action, entityType, entityId, issuerId string, details any, ip string) {
