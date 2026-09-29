@@ -850,8 +850,8 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
   </div>`);
   }
 
-  // إذا تم طلب طباعة سند القبض المرفق أو كانت الفاتورة مسددة ونمط الوكالات مفعلاً
-  const shouldPrintReceipt = printCfg.show_receipt === true || invoice.print_receipt === true || (tplStyle === 'corporate_multipage' && (invoice.payment_method === 'CASH' || invoice.paid_amount > 0));
+  // طباعة سند القبض المرفق فقط إذا طُلب صراحة في إعدادات الطباعة أو الفاتورة
+  const shouldPrintReceipt = printCfg.show_receipt === true || invoice.print_receipt === true;
   if (shouldPrintReceipt) {
     pages.push(`
   <div class="page page-receipt"${tplStyle && tplStyle !== 'standard' ? ` data-tpl="${esc(tplStyle)}"` : ''} style="page-break-before:always;">
@@ -2399,7 +2399,18 @@ export function invoiceThermal({ invoice, issuer, client, printSettings = null, 
 
 // -------------------------------------------------------- سند قبض A4/A5
 // -------------------------------------------------------- قوالب سندات القبض
+// -------------------------------------------------------- سند قبض A4/A5
+// -------------------------------------------------------- قوالب سندات القبض
 export const VOUCHER_TEMPLATES = [
+  {
+    id: 'voucher_classic_slip',
+    name: 'سند قبض وقسيمة تحصيل رسمية (Payment Slip / RECEIPT)',
+    name_en: 'Official Classic Payment Slip & Receipt',
+    desc: 'نموذج سند القبض المعتمد بشريط العنوان الثنائي، مربع المبلغ الواضح، جدول البيانات، والتواقيع الثلاثية (الصندوق، المحاسب، المستلم).',
+    badge: 'النموذج الرسمي المعتمد',
+    color: '#0f172a',
+    dark: '#020617',
+  },
   {
     id: 'voucher_saqr_slip',
     name: 'قسيمة تحصيل وسند قبض (توريدات الصقر)',
@@ -2420,11 +2431,13 @@ export const VOUCHER_TEMPLATES = [
   },
 ];
 
-export function voucherPrint({ voucher, issuer, client, style = 'voucher_saqr_slip' }) {
+export function voucherPrint({ voucher, issuer, client, style = 'voucher_classic_slip' }) {
   const isSar = !voucher.currency || voucher.currency === 'SAR' || voucher.currency === 'ر.س' || voucher.currency === '﷼';
   const cur = voucher.currency === 'SAR' ? 'ر.س' : (voucher.currency || 'ر.س');
   const curSym = isSar ? sarSvg({ size: '1.05em' }) : esc(cur);
   const isLuxury = style === 'voucher_luxury_receipt';
+  const isSaqr = style === 'voucher_saqr_slip';
+  const isClassic = style === 'voucher_classic_slip' || (!isLuxury && !isSaqr);
 
   const allocs = (voucher.allocations || []).map((a, i) => `<tr>
       <td class="c">${i + 1}</td>
@@ -2438,7 +2451,113 @@ export function voucherPrint({ voucher, issuer, client, style = 'voucher_saqr_sl
   let html = '';
   let css = '';
 
-  if (isLuxury) {
+  if (isClassic) {
+    const logoHtml = issuer.logo_data || issuer.logo_url
+      ? `<img src="${esc(issuer.logo_data || issuer.logo_url)}" alt="Logo" style="max-height:60px; max-width:130px; object-fit:contain;" />`
+      : `<div style="font-size:14pt; font-weight:900; color:#0f172a; padding:4px 8px; border:1px dashed #cbd5e1; border-radius:4px;">${esc(issuer.name_ar || 'رسين')}</div>`;
+
+    html = `<div class="page classic-slip-page">
+      ${voucher.status === 'CANCELLED' ? '<div class="watermark">ملغى</div>' : ''}
+      <header class="head" style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:6px; padding:10px 16px; margin-bottom:12px; display:grid; grid-template-columns:minmax(0,1.1fr) auto minmax(0,1.1fr); gap:8px 14px; align-items:center;">
+        <div style="text-align:left; direction:ltr;">
+          ${issuer.name_en ? `<div style="font-size:12pt; font-weight:800; color:#0f172a;">${esc(issuer.name_en)}</div>` : ''}
+          <div style="font-size:8pt; color:#475569;">VAT: ${esc(issuer.tax_number || '—')}</div>
+          <div style="font-size:8pt; color:#475569;">CR: ${esc(issuer.commercial_register || '—')}</div>
+        </div>
+        <div style="text-align:center;">
+          ${logoHtml}
+        </div>
+        <div style="text-align:right; direction:rtl;">
+          <div style="font-size:13pt; font-weight:800; color:#0f172a;">${esc(issuer.name_ar)}</div>
+          <div style="font-size:8.5pt; color:#0f172a;">الرقم الضريبي: <span class="mono">${esc(issuer.tax_number || '—')}</span></div>
+          <div style="font-size:8.5pt; color:#0f172a;">السجل التجاري: <span class="mono">${esc(issuer.commercial_register || '—')}</span></div>
+        </div>
+      </header>
+
+      <div style="border:1.5px solid #0f172a; border-radius:6px; padding:16px; margin-top:14px; background:#fff;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1.5px solid #0f172a; padding-bottom:10px; margin-bottom:14px;">
+          <div>
+            <span style="font-size:16pt; font-weight:900; color:#0f172a;">سند قبض</span>
+            <span style="font-size:9.5pt; font-weight:700; color:#64748b; margin-inline-start:6px;">/ Payment Slip / RECEIPT</span>
+          </div>
+          <div style="font-size:14pt; font-weight:900; color:#0f172a; background:#f1f5f9; padding:4px 16px; border:1.5px solid #0f172a; border-radius:4px;">
+            المبلغ: ${money(voucher.total_amount || voucher.amount)} ${curSym}
+          </div>
+        </div>
+        <table class="kv" style="width:100%; font-size:9.5pt; border-collapse:collapse; line-height:2.2;">
+          <tr>
+            <td style="width:110px; font-weight:700; color:#475569;">رقم السند:</td>
+            <td><b class="mono">${esc(voucher.voucher_number || '1121')}</b></td>
+            <td style="width:110px; font-weight:700; color:#475569;">تاريخ السند:</td>
+            <td><b>${esc(dateAr(voucher.voucher_date))}</b></td>
+          </tr>
+          <tr>
+            <td style="font-weight:700; color:#475569;">استلمنا من:</td>
+            <td colspan="3"><b style="font-size:11pt;">${esc(client.name || voucher.client_name)}</b></td>
+          </tr>
+          <tr>
+            <td style="font-weight:700; color:#475569;">مبلغ وقدره:</td>
+            <td colspan="3"><span style="background:#f8fafc; padding:3px 10px; border-radius:3px; display:inline-block; border:1px solid #e2e8f0; font-weight:700;">${esc(tafqeet(voucher.total_amount || voucher.amount, cur))}</span></td>
+          </tr>
+          <tr>
+            <td style="font-weight:700; color:#475569;">وذلك عن:</td>
+            <td colspan="3">${esc(voucher.notes || (voucher.allocations?.[0] ? `سداد فاتورة مبيعات رقم ${voucher.allocations[0].invoice_number}` : 'سداد حساب'))}</td>
+          </tr>
+          <tr>
+            <td style="font-weight:700; color:#475569;">طريقة السداد:</td>
+            <td colspan="3">${esc(voucher.payment_method_label || voucher.payment_method || 'نقداً')}</td>
+          </tr>
+        </table>
+
+        ${allocs ? `
+        <div style="margin-top:14px;">
+          <h4 style="margin:2mm 0 1mm;font-size:9pt;color:#0f172a">الفواتير المسددة بموجب هذا السند</h4>
+          <table class="items" style="font-size:8.4pt; border-collapse:collapse; width:100%; margin-top:2mm;">
+            <thead><tr>
+              <th class="c" style="width:22px; background:#0f172a; color:#fff; padding:1.2mm;">#</th>
+              <th style="background:#0f172a; color:#fff; padding:1.2mm;">رقم الفاتورة</th>
+              <th style="width:70px; background:#0f172a; color:#fff; padding:1.2mm;">تاريخها</th>
+              <th class="e" style="width:80px; background:#0f172a; color:#fff; padding:1.2mm;">إجمالي الفاتورة</th>
+              <th class="e" style="width:80px; background:#0f172a; color:#fff; padding:1.2mm;">المسدد</th>
+              <th class="e" style="width:80px; background:#0f172a; color:#fff; padding:1.2mm;">المتبقي</th>
+            </tr></thead>
+            <tbody>${allocs}</tbody>
+          </table>
+        </div>` : ''}
+
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:35px; padding:0 30px; text-align:center;">
+          <div>
+            <div style="margin-bottom:35px; font-weight:800; font-size:9pt;">الصندوق</div>
+            <div style="border-top:1.5px dashed #64748b; width:130px;"></div>
+          </div>
+          <div>
+            <div style="margin-bottom:35px; font-weight:800; font-size:9pt;">توقيع المحاسب</div>
+            <div style="border-top:1.5px dashed #64748b; width:130px;"></div>
+          </div>
+          <div>
+            <div style="margin-bottom:35px; font-weight:800; font-size:9pt;">توقيع وختم المستلم</div>
+            <div style="border-top:1.5px dashed #64748b; width:130px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <footer class="foot" style="margin-top:auto; padding-top:4mm;">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:7.5pt; color:#64748b;">
+          <span>${esc(addressLine(issuer))}</span>
+          <span class="mono" style="font-weight:800;">OBS | RECEIPT CARD</span>
+        </div>
+      </footer>
+    </div>`;
+
+    css = `
+      html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; font-family: ${FONT}; }
+      .page.classic-slip-page { width: 210mm; min-height: 148mm; padding: 10mm; position: relative; box-sizing: border-box; color: #0f172a; background: #fff; }
+      .watermark { position: absolute; inset: 0; display: grid; place-items: center; font-size: 80pt; color: rgba(220,38,38,.12); font-weight: 800; transform: rotate(-18deg); pointer-events: none; }
+      .mono { font-family: monospace; }
+      table.items td { border: 1px solid #cbd5e1; padding: 1.2mm; }
+      .c { text-align: center; } .e { text-align: end; }
+    `;
+  } else if (isLuxury) {
     // ---------------------- طراز الإصدار الفاخر وتويوتا
     html = `<div class="page lux-page">
       ${voucher.status === 'CANCELLED' ? '<div class="watermark">ملغى</div>' : ''}
