@@ -297,6 +297,64 @@ export async function render(view) {
     `;
   }
 
+  function getThemeColors(hex) {
+    if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) {
+      return {
+        accent: '#10b981',
+        textDark: '#6ee7b7',
+        textLight: '#047857',
+        bgTint: 'rgba(16, 185, 129, 0.12)',
+        borderTint: 'rgba(16, 185, 129, 0.35)'
+      };
+    }
+    const cleanHex = hex.replace('#', '');
+    const fullHex = cleanHex.length === 3 ? cleanHex.split('').map(c => c + c).join('') : cleanHex;
+    const num = parseInt(fullHex, 16);
+    if (isNaN(num)) {
+      return {
+        accent: '#10b981',
+        textDark: '#6ee7b7',
+        textLight: '#047857',
+        bgTint: 'rgba(16, 185, 129, 0.12)',
+        borderTint: 'rgba(16, 185, 129, 0.35)'
+      };
+    }
+    let r = ((num >> 16) & 255) / 255;
+    let g = ((num >> 8) & 255) / 255;
+    let b = (num & 255) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0, l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+        case g: h = ((b - r) / d + 2) / 6; break;
+        case b: h = ((r - g) / d + 4) / 6; break;
+      }
+    }
+    const hue = Math.round(h * 360);
+    const sat = Math.round(s * 100);
+
+    const hslToHex = (hDeg, sPct, lPct) => {
+      const sVal = sPct / 100;
+      const lVal = lPct / 100;
+      const k = n => (n + hDeg / 30) % 12;
+      const a = sVal * Math.min(lVal, 1 - lVal);
+      const f = n => lVal - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+      const toHex = x => Math.round(x * 255).toString(16).padStart(2, '0');
+      return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
+    };
+
+    return {
+      accent: hex,
+      textDark: hslToHex(hue, Math.max(sat, 70), 72),
+      textLight: hslToHex(hue, Math.max(sat, 75), 34),
+      bgTint: `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, 0.12)`,
+      borderTint: `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, 0.35)`
+    };
+  }
+
   function renderReportsGridHtml(reports) {
     if (!reports.length) {
       return `
@@ -312,26 +370,27 @@ export async function render(view) {
     }
 
     const cards = reports.map((tpl) => {
+      const colors = getThemeColors('#10b981');
       const headers = tpl.headers || [];
-      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip green"><span style="opacity:0.6;">#${i + 1}</span> ${esc(h)}</span>`).join('');
-      const moreChips = headers.length > 4 ? `<span class="doc-tpl-chip" style="font-size:0.68rem;">+${headers.length - 4} أعمدة</span>` : '';
+      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip"><span class="chip-idx">#${i + 1}</span> ${esc(h)}</span>`).join('');
+      const moreChips = headers.length > 4 ? `<span class="doc-tpl-chip doc-tpl-chip-more">+${headers.length - 4} أعمدة</span>` : '';
       const sizeBadge = tpl.file_size ? `<span class="badge gray tiny" style="font-size:0.65rem;">${formatBytes(tpl.file_size)}</span>` : '';
 
       return `
-        <div class="doc-tpl-card">
+        <div class="doc-tpl-card" style="--tpl-accent:${colors.accent}; --tpl-text-dark:${colors.textDark}; --tpl-text-light:${colors.textLight}; --tpl-bg-tint:${colors.bgTint}; --tpl-border-tint:${colors.borderTint};">
           <div class="doc-tpl-card-top">
-            <div class="doc-tpl-card-icon" style="background:rgba(16,185,129,0.12); color:#10b981;">
+            <div class="doc-tpl-card-icon" style="background:${colors.bgTint}; color:var(--tpl-text); border:1px solid ${colors.borderTint};">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/></svg>
             </div>
             <div class="doc-tpl-card-meta">
               <div class="doc-tpl-card-title">
                 <span>${esc(tpl.name_ar || tpl.name)}</span>
-                <span class="badge green tiny" style="font-size:0.68rem;">تقرير معتمد</span>
+                <span class="badge tiny doc-tpl-badge">تقرير معتمد</span>
                 ${sizeBadge}
               </div>
               <p class="doc-tpl-card-desc">${esc(tpl.description || 'قالب تقرير محاسبي ذكي بصيغة Excel')}</p>
               <div class="doc-tpl-card-chips">
-                <span class="tiny muted" style="font-size:0.7rem; font-weight:700;">الأعمدة المكتشفة (${headers.length}):</span>
+                <span class="doc-tpl-headers-label">الأعمدة المكتشفة (${headers.length}):</span>
                 ${chipsHtml}
                 ${moreChips}
               </div>
@@ -353,10 +412,6 @@ export async function render(view) {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 فحص
               </button>
-              <a class="btn btn-sm" href="/api/invoices/template?style=${esc(tpl.id)}&format=xlsx" target="_blank" download="report_template_${esc(tpl.id)}.xlsx" title="تنزيل ملف القالب (.xlsx)" style="padding:4px 8px; font-size:0.76rem;">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                تنزيل .xlsx
-              </a>
               <button type="button" class="btn btn-sm btn-danger btn-delete-tpl" data-tpl-id="${esc(tpl.id)}" data-tpl-name="${esc(tpl.name_ar || tpl.name)}" title="حذف القالب" style="padding:4px 7px;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               </button>
@@ -382,26 +437,27 @@ export async function render(view) {
     const cards = invoices.map((tpl) => {
       const isActive = tpl.id === currentStyle;
       const tplColor = tpl.color_hex || '#06b6d4';
+      const colors = getThemeColors(tplColor);
       const headers = tpl.headers || [];
-      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};"><span style="opacity:0.6;">#${i + 1}</span> ${esc(h)}</span>`).join('');
-      const moreChips = headers.length > 4 ? `<span class="doc-tpl-chip" style="font-size:0.68rem;">+${headers.length - 4} أعمدة</span>` : '';
+      const chipsHtml = headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip"><span class="chip-idx">#${i + 1}</span> ${esc(h)}</span>`).join('');
+      const moreChips = headers.length > 4 ? `<span class="doc-tpl-chip doc-tpl-chip-more">+${headers.length - 4} أعمدة</span>` : '';
       const sizeBadge = tpl.file_size ? `<span class="badge gray tiny" style="font-size:0.65rem;">${formatBytes(tpl.file_size)}</span>` : '';
 
       return `
-        <div class="doc-tpl-card ${isActive ? 'is-active' : ''}" style="${isActive ? `border-color:${tplColor}; box-shadow:0 0 0 1.5px ${tplColor}44;` : `border-color:${tplColor}25;`}">
+        <div class="doc-tpl-card ${isActive ? 'is-active' : ''}" style="--tpl-accent:${colors.accent}; --tpl-text-dark:${colors.textDark}; --tpl-text-light:${colors.textLight}; --tpl-bg-tint:${colors.bgTint}; --tpl-border-tint:${colors.borderTint}; ${isActive ? `border-color:${colors.accent}; box-shadow:0 0 0 1.5px ${colors.borderTint};` : `border-color:${colors.borderTint};`}">
           <div class="doc-tpl-card-top">
-            <div class="doc-tpl-card-icon" style="background:${tplColor}18; color:${tplColor}; border:1px solid ${tplColor}35;">
+            <div class="doc-tpl-card-icon" style="background:${colors.bgTint}; color:var(--tpl-text); border:1px solid ${colors.borderTint};">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="9" x2="9" y1="3" y2="21"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/></svg>
             </div>
             <div class="doc-tpl-card-meta">
               <div class="doc-tpl-card-title">
                 <span style="font-weight:800;">${esc(tpl.name_ar || tpl.name)}</span>
-                ${isActive ? `<span class="badge tiny" style="background:${tplColor}22; color:${tplColor}; border:1px solid ${tplColor}55; font-weight:700;">القالب المعتمد النشط ✓</span>` : `<span class="badge tiny" style="background:${tplColor}15; color:${tplColor}; font-size:0.68rem;">${esc(tpl.badge || 'فاتورة إكسل')}</span>`}
+                ${isActive ? `<span class="badge tiny doc-tpl-active-badge">القالب المعتمد النشط ✓</span>` : `<span class="badge tiny doc-tpl-badge">${esc(tpl.badge || 'فاتورة إكسل')}</span>`}
                 ${sizeBadge}
               </div>
               <p class="doc-tpl-card-desc">${esc(tpl.description || 'قالب فاتورة مبيعات ضريبية متوافق مع هيئة الزكاة')}</p>
               <div class="doc-tpl-card-chips">
-                <span class="tiny muted" style="font-size:0.7rem; font-weight:700;">الأعمدة (${headers.length}):</span>
+                <span class="doc-tpl-headers-label">الأعمدة (${headers.length}):</span>
                 ${chipsHtml}
                 ${moreChips}
               </div>
@@ -414,7 +470,7 @@ export async function render(view) {
                 عرض الفاتورة (صورة)
               </button>
               ${isActive ? `
-                <button type="button" class="btn btn-sm" disabled style="background:${tplColor}22; border:1px solid ${tplColor}55; color:${tplColor}; font-size:0.78rem; padding:4px 10px; font-weight:700;">معتمد للمنشأة ✓</button>
+                <button type="button" class="btn btn-sm btn-tpl-active-state" disabled>معتمد للمنشأة ✓</button>
               ` : `
                 <button type="button" class="btn btn-sm btn-primary btn-select-template" data-tpl-id="${esc(tpl.id)}" style="font-size:0.78rem; padding:4px 10px;">اعتماد القالب</button>
               `}
@@ -424,9 +480,6 @@ export async function render(view) {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 فحص
               </button>
-              <a class="btn btn-sm" href="/api/invoices/template?style=${esc(tpl.id)}" target="_blank" download="invoice_template_${esc(tpl.id)}.html" title="تنزيل ملف القالب" style="padding:4px 8px; font-size:0.76rem;">
-                تنزيل القالب
-              </a>
               ${tpl.badge === 'مخصص' ? `<a class="btn btn-sm" href="#/template-builder?id=${encodeURIComponent(tpl.id)}">تعديل التصميم</a>` : ''}
               <button type="button" class="btn btn-sm btn-danger btn-delete-tpl" data-tpl-id="${esc(tpl.id)}" data-tpl-name="${esc(tpl.name_ar || tpl.name)}" title="حذف القالب" style="padding:4px 7px;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -452,44 +505,47 @@ export async function render(view) {
 
     const cards = vouchers.map((tpl) => {
       const tplColor = tpl.color_hex || '#7c3aed';
+      const colors = getThemeColors(tplColor);
       const isVoucherActive = (printCfg.voucher_template_style || '') === tpl.id;
       const headers = tpl.headers || [];
       const isHtmlTpl = tpl.badge?.includes('HTML') || (tpl.file_path && tpl.file_path.endsWith('.html')) || headers.length === 0;
       const chipsHtml = isHtmlTpl
-        ? `<span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};">بيانات المنشأة</span>
-           <span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};">بيانات العميل</span>
-           <span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};">المبالغ والسداد</span>
-           <span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};">طباعة A4</span>`
-        : headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip" style="background:${tplColor}15; border:1px solid ${tplColor}35; color:${tplColor};"><span style="opacity:0.6;">#${i + 1}</span> ${esc(h)}</span>`).join('');
+        ? `<span class="doc-tpl-chip">بيانات المنشأة</span>
+           <span class="doc-tpl-chip">بيانات العميل</span>
+           <span class="doc-tpl-chip">المبالغ والسداد</span>
+           <span class="doc-tpl-chip">طباعة A4</span>`
+        : headers.slice(0, 4).map((h, i) => `<span class="doc-tpl-chip"><span class="chip-idx">#${i + 1}</span> ${esc(h)}</span>`).join('');
+      const moreChips = !isHtmlTpl && headers.length > 4 ? `<span class="doc-tpl-chip doc-tpl-chip-more">+${headers.length - 4} أعمدة</span>` : '';
       const sizeBadge = tpl.file_size ? `<span class="badge gray tiny" style="font-size:0.65rem;">${formatBytes(tpl.file_size)}</span>` : '';
 
       return `
-        <div class="doc-tpl-card" style="border-color:${tplColor}25;">
+        <div class="doc-tpl-card ${isVoucherActive ? 'is-active' : ''}" style="--tpl-accent:${colors.accent}; --tpl-text-dark:${colors.textDark}; --tpl-text-light:${colors.textLight}; --tpl-bg-tint:${colors.bgTint}; --tpl-border-tint:${colors.borderTint}; ${isVoucherActive ? `border-color:${colors.accent}; box-shadow:0 0 0 1.5px ${colors.borderTint};` : `border-color:${colors.borderTint};`}">
           <div class="doc-tpl-card-top">
-            <div class="doc-tpl-card-icon" style="background:${tplColor}18; color:${tplColor}; border:1px solid ${tplColor}35;">
+            <div class="doc-tpl-card-icon" style="background:${colors.bgTint}; color:var(--tpl-text); border:1px solid ${colors.borderTint};">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
             </div>
             <div class="doc-tpl-card-meta">
               <div class="doc-tpl-card-title">
                 <span style="font-weight:800;">${esc(tpl.name_ar || tpl.name)}</span>
-                ${isVoucherActive ? `<span class="badge tiny" style="background:${tplColor}22; color:${tplColor}; border:1px solid ${tplColor}55; font-weight:700;">القالب المعتمد النشط ✓</span>` : `<span class="badge tiny" style="background:${tplColor}15; color:${tplColor}; font-size:0.68rem;">${esc(tpl.badge || 'سند قبض')}</span>`}
+                ${isVoucherActive ? `<span class="badge tiny doc-tpl-active-badge">القالب المعتمد النشط ✓</span>` : `<span class="badge tiny doc-tpl-badge">${esc(tpl.badge || 'سند قبض')}</span>`}
                 ${sizeBadge}
               </div>
               <p class="doc-tpl-card-desc">${esc(tpl.description || 'قالب إيصال وسند قبض مالي معتمد')}</p>
               <div class="doc-tpl-card-chips">
-                <span class="tiny muted" style="font-size:0.7rem; font-weight:700;">${isHtmlTpl ? 'الحقول الديناميكية:' : `الأعمدة (${headers.length}):`}</span>
+                <span class="doc-tpl-headers-label">${isHtmlTpl ? 'الحقول الديناميكية:' : `الأعمدة (${headers.length}):`}</span>
                 ${chipsHtml}
+                ${moreChips}
               </div>
             </div>
           </div>
           <div class="doc-tpl-card-foot">
             <div class="flex gap-xs" style="align-items:center; flex-wrap:wrap;">
-              <button type="button" class="btn btn-sm btn-info btn-visual-voucher-modal" data-tpl-id="${esc(tpl.id)}" style="display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:700; background:${tplColor}20; border:1px solid ${tplColor}55; color:${tplColor};" title="عرض ومعاينة السند بصرية كصورة ومستند رسمي">
+              <button type="button" class="btn btn-sm btn-info btn-visual-voucher-modal" data-tpl-id="${esc(tpl.id)}" style="display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:700; background:${colors.bgTint}; border:1px solid ${colors.borderTint}; color:var(--tpl-text);" title="عرض ومعاينة السند بصرية كصورة ومستند رسمي">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                 عرض السند (صورة)
               </button>
               ${isVoucherActive ? `
-                <button type="button" class="btn btn-sm" disabled style="background:${tplColor}22; border:1px solid ${tplColor}55; color:${tplColor}; font-size:0.78rem; padding:4px 10px; font-weight:700;">معتمد للمنشأة ✓</button>
+                <button type="button" class="btn btn-sm btn-tpl-active-state" disabled>معتمد للمنشأة ✓</button>
               ` : `
                 <button type="button" class="btn btn-sm btn-primary btn-select-voucher-template" data-tpl-id="${esc(tpl.id)}" style="font-size:0.78rem; padding:4px 10px;">اعتماد القالب</button>
               `}
@@ -498,7 +554,6 @@ export async function render(view) {
               ${tpl.is_builtin ? '' : `
                 ${tpl.badge === 'سند مخصص' ? `<a class="btn btn-sm" href="#/template-builder?id=${encodeURIComponent(tpl.id)}">تعديل التصميم</a>` : ''}
                 <button type="button" class="btn btn-sm btn-inspect-tpl" data-tpl-id="${esc(tpl.id)}" title="فحص خلايا القالب" style="padding:4px 8px; font-size:0.76rem;">فحص</button>
-                <a class="btn btn-sm" href="/api/invoices/template?style=${esc(tpl.id)}" target="_blank" download="${esc(tpl.name_ar || tpl.name || 'voucher_template')}.html" style="padding:4px 8px; font-size:0.76rem;">تنزيل القالب</a>
                 <button type="button" class="btn btn-sm btn-danger btn-delete-tpl" data-tpl-id="${esc(tpl.id)}" data-tpl-name="${esc(tpl.name_ar || tpl.name)}" style="padding:4px 7px;">حذف</button>
               `}
             </div>
@@ -995,7 +1050,8 @@ export async function render(view) {
     const tpl = excelTemplates.find((t) => t.id === printCfg.template_style);
     if (tpl) {
       printCfg.template_title = tpl.name_ar || tpl.name;
-      printCfg.headers = tpl.headers || [];
+      const rawH = tpl.headers || [];
+      printCfg.headers = rawH.some((h) => String(h).startsWith('{{') || /seller_|buyer_|qr_|logo/i.test(String(h))) ? [] : rawH;
       printCfg.header_fill = tpl.style_meta?.header_fill || tpl.color_hex;
       printCfg.banner_text = tpl.style_meta?.banner_text || '';
       printCfg.banner_fill = tpl.style_meta?.banner_fill || tpl.style_meta?.header_fill || '';
@@ -1044,7 +1100,8 @@ export async function render(view) {
       if (tpl) {
         previewPrintCfg.template_style = tpl.id;
         previewPrintCfg.template_title = tpl.name_ar || tpl.name;
-        previewPrintCfg.headers = tpl.headers || [];
+        const prevH = tpl.headers || [];
+        previewPrintCfg.headers = prevH.some((h) => String(h).startsWith('{{') || /seller_|buyer_|qr_|logo/i.test(String(h))) ? [] : prevH;
         previewPrintCfg.alignments = tpl.style_meta?.alignments || [];
         previewPrintCfg.header_fill = tpl.style_meta?.header_fill || tpl.color_hex;
         previewPrintCfg.banner_text = tpl.style_meta?.banner_text || '';
@@ -1092,17 +1149,18 @@ export async function render(view) {
           </div>
         `,
         footer: html`
-          <div class="flex gap" style="justify-content:space-between; width:100%;">
-            <div class="flex gap-xs">
-              <button class="btn btn-primary" id="btn-modal-print" type="button" style="display:inline-flex;align-items:center;gap:4px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
-                طباعة الآن
+          <div class="modal-preview-bar">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button class="btn btn-primary" id="btn-modal-print" type="button">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+                <span>طباعة الآن</span>
               </button>
-              <button class="btn" id="btn-modal-pdf" type="button" style="display:inline-flex;align-items:center;gap:4px;">
-                PDF ⤓
+              <button class="btn" id="btn-modal-pdf" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>تنزيل PDF</span>
               </button>
             </div>
-            <button class="btn" data-close type="button">إغلاق</button>
+            <button class="btn" data-close type="button" style="padding:0 1.25rem;">إغلاق</button>
           </div>
         `,
       });
@@ -1258,16 +1316,18 @@ export async function render(view) {
         </div>
       `,
       footer: html`
-        <div class="flex gap" style="justify-content:space-between; width:100%;">
-          <div class="flex gap-xs">
-            <button class="btn btn-primary" id="btn-modal-print-voucher" type="button" style="display:inline-flex;align-items:center;gap:4px;">
-              طباعة الآن
+        <div class="modal-preview-bar">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn btn-primary" id="btn-modal-print-voucher" type="button">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+              <span>طباعة الآن</span>
             </button>
-            <button class="btn" id="btn-modal-pdf-voucher" type="button" style="display:inline-flex;align-items:center;gap:4px;">
-              PDF ⤓
+            <button class="btn" id="btn-modal-pdf-voucher" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>تنزيل PDF</span>
             </button>
           </div>
-          <button class="btn" data-close type="button">إغلاق</button>
+          <button class="btn" data-close type="button" style="padding:0 1.25rem;">إغلاق</button>
         </div>
       `,
     });
@@ -2225,7 +2285,8 @@ export async function render(view) {
         const tpl = excelTemplates.find((t) => t.id === tplId);
         printCfg.template_style = tplId;
         if (tpl) {
-          printCfg.headers = tpl.headers || [];
+          const selH = tpl.headers || [];
+          printCfg.headers = selH.some((h) => String(h).startsWith('{{') || /seller_|buyer_|qr_|logo/i.test(String(h))) ? [] : selH;
           printCfg.alignments = tpl.style_meta?.alignments || [];
           printCfg.header_fill = tpl.style_meta?.header_fill || tpl.color_hex;
           printCfg.banner_text = tpl.style_meta?.banner_text || '';

@@ -8,7 +8,7 @@ import * as router from '../core/router.js';
 import {
   html, raw, esc, money, num, timeToMinutes, toNum, today,
   toastOk, toastErr, $, delegate, confirmDialog, promptDialog, exportCsv, exportExcel,
-  modal, printDoc, icon,
+  modal, printDoc, icon, generateNextItemCode,
 } from '../core/util.js';
 import { invoiceA4, invoiceThermal, bulkPreviewReport } from '../print/templates.js';
 
@@ -135,14 +135,18 @@ export async function render(view) {
     start_invoice_number: (state.start_invoice_number || '').trim(),
     category_ids: state.category_ids,
     item_ids: state.item_ids,
-    custom_items: state.custom_items.map((it) => ({
-      id: it.id || undefined,
-      name_ar: it.name_ar,
-      item_code: it.item_code || '',
-      unit: it.unit || 'حبة',
-      sale_price: toNum(it.sale_price, 0),
-      tax_rate: it.tax_rate !== undefined ? toNum(it.tax_rate, 15) : 15,
-    })),
+    custom_items: state.custom_items.map((it) => {
+      const code = (it.item_code && it.item_code.trim()) ? it.item_code.trim() : generateNextItemCode(state.custom_items, store.items);
+      it.item_code = code;
+      return {
+        id: it.id || undefined,
+        name_ar: it.name_ar,
+        item_code: code,
+        unit: it.unit || 'حبة',
+        sale_price: toNum(it.sale_price, 0),
+        tax_rate: it.tax_rate !== undefined ? toNum(it.tax_rate, 15) : 15,
+      };
+    }),
     distribution_mode: state.distribution_mode,
     min_items: toNum(state.min_items, 1),
     max_items: toNum(state.max_items, 6),
@@ -258,6 +262,7 @@ export async function render(view) {
                 <span class="badge blue tiny">إجمالي الأصناف المحددة للدفعة: <b>${num(state.custom_items.length)}</b> صنف</span>
               </td>
               <td colspan="3" class="text-end" style="gap:.4rem">
+                <button class="btn btn-sm" id="btn-autogen-custom-codes" type="button" style="font-size:.78rem">توليد أرقام الأصناف آلياً</button>
                 <button class="btn btn-sm" id="btn-bulk-price-adjust" type="button" style="font-size:.78rem">تعديل جماعي للأسعار (±%)</button>
                 <button class="btn btn-sm" id="btn-reset-default-prices" type="button" style="font-size:.78rem">استعادة الأسعار الأصلية</button>
                 <button class="btn btn-sm btn-danger" id="btn-clear-custom-items" type="button" style="font-size:.78rem">مسح الكل</button>
@@ -759,7 +764,10 @@ export async function render(view) {
         toastErr('يرجى تحديد أو كتابة اسم الصنف');
         return;
       }
-      const customCode = codeInput ? codeInput.value.trim() : (it ? it.item_code || '' : '');
+      let customCode = codeInput ? codeInput.value.trim() : (it ? it.item_code || '' : '');
+      if (!customCode) {
+        customCode = generateNextItemCode(state.custom_items, store.items);
+      }
       const customUnit = unitInput && unitInput.value.trim() ? unitInput.value.trim() : (it ? it.unit || 'حبة' : 'حبة');
       const customPrice = priceInput && priceInput.value !== '' ? Number(priceInput.value) : (it ? it.sale_price : 0);
       if (customPrice <= 0) {
@@ -783,7 +791,7 @@ export async function render(view) {
           sale_price: customPrice,
           tax_rate: (it && it.tax_rate !== undefined) ? it.tax_rate : 15,
         });
-        toastOk(`تمت إضافة الصنف: ${customName} (كود: ${customCode || '—'}) بسعر ${money(customPrice)} ${cur}`);
+        toastOk(`تمت إضافة الصنف: ${customName} (رقم الصنف: ${customCode}) بسعر ${money(customPrice)} ${cur}`);
       }
 
       if (nameInput) nameInput.value = '';
@@ -812,6 +820,7 @@ export async function render(view) {
 
     // إضافة صنف مخصص بالكامل (طوالي مش من المجموعات)
     delegate(view, 'click', '#btn-add-custom-adhoc', () => {
+      const nextCode = generateNextItemCode(state.custom_items, store.items);
       const m = modal({
         title: 'إضافة صنف مخصص جديد للدفعة',
         slim: true,
@@ -819,7 +828,7 @@ export async function render(view) {
           <div class="row">
             <div class="field" style="max-width:140px">
               <label>رقم / كود الصنف</label>
-              <input type="text" name="item_code" class="mono" placeholder="مثال: ITM-001" />
+              <input type="text" name="item_code" class="mono" value="${esc(nextCode)}" placeholder="مثال: ${esc(nextCode)}" />
             </div>
             <div class="field" style="flex:2">
               <label class="req">اسم الصنف أو الخدمة</label>
@@ -854,9 +863,10 @@ export async function render(view) {
           toastErr('أدخل سعر وحدة صالح أكبر من الصفر');
           return;
         }
+        const code = (values.item_code || '').trim() || generateNextItemCode(state.custom_items, store.items);
         state.custom_items.push({
           id: null,
-          item_code: (values.item_code || '').trim(),
+          item_code: code,
           name_ar: values.name_ar.trim(),
           unit: (values.unit || '').trim() || 'حبة',
           sale_price: price,
@@ -864,8 +874,23 @@ export async function render(view) {
         });
         m.close();
         refreshCustomItemsArea();
-        toastOk(`تمت إضافة الصنف: ${values.name_ar.trim()}`);
+        toastOk(`تمت إضافة الصنف: ${values.name_ar.trim()} (رقم: ${code})`);
       });
+    });
+
+    // توليد أرقام الأصناف آلياً للأصناف الحرة في الدفعة
+    delegate(view, 'click', '#btn-autogen-custom-codes', () => {
+      if (!state.custom_items.length) {
+        toastErr('لا توجد أصناف في جدول الدفعة بعد');
+        return;
+      }
+      for (const it of state.custom_items) {
+        if (!it.item_code || !it.item_code.trim()) {
+          it.item_code = generateNextItemCode(state.custom_items, store.items);
+        }
+      }
+      refreshCustomItemsArea();
+      toastOk(`تم توليد وتحديث أرقام الأصناف لجميع أصناف الدفعة (${state.custom_items.length} صنف)`);
     });
 
     // استيراد جميع الأصناف النشطة

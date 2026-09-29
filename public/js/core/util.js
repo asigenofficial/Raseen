@@ -155,15 +155,20 @@ export function delegate(root, event, selector, handler) {
 // -------------------------------------------------------------- التنبيهات
 export function toast(message, type = '') {
   const root = document.getElementById('toast-root');
+  if (!root) return;
+  root.innerHTML = '';
   const el = document.createElement('div');
   el.className = `toast ${type}`;
   el.innerHTML = html`<span>${message}</span>`;
+  el.style.cursor = 'pointer';
+  el.title = 'إغلاق';
+  el.addEventListener('click', () => el.remove());
   root.appendChild(el);
   setTimeout(() => {
     el.style.opacity = '0';
-    el.style.transition = 'opacity .25s';
-    setTimeout(() => el.remove(), 250);
-  }, type === 'err' ? 6000 : 3200);
+    el.style.transition = 'opacity .2s';
+    setTimeout(() => el.remove(), 200);
+  }, type === 'err' ? 4000 : 1500);
 }
 
 export const toastOk = (m) => toast(m, 'ok');
@@ -175,6 +180,9 @@ export const toastErr = (m) => toast(m, 'err');
  */
 export function modal({ title, body, footer, wide = false, slim = false, onClose } = {}) {
   const root = document.getElementById('modal-root');
+  if (root) {
+    Array.from(root.querySelectorAll('.modal-backdrop:not(.confirm-dialog-active)')).forEach((el) => el.remove());
+  }
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.innerHTML = html`
@@ -617,7 +625,7 @@ function extractTableHeadersJS(htmlSnippet) {
   return [];
 }
 
-function generateSmartRowsJS(htmlSnippet, rawLines) {
+function generateSmartRowsJS(htmlSnippet, rawLines, offset = 0) {
   const headers = extractTableHeadersJS(htmlSnippet);
   let cols = [];
   if (headers.length > 0) {
@@ -668,18 +676,15 @@ function generateSmartRowsJS(htmlSnippet, rawLines) {
     const itemCode = l.item_code || l.code || '—';
     const unit = l.unit || 'حبة';
 
-    const bg = idx % 2 === 1 ? '#fafafa' : '#fff';
+    const bg = (offset + idx) % 2 === 1 ? '#fafafa' : '#fff';
     const cells = cols.map(c => {
       switch (c) {
         case 'index':
-          return `<td class="c" style="padding:6px 8px;text-align:center;">${idx + 1}</td>`;
+          return `<td class="c" style="padding:6px 8px;text-align:center;">${offset + idx + 1}</td>`;
         case 'code':
-          return `<td class="c" style="padding:6px 8px;text-align:center;font-family:Tahoma,sans-serif;">${esc(itemCode)}</td>`;
-        case 'name': {
-          const hasCodeCol = cols.includes('code');
-          const codeSub = (!hasCodeCol && itemCode && itemCode !== '—') ? `<div style="font-size:0.75rem;color:#6b7280;font-family:Tahoma,sans-serif;direction:ltr;text-align:right;">${esc(itemCode)}</div>` : '';
-          return `<td class="r" style="padding:6px 8px;font-weight:600;text-align:right;">${esc(itemName)}${codeSub}</td>`;
-        }
+          return `<td class="r" style="padding:6px 8px;font-weight:600;text-align:right;">${esc(itemName)}</td>`;
+        case 'name':
+          return `<td class="r" style="padding:6px 8px;font-weight:600;text-align:right;">${esc(itemName)}</td>`;
         case 'unit':
           return `<td class="c" style="padding:6px 8px;text-align:center;">${esc(unit)}</td>`;
         case 'price':
@@ -790,6 +795,55 @@ export function cleanStrayTableRowsAndFixTables(html) {
   return html;
 }
 
+// تفقيط المبالغ باللغة العربية كتابة (ريالات وهللات)
+const ONES_AR = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة',
+  'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+const TENS_AR = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+const HUNDREDS_AR = ['', 'مئة', 'مئتان', 'ثلاثمئة', 'أربعمئة', 'خمسمئة', 'ستمئة', 'سبعمئة', 'ثمانمئة', 'تسعمئة'];
+
+function under1000AR(n) {
+  const parts = [];
+  const h = Math.floor(n / 100);
+  const rest = n % 100;
+  if (h) parts.push(HUNDREDS_AR[h]);
+  if (rest) {
+    if (rest < 20) parts.push(ONES_AR[rest]);
+    else {
+      const o = rest % 10;
+      const t = Math.floor(rest / 10);
+      parts.push(o ? `${ONES_AR[o]} و${TENS_AR[t]}` : TENS_AR[t]);
+    }
+  }
+  return parts.join(' و');
+}
+
+function groupWordAR(n, singular, dual, plural) {
+  if (n === 1) return singular;
+  if (n === 2) return dual;
+  return `${under1000AR(n)} ${plural}`;
+}
+
+export function tafqeetArabicJS(value, currency = 'SAR') {
+  const total = Math.round(Number(value || 0) * 100);
+  const riyals = Math.floor(total / 100);
+  const halalas = total % 100;
+  const unitName = (currency === 'SAR' || currency === 'ر.س') ? 'ريالاً سعودياً' : currency;
+  if (!riyals && !halalas) return `فقط صفر ${unitName} لا غير`;
+
+  const chunks = [];
+  const millions = Math.floor(riyals / 1000000);
+  const thousands = Math.floor((riyals % 1000000) / 1000);
+  const units = riyals % 1000;
+  if (millions) chunks.push(groupWordAR(millions, 'مليون', 'مليونان', 'ملايين'));
+  if (thousands) chunks.push(groupWordAR(thousands, 'ألف', 'ألفان', 'آلاف'));
+  if (units) chunks.push(under1000AR(units));
+
+  let text = chunks.filter(Boolean).join(' و');
+  text = `فقط ${text} ${unitName}`;
+  if (halalas) text += ` و${under1000AR(halalas)} هللة`;
+  return `${text} لا غير`;
+}
+
 /**
  * محرك استبدال الوسوم الديناميكي الشامل لأي قالب HTML بدون أي قيود أو ثوابت.
  * يكتشف الوسوم والجداول وهيكلتها برمجياً ويستبدلها بالقيم الحقيقية تلقائياً.
@@ -799,6 +853,8 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
 
   rawHtml = rawHtml.replace(/<img\b[^>]*src=["']\{\{\s*(logo|seller_logo|company_logo|شعار|الشعار)\s*\}\}["'][^>]*>/gi, '{{logo}}');
   rawHtml = rawHtml.replace(/<img\b[^>]*src=["']\{\{\s*(qr_code|qr|qrcode|barcode|zatca_qr|zatca_code|zatca_payload|رمز_الاستجابة|الباركود|باركود)\s*\}\}["'][^>]*>/gi, '{{qr_code}}');
+  // استبدال أي رمز خطأ قديم تسبب في إظهار "جل جلاله" بدلاً من رمز الريال
+  rawHtml = rawHtml.replace(/&#xFDFB;/gi, '{{sar_symbol}}').replace(/&#65019;/g, '{{sar_symbol}}').replace(/\uFDFB/g, '{{sar_symbol}}');
   rawHtml = ensureItemsRowsInTbodyJS(rawHtml);
 
   const doc = voucher || invoice || {};
@@ -941,24 +997,44 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       const val = (!isNaN(n) && Number.isFinite(n)) ? n : 0;
       return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
+    const payMethodStr = (voucher?.payment_type || voucher?.payment_label || invoice?.payment_method || invoice?.payment_label || '').toLowerCase();
+    const isCashMethod = payMethodStr.includes('cash') || payMethodStr.includes('نقد');
+    const isPaidState = String(invoice?.status || '').toUpperCase() === 'PAID';
+
     if (k === 'paid_amount' || k === 'paid') {
       const p = invoice?.paid_amount;
-      const n = Number(String(p ?? '').replace(/,/g, '').trim());
-      const val = (!isNaN(n) && Number.isFinite(n)) ? n : 0;
+      let val = Number(String(p ?? '').replace(/,/g, '').trim());
+      if (isNaN(val) || !Number.isFinite(val)) val = 0;
+      if ((val === 0 || isCashMethod) && (isCashMethod || isPaidState) && docTotal > 0) {
+        val = docTotal;
+      }
       return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     if (k === 'remaining_amount' || k === 'due_amount' || k === 'balance_due') {
-      const rem = invoice?.remaining_amount;
-      const n = Number(String(rem ?? '').replace(/,/g, '').trim());
-      const val = (!isNaN(n) && Number.isFinite(n)) ? n : 0;
+      const p = invoice?.paid_amount;
+      let paidVal = Number(String(p ?? '').replace(/,/g, '').trim());
+      if (isNaN(paidVal) || !Number.isFinite(paidVal)) paidVal = 0;
+      if ((paidVal === 0 || isCashMethod) && (isCashMethod || isPaidState) && docTotal > 0) {
+        paidVal = docTotal;
+      }
+      let val = 0;
+      if (isCashMethod || isPaidState || (paidVal > 0 && paidVal >= docTotal)) {
+        val = 0;
+      } else if (paidVal > 0) {
+        val = Math.max(0, docTotal - paidVal);
+      } else {
+        const rem = invoice?.remaining_amount;
+        const n = Number(String(rem ?? '').replace(/,/g, '').trim());
+        val = (!isNaN(n) && Number.isFinite(n) && n > 0) ? n : docTotal;
+      }
       return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     if (k === 'amount_in_words' || k === 'tafqeet' || k === 'total_in_words') {
       if (doc?.amount_in_words && doc.amount_in_words !== '—' && doc.amount_in_words !== '0') return String(doc.amount_in_words);
       if (docTotal > 0) {
-        return Math.floor(docTotal).toLocaleString('ar-SA') + ' ريال سعودي';
+        return tafqeetArabicJS(docTotal, issuer.currency || 'SAR');
       }
-      return 'صفر ريال سعودي';
+      return 'فقط صفر ريال سعودي لا غير';
     }
 
     // 6. طرق الدفع والبيان
@@ -1042,11 +1118,6 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       return `<div class="zatca-qr-container" style="display:inline-block; line-height:0;">${svg}</div>`;
     }
 
-    if (k === 'remaining_amount' || k === 'due_amount' || k === 'balance_due') {
-      const p = Number(invoice?.paid_amount ?? docTotal);
-      const rem = Number(invoice?.remaining_amount ?? Math.max(0, docTotal - p));
-      return rem.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
     if (k === 'total_qty' || k === 'total_quantity' || k === 'qty_total') {
       const lines = invoice?.lines || [];
       const sum = lines.reduce((acc, l) => acc + Number(l.quantity || 0), 0);
@@ -1064,8 +1135,8 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
           <thead>
             <tr style="background:#0f172a; color:#fff;">
               <th style="padding:7px 8px; text-align:center; border:1px solid #cbd5e1; width:36px;">#</th>
-              <th style="padding:7px 8px; text-align:center; border:1px solid #cbd5e1; width:80px;">كود الصنف</th>
-              <th style="padding:7px 8px; text-align:right; border:1px solid #cbd5e1;">الصنف / الخدمة</th>
+              <th style="padding:7px 8px; text-align:right; border:1px solid #cbd5e1;">اسم الصنف بالكامل</th>
+              <th style="padding:7px 8px; text-align:right; border:1px solid #cbd5e1;">البيان</th>
               <th style="padding:7px 8px; text-align:center; border:1px solid #cbd5e1; width:70px;">الكمية</th>
               <th style="padding:7px 8px; text-align:right; border:1px solid #cbd5e1; width:95px;">سعر الوحدة</th>
               <th style="padding:7px 8px; text-align:right; border:1px solid #cbd5e1; width:85px;">الضريبة</th>
@@ -1095,11 +1166,158 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
     return val !== undefined ? val : match;
   });
 
-  // استبدال ذكي إضافي إذا كان القالب يحتوي على tbody ثابت أو فارغ بدون وسوم
-  const tbodyRegex = /(<tbody\b[^>]*>)([\s\S]*?)(<\/tbody>)/i;
-  if (tbodyRegex.test(result) && !rawHtml.includes('{{items_rows') && !rawHtml.includes('{{items_table')) {
-    result = result.replace(tbodyRegex, `$1${smartRows}$3`);
+  // تحسين الطباعة للقوالب المخصصة عند كثرة الأصناف لمنع اقتطاع المحتوى
+  if (result.includes('overflow: hidden') || result.includes('overflow:hidden')) {
+    result = result.replace(/overflow:\s*hidden\s*;/gi, 'overflow: visible;');
   }
 
+  const lines = invoice?.lines || (Array.isArray(invoice?.items) ? invoice.items : []);
+  if (lines.length > 12) {
+    result = paginateInvoiceHtmlJS(result, { ...invoice, lines }, 12);
+  }
+
+  result = result
+    .replace(/(?:لا غير\s*){2,}/g, 'لا غير ')
+    .replace(/(?:فقط\s*){2,}/g, 'فقط ')
+    .replace(/فقط مبلغ وقدره\s*فقط/g, 'فقط مبلغ وقدره');
+
   return result;
+}
+
+/**
+ * تقسيم أي قالب فاتورة HTML ديناميكياً إلى صفحات A4 عند زيادة عدد الأصناف عن 12 صنفاً.
+ */
+export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 12) {
+  const lines = inv?.lines || [];
+  if (lines.length <= chunkSize) return htmlStr;
+
+  const totalPages = Math.ceil(lines.length / chunkSize);
+
+  const bodyMatch = htmlStr.match(/<body\b([^>]*)>([\s\S]*?)<\/body>/i);
+  if (!bodyMatch) return htmlStr;
+  const bodyAttrs = bodyMatch[1];
+  const bodyContent = bodyMatch[2];
+
+  // 1. Locate outer page container: look for invoice-container or invoice-frame
+  const contTargetRegex = /<div\b[^>]*class=["'][^"']*(?:invoice-container|invoice-frame)[^"']*["'][^>]*>/i;
+  const contMatch = bodyContent.match(contTargetRegex);
+
+  let contOpen = '', contInner = '', contClose = '</div>', prefix = '', suffix = '';
+  if (contMatch) {
+    const contIdx = bodyContent.indexOf(contMatch[0]);
+    prefix = bodyContent.slice(0, contIdx);
+    contOpen = contMatch[0];
+    const rest = bodyContent.slice(contIdx + contMatch[0].length);
+    const lastCloseIdx = rest.lastIndexOf('</div>');
+    if (lastCloseIdx !== -1) {
+      contInner = rest.slice(0, lastCloseIdx);
+      suffix = rest.slice(lastCloseIdx + 6);
+    } else {
+      contInner = rest;
+    }
+  } else {
+    const firstDivIdx = bodyContent.indexOf('<div');
+    const lastDivIdx = bodyContent.lastIndexOf('</div>');
+    if (firstDivIdx === -1 || lastDivIdx <= firstDivIdx) return htmlStr;
+    const tagCloseIdx = bodyContent.indexOf('>', firstDivIdx);
+    if (tagCloseIdx === -1) return htmlStr;
+    prefix = bodyContent.slice(0, firstDivIdx);
+    contOpen = bodyContent.slice(firstDivIdx, tagCloseIdx + 1);
+    contInner = bodyContent.slice(tagCloseIdx + 1, lastDivIdx);
+    suffix = bodyContent.slice(lastDivIdx + 6);
+  }
+
+  const tableRegex = /(<table\b[\s\S]*?)(<tbody\b[^>]*>)([\s\S]*?)(<\/tbody>)([\s\S]*?<\/table>)/i;
+  const tableMatch = contInner.match(tableRegex);
+  if (!tableMatch) return htmlStr;
+
+  const tableIdx = contInner.indexOf(tableMatch[0]);
+  const beforeTable = contInner.slice(0, tableIdx);
+  const tableOpen = tableMatch[1] + tableMatch[2];
+  const tableClose = tableMatch[4] + tableMatch[5];
+  const afterTableRaw = contInner.slice(tableIdx + tableMatch[0].length);
+
+  const bottomRegex = /<(?:div|section|table)\b[^>]*(?:class|id)=["'][^"']*(?:bottom|summary)["']/i;
+  const bottomLoc = afterTableRaw.search(bottomRegex);
+  let tableWrapClose = '';
+  let bottomContent = afterTableRaw;
+  if (bottomLoc !== -1) {
+    tableWrapClose = afterTableRaw.slice(0, bottomLoc);
+    bottomContent = afterTableRaw.slice(bottomLoc);
+  }
+
+  const pages = [];
+  for (let p = 1; p <= totalPages; p++) {
+    const start = (p - 1) * chunkSize;
+    const end = Math.min(start + chunkSize, lines.length);
+    const chunk = lines.slice(start, end);
+    const rowsHtml = generateSmartRowsJS(htmlStr, chunk, start);
+
+    let pageInner = '';
+    if (p < totalPages) {
+      pageInner = beforeTable + tableOpen + rowsHtml + tableClose + tableWrapClose;
+    } else {
+      pageInner = beforeTable + tableOpen + rowsHtml + tableClose + tableWrapClose + bottomContent;
+    }
+
+    const pOpen = contOpen.replace('<div', `<div data-invoice-page="${p}"`);
+    pages.push(`${pOpen}\n${pageInner}\n${contClose}`);
+  }
+
+  const multiCss = `
+<style>
+@media screen {
+  body { background: #47556914 !important; padding: 20px 0 !important; }
+  .invoice-container, .invoice-frame {
+    margin: 0 auto 24px auto !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+    min-height: 297mm !important;
+    max-height: none !important;
+    height: auto !important;
+    box-sizing: border-box !important;
+  }
+}
+@media print {
+  body { background: #fff !important; padding: 0 !important; }
+  .invoice-container, .invoice-frame {
+    margin: 0 !important;
+    box-shadow: none !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    min-height: 297mm !important;
+    box-sizing: border-box !important;
+  }
+  .invoice-container:last-child, .invoice-frame:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+}
+</style>`;
+
+  let res = htmlStr;
+  if (/<\/head>/i.test(res)) {
+    res = res.replace(/<\/head>/i, multiCss + '\n</head>');
+  }
+  const allPages = prefix + pages.join('\n') + suffix;
+  res = res.replace(/<body\b([^>]*)>[\s\S]*?<\/body>/i, `<body${bodyAttrs}>\n${allPages}\n</body>`);
+
+  return res;
+}
+
+// ------------------------------------------------------------- توليد رقم صنف تلقائي للأصناف الحرة
+export function generateNextItemCode(existingList = [], catalogItems = []) {
+  let maxNum = 0;
+  const list = [
+    ...(catalogItems || []),
+    ...(existingList || []),
+  ];
+  for (const item of list) {
+    const code = typeof item === 'string' ? item : (item?.item_code || '');
+    const m = String(code).match(/ITM-(\d+)/i);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > maxNum) maxNum = n;
+    }
+  }
+  return `ITM-${String(maxNum + 1).padStart(4, '0')}`;
 }

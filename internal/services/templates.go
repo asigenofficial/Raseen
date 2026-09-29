@@ -818,12 +818,24 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 	}
 
 	paidAmount := inv.PaidAmountMajor
-	if paidAmount == 0 && inv.GrandTotalMajor > 0 && (strings.Contains(inv.PaymentMethod, "نقد") || strings.Contains(strings.ToLower(inv.PaymentMethod), "cash")) {
-		paidAmount = inv.GrandTotalMajor
-	}
-	remainingAmount := inv.RemainingAmountMajor
-	if remainingAmount == 0 && inv.GrandTotalMajor > paidAmount {
+	isCash := strings.Contains(inv.PaymentMethod, "نقد") || strings.EqualFold(inv.PaymentMethod, "CASH") || strings.Contains(strings.ToLower(inv.PaymentMethod), "cash")
+	var remainingAmount float64
+	if isCash || (paidAmount > 0 && paidAmount >= inv.GrandTotalMajor) || strings.EqualFold(inv.Status, "PAID") {
+		remainingAmount = 0
+		if paidAmount == 0 || isCash {
+			paidAmount = inv.GrandTotalMajor
+		}
+	} else if paidAmount > 0 {
 		remainingAmount = inv.GrandTotalMajor - paidAmount
+		if remainingAmount < 0 {
+			remainingAmount = 0
+		}
+	} else {
+		if inv.RemainingAmountMajor > 0 {
+			remainingAmount = inv.RemainingAmountMajor
+		} else {
+			remainingAmount = inv.GrandTotalMajor
+		}
 	}
 
 	tpl = ensureItemsRowsInTbody(tpl)
@@ -880,6 +892,11 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 
 	cleanImgQrRegex := regexp.MustCompile(`(?i)<img\b[^>]*src=["']\{\{\s*(qr_code|qr|qrcode|barcode|zatca_qr|zatca_code|zatca_payload|رمز_الاستجابة|الباركود|باركود)\s*\}\}["'][^>]*>`)
 	tpl = cleanImgQrRegex.ReplaceAllString(tpl, "{{qr_code}}")
+
+	// استبدال أي رمز قديم تسبب في إظهار "جل جلاله" بدلاً من رمز الريال
+	tpl = strings.ReplaceAll(tpl, "&#xFDFB;", "{{sar_symbol}}")
+	tpl = strings.ReplaceAll(tpl, "&#xfdfb;", "{{sar_symbol}}")
+	tpl = strings.ReplaceAll(tpl, "\uFDFB", "{{sar_symbol}}")
 
 	result := strings.NewReplacer(
 		// ─── بيانات الفاتورة والمستند الأساسية ───
@@ -998,6 +1015,21 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 	if tbodyRegex.MatchString(result) && !strings.Contains(tpl, "{{items_rows") && !strings.Contains(tpl, "{{items_table") {
 		result = tbodyRegex.ReplaceAllString(result, "${1}"+smartRows+"${3}")
 	}
+
+	if strings.Contains(result, "overflow: hidden") || strings.Contains(result, "overflow:hidden") {
+		result = strings.ReplaceAll(result, "overflow: hidden", "overflow: visible")
+		result = strings.ReplaceAll(result, "overflow:hidden", "overflow:visible")
+	}
+
+	if len(inv.Lines) > 12 {
+		result = paginateInvoiceHtml(result, inv, 12)
+	}
+
+	dupNoOtherRegex := regexp.MustCompile(`(لا غير\s*)+لا غير`)
+	result = dupNoOtherRegex.ReplaceAllString(result, "لا غير")
+	dupFaqatRegex := regexp.MustCompile(`(فقط\s*)+فقط`)
+	result = dupFaqatRegex.ReplaceAllString(result, "فقط")
+	result = strings.ReplaceAll(result, "فقط مبلغ وقدره فقط", "فقط مبلغ وقدره")
 
 	return result
 }
@@ -1177,49 +1209,36 @@ func ensureItemsRowsInTbody(tpl string) string {
 }
 
 func generateSmartRows(tpl string, inv *InvoiceView) string {
+	return generateSmartRowsSlice(tpl, inv.Lines, 0)
+}
+
+func generateSmartRowsSlice(tpl string, lines []InvoiceItemView, offset int) string {
 	headers := extractTableHeaders(tpl)
 	var cols []colType
 	if len(headers) > 0 {
 		cols = make([]colType, len(headers))
-		hasCode := false
 		for i, h := range headers {
 			cols[i] = detectColumnType(h)
-			if cols[i] == colCode {
-				hasCode = true
-			}
-		}
-		// إذا لم يجد النظام عمود كود في القالب، يُضيفه إلزامياً بعد رقم الصف
-		if !hasCode {
-			newCols := make([]colType, 0, len(cols)+1)
-			for _, c := range cols {
-				newCols = append(newCols, c)
-				if c == colIndex {
-					newCols = append(newCols, colCode)
-				}
-			}
-			cols = newCols
 		}
 	} else {
-		cols = []colType{colIndex, colCode, colName, colQty, colUnit, colPrice, colTaxable, colDiscount, colTaxAmount, colTaxRate, colTotal}
+		cols = []colType{colIndex, colName, colQty, colUnit, colPrice, colTaxable, colDiscount, colTaxAmount, colTaxRate, colTotal}
 	}
 
 	var sb strings.Builder
-	for i, item := range inv.Lines {
+	for i, item := range lines {
 		bg := "#fff"
-		if i%2 == 1 {
+		if (offset+i)%2 == 1 {
 			bg = "#fafafa"
 		}
 		sb.WriteString(fmt.Sprintf(`<tr style="background:%s;">`, bg))
 		for _, col := range cols {
 			switch col {
 			case colIndex:
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;">%d</td>`, i+1))
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;">%d</td>`, offset+i+1))
 			case colCode:
-				code := item.ItemCode
-				if code == "" {
-					code = "—"
-				}
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%s</td>`, html.EscapeString(code)))
+				// بدل كود الصنف، يظهر اسم الصنف بالكامل
+				nameHtml := html.EscapeString(item.ItemName)
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;font-weight:600;text-align:right;">%s</td>`, nameHtml))
 			case colName:
 				nameHtml := html.EscapeString(item.ItemName)
 				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;font-weight:600;text-align:right;">%s</td>`, nameHtml))
@@ -1259,11 +1278,147 @@ func generateSmartRows(tpl string, inv *InvoiceView) string {
 	return sb.String()
 }
 
+func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string {
+	if len(inv.Lines) <= chunkSize {
+		return htmlStr
+	}
+
+	totalPages := (len(inv.Lines) + chunkSize - 1) / chunkSize
+
+	bodyRegex := regexp.MustCompile(`(?is)(<body\b[^>]*>)([\s\S]*?)(</body>)`)
+	bodyMatch := bodyRegex.FindStringSubmatch(htmlStr)
+	if len(bodyMatch) < 4 {
+		return htmlStr
+	}
+	bodyOpen := bodyMatch[1]
+	bodyInner := strings.TrimSpace(bodyMatch[2])
+	bodyClose := bodyMatch[3]
+
+	// 1. Locate outer page container: look for invoice-container or invoice-frame
+	contTargetRegex := regexp.MustCompile(`(?i)<div\b[^>]*class=["'][^"']*(?:invoice-container|invoice-frame)[^"']*["'][^>]*>`)
+	contLoc := contTargetRegex.FindStringIndex(bodyInner)
+
+	var contOpen, contInner, contClose, prefix, suffix string
+	if contLoc != nil {
+		prefix = bodyInner[:contLoc[0]]
+		contOpen = bodyInner[contLoc[0]:contLoc[1]]
+		rest := bodyInner[contLoc[1]:]
+		lastCloseIdx := strings.LastIndex(rest, "</div>")
+		if lastCloseIdx != -1 {
+			contInner = rest[:lastCloseIdx]
+			suffix = rest[lastCloseIdx+6:]
+		} else {
+			contInner = rest
+		}
+		contClose = "</div>"
+	} else {
+		// Fallback to first <div and last </div>
+		firstDivIdx := strings.Index(bodyInner, "<div")
+		lastDivIdx := strings.LastIndex(bodyInner, "</div>")
+		if firstDivIdx == -1 || lastDivIdx <= firstDivIdx {
+			return htmlStr
+		}
+		tagCloseIdx := strings.Index(bodyInner[firstDivIdx:], ">")
+		if tagCloseIdx == -1 {
+			return htmlStr
+		}
+		prefix = bodyInner[:firstDivIdx]
+		contOpen = bodyInner[firstDivIdx : firstDivIdx+tagCloseIdx+1]
+		contInner = bodyInner[firstDivIdx+tagCloseIdx+1 : lastDivIdx]
+		contClose = "</div>"
+		suffix = bodyInner[lastDivIdx+6:]
+	}
+
+	// 2. Locate the items table
+	tableRegex := regexp.MustCompile(`(?is)(<table\b[\s\S]*?)(<tbody\b[^>]*>)([\s\S]*?)(</tbody>)([\s\S]*?</table>)`)
+	tableMatch := tableRegex.FindStringSubmatch(contInner)
+	if len(tableMatch) < 6 {
+		return htmlStr
+	}
+
+	tblIdx := strings.Index(contInner, tableMatch[0])
+	beforeTable := contInner[:tblIdx]
+	tableOpen := tableMatch[1] + tableMatch[2]
+	tableClose := tableMatch[4] + tableMatch[5]
+	afterTableRaw := contInner[tblIdx+len(tableMatch[0]):]
+
+	// 3. Locate bottom section
+	bottomRegex := regexp.MustCompile(`(?i)<(?:div|section|table)\b[^>]*(?:class|id)=["'][^"']*(?:bottom|summary)[^"']*["']`)
+	bottomLoc := bottomRegex.FindStringIndex(afterTableRaw)
+	tableWrapClose := ""
+	bottomContent := afterTableRaw
+	if bottomLoc != nil {
+		tableWrapClose = afterTableRaw[:bottomLoc[0]]
+		bottomContent = afterTableRaw[bottomLoc[0]:]
+	}
+
+	var pages []string
+	for p := 1; p <= totalPages; p++ {
+		start := (p - 1) * chunkSize
+		end := start + chunkSize
+		if end > len(inv.Lines) {
+			end = len(inv.Lines)
+		}
+		chunk := inv.Lines[start:end]
+		rowsHtml := generateSmartRowsSlice(htmlStr, chunk, start)
+
+		var pageInner string
+		if p < totalPages {
+			pageInner = beforeTable + tableOpen + rowsHtml + tableClose + tableWrapClose
+		} else {
+			pageInner = beforeTable + tableOpen + rowsHtml + tableClose + tableWrapClose + bottomContent
+		}
+
+		pOpen := strings.Replace(contOpen, "<div", fmt.Sprintf(`<div data-invoice-page="%d"`, p), 1)
+		pages = append(pages, fmt.Sprintf("%s\n%s\n%s", pOpen, pageInner, contClose))
+	}
+
+	multiCss := `
+<style>
+@media screen {
+  body { background: #47556914 !important; padding: 20px 0 !important; }
+  .invoice-container, .invoice-frame {
+    margin: 0 auto 24px auto !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+    min-height: 297mm !important;
+    max-height: none !important;
+    height: auto !important;
+    box-sizing: border-box !important;
+  }
+}
+@media print {
+  body { background: #fff !important; padding: 0 !important; }
+  .invoice-container, .invoice-frame {
+    margin: 0 !important;
+    box-shadow: none !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    min-height: 297mm !important;
+    box-sizing: border-box !important;
+  }
+  .invoice-container:last-child, .invoice-frame:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+}
+</style>`
+
+	result := htmlStr
+	if strings.Contains(strings.ToLower(result), "</head>") {
+		headRegex := regexp.MustCompile(`(?i)</head>`)
+		result = headRegex.ReplaceAllString(result, multiCss+"\n</head>")
+	}
+	allPages := prefix + strings.Join(pages, "\n") + suffix
+	result = bodyRegex.ReplaceAllString(result, fmt.Sprintf("%s\n%s\n%s", bodyOpen, allPages, bodyClose))
+
+	return result
+}
+
 func generateItemsTable(inv *InvoiceView) string {
 	var sb strings.Builder
 	sb.WriteString(`<table style="width:100%;border-collapse:collapse;font-size:12px;" dir="rtl">`)
 	sb.WriteString(`<thead><tr style="background:#059669;color:#fff;">`)
-	for _, h := range []string{"#", "كود الصنف", "الصنف / الخدمة", "الكمية", "سعر الوحدة", "الضريبة", "الإجمالي"} {
+	for _, h := range []string{"#", "اسم الصنف بالكامل", "الكمية", "سعر الوحدة", "الضريبة", "الإجمالي"} {
 		sb.WriteString(`<th style="padding:6px 8px;text-align:right;border:1px solid #ccc;">` + h + `</th>`)
 	}
 	sb.WriteString(`</tr></thead><tbody>`)
@@ -1273,13 +1428,8 @@ func generateItemsTable(inv *InvoiceView) string {
 		if i%2 == 1 {
 			bg = "#f0fdf4"
 		}
-		code := item.ItemCode
-		if code == "" {
-			code = "—"
-		}
 		sb.WriteString(fmt.Sprintf(`<tr style="background:%s;">`, bg))
 		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;text-align:center;">%d</td>`, i+1))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;text-align:center;font-family:Tahoma,sans-serif;">%s</td>`, html.EscapeString(code)))
 		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;font-weight:600;">%s</td>`, html.EscapeString(item.ItemName)))
 		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;text-align:center;">%.2f</td>`, item.Quantity))
 		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">%.2f</td>`, item.UnitPriceMajor))

@@ -113,6 +113,14 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
       if (v > 0) alloc.set(id, v); else alloc.delete(id);
       renderOpen();
     }));
+    if (alloc.size === 1) {
+      const invId = Array.from(alloc.keys())[0];
+      const singleInv = open.find((x) => x.id === invId);
+      const notesInp = $('input[name="notes"]', m.body);
+      if (singleInv && notesInp && (!notesInp.value || notesInp.value.startsWith('وذلك مقابل سداد فاتورة رقم '))) {
+        notesInp.value = `وذلك مقابل سداد فاتورة رقم ${singleInv.invoice_number}`;
+      }
+    }
   };
 
   const loadOpen = async () => {

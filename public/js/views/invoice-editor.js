@@ -8,7 +8,7 @@ import * as router from '../core/router.js';
 const syncNotify = (entity, action, payload) => (typeof store.syncNotify === 'function' ? store.syncNotify(entity, action, payload) : null);
 import {
   html, raw, esc, money, toNum, today, nowTime, toastOk, toastErr,
-  $, $$, delegate, modal, formValues, confirmDialog, icon,
+  $, $$, delegate, modal, formValues, confirmDialog, icon, generateNextItemCode,
 } from '../core/util.js';
 
 const emptyLine = () => ({
@@ -124,7 +124,7 @@ export async function render(view, ctx) {
     issue_date: today(),
     issue_time: nowTime(),
     invoice_type: 'STANDARD',
-    payment_method: 'CREDIT',
+    payment_method: 'CASH',
     invoice_number: '',
     notes: '',
     auto_receipt: false,
@@ -479,6 +479,7 @@ export async function render(view, ctx) {
     $('#add-line', view).addEventListener('click', () => {
       const l = emptyLine();
       l.tax_rate = defaultRate();
+      l.item_code = generateNextItemCode(state.lines, store.items);
       state.lines.push(l);
       refreshLines();
       const inputs = $$('#lines tr [data-f=item_name]', view);
@@ -588,6 +589,11 @@ export async function render(view, ctx) {
       if (field === 'item_name') {
         line.item_name = input.value;
         line.item_id = line.item_id && input.value ? line.item_id : '';
+        if (!line.item_code && line.item_name.trim()) {
+          line.item_code = generateNextItemCode(state.lines, store.items);
+          const codeInput = input.closest('tr')?.querySelector('input[data-f="item_code"]');
+          if (codeInput) codeInput.value = line.item_code;
+        }
         showSuggestions(input, line);
         return;
       }
@@ -620,7 +626,11 @@ export async function render(view, ctx) {
           state.lines[0].tax_rate = defaultRate();
         } else state.lines.splice(idx, 1);
       } else if (btn.dataset.act === 'dup') {
-        state.lines.splice(idx + 1, 0, { ...state.lines[idx], key: Math.random().toString(36).slice(2) });
+        const dupLine = { ...state.lines[idx], key: Math.random().toString(36).slice(2) };
+        if (!dupLine.item_id) {
+          dupLine.item_code = generateNextItemCode(state.lines, store.items);
+        }
+        state.lines.splice(idx + 1, 0, dupLine);
       }
       refreshLines();
     });
@@ -856,7 +866,7 @@ export async function render(view, ctx) {
       .filter((l) => l.item_name.trim() && l.quantity > 0)
       .map((l) => ({
         item_id: (l.item_id && store.items.some((it) => it.id === l.item_id)) ? l.item_id : null,
-        item_code: l.item_code,
+        item_code: (l.item_code && l.item_code.trim()) ? l.item_code.trim() : generateNextItemCode(state.lines, store.items),
         item_name: l.item_name.trim(),
         unit: l.unit,
         quantity: l.quantity,

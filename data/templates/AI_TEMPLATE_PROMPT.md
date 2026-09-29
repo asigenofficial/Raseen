@@ -232,8 +232,8 @@
     <thead>
       <tr>
         <th style="width: 5%;">#</th>
-        <th style="width: 12%;">كود الصنف<br><small>Code</small></th>
-        <th style="width: 28%;">البيان (اسم الصنف والخدمة)<br><small>Description</small></th>
+        <th style="width: 25%;">اسم الصنف بالكامل<br><small>Item Name</small></th>
+        <th style="width: 15%;">البيان<br><small>Description</small></th>
         <th style="width: 8%;">الوحدة<br><small>Unit</small></th>
         <th style="width: 8%;">الكمية<br><small>Qty</small></th>
         <th style="width: 11%;">سعر الوحدة<br><small>Price</small></th>
@@ -337,7 +337,7 @@
 4. جدول الأصناف والبنود الشبكي (Items Grid Table):
    - جدول شبكي أنيق برأس ملون هادئ وخطوط فاصلة عمودية وأفقية تفصل الأعمدة بوضوح، ويتضمن إلزامياً الأعمدة التالية:
      - م (#)
-     - كود الصنف (رقم الصنف / Code) — (عمود إلزامي وصارم في جميع قوالب الفواتير)
+     - اسم الصنف(رقم الصنف / Code) — (عمود إلزامي وصارم في جميع قوالب الفواتير)
      - البيان (اسم الصنف والخدمة والوصف)
      - سعر الوحدة (Unit Price)
      - الكمية (Qty)

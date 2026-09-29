@@ -235,6 +235,9 @@ html[data-theme="light"] .doc-tpl-card:hover {
   border-color: var(--brand);
   box-shadow: 0 8px 24px rgba(23, 43, 58, 0.1);
 }
+html[data-theme="light"] .doc-tpl-card {
+  --tpl-text: var(--tpl-text-light, #047857);
+}
 html[data-theme="light"] .doc-tpl-card.is-active {
   border-color: var(--brand);
   background: linear-gradient(145deg, #f0fdf9, #ffffff);
@@ -243,10 +246,37 @@ html[data-theme="light"] .doc-tpl-card.is-active {
 html[data-theme="light"] .doc-tpl-card-title {
   color: var(--text-heading);
 }
+html[data-theme="light"] .doc-tpl-card-desc {
+  color: #475569;
+}
+html[data-theme="light"] .doc-tpl-headers-label {
+  color: #475569;
+}
 html[data-theme="light"] .doc-tpl-chip {
   background: #f1f5f9;
-  border-color: #e2e8f0;
-  color: #334155;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+html[data-theme="light"] .doc-tpl-chip-more {
+  color: #64748b;
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+html[data-theme="light"] .doc-tpl-badge {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: var(--tpl-text);
+}
+html[data-theme="light"] .doc-tpl-active-badge {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+  box-shadow: none;
+}
+html[data-theme="light"] .btn-tpl-active-state {
+  background: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #047857 !important;
 }
 html[data-theme="light"] .doc-tpl-card-foot {
   border-top-color: #f1f5f9;
@@ -320,3 +350,312 @@ html[data-theme="light"] .tab-pill-group {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* ── محرر ومصمم القوالب في وضع الضوء (Template Builder Light Theme) ── */
+html[data-theme="light"] .visual-doc-editor {
+  background: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+html[data-theme="light"] .visual-doc-editor > header {
+  background: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .visual-doc-editor > header span {
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .builder-core-controls select,
+html[data-theme="light"] .builder-core-controls input {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+html[data-theme="light"] .builder-core-controls select option {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .builder-actions-row .btn-clear-sheet,
+html[data-theme="light"] .builder-actions-row .btn-print-sheet {
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+html[data-theme="light"] .visual-doc-editor > nav {
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+html[data-theme="light"] .visual-doc-editor > nav > div:last-child {
+  color: #64748b !important;
+}
+
+html[data-theme="light"] .tab-btn {
+  color: #64748b !important;
+}
+
+html[data-theme="light"] .tab-btn:hover {
+  color: #0f172a !important;
+  background: #e2e8f0 !important;
+}
+
+html[data-theme="light"] .tab-btn.active {
+  color: #0284c7 !important;
+  border-bottom-color: #0284c7 !important;
+  background: rgba(2, 132, 199, 0.08) !important;
+}
+
+html[data-theme="light"] .tab-panel {
+  background: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+html[data-theme="light"] .btn-insert-blk {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+html[data-theme="light"] .btn-insert-blk:hover {
+  background: var(--brand, #059669) !important;
+  border-color: var(--brand, #059669) !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="light"] .btn-tag-chip {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+html[data-theme="light"] .btn-tag-chip:hover {
+  background: #0284c7 !important;
+  border-color: #0284c7 !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="light"] .btn-fmt {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+html[data-theme="light"] .btn-fmt:hover {
+  background: #e2e8f0 !important;
+}
+
+html[data-theme="light"] .tab-panel select,
+html[data-theme="light"] .tab-panel input:not([type=color]):not([type=range]) {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .tab-panel label,
+html[data-theme="light"] .tab-panel span {
+  color: #334155 !important;
+}
+
+html[data-theme="light"] .builder-workspace {
+  background: #e2e8f0 !important;
+}
+
+html[data-theme="light"] .editor-a4-sheet {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12) !important;
+}
+
+html[data-theme="light"] .builder-bottom-bar {
+  background: #ffffff !important;
+  border-top: 1px solid #e2e8f0 !important;
+  color: #64748b !important;
+}
+
+html[data-theme="light"] .builder-bottom-actions select {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] #modal-table-gen > div,
+html[data-theme="light"] #modal-paste-html > div {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.15) !important;
+}
+
+html[data-theme="light"] #modal-paste-html > div > div:first-child,
+html[data-theme="light"] #modal-table-gen > div > div:first-child {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+html[data-theme="light"] #modal-paste-html > div > div:last-child,
+html[data-theme="light"] #modal-table-gen > div > div:last-child {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+html[data-theme="light"] #modal-paste-html input,
+html[data-theme="light"] #modal-paste-html textarea,
+html[data-theme="light"] #modal-table-gen input,
+html[data-theme="light"] #modal-table-gen select {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .builder-palette-controls span {
+  color: #64748b !important;
+}
+
+html[data-theme="light"] .tab-panel span[style*="color:#38bdf8"],
+html[data-theme="light"] .tab-panel span[style*="color:#94a3b8"] {
+  color: #0284c7 !important;
+}
+
+html[data-theme="light"] .tab-panel div[style*="background:#334155"] {
+  background: #cbd5e1 !important;
+}
+
+html[data-theme="light"] .preset-section > .preset-section-controls,
+html[data-theme="light"] .preset-tbl-controls {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+html[data-theme="light"] .preset-section > .preset-section-controls button,
+html[data-theme="light"] .preset-tbl-controls button {
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+/* ── زرا برومبت الذكاء الاصطناعي ولصق الكود في وضع الضوء ── */
+html[data-theme="light"] .btn-open-ai-prompt {
+  background: #f5f3ff !important;
+  color: #6d28d9 !important;
+  border: 1px solid #ddd6fe !important;
+  box-shadow: 0 1px 4px rgba(109, 40, 217, 0.12) !important;
+}
+
+html[data-theme="light"] .btn-open-ai-prompt:hover {
+  background: #ede9fe !important;
+  color: #5b21b6 !important;
+  border-color: #c4b5fd !important;
+}
+
+html[data-theme="light"] #btn-open-paste-modal {
+  background: #f0f9ff !important;
+  color: #0284c7 !important;
+  border: 1px solid #bae6fd !important;
+  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.12) !important;
+}
+
+html[data-theme="light"] #btn-open-paste-modal:hover {
+  background: #e0f2fe !important;
+  color: #0369a1 !important;
+  border-color: #7dd3fc !important;
+}
+
+/* ── نافذة برومبت الذكاء الاصطناعي في وضع الضوء ── */
+html[data-theme="light"] #modal-ai-prompt-studio > div {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #1e293b !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.15) !important;
+}
+
+html[data-theme="light"] #modal-ai-prompt-studio > div > div:first-child {
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+html[data-theme="light"] #modal-ai-prompt-studio h3 {
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] #modal-ai-prompt-studio #btn-close-ai-modal {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #64748b !important;
+}
+
+html[data-theme="light"] #modal-ai-prompt-studio #btn-close-ai-modal:hover {
+  background: #fee2e2 !important;
+  color: #ef4444 !important;
+  border-color: #fca5a5 !important;
+}
+
+html[data-theme="light"] #modal-ai-prompt-studio > div > div:nth-child(2) {
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+html[data-theme="light"] .ai-tab-btn:not([style*="background: rgb(79, 70, 229)"]):not([style*="background: #4f46e5"]):not([style*="background: rgb(2, 132, 199)"]):not([style*="background: #0284c7"]) {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+html[data-theme="light"] #txt-ai-prompt {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+html[data-theme="light"] #modal-ai-prompt-studio div[style*="border: 1px dashed"] {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+html[data-theme="light"] #ai-tags-view table {
+  color: #1e293b !important;
+}
+
+html[data-theme="light"] #ai-tags-view thead tr {
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  border-bottom: 1px solid #cbd5e1 !important;
+}
+
+html[data-theme="light"] #ai-tags-view tbody tr {
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+html[data-theme="light"] #ai-tags-view tbody td {
+  color: #334155 !important;
+}
+
+html[data-theme="light"] #ai-tags-view code {
+  color: #0369a1 !important;
+  background: #f0f9ff !important;
+  border: 1px solid #bae6fd !important;
+}
+
+/* ── نافذة لصق كود HTML في وضع الضوء ── */
+html[data-theme="light"] #modal-paste-html div[style*="line-height: 1.6"] {
+  background: #f0f9ff !important;
+  border-color: #bae6fd !important;
+  color: #0369a1 !important;
+}
+
+html[data-theme="light"] #modal-paste-html label {
+  color: #334155 !important;
+}
+
+html[data-theme="light"] #btn-cancel-paste-modal {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+

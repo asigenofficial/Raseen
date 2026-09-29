@@ -195,11 +195,11 @@ function openIssuerModal(issuer, onSaved) {
     try {
       if (isNew) await api.post('/api/issuers', values);
       else await api.put(`/api/issuers/${issuer.id}`, values);
-      toastOk('تم الحفظ بنجاح');
       m.close();
+      toastOk('تم الحفظ بنجاح');
       invalidate('issuers');
       await loadIssuers(true);
-      onSaved();
+      if (onSaved) onSaved();
     } catch {
       e.target.disabled = false;
     }

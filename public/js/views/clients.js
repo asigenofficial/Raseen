@@ -82,11 +82,11 @@ function openClientModal(client, onSaved) {
     try {
       if (isNew) await api.post('/api/clients', values);
       else await api.put(`/api/clients/${client.id}`, values);
-      toastOk('تم الحفظ');
       m.close();
+      toastOk('تم الحفظ');
       invalidate('clients');
       await loadClients(true);
-      onSaved();
+      if (onSaved) onSaved();
     } catch { e.target.disabled = false; }
     return undefined;
   });

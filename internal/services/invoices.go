@@ -157,9 +157,9 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		issueTime = nowDt.Format("15:04:05")
 	}
 	if len(issueTime) == 5 { issueTime += ":00" }
-	issuedAt, err := time.ParseInLocation("2006-01-02T15:04:05", issueDate+"T"+issueTime, riyadhLoc)
+	_, err = time.ParseInLocation("2006-01-02T15:04:05", issueDate+"T"+issueTime, riyadhLoc)
 	if err != nil { return nil, errors.New("تاريخ أو وقت الفاتورة غير صالح") }
-	issueDatetime := issuedAt.Format(time.RFC3339)
+	issueDatetime := fmt.Sprintf("%sT%sZ", issueDate, issueTime)
 
 	invoiceType := input.InvoiceType
 	if invoiceType == "" {
@@ -174,7 +174,7 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 	}
 	paymentMethod := input.PaymentMethod
 	if paymentMethod == "" {
-		paymentMethod = "CREDIT"
+		paymentMethod = "CASH"
 	}
 	if invoiceType != "STANDARD" && invoiceType != "SIMPLIFIED" { return nil,errors.New("نوع الفاتورة غير صالح") }
 	if _, ok := invoicePaymentLabels[paymentMethod]; !ok { return nil,errors.New("طريقة السداد غير صالحة") }
@@ -183,6 +183,24 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 	computedLines, subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor, err := computeInvoiceLines(input.Lines, input.PricesIncludeTax, issuer.DefaultTaxRate)
 	if err != nil {
 		return nil, err
+	}
+
+	// Auto-assign sequential ITM-XXXX code for any free items without an item code
+	var maxItmNum int
+	_ = tx.QueryRow(`
+		SELECT COALESCE(MAX(CAST(SUBSTR(item_code, 5) AS INTEGER)), 0)
+		FROM (
+			SELECT item_code FROM items WHERE item_code LIKE 'ITM-%'
+			UNION ALL
+			SELECT item_code FROM invoice_items WHERE item_code LIKE 'ITM-%'
+		)
+	`).Scan(&maxItmNum)
+
+	for i := range computedLines {
+		if strings.TrimSpace(computedLines[i].ItemCode) == "" {
+			maxItmNum++
+			computedLines[i].ItemCode = fmt.Sprintf("ITM-%04d", maxItmNum)
+		}
 	}
 
 	// Allocate serial and ICV
@@ -348,6 +366,16 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		pricesIncInt = 1
 	}
 
+	initPaidMinor := int64(0)
+	initRemMinor := grandTotalMinor
+	initStatus := "UNPAID"
+	isCashInvoice := strings.Contains(paymentMethod, "نقد") || strings.EqualFold(paymentMethod, "CASH") || strings.Contains(strings.ToLower(paymentMethod), "cash")
+	if isCashInvoice {
+		initPaidMinor = grandTotalMinor
+		initRemMinor = 0
+		initStatus = "PAID"
+	}
+
 	_, err = tx.Exec(`
 		INSERT INTO invoices (
 			id, issuer_id, client_id, invoice_number, sequence_no, invoice_type, zatca_phase,
@@ -363,7 +391,7 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 			?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
-			0, ?, 'UNPAID', ?,
+			?, ?, ?, ?,
 			?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?,
@@ -374,7 +402,7 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		invoiceID, issuer.ID, client.ID, invoiceNumber, sequenceNo, invoiceType, zatcaPhase,
 		invUUID, issueDate, issueTime, issueDatetime, issuer.Currency,
 		subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor,
-		grandTotalMinor, paymentMethod,
+		initPaidMinor, initRemMinor, initStatus, paymentMethod,
 		input.DueDate, input.ChequeDate, input.ChequeNo, pricesIncInt,
 		issuer.NameAr, issuer.TaxNumber, issuer.CommercialRegister, sellerAddr, issuer.AddressEn,
 		client.Name, client.TaxNumber, client.CommercialRegister, buyerAddr,
@@ -532,6 +560,21 @@ func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 	inv.IssuerName = issName
 	inv.ClientName = inv.BuyerName
 
+	paidMajor := models.ToMajor(inv.PaidAmount)
+	remMajor := models.ToMajor(inv.RemainingAmount)
+	isCash := strings.Contains(inv.PaymentMethod, "نقد") || strings.EqualFold(inv.PaymentMethod, "CASH") || strings.Contains(strings.ToLower(inv.PaymentMethod), "cash")
+	if isCash || (paidMajor > 0 && paidMajor >= models.ToMajor(inv.GrandTotal)) || strings.EqualFold(inv.Status, "PAID") {
+		remMajor = 0
+		if paidMajor == 0 || isCash {
+			paidMajor = models.ToMajor(inv.GrandTotal)
+		}
+	} else if paidMajor > 0 {
+		remMajor = models.ToMajor(inv.GrandTotal) - paidMajor
+		if remMajor < 0 {
+			remMajor = 0
+		}
+	}
+
 	view := &InvoiceView{
 		Invoice:              inv,
 		ClientCode:           cCode,
@@ -542,8 +585,8 @@ func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 		TaxableAmountMajor:   models.ToMajor(inv.TaxableAmount),
 		TaxAmountMajor:       models.ToMajor(inv.TaxAmount),
 		GrandTotalMajor:      models.ToMajor(inv.GrandTotal),
-		PaidAmountMajor:      models.ToMajor(inv.PaidAmount),
-		RemainingAmountMajor: models.ToMajor(inv.RemainingAmount),
+		PaidAmountMajor:      paidMajor,
+		RemainingAmountMajor: remMajor,
 		Items:                make([]InvoiceItemView, 0),
 		Lines:                make([]InvoiceItemView, 0),
 	}
@@ -778,6 +821,21 @@ func (s *InvoiceService) ListInvoices(f ListInvoicesFilter) (*ListInvoicesResult
 				sLabel = inv.Status
 			}
 
+			paidMajor := models.ToMajor(inv.PaidAmount)
+			remMajor := models.ToMajor(inv.RemainingAmount)
+			isCash := strings.Contains(inv.PaymentMethod, "نقد") || strings.EqualFold(inv.PaymentMethod, "CASH") || strings.Contains(strings.ToLower(inv.PaymentMethod), "cash")
+			if isCash || (paidMajor > 0 && paidMajor >= models.ToMajor(inv.GrandTotal)) || strings.EqualFold(inv.Status, "PAID") {
+				remMajor = 0
+				if paidMajor == 0 || isCash {
+					paidMajor = models.ToMajor(inv.GrandTotal)
+				}
+			} else if paidMajor > 0 {
+				remMajor = models.ToMajor(inv.GrandTotal) - paidMajor
+				if remMajor < 0 {
+					remMajor = 0
+				}
+			}
+
 			view := InvoiceView{
 				Invoice:              inv,
 				ClientCode:           cCode,
@@ -788,8 +846,8 @@ func (s *InvoiceService) ListInvoices(f ListInvoicesFilter) (*ListInvoicesResult
 				TaxableAmountMajor:   models.ToMajor(inv.TaxableAmount),
 				TaxAmountMajor:       models.ToMajor(inv.TaxAmount),
 				GrandTotalMajor:      models.ToMajor(inv.GrandTotal),
-				PaidAmountMajor:      models.ToMajor(inv.PaidAmount),
-				RemainingAmountMajor: models.ToMajor(inv.RemainingAmount),
+				PaidAmountMajor:      paidMajor,
+				RemainingAmountMajor: remMajor,
 				Items:                make([]InvoiceItemView, 0),
 				Lines:                make([]InvoiceItemView, 0),
 			}
@@ -1137,11 +1195,11 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		issueTime += ":00"
 	}
 	riyadhLoc := time.FixedZone("Asia/Riyadh", 3*3600)
-	issuedAt, err := time.ParseInLocation("2006-01-02T15:04:05", issueDate+"T"+issueTime, riyadhLoc)
+	_, err = time.ParseInLocation("2006-01-02T15:04:05", issueDate+"T"+issueTime, riyadhLoc)
 	if err != nil {
 		return nil, errors.New("تاريخ أو وقت الفاتورة غير صالح")
 	}
-	issueDatetime := issuedAt.Format(time.RFC3339)
+	issueDatetime := fmt.Sprintf("%sT%sZ", issueDate, issueTime)
 
 	invoiceType := input.InvoiceType
 	if invoiceType == "" {
@@ -1168,6 +1226,24 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	computedLines, subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor, err := computeInvoiceLines(input.Lines, input.PricesIncludeTax, issuer.DefaultTaxRate)
 	if err != nil {
 		return nil, err
+	}
+
+	// Auto-assign sequential ITM-XXXX code for any free items without an item code
+	var maxItmNumUpdate int
+	_ = tx.QueryRow(`
+		SELECT COALESCE(MAX(CAST(SUBSTR(item_code, 5) AS INTEGER)), 0)
+		FROM (
+			SELECT item_code FROM items WHERE item_code LIKE 'ITM-%'
+			UNION ALL
+			SELECT item_code FROM invoice_items WHERE item_code LIKE 'ITM-%'
+		)
+	`).Scan(&maxItmNumUpdate)
+
+	for i := range computedLines {
+		if strings.TrimSpace(computedLines[i].ItemCode) == "" {
+			maxItmNumUpdate++
+			computedLines[i].ItemCode = fmt.Sprintf("ITM-%04d", maxItmNumUpdate)
+		}
 	}
 
 	sellerPartsUpdate := []string{}
@@ -1303,12 +1379,25 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	}
 	nowIso := db.NowIso()
 
+	updatePaidMinor := inv.PaidAmount
+	updateRemMinor := grandTotalMinor - inv.PaidAmount
+	if updateRemMinor < 0 {
+		updateRemMinor = 0
+	}
+	updateStatus := inv.Status
+	isCashUpdate := strings.Contains(paymentMethod, "نقد") || strings.EqualFold(paymentMethod, "CASH") || strings.Contains(strings.ToLower(paymentMethod), "cash")
+	if isCashUpdate {
+		updatePaidMinor = grandTotalMinor
+		updateRemMinor = 0
+		updateStatus = "PAID"
+	}
+
 	_, err = tx.Exec(`
 		UPDATE invoices SET
 			client_id = ?, invoice_type = ?, zatca_phase = ?,
 			issue_date = ?, issue_time = ?, issue_datetime = ?,
 			subtotal = ?, discount_amount = ?, taxable_amount = ?, tax_amount = ?, grand_total = ?,
-			remaining_amount = ?, payment_method = ?,
+			paid_amount = ?, remaining_amount = ?, status = ?, payment_method = ?,
 			due_date = ?, cheque_date = ?, cheque_no = ?, prices_include_tax = ?,
 			seller_name = ?, seller_tax_number = ?, seller_cr = ?, seller_address = ?, seller_address_en = ?,
 			buyer_name = ?, buyer_tax_number = ?, buyer_cr = ?, buyer_address = ?,
@@ -1318,7 +1407,7 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		client.ID, invoiceType, zatcaPhase,
 		issueDate, issueTime, issueDatetime,
 		subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor,
-		grandTotalMinor, paymentMethod,
+		updatePaidMinor, updateRemMinor, updateStatus, paymentMethod,
 		input.DueDate, input.ChequeDate, input.ChequeNo, pricesIncInt,
 		issuer.NameAr, issuer.TaxNumber, issuer.CommercialRegister, sellerAddr, issuer.AddressEn,
 		client.Name, client.TaxNumber, client.CommercialRegister, buyerAddr,

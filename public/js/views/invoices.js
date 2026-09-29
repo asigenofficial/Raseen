@@ -97,7 +97,13 @@ export async function render(view, ctx) {
       api.get(`/api/issuers/${invoice.issuer_id}`),
       api.get(`/api/clients/${invoice.client_id}`),
     ]);
-    printDoc(kind === 'thermal' ? invoiceThermal({ invoice, issuer, client }) : invoiceA4({ invoice, issuer, client }));
+    if (kind === 'thermal') {
+      printDoc(invoiceThermal({ invoice, issuer, client }));
+      return;
+    }
+    const { getInvoiceDocHtml } = await import('./invoice-view.js?v=' + Date.now());
+    const docHtml = await getInvoiceDocHtml({ invoice, issuer, client });
+    printDoc(docHtml);
   };
 
   const rowsHtml = () => {
@@ -572,7 +578,13 @@ export async function render(view, ctx) {
             api.get(`/api/issuers/${invoice.issuer_id}`),
             api.get(`/api/clients/${invoice.client_id}`),
           ]);
-          printDoc(invoiceA4({ invoice, issuer, client }));
+          if (btn.dataset.act === 'thermal') {
+            printDoc(invoiceThermal({ invoice, issuer, client }));
+          } else {
+            const { getInvoiceDocHtml } = await import('./invoice-view.js?v=' + Date.now());
+            const docHtml = await getInvoiceDocHtml({ invoice, issuer, client });
+            printDoc(docHtml);
+          }
         } finally {
           btn.disabled = false;
         }
@@ -584,12 +596,21 @@ export async function render(view, ctx) {
           slim: true,
           body: html`
             <div class="alert alert-info tiny">المتبقي على الفاتورة: <b class="num">${money(invoice.remaining_amount)}</b></div>
-            <div class="field"><label class="req">المبلغ</label>
-              <input type="number" name="amount" value="${invoice.remaining_amount}" step="0.01" min="0.01" max="${invoice.remaining_amount}" /></div>
-            <div class="field mt"><label>طريقة السداد</label>
-              <select name="payment_type"><option value="CASH">نقداً</option><option value="TRANSFER">تحويل</option>
-                <option value="CARD">شبكة</option><option value="CHEQUE">شيك</option></select></div>
-            <div class="field mt"><label>المرجع</label><input type="text" name="reference_no" class="ltr" /></div>`,
+            <div class="row">
+              <div class="field"><label class="req">المبلغ المستلم</label>
+                <input type="number" name="amount" value="${invoice.remaining_amount}" step="0.01" min="0.01" max="${invoice.remaining_amount}" /></div>
+              <div class="field"><label>طريقة السداد</label>
+                <select name="payment_type"><option value="CASH">نقداً</option><option value="TRANSFER">تحويل بنكي</option>
+                  <option value="CARD">شبكة</option><option value="CHEQUE">شيك</option></select></div>
+            </div>
+            <div class="row mt">
+              <div class="field"><label class="req">تاريخ السند</label>
+                <input type="date" name="voucher_date" value="${today()}" /></div>
+              <div class="field"><label>المرجع / الشيك</label>
+                <input type="text" name="reference_no" class="ltr" /></div>
+            </div>
+            <div class="field mt"><label>البيان / ملاحظات السند</label>
+              <input type="text" name="notes" value="وذلك مقابل سداد فاتورة رقم ${invoice.invoice_number}" /></div>`,
           footer: `<button class="btn" data-close type="button">إلغاء</button>
                    <button class="btn btn-primary" data-ok type="button">تسجيل</button>`,
         });

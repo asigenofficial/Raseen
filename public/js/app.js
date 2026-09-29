@@ -17,7 +17,7 @@ const app = document.getElementById('app');
 
 const NAV = [
   { group: 'العمليات اليومية' },
-  { name: 'dashboard', label: 'الرئيسية', icon: icon.dashboard(), perm: 'reports.view' },
+  { name: 'dashboard', label: 'الرئيسية', icon: icon.home(), perm: 'reports.view' },
   { name: 'invoice', label: 'فاتورة جديدة', icon: icon.invoicePlus(), perm: 'invoices.create' },
   { name: 'invoices', label: 'الفواتير', icon: icon.invoice(), perm: 'invoices.view' },
   { name: 'bulk', label: 'التوليد الدفعي', icon: icon.bulk(), perm: 'bulk.generate' },
@@ -25,14 +25,14 @@ const NAV = [
   { name: 'statement', label: 'كشف حساب عميل', icon: icon.statement(), perm: 'ledger.view' },
   { group: 'البيانات الأساسية' },
   { name: 'issuers', label: 'الشركات المصدرة', icon: icon.building(), perm: 'issuers.view' },
-  { name: 'templates', label: 'القوالب', icon: icon.palette(), perm: 'invoices.view' },
-  { name: 'template-builder', label: 'إنشاء القوالب', icon: icon.fileSpreadsheet(), perm: 'invoices.view' },
+  { name: 'templates', label: 'القوالب', icon: icon.layoutTemplate(), perm: 'invoices.view' },
+  { name: 'template-builder', label: 'إنشاء القوالب', icon: icon.templateBuilder(), perm: 'invoices.view' },
   { name: 'clients', label: 'العملاء', icon: icon.users(), perm: 'clients.view' },
   { name: 'items', label: 'الأصناف والمجموعات', icon: icon.package(), perm: 'items.view' },
   { group: 'التقارير والرقابة' },
   { name: 'reports', label: 'التقارير المالية', icon: icon.report(), perm: 'reports.view' },
   { name: 'audit', label: 'سجل التدقيق', icon: icon.shieldCheck(), perm: 'audit.view' },
-  { name: 'users', label: 'المستخدمون والصلاحيات', icon: icon.user(), perm: 'users.manage' },
+  { name: 'users', label: 'المستخدمون والصلاحيات', icon: icon.usersManage(), perm: 'users.manage' },
   { name: 'settings', label: 'إعدادات النظام', icon: icon.settings(), perm: 'settings.write' },
 ];
 
@@ -337,8 +337,10 @@ function registerRoutes() {
     router.route(name, async (ctx) => {
       const seq = ++navSeq;
       refreshNav();
-      const view = $('#view');
-      if (!view) return undefined;
+      const oldView = $('#view');
+      if (!oldView) return undefined;
+      const view = oldView.cloneNode(false);
+      oldView.parentNode.replaceChild(view, oldView);
       if (!guard(ROUTE_PERMS[name])) {
         finishRouteProgress();
         return undefined;

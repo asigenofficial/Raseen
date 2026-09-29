@@ -1532,13 +1532,22 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 
+		vDate := strings.TrimSpace(req.VoucherDate)
+		if vDate == "" {
+			vDate = db.TodayIso()
+		}
+		notes := strings.TrimSpace(req.Notes)
+		if notes == "" {
+			notes = fmt.Sprintf("وذلك مقابل سداد فاتورة رقم %s", inv.InvoiceNumber)
+		}
+
 		v, err := s.vouchers.CreateVoucher(services.CreateVoucherInput{
 			IssuerID:    inv.IssuerID,
 			ClientID:    inv.ClientID,
-			VoucherDate: req.VoucherDate,
+			VoucherDate: vDate,
 			TotalAmount: req.Amount,
 			PaymentType: req.PaymentType,
-			Notes:       req.Notes,
+			Notes:       notes,
 			Allocations: []services.VoucherAllocationInput{
 				{InvoiceID: inv.ID, Amount: req.Amount},
 			},

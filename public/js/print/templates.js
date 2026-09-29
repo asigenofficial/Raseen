@@ -60,6 +60,15 @@ export const INVOICE_TEMPLATES = [
     paper: 'A4',
   },
   {
+    id: 'corporate_multipage',
+    name: 'قالب الوكالات وقطع الغيار متعدد الصفحات (OBS / Corporate)',
+    desc: 'القالب المعتمد للوكالات وتجار قطع الغيار والتوريدات مع الترقيم الآلي وتوزيع الصفحات (12 صنفاً في كل صفحة) وتذييل المتابعة وقسيمة القبض.',
+    badge: 'نمط الوكالات والقطع (متعدد الصفحات)',
+    category: 'a4',
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',
+    paper: 'A4',
+  },
+  {
     id: 'detailed_address',
     name: 'العنوان الوطني المفصل (National Address)',
     desc: 'شبكة العنوان الوطني المفصل (المبنى، الشارع، الحي، الرمز، الإضافي)، وتوريدات البنية التحتية.',
@@ -545,11 +554,12 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
   let customHeaders = null;
   let customAlignments = [];
   if (Array.isArray(printCfg.headers) && printCfg.headers.length > 0) {
+    const validRaw = printCfg.headers.filter((h) => !String(h).startsWith('{{') && !/seller_|buyer_|qr_|logo/i.test(String(h)));
     const deduped = [];
     const dedupedAligns = [];
     const rawAligns = Array.isArray(printCfg.alignments) ? printCfg.alignments : [];
-    for (let i = 0; i < printCfg.headers.length; i++) {
-      const h = String(printCfg.headers[i] || '').trim();
+    for (let i = 0; i < validRaw.length; i++) {
+      const h = String(validRaw[i] || '').trim();
       if (h && (deduped.length === 0 || deduped[deduped.length - 1].toLowerCase() !== h.toLowerCase())) {
         deduped.push(h);
         dedupedAligns.push(rawAligns[i] || 'right');
@@ -653,9 +663,47 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
     ? `<img class="logo" src="${esc(issuer.logo_data)}" alt="" style="max-width:${logoWidth};max-height:${logoHeight};display:block;margin:0 auto;" />`
     : logoFallback);
 
-  const one = `
-  <div class="page"${tplStyle && tplStyle !== 'standard' ? ` data-tpl="${esc(tplStyle)}"` : ''}>
-    ${isCancelled ? '<div class="watermark">ملغاة</div>' : ''}
+  // ------------------------------------------------------------- تقسيم الصفحات الذكي (Multi-Page Pagination)
+  const allLines = invoice.lines || [];
+  const CHUNK_SIZE = 12;
+  const isMultiPage = allLines.length > CHUNK_SIZE;
+  const totalPages = isMultiPage ? Math.ceil(allLines.length / CHUNK_SIZE) : 1;
+
+  const renderRowsForSlice = (slice, offset) => {
+    if (customHeaders) {
+      const renderers = customHeaders.map((h, i) => getColumnRenderer(h, i, customHeaders, {
+        curSym,
+        curBadge,
+        showItemCode,
+        alignment: customAlignments[i],
+      }));
+      return slice.map((l, idx) => `<tr>` + renderers.map((r) => r.renderTd(l, offset + idx)).join('') + `</tr>`).join('');
+    }
+    return slice.map((l, idx) => `<tr>
+        <td class="c">${offset + idx + 1}</td>
+        <td>${esc(l.item_name)}${showItemCode && l.item_code ? `<div class="tiny muted ltr">${esc(l.item_code)}</div>` : ''}</td>
+        ${showUnit ? `<td class="c">${esc(l.unit || '')}</td>` : ''}
+        <td class="e"><span class="num">${num(l.quantity)}</span></td>
+        ${showCurrencyColumn ? `<td class="c">${curBadge}</td>` : ''}
+        <td class="e"><small class="cur-sym">${curSym}</small> <span class="num">${money(l.unit_price)}</span></td>
+        ${showDiscount ? `<td class="e">${l.discount ? `<small class="cur-sym">${curSym}</small> <span class="num">${money(l.discount)}</span>` : '—'}</td>` : ''}
+        ${showTaxable ? `<td class="e"><small class="cur-sym">${curSym}</small> <span class="num">${money(l.taxable)}</span></td>` : ''}
+        ${showTaxRate ? `<td class="c"><span class="num">${num(l.tax_rate)}%</span></td>` : ''}
+        ${showTaxAmount ? `<td class="e"><small class="cur-sym">${curSym}</small> <span class="num">${money(l.tax_amount)}</span></td>` : ''}
+        <td class="e"><small class="cur-sym">${curSym}</small> <b class="num">${money(l.total_line)}</b></td>
+      </tr>`).join('');
+  };
+
+  const pages = [];
+
+  for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+    const isFirstPage = pageIdx === 0;
+    const isLastPage = pageIdx === totalPages - 1;
+    const chunkStart = pageIdx * CHUNK_SIZE;
+    const chunkLines = isMultiPage ? allLines.slice(chunkStart, chunkStart + CHUNK_SIZE) : allLines;
+    const currentLinesHtml = renderRowsForSlice(chunkLines, chunkStart);
+
+    const headerHtml = isFirstPage ? `
     <header class="head" style="background:${isLightColor(brandLight) ? brandLight : '#f8fafc'}; border:1.5px solid ${brandColor}44; border-radius:6px; padding:10px 16px; margin-bottom:12px; display:grid; grid-template-columns:minmax(0,1.1fr) auto minmax(0,1.1fr); gap:8px 14px; align-items:center; position:relative;">
       <!-- Left Column: English Info -->
       <div class="brand-side-info-en" style="text-align:left; direction:ltr;">
@@ -687,8 +735,20 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
           ${issuer.phone ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:85px; text-align:right;">رقم الجوال:</td><td style="padding:1.5px 4px; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr mono">${esc(issuer.phone)}</span></td></tr>` : ''}
         </table>
       </div>
+    </header>` : `
+    <header class="head head-followup" style="background:${isLightColor(brandLight) ? brandLight : '#f8fafc'}; border:1px solid ${brandColor}44; border-radius:4px; padding:6px 14px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+      <div style="font-size:11pt; font-weight:800; color:${brandDark};">${esc(sellerName)} <span style="font-size:8.5pt; font-weight:600; color:#64748b;">${esc(sellerNameEn)}</span></div>
+      <div style="font-weight:900; font-size:10pt; color:${brandDark}; border:1px solid ${brandColor}; padding:2px 14px; border-radius:3px; background:#fff;">فاتورة ضريبية — متابعة</div>
+      <div style="font-size:8.5pt; text-align:left; direction:ltr;"><span class="mono">${esc(sellerTax ? `VAT: ${sellerTax}` : '')}</span></div>
     </header>
+    <div class="followup-meta" style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:3px; padding:4px 10px; margin-bottom:6px; font-size:8.5pt;">
+      <span>العميل: <b>${esc(buyerName)}</b></span>
+      <span>رقم الفاتورة: <b class="ltr mono">${esc(invoice.invoice_number)}</b></span>
+      <span>تاريخ الإصدار: <b>${esc(dateAr(invoice.issue_date))}</b></span>
+      <span class="badge-mini" style="font-weight:700;">صفحة ${pageIdx + 1} من ${totalPages}</span>
+    </div>`;
 
+    const partiesHtml = isFirstPage ? `
     <section class="parties">
       <div class="party">
         <div class="party-h">بيانات العميل / المشتري (Client Details)</div>
@@ -720,19 +780,16 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
           <tr><td>العملة الأساسية</td><td class="ltr"><b style="display:inline-flex;align-items:center;vertical-align:middle;">${curSym}</b> (${esc(invoice.currency || 'SAR')})</td></tr>
         </table>
       </div>
-    </section>
+    </section>` : '';
 
-    <table class="items ${stripedRows ? 'striped' : ''}">
-      <thead>${theadHtml}</thead>
-      <tbody>${linesHtml}</tbody>
-    </table>
-
+    const bottomHtml = isLastPage ? `
     <section class="bottom">
       <div class="left-col">
         ${showQr ? `<div class="qr qr-${esc(printCfg.qr_position || 'right')}">
           ${qr}
         </div>` : ''}
         <div class="notes">
+          <div class="items-count-badge" style="display:inline-block; background:#f1f5f9; border:1px solid #cbd5e1; padding:2px 8px; border-radius:4px; font-size:8pt; font-weight:700; margin-bottom:4px; color:#0f172a;">عدد الأصناف: <span class="ltr mono font-bold">${allLines.length}</span></div>
           ${showNotes && invoice.notes ? `<div class="note"><b>ملاحظات:</b> ${esc(invoice.notes)}</div>` : ''}
           ${showBank && (issuer.bank_name || issuer.bank_iban) ? `<div class="note"><b>بيانات السداد:</b> ${esc(issuer.bank_name || '')}${issuer.bank_iban ? ` — <span class="ltr" style="font-family:Consolas,monospace;font-weight:bold">${esc(formatIban(issuer.bank_iban))}</span>` : ''}</div>` : ''}
           ${showNotes && issuer.legal_terms ? `<div class="note tiny">${esc(issuer.legal_terms)}</div>` : ''}
@@ -750,13 +807,15 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
         </table>
         ${showTafqeet ? `<div class="words">${esc(tafqeet(invoice.grand_total, cur))}</div>` : ''}
       </div>
-    </section>
+    </section>` : '';
 
+    const footerHtml = isLastPage ? `
     ${isCustomTemplate ? (printCfg.footer_text ? `
-    <footer class="foot" style="border-top:1px solid #cbd5e1;margin-top:5mm;padding-top:2.5mm;text-align:center;color:#64748b;font-size:7.5pt">
+    <footer class="foot" style="border-top:1px solid #cbd5e1;margin-top:auto;padding-top:2.5mm;text-align:center;color:#64748b;font-size:7.5pt">
       <div>${esc(printCfg.footer_text)}</div>
-    </footer>` : '') : `
-    <footer class="foot">
+      <div style="text-align:end; font-weight:700; margin-top:2px;">OBS | ${totalPages} - ${totalPages}</div>
+    </footer>` : `<footer class="foot" style="margin-top:auto;"><div style="display:flex;justify-content:space-between;align-items:center;color:#64748b;font-size:7.5pt;"><span>${esc(sellerAddr)}</span><span class="mono" style="font-weight:700;">OBS | ${totalPages} - ${totalPages}</span></div></footer>`) : `
+    <footer class="foot" style="margin-top:auto;">
       <div>${esc(issuer.footer_notes || 'شكراً لتعاملكم معنا')}</div>
       ${showSignatures ? `<div class="sig" style="display:flex;justify-content:space-between;align-items:center;margin:3mm 0;">
         <div>توقيع المستلم: ................................</div>
@@ -767,13 +826,123 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
       ? `فاتورة إلكترونية معتمدة — المرحلة الثانية (الربط والتكامل المشفر) — بصمة الفاتورة: <span class="ltr">${esc(String(invoice.invoice_hash).slice(0, 32))}…</span>`
       : 'فاتورة إلكترونية — المرحلة الأولى (رمز QR بالحقول الخمسة الأساسية)'}
       </div>
-    </footer>`}
-  </div>`;
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2mm; font-size:7.5pt; color:#64748b; border-top:1px dashed #e2e8f0; padding-top:2px;">
+        <span>${esc(sellerAddr)}</span>
+        <span class="mono" style="font-weight:700;">OBS | ${totalPages} - ${totalPages}</span>
+      </div>
+    </footer>`}` : `
+    <footer class="foot multipage-foot" style="display:flex; justify-content:space-between; align-items:center; margin-top:auto; padding-top:2.5mm; border-top:1px solid #cbd5e1; font-size:8pt; color:#475569;">
+      <span style="font-weight:800; color:${brandDark};">متابعة الفاتورة في الصفحة التالية</span>
+      <span class="mono" style="font-weight:800;">OBS | ${totalPages} - ${pageIdx + 1}</span>
+    </footer>`;
+
+    pages.push(`
+  <div class="page"${tplStyle && tplStyle !== 'standard' ? ` data-tpl="${esc(tplStyle)}"` : ''}>
+    ${isCancelled ? '<div class="watermark">ملغاة</div>' : ''}
+    ${headerHtml}
+    ${partiesHtml}
+    <table class="items ${stripedRows ? 'striped' : ''}">
+      <thead>${theadHtml}</thead>
+      <tbody>${currentLinesHtml}</tbody>
+    </table>
+    ${bottomHtml}
+    ${footerHtml}
+  </div>`);
+  }
+
+  // إذا تم طلب طباعة سند القبض المرفق أو كانت الفاتورة مسددة ونمط الوكالات مفعلاً
+  const shouldPrintReceipt = printCfg.show_receipt === true || invoice.print_receipt === true || (tplStyle === 'corporate_multipage' && (invoice.payment_method === 'CASH' || invoice.paid_amount > 0));
+  if (shouldPrintReceipt) {
+    pages.push(`
+  <div class="page page-receipt"${tplStyle && tplStyle !== 'standard' ? ` data-tpl="${esc(tplStyle)}"` : ''} style="page-break-before:always;">
+    <header class="head" style="background:${isLightColor(brandLight) ? brandLight : '#f8fafc'}; border:1.5px solid ${brandColor}44; border-radius:6px; padding:10px 16px; margin-bottom:12px; display:grid; grid-template-columns:minmax(0,1.1fr) auto minmax(0,1.1fr); gap:8px 14px; align-items:center;">
+      <div style="text-align:left; direction:ltr;">
+        ${sellerNameEn ? `<div style="font-size:12pt; font-weight:800; color:${brandDark};">${esc(sellerNameEn)}</div>` : ''}
+        <div style="font-size:8pt; color:#475569;">VAT: ${esc(sellerTax || '—')}</div>
+        <div style="font-size:8pt; color:#475569;">CR: ${esc(sellerCr || '—')}</div>
+      </div>
+      <div style="text-align:center;">
+        ${logoHtml}
+      </div>
+      <div style="text-align:right; direction:rtl;">
+        <div style="font-size:13pt; font-weight:800; color:${brandDark};">${esc(sellerName)}</div>
+        <div style="font-size:8.5pt; color:#0f172a;">الرقم الضريبي: <span class="mono">${esc(sellerTax || '—')}</span></div>
+        <div style="font-size:8.5pt; color:#0f172a;">السجل التجاري: <span class="mono">${esc(sellerCr || '—')}</span></div>
+      </div>
+    </header>
+
+    <div style="border:1.5px solid #0f172a; border-radius:6px; padding:16px; margin-top:14px; background:#fff;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1.5px solid #0f172a; padding-bottom:10px; margin-bottom:14px;">
+        <div>
+          <span style="font-size:16pt; font-weight:900; color:#0f172a;">سند قبض</span>
+          <span style="font-size:9.5pt; font-weight:700; color:#64748b; margin-inline-start:6px;">/ Payment Slip / RECEIPT</span>
+        </div>
+        <div style="font-size:14pt; font-weight:900; color:#0f172a; background:#f1f5f9; padding:4px 16px; border:1.5px solid #0f172a; border-radius:4px;">
+          المبلغ: ${money(invoice.paid_amount || invoice.grand_total)} ${curSym}
+        </div>
+      </div>
+      <table class="kv" style="width:100%; font-size:9.5pt; border-collapse:collapse; line-height:2.2;">
+        <tr>
+          <td style="width:110px; font-weight:700; color:#475569;">رقم السند:</td>
+          <td><b class="mono">${esc(invoice.voucher_number || '1121')}</b></td>
+          <td style="width:110px; font-weight:700; color:#475569;">تاريخ السند:</td>
+          <td><b>${esc(invoice.voucher_date || invoice.issue_date)}</b></td>
+        </tr>
+        <tr>
+          <td style="font-weight:700; color:#475569;">استلمنا من:</td>
+          <td colspan="3"><b style="font-size:11pt;">${esc(buyerName)}</b></td>
+        </tr>
+        <tr>
+          <td style="font-weight:700; color:#475569;">مبلغ وقدره:</td>
+          <td colspan="3"><span style="background:#f8fafc; padding:3px 10px; border-radius:3px; display:inline-block; border:1px solid #e2e8f0; font-weight:700;">${esc(tafqeet(invoice.paid_amount || invoice.grand_total, cur))}</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight:700; color:#475569;">وذلك عن:</td>
+          <td colspan="3">سداد فاتورة مبيعات رقم <b class="mono">${esc(invoice.invoice_number)}</b></td>
+        </tr>
+        <tr>
+          <td style="font-weight:700; color:#475569;">طريقة السداد:</td>
+          <td colspan="3">${esc(invoice.payment_label || 'تحويل بنكي / نقداً')}</td>
+        </tr>
+      </table>
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:45px; padding:0 30px; text-align:center;">
+        <div>
+          <div style="margin-bottom:45px; font-weight:800; font-size:9pt;">الصندوق</div>
+          <div style="border-top:1.5px dashed #64748b; width:130px;"></div>
+        </div>
+        <div>
+          <div style="margin-bottom:45px; font-weight:800; font-size:9pt;">توقيع المحاسب</div>
+          <div style="border-top:1.5px dashed #64748b; width:130px;"></div>
+        </div>
+        <div>
+          <div style="margin-bottom:45px; font-weight:800; font-size:9pt;">توقيع وختم المستلم</div>
+          <div style="border-top:1.5px dashed #64748b; width:130px;"></div>
+        </div>
+      </div>
+    </div>
+    <footer class="foot" style="margin-top:auto; padding-top:4mm;">
+      <div style="display:flex; justify-content:space-between; align-items:center; font-size:7.5pt; color:#64748b;">
+        <span>${esc(sellerAddr)}</span>
+        <span class="mono" style="font-weight:800;">OBS | RECEIPT CARD</span>
+      </div>
+    </footer>
+  </div>`);
+  }
+
+  const one = pages.join('');
 
   const css = `
     html, body { font-family: ${fontFamily}; font-size: ${fontSize}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .page { width: 210mm; min-height: 297mm; padding: 10mm 9mm; position: relative; page-break-after: always; box-sizing: border-box; background: ${printCfg.light_color && printCfg.light_color !== '#ffffff' ? printCfg.light_color : '#ffffff'}; ${isCustomTemplate ? `border: 1.5px solid ${brandColor}88;` : ''} }
-    .page:last-child { page-break-after: auto; }
+    @media screen {
+      body { background: #47556914; padding: 16px 0; }
+      .page { margin: 0 auto 16px auto; box-shadow: 0 4px 18px rgba(0,0,0,0.12); border-radius: 4px; }
+    }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .page { margin: 0; box-shadow: none; border-radius: 0; page-break-after: always; break-after: page; }
+      .page:last-child { page-break-after: auto; break-after: auto; }
+    }
+    .page { width: 210mm; min-height: 297mm; padding: 10mm 9mm; position: relative; box-sizing: border-box; background: ${printCfg.light_color && printCfg.light_color !== '#ffffff' ? printCfg.light_color : '#ffffff'}; ${isCustomTemplate ? `border: 1.5px solid ${brandColor}88;` : ''} display: flex; flex-direction: column; justify-content: space-between; }
     .watermark { position: absolute; inset: 0; display: grid; place-items: center; font-size: 90pt; color: rgba(220,38,38,.13); font-weight: 800; transform: rotate(-20deg); pointer-events: none; z-index: 0; }
     .head { display: flex; gap: 8mm; justify-content: space-between; border-bottom: 2px solid ${brandColor}; padding-bottom: 4mm; }
     .head.head-center { align-items: center; }
@@ -826,6 +995,53 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
     .cur-sym svg { vertical-align: middle; }
     .grand-cur { display: inline-flex; align-items: center; justify-content: center; font-size: 9.5pt; margin-inline-end: 4px; font-weight: 700; vertical-align: middle; }
     .grand-cur svg { fill: currentColor; vertical-align: middle; }
+
+    /* نمط الوكالات والتوريدات متعدد الصفحات (Corporate Multipage - OBS) */
+    .page[data-tpl="corporate_multipage"] {
+      border: 1.5px solid #0f172a;
+      padding: 8mm 9mm;
+      background: #ffffff;
+    }
+    .page[data-tpl="corporate_multipage"] .head {
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 3.5mm;
+      margin-bottom: 3mm;
+      background: transparent !important;
+    }
+    .page[data-tpl="corporate_multipage"] .party {
+      border: 1.2px solid #0f172a;
+      border-radius: 0;
+    }
+    .page[data-tpl="corporate_multipage"] .party-h {
+      background: #0f172a;
+      color: #ffffff;
+      font-weight: 800;
+      border-bottom: 1.2px solid #0f172a;
+      padding: 1.5mm 3mm;
+    }
+    .page[data-tpl="corporate_multipage"] table.items {
+      border: 1.2px solid #0f172a;
+      margin-top: 1mm;
+    }
+    .page[data-tpl="corporate_multipage"] table.items th {
+      background: #0f172a;
+      color: #ffffff;
+      border: 1px solid #334155;
+      font-size: 7.8pt;
+      font-weight: 800;
+      padding: 1.8mm 1mm;
+    }
+    .page[data-tpl="corporate_multipage"] table.items td {
+      border: 1px solid #94a3b8;
+      font-size: 8pt;
+      padding: 1.2mm 1mm;
+    }
+    .page[data-tpl="corporate_multipage"] table.totals tr.grand td {
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 10.5pt;
+      font-weight: 900;
+    }
 
     /* أنماط القوالب الإضافية */
     .page[data-tpl="modern"] {
@@ -2265,7 +2481,7 @@ export function voucherPrint({ voucher, issuer, client, style = 'voucher_saqr_sl
         </div>
 
         <div class="lux-tafqeet-bar">
-          <b>فقط مبلغ وقدره:</b> ${esc(tafqeet(voucher.total_amount, cur))}
+          ${esc(tafqeet(voucher.total_amount, cur))}
         </div>
 
         <div class="lux-row mt">
@@ -2381,7 +2597,7 @@ export function voucherPrint({ voucher, issuer, client, style = 'voucher_saqr_sl
       </div>
 
       <div class="saqr-tafqeet-card">
-        فقط مبلغ وقدره ${esc(tafqeet(voucher.total_amount, cur))}
+        ${esc(tafqeet(voucher.total_amount, cur))}
       </div>
 
       <div class="saqr-section-title">بيان السند</div>

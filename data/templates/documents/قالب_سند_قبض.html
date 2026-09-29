@@ -365,8 +365,8 @@
         <div class="kpi-cell">
           <div class="kpi-title">المبلغ المحصل</div>
           <div class="kpi-val kpi-val-amt">
+            <span class="sar-sym">{{sar_symbol}}</span>
             <span>{{grand_total}}</span>
-            <span class="sar-sym">&#xFDFB;</span>
           </div>
         </div>
 
@@ -393,7 +393,7 @@
 
       <!-- التفقيط -->
       <div class="tafqeet-bar">
-        فقط مبلغ وقدره {{amount_in_words}} لا غير
+        {{amount_in_words}}
       </div>
     </section>
 
@@ -408,14 +408,14 @@
 
       <div class="statement-row">
         <div class="statement-label">العملة</div>
-        <div class="statement-value">ريال سعودي</div>
+        <div class="statement-value"><span class="sar-sym">{{sar_symbol}}</span></div>
       </div>
 
       <div class="statement-row">
         <div class="statement-label">المبلغ</div>
         <div class="statement-value amt">
+          <span class="sar-sym">{{sar_symbol}}</span>
           <span>{{grand_total}}</span>
-          <span class="sar-sym">&#xFDFB;</span>
         </div>
       </div>
 

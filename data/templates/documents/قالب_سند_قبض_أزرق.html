@@ -323,19 +323,19 @@
         <!-- صندوق المبلغ المنقط في المنتصف -->
         <div class="amount-dashed-box">
           <div class="amount-text">
+            <span class="sar-sym">{{sar_symbol}}</span>
             <span>{{grand_total}}</span>
-            <span class="sar-sym">&#xFDFB;</span>
           </div>
         </div>
 
         <!-- التفقيط -->
         <div class="tafqeet-text">
-          فقط مبلغ وقدره {{amount_in_words}} لا غير
+          {{amount_in_words}}
         </div>
 
         <!-- الملاحظات والبيان -->
         <div class="notes-text">
-          وذلك مقابل: {{notes}}
+          {{notes}}
         </div>
 
       </main>

@@ -27,6 +27,7 @@ export function can(permission) {
   const permissions = store.user.effective_permissions || [];
   if (permissions.includes('*') || permissions.includes(permission)) return true;
   const [resource, action] = permission.split('.');
+  if (permissions.includes(`${resource}.write`)) return true;
   return action === 'write' && ['create', 'edit'].some((a) => permissions.includes(`${resource}.${a}`));
 }
 

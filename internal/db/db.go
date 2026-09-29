@@ -126,6 +126,14 @@ func (d *DB) bootstrap() error {
 		`, issId, now, now)
 	}
 
+	// 4. Ensure legacy cash invoices have remaining_amount = 0, paid_amount = grand_total, status = PAID
+	_, _ = d.Exec(`
+		UPDATE invoices 
+		SET paid_amount = grand_total, remaining_amount = 0, status = 'PAID' 
+		WHERE (payment_method LIKE '%CASH%' OR payment_method LIKE '%نقد%') 
+		  AND remaining_amount > 0
+	`)
+
 	return nil
 }
 

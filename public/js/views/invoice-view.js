@@ -50,7 +50,7 @@ function receiptModal(invoice, onDone) {
       <div class="row mt">
         <div class="field"><label>البنك</label><input type="text" name="bank_name" /></div>
       </div>
-      <div class="field mt"><label>ملاحظات</label><input type="text" name="notes" /></div>`,
+      <div class="field mt"><label>البيان / ملاحظات السند</label><input type="text" name="notes" value="وذلك مقابل سداد فاتورة رقم ${invoice.invoice_number}" /></div>`,
     footer: `<button class="btn" data-close type="button">إلغاء</button>
              <button class="btn btn-primary" data-ok type="button">تسجيل السند</button>`,
   });
@@ -97,8 +97,28 @@ export async function fetchInvoicePdfBlob(invoiceId, docHtml) {
   throw new Error('تعذر إنشاء ملف PDF من الخادم');
 }
 
+export async function getInvoiceDocHtml({ invoice, issuer, client, printSettings = null }) {
+  const cfg = printSettings || (typeof issuer?.print_settings === 'string'
+    ? JSON.parse(issuer.print_settings || '{}')
+    : (issuer?.print_settings || {})) || {};
+  const tplId = cfg.template_style;
+  const isBuiltin = ['corporate_multipage', 'standard', 'modern', 'classic', 'compact', 'detailed_address'].includes(tplId);
+  if (tplId && !isBuiltin) {
+    try {
+      const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/render-html?style=${encodeURIComponent(tplId)}&_t=${Date.now()}`);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.length > 500) return text;
+      }
+    } catch (e) {
+      console.warn('Failed to fetch custom template HTML:', e);
+    }
+  }
+  return invoiceA4({ invoice, issuer, client, printSettings: cfg, autoPrint: false });
+}
+
 export async function downloadInvoicePdf({ invoice, issuer, client, printSettings = null, docHtml = null }) {
-  const finalHtml = docHtml || invoiceA4({ invoice, issuer, client, printSettings });
+  const finalHtml = docHtml || await getInvoiceDocHtml({ invoice, issuer, client, printSettings });
   try {
     invoice.lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
     invoice.items = invoice.lines;
@@ -136,7 +156,7 @@ export async function downloadInvoicePdf({ invoice, issuer, client, printSetting
 }
 
 export async function shareInvoicePdfFile({ invoice, issuer, client, text, printSettings = null, docHtml = null }) {
-  const finalHtml = docHtml || invoiceA4({ invoice, issuer, client, printSettings });
+  const finalHtml = docHtml || await getInvoiceDocHtml({ invoice, issuer, client, printSettings });
   try {
     invoice.lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
     invoice.items = invoice.lines;
@@ -294,15 +314,19 @@ export async function render(view, ctx) {
     }
 
     if (!selectedTplStyle) {
-      selectedTplStyle = issuerPrintCfg.template_style || (availableTemplates[0]?.id || 'standard');
+      selectedTplStyle = issuerPrintCfg.template_style || 'corporate_multipage';
     }
 
     const getPrintSettings = () => {
       const tpl = availableTemplates.find((t) => t.id === selectedTplStyle);
+      const rawHeaders = tpl?.headers || issuerPrintCfg.headers || [];
+      const cleanHeaders = Array.isArray(rawHeaders)
+        ? rawHeaders.filter((h) => !String(h).startsWith('{{') && !/seller_|buyer_|qr_|logo/i.test(String(h)))
+        : [];
       return {
         ...issuerPrintCfg,
         template_style: selectedTplStyle,
-        headers: tpl?.headers || issuerPrintCfg.headers || [],
+        headers: cleanHeaders,
         alignments: tpl?.style_meta?.alignments || issuerPrintCfg.alignments || [],
         header_fill: tpl?.style_meta?.header_fill || tpl?.color_hex || issuerPrintCfg.header_fill,
         banner_text: tpl?.style_meta?.banner_text || issuerPrintCfg.banner_text || '',
@@ -367,9 +391,13 @@ export async function render(view, ctx) {
               <div id="tpl-select-wrap" style="display:${activeViewMode === 'template' ? 'flex' : 'none'};align-items:center;gap:6px">
                 <span style="font-size:.8rem;color:var(--muted);font-weight:600">القالب:</span>
                 <select id="sel-invoice-tpl" class="input input-sm" style="padding:.28rem .6rem;font-size:.82rem;border-radius:6px;background:var(--card);color:var(--text);border:1px solid var(--line-strong)">
-                  ${raw(availableTemplates.length
-        ? availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name_ar || t.id)}${t.headers?.length ? ` (${t.headers.length} أعمدة)` : ''}</option>`).join('')
-        : INVOICE_TEMPLATES.map((t) => `<option value="${t.id}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name)}</option>`).join(''))}
+                  <optgroup label="القوالب الرسمية المعتمدة (متعددة الصفحات A4)">
+                    ${INVOICE_TEMPLATES.map((t) => `<option value="${t.id}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
+                  </optgroup>
+                  ${availableTemplates.length ? `
+                  <optgroup label="القوالب المخصصة والمستوردة">
+                    ${availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name_ar || t.id)}</option>`).join('')}
+                  </optgroup>` : ''}
                 </select>
               </div>
             </div>
@@ -573,7 +601,8 @@ export async function render(view, ctx) {
       if (!iframe) return;
       const printSettings = getPrintSettings();
       const tplId = selectedTplStyle || printSettings?.template_style;
-      const isExcelTpl = tplId && tplId !== 'standard' && tplId !== 'modern' && tplId !== 'classic' && tplId !== 'compact';
+      const isBuiltinTpl = ['corporate_multipage', 'standard', 'modern', 'classic', 'compact', 'detailed_address'].includes(tplId);
+      const isExcelTpl = !isBuiltinTpl && tplId;
 
       if (isExcelTpl) {
         // إظهار مؤشر تحميل نظيف بدلاً من وميض قالب قديم غير مرغوب
@@ -596,7 +625,7 @@ export async function render(view, ctx) {
         invoice,
         issuer,
         client,
-        printSettings,
+        printSettings: { ...(printSettings || {}), template_style: tplId },
         autoPrint: false,
       });
       iframe.srcdoc = currentInvoiceDocHtml;

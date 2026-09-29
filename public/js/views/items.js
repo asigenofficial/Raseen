@@ -61,11 +61,11 @@ function openItemModal(item, categories, onSaved) {
     try {
       if (isNew) await api.post('/api/items', values);
       else await api.put(`/api/items/${item.id}`, values);
-      toastOk('تم الحفظ');
       m.close();
+      toastOk('تم الحفظ');
       invalidate('items');
       await loadItems(true);
-      onSaved();
+      if (onSaved) onSaved();
     } catch { e.target.disabled = false; }
     return undefined;
   });
@@ -98,11 +98,11 @@ function openCategoryModal(category, categories, onSaved) {
     try {
       if (isNew) await api.post('/api/categories', values);
       else await api.put(`/api/categories/${category.id}`, values);
-      toastOk('تم الحفظ');
       m.close();
+      toastOk('تم الحفظ');
       invalidate('categories');
       await loadCategories(true);
-      onSaved();
+      if (onSaved) onSaved();
     } catch { e.target.disabled = false; }
     return undefined;
   });

@@ -271,7 +271,7 @@ function getItemsTableBlockHTML(color) {
         <thead>
           <tr style="background:${color}; color:#fff;" class="tbl-head-row">
             <th contenteditable="true" style="padding:8px 6px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:center; width:35px;">#</th>
-            <th contenteditable="true" style="padding:8px 8px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:center; width:75px;">كود الصنف</th>
+            <th contenteditable="true" style="padding:8px 8px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:right;">اسم الصنف بالكامل</th>
             <th contenteditable="true" style="padding:8px 8px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:right;">بيان الصنف أو الخدمة</th>
             <th contenteditable="true" style="padding:8px 6px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:center; width:55px;">الكمية</th>
             <th contenteditable="true" style="padding:8px 6px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:left; width:85px;">سعر الوحدة</th>
