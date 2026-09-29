@@ -2380,18 +2380,18 @@ export function voucherPrint({ voucher, issuer, client, style = 'voucher_classic
     html = `<div class="page classic-slip-page">
       ${voucher.status === 'CANCELLED' ? '<div class="watermark">ملغى</div>' : ''}
       <header class="head" style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:6px; padding:10px 16px; margin-bottom:12px; display:grid; grid-template-columns:minmax(0,1.1fr) auto minmax(0,1.1fr); gap:8px 14px; align-items:center;">
-        <div style="text-align:left; direction:ltr;">
-          ${issuer.name_en ? `<div style="font-size:12pt; font-weight:800; color:#0f172a;">${esc(issuer.name_en)}</div>` : ''}
-          <div style="font-size:8pt; color:#475569;">VAT: ${esc(issuer.tax_number || '—')}</div>
-          <div style="font-size:8pt; color:#475569;">CR: ${esc(issuer.commercial_register || '—')}</div>
-        </div>
-        <div style="text-align:center;">
-          ${logoHtml}
-        </div>
         <div style="text-align:right; direction:rtl;">
           <div style="font-size:13pt; font-weight:800; color:#0f172a;">${esc(issuer.name_ar)}</div>
           <div style="font-size:8.5pt; color:#0f172a;">الرقم الضريبي: <span class="mono">${esc(issuer.tax_number || '—')}</span></div>
           <div style="font-size:8.5pt; color:#0f172a;">السجل التجاري: <span class="mono">${esc(issuer.commercial_register || '—')}</span></div>
+        </div>
+        <div style="text-align:center;">
+          ${logoHtml}
+        </div>
+        <div style="text-align:left; direction:ltr;">
+          ${issuer.name_en ? `<div style="font-size:12pt; font-weight:800; color:#0f172a;">${esc(issuer.name_en)}</div>` : ''}
+          <div style="font-size:8pt; color:#475569;">VAT: ${esc(issuer.tax_number || '—')}</div>
+          <div style="font-size:8pt; color:#475569;">CR: ${esc(issuer.commercial_register || '—')}</div>
         </div>
       </header>
 
