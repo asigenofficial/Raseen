@@ -1021,8 +1021,8 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		result = strings.ReplaceAll(result, "overflow:hidden", "overflow:visible")
 	}
 
-	if len(inv.Lines) > 12 {
-		result = paginateInvoiceHtml(result, inv, 12)
+	if len(inv.Lines) > 15 {
+		result = paginateInvoiceHtml(result, inv, 15)
 	}
 
 	dupNoOtherRegex := regexp.MustCompile(`(لا غير\s*)+لا غير`)

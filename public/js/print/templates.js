@@ -62,7 +62,7 @@ export const INVOICE_TEMPLATES = [
   {
     id: 'corporate_multipage',
     name: 'قالب الوكالات وقطع الغيار متعدد الصفحات (OBS / Corporate)',
-    desc: 'القالب المعتمد للوكالات وتجار قطع الغيار والتوريدات مع الترقيم الآلي وتوزيع الصفحات (12 صنفاً في كل صفحة) وتذييل المتابعة وقسيمة القبض.',
+    desc: 'القالب المعتمد للوكالات وتجار قطع الغيار والتوريدات مع الترقيم الآلي وتوزيع الصفحات (15 صنفاً في كل صفحة) وتذييل المتابعة وقسيمة القبض.',
     badge: 'نمط الوكالات والقطع (متعدد الصفحات)',
     category: 'a4',
     icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',
@@ -665,7 +665,7 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
 
   // ------------------------------------------------------------- تقسيم الصفحات الذكي (Multi-Page Pagination)
   const allLines = invoice.lines || [];
-  const CHUNK_SIZE = 12;
+  const CHUNK_SIZE = 15;
   const isMultiPage = allLines.length > CHUNK_SIZE;
   const totalPages = isMultiPage ? Math.ceil(allLines.length / CHUNK_SIZE) : 1;
 
