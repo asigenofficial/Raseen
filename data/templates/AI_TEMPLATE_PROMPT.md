@@ -232,8 +232,8 @@
     <thead>
       <tr>
         <th style="width: 5%;">#</th>
-        <th style="width: 25%;">اسم الصنف بالكامل<br><small>Item Name</small></th>
-        <th style="width: 15%;">البيان<br><small>Description</small></th>
+        <th style="width: 14%;">رقم الصنف<br><small>Item No</small></th>
+        <th style="width: 26%;">اسم الصنف<br><small>Item Name</small></th>
         <th style="width: 8%;">الوحدة<br><small>Unit</small></th>
         <th style="width: 8%;">الكمية<br><small>Qty</small></th>
         <th style="width: 11%;">سعر الوحدة<br><small>Price</small></th>

@@ -1236,9 +1236,11 @@ func generateSmartRowsSlice(tpl string, lines []InvoiceItemView, offset int) str
 			case colIndex:
 				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;">%d</td>`, offset+i+1))
 			case colCode:
-				// بدل كود الصنف، يظهر اسم الصنف بالكامل
-				nameHtml := html.EscapeString(item.ItemName)
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;font-weight:600;text-align:right;">%s</td>`, nameHtml))
+				code := item.ItemCode
+				if code == "" {
+					code = "—"
+				}
+				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%s</td>`, html.EscapeString(code)))
 			case colName:
 				nameHtml := html.EscapeString(item.ItemName)
 				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;font-weight:600;text-align:right;">%s</td>`, nameHtml))

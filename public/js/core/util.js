@@ -682,7 +682,7 @@ function generateSmartRowsJS(htmlSnippet, rawLines, offset = 0) {
         case 'index':
           return `<td class="c" style="padding:6px 8px;text-align:center;">${offset + idx + 1}</td>`;
         case 'code':
-          return `<td class="r" style="padding:6px 8px;font-weight:600;text-align:right;">${esc(itemName)}</td>`;
+          return `<td class="c" style="padding:6px 8px;text-align:center;font-family:Tahoma,sans-serif;">${esc(itemCode)}</td>`;
         case 'name':
           return `<td class="r" style="padding:6px 8px;font-weight:600;text-align:right;">${esc(itemName)}</td>`;
         case 'unit':
