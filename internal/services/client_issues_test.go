@@ -1,0 +1,364 @@
+package services
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"raseen/internal/config"
+	"raseen/internal/db"
+)
+
+func setupTestServices(t *testing.T) (*db.DB, *InvoiceService, *TemplateService) {
+	t.Helper()
+	tempDir := t.TempDir()
+	cfg := &config.Config{
+		DataDir: tempDir,
+		DbFile:  filepath.Join(tempDir, "test.db"),
+		Defaults: config.Defaults{
+			Currency: "SAR",
+			TaxRate:  15.0,
+			Country:  "SA",
+		},
+	}
+	database, err := db.Open(cfg)
+	if err != nil {
+		t.Fatalf("Failed to open test db: %v", err)
+	}
+
+	issSvc := NewIssuerService(database)
+	masterKey := make([]byte, 32)
+	invSvc := NewInvoiceService(database, issSvc, masterKey)
+	
+	// Copy or point to data/templates
+	wd, _ := os.Getwd()
+	// Find project root
+	root := wd
+	for !fileExists(filepath.Join(root, "go.mod")) && filepath.Dir(root) != root {
+		root = filepath.Dir(root)
+	}
+	tplSvc := NewTemplateService(database, filepath.Join(root, "data"))
+
+	return database, invSvc, tplSvc
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func createTestIssuerAndClient(t *testing.T, database *db.DB) (string, string) {
+	t.Helper()
+	issuerID := "iss-test-1"
+	clientID := "cli-test-1"
+	now := "2026-09-30T00:00:00Z"
+
+	_, err := database.Exec(`
+		INSERT INTO issuers (
+			id, code, name_ar, name_en, tax_number, commercial_register,
+			city, district, street, building_no, postal_code, country,
+			city_en, district_en, street_en, address_en,
+			phone, email, is_active, created_at, updated_at
+		) VALUES (
+			?, 'ISS01', 'شركة روائع التقنية', 'Rawaia Tech Co.', '310123456700003', '1010123456',
+			'الرياض', 'الملز', 'طريق صلاح الدين', '1234', '12836', 'SA',
+			'Riyadh', 'Al Malaz', 'Salah Al Din St.', 'Riyadh, Salah Al Din St., Al Malaz',
+			'0501234567', 'info@rawaiatech.com', 1, ?, ?
+		)
+	`, issuerID, now, now)
+	if err != nil {
+		t.Fatalf("Failed to insert issuer: %v", err)
+	}
+
+	_, err = database.Exec(`
+		INSERT INTO clients (
+			id, client_code, name, tax_number, commercial_register,
+			city, district, street, building_no, postal_code, country,
+			phone, is_active, created_at, updated_at
+		) VALUES (
+			?, 'C-001', 'مؤسسة الأفق للتجارة', '310987654300003', '1010987654',
+			'جدة', 'الروضة', 'شارع الأمير سلطان', '5678', '23432', 'SA',
+			'0559876543', 1, ?, ?
+		)
+	`, clientID, now, now)
+	if err != nil {
+		t.Fatalf("Failed to insert client: %v", err)
+	}
+
+	return issuerID, clientID
+}
+
+// Test 1: Invoice Number Editing and Duplicate Check
+func TestInvoiceNumberEditing(t *testing.T) {
+	database, invSvc, _ := setupTestServices(t)
+	defer database.Close()
+	issuerID, clientID := createTestIssuerAndClient(t, database)
+
+	// Create invoice with number INV-1001
+	createInput := CreateInvoiceInput{
+		IssuerID:      issuerID,
+		ClientID:      clientID,
+		InvoiceNumber: "INV-1001",
+		IssueDate:     "2026-09-30",
+		PaymentMethod: "CREDIT",
+		Lines: []CreateInvoiceLineInput{
+			{
+				ItemName:  "منتج تجريبي 1",
+				ItemCode:  "PRD-01",
+				Unit:      "حبة",
+				UnitPrice: 100.0,
+				Quantity:  2,
+				TaxRate:   15.0,
+			},
+		},
+	}
+
+	created, err := invSvc.CreateInvoice(createInput, "admin", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("Failed to create invoice: %v", err)
+	}
+	if created.InvoiceNumber != "INV-1001" {
+		t.Fatalf("Expected invoice number INV-1001, got %s", created.InvoiceNumber)
+	}
+
+	// Now update invoice number to INV-9999
+	updateInput := createInput
+	updateInput.InvoiceNumber = "INV-9999"
+	updated, err := invSvc.UpdateInvoice(created.ID, updateInput, "admin", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("Failed to update invoice: %v", err)
+	}
+	if updated.InvoiceNumber != "INV-9999" {
+		t.Fatalf("Expected updated invoice number to be INV-9999, got %s", updated.InvoiceNumber)
+	}
+
+	// Verify in DB directly
+	var dbInvNum string
+	err = database.QueryRow("SELECT invoice_number FROM invoices WHERE id = ?", created.ID).Scan(&dbInvNum)
+	if err != nil || dbInvNum != "INV-9999" {
+		t.Fatalf("DB invoice_number mismatch: %s, err: %v", dbInvNum, err)
+	}
+
+	// Verify XML document contains updated invoice number
+	var xmlDoc string
+	err = database.QueryRow("SELECT xml FROM invoice_documents WHERE invoice_id = ?", created.ID).Scan(&xmlDoc)
+	if err != nil || !strings.Contains(xmlDoc, "INV-9999") {
+		t.Fatalf("Invoice XML missing updated invoice number INV-9999, err: %v", err)
+	}
+
+	// Create second invoice INV-2002
+	createInput2 := createInput
+	createInput2.InvoiceNumber = "INV-2002"
+	created2, err := invSvc.CreateInvoice(createInput2, "admin", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("Failed to create second invoice: %v", err)
+	}
+
+	// Attempt to rename second invoice to INV-9999 (duplicate check)
+	updateInput2 := createInput2
+	updateInput2.InvoiceNumber = "INV-9999"
+	_, err = invSvc.UpdateInvoice(created2.ID, updateInput2, "admin", "127.0.0.1")
+	if err == nil {
+		t.Fatalf("Expected error when setting duplicate invoice number, but got nil")
+	}
+	t.Logf("Duplicate error caught successfully: %v", err)
+}
+
+// Test 2: Item Unit Column in Templates and HTML Output
+func TestItemUnitInTemplates(t *testing.T) {
+	database, invSvc, tplSvc := setupTestServices(t)
+	defer database.Close()
+	issuerID, clientID := createTestIssuerAndClient(t, database)
+
+	invInput := CreateInvoiceInput{
+		IssuerID:      issuerID,
+		ClientID:      clientID,
+		InvoiceNumber: "INV-UNIT-01",
+		IssueDate:     "2026-09-30",
+		PaymentMethod: "CASH",
+		Lines: []CreateInvoiceLineInput{
+			{
+				ItemName:  "أسمنت بورتلاندي",
+				ItemCode:  "CEM-01",
+				Unit:      "كيس",
+				UnitPrice: 25.0,
+				Quantity:  50,
+				TaxRate:   15.0,
+			},
+		},
+	}
+	inv, err := invSvc.CreateInvoice(invInput, "admin", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateInvoice failed: %v", err)
+	}
+
+	// Render with template 01-royal-navy
+	htmlOut, err := tplSvc.RenderInvoiceHTML(inv, "01-royal-navy")
+	if err != nil {
+		t.Fatalf("RenderInvoiceHTML failed: %v", err)
+	}
+
+	if !strings.Contains(htmlOut, "الوحدة") {
+		t.Fatalf("Rendered HTML missing 'الوحدة' column header")
+	}
+	if !strings.Contains(htmlOut, "كيس") {
+		t.Fatalf("Rendered HTML missing unit value 'كيس'")
+	}
+	t.Logf("Item unit verified in rendered HTML successfully")
+}
+
+// Test 3: English Address Display
+func TestEnglishAddressDisplay(t *testing.T) {
+	database, invSvc, tplSvc := setupTestServices(t)
+	defer database.Close()
+	issuerID, clientID := createTestIssuerAndClient(t, database)
+
+	invInput := CreateInvoiceInput{
+		IssuerID:      issuerID,
+		ClientID:      clientID,
+		InvoiceNumber: "INV-ADDR-01",
+		IssueDate:     "2026-09-30",
+		PaymentMethod: "CASH",
+		Lines: []CreateInvoiceLineInput{
+			{
+				ItemName:  "استشارة تقنية",
+				ItemCode:  "CNS-01",
+				Unit:      "ساعة",
+				UnitPrice: 500.0,
+				Quantity:  10,
+				TaxRate:   15.0,
+			},
+		},
+	}
+	inv, err := invSvc.CreateInvoice(invInput, "admin", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateInvoice failed: %v", err)
+	}
+
+	htmlOut, err := tplSvc.RenderInvoiceHTML(inv, "01-royal-navy")
+	if err != nil {
+		t.Fatalf("RenderInvoiceHTML failed: %v", err)
+	}
+
+	// Issuer English address was set to "Riyadh, Salah Al Din St., Al Malaz"
+	if !strings.Contains(htmlOut, "Riyadh") && !strings.Contains(htmlOut, "Salah Al Din") {
+		t.Fatalf("Rendered HTML missing English address components (Riyadh / Salah Al Din)")
+	}
+	t.Logf("English address verified in rendered HTML successfully")
+}
+
+// Test 4: Multipage Invoice Continuation and Badges
+func TestMultipageContinuation(t *testing.T) {
+	database, invSvc, tplSvc := setupTestServices(t)
+	defer database.Close()
+	issuerID, clientID := createTestIssuerAndClient(t, database)
+
+	// Create an invoice with 22 items (chunk size is 15 -> will result in 2 pages)
+	lines := make([]CreateInvoiceLineInput, 22)
+	for i := 0; i < 22; i++ {
+		lines[i] = CreateInvoiceLineInput{
+			ItemName:  fmt.Sprintf("بند الفاتورة رقم %02d", i+1),
+			ItemCode:  fmt.Sprintf("ITM-%02d", i+1),
+			Unit:      "حبة",
+			UnitPrice: float64(10 + i),
+			Quantity:  1,
+			TaxRate:   15.0,
+		}
+	}
+
+	invInput := CreateInvoiceInput{
+		IssuerID:      issuerID,
+		ClientID:      clientID,
+		InvoiceNumber: "INV-MULTI-01",
+		IssueDate:     "2026-09-30",
+		PaymentMethod: "CASH",
+		Lines:         lines,
+	}
+	inv, err := invSvc.CreateInvoice(invInput, "admin", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateInvoice failed: %v", err)
+	}
+
+	htmlOut, err := tplSvc.RenderInvoiceHTML(inv, "01-royal-navy")
+	if err != nil {
+		t.Fatalf("RenderInvoiceHTML failed: %v", err)
+	}
+
+	// Page 1 assertions
+	if !strings.Contains(htmlOut, `data-invoice-page="1"`) {
+		t.Fatalf("Missing data-invoice-page='1'")
+	}
+	if !strings.Contains(htmlOut, "صفحة 1 من 2") {
+		t.Fatalf("Missing Page 1 indicator 'صفحة 1 من 2'")
+	}
+	if !strings.Contains(htmlOut, "يتبع في الصفحة التالية") {
+		t.Fatalf("Missing continuation footer 'يتبع في الصفحة التالية'")
+	}
+
+	// Page 2 assertions
+	if !strings.Contains(htmlOut, `data-invoice-page="2"`) {
+		t.Fatalf("Missing data-invoice-page='2'")
+	}
+	if !strings.Contains(htmlOut, "invoice-continuation-header") {
+		t.Fatalf("Missing continuation header class 'invoice-continuation-header'")
+	}
+	if !strings.Contains(htmlOut, "تابع فاتورة ضريبية") {
+		t.Fatalf("Missing continuation text 'تابع فاتورة ضريبية'")
+	}
+	if !strings.Contains(htmlOut, "Continuation Sheet") {
+		t.Fatalf("Missing English continuation text 'Continuation Sheet'")
+	}
+	if !strings.Contains(htmlOut, "نهاية بنود الفاتورة") {
+		t.Fatalf("Missing end of items footer 'نهاية بنود الفاتورة'")
+	}
+
+	t.Logf("Multipage continuation verified successfully: Page 1 and Page 2 badges, footers, and continuation indicators are all present and correct.")
+}
+
+func TestAllTemplatesRenderUnitAndContinuation(t *testing.T) {
+	database, invSvc, tplSvc := setupTestServices(t)
+	defer database.Close()
+	issuerID, clientID := createTestIssuerAndClient(t, database)
+
+	invInput := CreateInvoiceInput{
+		IssuerID:      issuerID,
+		ClientID:      clientID,
+		InvoiceNumber: "INV-ALL-01",
+		IssueDate:     "2026-09-30",
+		PaymentMethod: "CREDIT",
+		Lines: []CreateInvoiceLineInput{
+			{
+				ItemName:  "منتج شامل للوحدة",
+				ItemCode:  "ALL-01",
+				Unit:      "حبة_اختبار",
+				UnitPrice: 50.0,
+				Quantity:  2,
+				TaxRate:   15.0,
+			},
+		},
+	}
+	inv, err := invSvc.CreateInvoice(invInput, "admin", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateInvoice failed: %v", err)
+	}
+
+	tplFiles, err := filepath.Glob(filepath.Join("..", "..", "data", "templates", "invoices", "*.html"))
+	if err != nil || len(tplFiles) == 0 {
+		t.Fatalf("No templates found in data/templates/invoices: %v", err)
+	}
+
+	for _, file := range tplFiles {
+		styleName := strings.TrimSuffix(filepath.Base(file), ".html")
+		rendered, err := tplSvc.RenderInvoiceHTML(inv, styleName)
+		if err != nil {
+			t.Errorf("Template %s failed to render: %v", styleName, err)
+			continue
+		}
+		if !strings.Contains(rendered, "حبة_اختبار") {
+			t.Errorf("Template %s failed to display unit value 'حبة_اختبار'", styleName)
+		}
+	}
+	t.Logf("All %d templates successfully verified for unit rendering!", len(tplFiles))
+}

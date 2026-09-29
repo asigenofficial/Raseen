@@ -1442,8 +1442,6 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		return nil, fmt.Errorf("failed to update invoice: %w", err)
 	}
 
-	_, _ = tx.Exec("UPDATE accounting_entries SET memo = ? WHERE reference_id = ?", fmt.Sprintf("فاتورة مبيعات رقم %s", invoiceNumber), id)
-
 	_, _ = tx.Exec(`
 		INSERT INTO invoice_documents (invoice_id, xml, issuer_json, client_json)
 		VALUES (?, ?, ?, ?)
