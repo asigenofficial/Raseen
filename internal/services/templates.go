@@ -660,27 +660,104 @@ func formatNationalAddress(city, district, street, buildingNo, postalCode string
 	return strings.Join(parts, " - ")
 }
 
+func translateCityArToEn(cityAr string) string {
+	c := strings.TrimSpace(cityAr)
+	switch c {
+	case "جدة", "جده":
+		return "Jeddah"
+	case "الرياض":
+		return "Riyadh"
+	case "مكة", "مكة المكرمة", "مكه", "مكه المكرمه":
+		return "Makkah"
+	case "المدينة", "المدينة المنورة", "المدينه", "المدينه المنوره":
+		return "Madinah"
+	case "الدمام":
+		return "Dammam"
+	case "الخبر":
+		return "Khobar"
+	case "الظهران":
+		return "Dhahran"
+	case "الجبيل":
+		return "Jubail"
+	case "الأحساء", "الاحساء", "الهفوف":
+		return "Al-Ahsa"
+	case "الطائف":
+		return "Taif"
+	case "تبوك":
+		return "Tabuk"
+	case "بريدة", "بريده":
+		return "Buraidah"
+	case "عنيزة", "عنيزه":
+		return "Unaizah"
+	case "حائل":
+		return "Hail"
+	case "أبها", "ابها":
+		return "Abha"
+	case "خميس مشيط":
+		return "Khamis Mushait"
+	case "جازان", "جيزان":
+		return "Jazan"
+	case "نجران":
+		return "Najran"
+	case "ينبع":
+		return "Yanbu"
+	case "القطيف":
+		return "Qatif"
+	}
+	if strings.Contains(c, "جدة") || strings.Contains(c, "جده") {
+		return "Jeddah"
+	}
+	if strings.Contains(c, "الرياض") {
+		return "Riyadh"
+	}
+	if strings.Contains(c, "مكة") || strings.Contains(c, "مكه") {
+		return "Makkah"
+	}
+	if strings.Contains(c, "الدمام") {
+		return "Dammam"
+	}
+	return c
+}
+
 // formatNationalAddressEn formats the national address in English: City - District - Street - Building No - Postal Code
-func formatNationalAddressEn(cityEn, districtEn, streetEn, buildingNo, postalCode string) string {
+func formatNationalAddressEn(cityEn, districtEn, streetEn, buildingNo, postalCode string, arFallback ...string) string {
+	c := strings.TrimSpace(cityEn)
+	if c == "" && len(arFallback) > 0 && arFallback[0] != "" {
+		c = translateCityArToEn(arFallback[0])
+	}
+	d := strings.TrimSpace(districtEn)
+	if d == "" && len(arFallback) > 1 && arFallback[1] != "" {
+		d = arFallback[1]
+		d = strings.TrimPrefix(d, "حي ")
+		if strings.Contains(d, "بني مالك") {
+			d = "Bani Malik"
+		}
+		if !strings.Contains(strings.ToLower(d), "dist") {
+			d = d + " Dist."
+		}
+	}
+	s := strings.TrimSpace(streetEn)
+	if s == "" && len(arFallback) > 2 && arFallback[2] != "" {
+		s = arFallback[2]
+		s = strings.TrimPrefix(s, "شارع ")
+		s = strings.TrimPrefix(s, "طريق ")
+		if strings.Contains(s, "الأمير ماجد") || strings.Contains(s, "الامير ماجد") {
+			s = "Prince Majid"
+		}
+		if !strings.Contains(strings.ToLower(s), "st") && !strings.Contains(strings.ToLower(s), "street") && !strings.Contains(strings.ToLower(s), "rd") {
+			s = s + " St."
+		}
+	}
+
 	parts := []string{}
-	if c := strings.TrimSpace(cityEn); c != "" {
+	if c != "" {
 		parts = append(parts, c)
 	}
-	if d := strings.TrimSpace(districtEn); d != "" {
-		low := strings.ToLower(d)
-		if !strings.Contains(low, "district") && !strings.Contains(low, "dist") {
-			parts = append(parts, d+" Dist.")
-		} else {
-			parts = append(parts, d)
-		}
+	if d != "" {
+		parts = append(parts, d)
 	}
-	if s := strings.TrimSpace(streetEn); s != "" {
-		low := strings.ToLower(s)
-		if !strings.Contains(low, "st") && !strings.Contains(low, "street") && !strings.Contains(low, "rd") {
-			parts = append(parts, s+" St.")
-		} else {
-			parts = append(parts, s)
-		}
+	if s != "" {
+		parts = append(parts, s)
 	}
 	if b := strings.TrimSpace(buildingNo); b != "" {
 		low := strings.ToLower(b)
@@ -697,6 +774,10 @@ func formatNationalAddressEn(cityEn, districtEn, streetEn, buildingNo, postalCod
 }
 
 // ─── Tag Substitution Engine ──────────────────────────────────────────────────
+
+func (s *TemplateService) SubstituteInvoiceTags(tpl string, inv *InvoiceView) string {
+	return s.substituteInvoiceTags(tpl, inv)
+}
 
 func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 	buyerName := inv.BuyerName
@@ -751,7 +832,16 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 		if sellerAddress == "" {
 			sellerAddress = strings.TrimSpace(inv.IssuerSnapshot.Street + " " + inv.IssuerSnapshot.City)
 		}
-		sellerAddressEn = formatNationalAddressEn(inv.IssuerSnapshot.CityEn, inv.IssuerSnapshot.DistrictEn, inv.IssuerSnapshot.StreetEn, inv.IssuerSnapshot.BuildingNo, inv.IssuerSnapshot.PostalCode)
+		sellerAddressEn = formatNationalAddressEn(
+			inv.IssuerSnapshot.CityEn,
+			inv.IssuerSnapshot.DistrictEn,
+			inv.IssuerSnapshot.StreetEn,
+			inv.IssuerSnapshot.BuildingNo,
+			inv.IssuerSnapshot.PostalCode,
+			inv.IssuerSnapshot.City,
+			inv.IssuerSnapshot.District,
+			inv.IssuerSnapshot.Street,
+		)
 		if sellerAddressEn == "" {
 			sellerAddressEn = inv.IssuerSnapshot.AddressEn
 			if sellerAddressEn == "" {
@@ -924,6 +1014,17 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 	tpl = strings.ReplaceAll(tpl, "&#xfdfb;", "{{sar_symbol}}")
 	tpl = strings.ReplaceAll(tpl, "\uFDFB", "{{sar_symbol}}")
 
+	sellerCityEn := ""
+	if inv.IssuerSnapshot != nil {
+		sellerCityEn = inv.IssuerSnapshot.CityEn
+		if sellerCityEn == "" && inv.IssuerSnapshot.City != "" {
+			sellerCityEn = translateCityArToEn(inv.IssuerSnapshot.City)
+		}
+	}
+	if sellerCityEn == "" && sellerCity != "" {
+		sellerCityEn = translateCityArToEn(sellerCity)
+	}
+
 	result := strings.NewReplacer(
 		// ─── بيانات الفاتورة والمستند الأساسية ───
 		"{{invoice_number}}", inv.InvoiceNumber,
@@ -956,6 +1057,7 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 		"{{seller_address_en}}", sellerAddressEn,
 		"{{seller_cr}}", sellerCR,
 		"{{seller_city}}", sellerCity,
+		"{{seller_city_en}}", sellerCityEn,
 		"{{seller_country}}", sellerCountry,
 		"{{seller_phone}}", sellerPhone,
 		"{{seller_email}}", sellerEmail,
@@ -966,7 +1068,7 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 		"{{buyer_name}}", buyerName,
 		"{{buyer_code}}", buyerCode,
 		"{{buyer_tax}}", buyerTax,
-		"{{buyer_cr}}", "",    // السجل التجاري للعميل لا يظهر في الفواتير الضريبية
+		"{{buyer_cr}}", "", // السجل التجاري للعميل لا يظهر في الفواتير الضريبية
 		"{{buyer_address}}", buyerAddress,
 		"{{buyer_city}}", buyerCity,
 		"{{buyer_street}}", buyerStreet,
@@ -1083,6 +1185,9 @@ func detectColumnType(th string) colType {
 
 	if strings.Contains(clean, "شامل") || strings.Contains(clean, "مع الضريبة") || strings.Contains(clean, "صافي") || strings.Contains(clean, "with vat") || strings.Contains(clean, "total with") || strings.Contains(clean, "gross") {
 		return colTotal
+	}
+	if strings.Contains(clean, "مبلغ الضريبة") || strings.Contains(clean, "مبلغ ضريبة") || strings.Contains(clean, "قيمة الضريبة") || strings.Contains(clean, "vat amount") || strings.Contains(clean, "tax amount") {
+		return colTaxAmount
 	}
 	if strings.Contains(clean, "رقم الصنف") || strings.Contains(clean, "رقم البند") || strings.Contains(clean, "كود") || strings.Contains(clean, "رمز") || strings.Contains(clean, "item code") || strings.Contains(clean, "item_code") || strings.Contains(clean, "sku") || strings.Contains(clean, "barcode") || strings.Contains(clean, "item no") || strings.Contains(clean, "item_no") || strings.Contains(clean, "part no") {
 		return colCode
@@ -1540,12 +1645,12 @@ func (s *TemplateService) GetBuilderConfig(id string) (map[string]any, error) {
 		if contentBytes, readErr := os.ReadFile(filePath); readErr == nil {
 			htmlStr := string(contentBytes)
 			cfg := map[string]any{
-				"id":            cleanId,
-				"name_ar":       nameAr,
-				"type":          category,
-				"category":      category,
-				"primary_color": colorHex,
-				"html_content":  htmlStr,
+				"id":             cleanId,
+				"name_ar":        nameAr,
+				"type":           category,
+				"category":       category,
+				"primary_color":  colorHex,
+				"html_content":   htmlStr,
 				"editor_content": htmlStr,
 			}
 			return map[string]any{"builder_config": cfg}, nil

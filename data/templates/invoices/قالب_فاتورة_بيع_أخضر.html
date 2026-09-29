@@ -698,18 +698,17 @@
       <section class="items-table-container">
         <table class="items-main-table">
           <thead>
-            <tr>
-              <th style="width:5%;">#</th>
-              <th style="width:11%;">رقم الصنف</th>
-              <th style="width:23%;">اسم الصنف</th>
-              <th style="width:8%;">الوحدة</th>
-              <th style="width:8%;">الكمية</th>
-              <th style="width:11%;">سعر الوحدة</th>
-              <th style="width:8%;">الخصم</th>
-              <th style="width:10%;">الضريبة</th>
-              <th style="width:16%;">الإجمالي قبل الضريبة</th>
-            </tr>
-          </thead>
+          <tr>
+            <th scope="col" style="width: 12%;">رقم الصنف</th>
+            <th scope="col" style="width: 28%;">اسم الصنف</th>
+            <th scope="col" style="width: 8%;">الوحدة</th>
+            <th scope="col" style="width: 8%;">الكمية</th>
+            <th scope="col" style="width: 11%;">السعر</th>
+            <th scope="col" style="width: 11%;">قبل الضريبة</th>
+            <th scope="col" style="width: 10%;">مبلغ الضريبة</th>
+            <th scope="col" style="width: 12%;">شامل الضريبة</th>
+          </tr>
+        </thead>
           <tbody>
             {{items_rows}}
           </tbody>

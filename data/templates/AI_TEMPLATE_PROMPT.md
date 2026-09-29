@@ -73,7 +73,7 @@
 ### هـ. جدول الأصناف (Items Table)
 | المتغير الموحد | الوصف |
 | :--- | :--- |
-| `{{items_rows}}` | السطور المولدة ديناميكياً لجدول الأصناف (`<tr>...</tr>`) متوافقة تلقائياً مع عدد وأسماء أعمدة الجدول سواء كان (6، 7، أو 8 أعمدة). |
+| `{{items_rows}}` | السطور المولدة ديناميكياً لجدول الأصناف (`<tr>...</tr>`) مطابقة إلزامياً للأعمدة الـ 8 المعتمدة بالترتيب الصارم. |
 | `{{items_table}}` | جدول الأصناف الكامل المولد جاهزاً في حال عدم تخصيص `<table>` يدوي. |
 
 ---
@@ -226,21 +226,19 @@
 ═══════════════════════════════════════════════════════════════
 الهيكل البرمجي الإلزامي لجدول الأصناف (Items Table Architecture):
 ═══════════════════════════════════════════════════════════════
-يجب كتابة جدول الأصناف في الكود بنفس هذا الهيكل البرمجي الصارم تماماً دون أي تحريف:
+يجب كتابة جدول الأصناف في الكود بالترتيب الإلزامي الصارم التالي للأعمدة (8 أعمدة فقط دون عمود # ودون عمود الخصم):
 <section class="items-table-container">
   <table class="items-main-table">
     <thead>
       <tr>
-        <th style="width: 5%;">#</th>
-        <th style="width: 14%;">رقم الصنف<br><small>Item No</small></th>
-        <th style="width: 26%;">اسم الصنف<br><small>Item Name</small></th>
-        <th style="width: 8%;">الوحدة<br><small>Unit</small></th>
-        <th style="width: 8%;">الكمية<br><small>Qty</small></th>
-        <th style="width: 11%;">سعر الوحدة<br><small>Price</small></th>
-        <th style="width: 12%;">قبل الضريبة<br><small>Taxable</small></th>
-        <th style="width: 8%;">الخصم<br><small>Discount</small></th>
-        <th style="width: 8%;">الضريبة 15%<br><small>VAT</small></th>
-        <th style="width: 14%;">شامل الضريبة<br><small>Total</small></th>
+        <th style="width: 12%;">رقم الصنف<br><small>Item No</small></th>
+        <th style="width: 28%;">اسم الصنف<br><small>Item Name</small></th>
+        <th style="width: 10%;">الوحدة<br><small>Unit</small></th>
+        <th style="width: 10%;">الكمية<br><small>Qty</small></th>
+        <th style="width: 10%;">السعر<br><small>Price</small></th>
+        <th style="width: 10%;">قبل الضريبة<br><small>Taxable</small></th>
+        <th style="width: 10%;">مبلغ الضريبة<br><small>VAT</small></th>
+        <th style="width: 10%;">شامل الضريبة<br><small>Total</small></th>
       </tr>
     </thead>
     <tbody>
@@ -335,15 +333,15 @@
        - العنوان: {{buyer_address}}
 
 4. جدول الأصناف والبنود الشبكي (Items Grid Table):
-   - جدول شبكي أنيق برأس ملون هادئ وخطوط فاصلة عمودية وأفقية تفصل الأعمدة بوضوح، ويتضمن إلزامياً الأعمدة التالية:
-     - م (#)
-     - اسم الصنف(رقم الصنف / Code) — (عمود إلزامي وصارم في جميع قوالب الفواتير)
-     - البيان (اسم الصنف والخدمة والوصف)
-     - سعر الوحدة (Unit Price)
-     - الكمية (Qty)
-     - قبل الضريبة (المبلغ الخاضع للضريبة)
-     - الضريبة (15%)
-     - شامل الضريبة (الإجمالي النهائي شامل الضريبة)
+   - جدول شبكي أنيق برأس ملون هادئ وخطوط فاصلة عمودية وأفقية تفصل الأعمدة بوضوح، ويتضمن إلزامياً وبالترتيب الصارم الـ 8 أعمدة التالية (دون عمود # ولا عمود خصم):
+     1. رقم الصنف (Item No)
+     2. اسم الصنف (Item Name)
+     3. الوحدة (Unit)
+     4. الكمية (Qty)
+     5. السعر (Price)
+     6. قبل الضريبة (Taxable)
+     7. مبلغ الضريبة (VAT)
+     8. شامل الضريبة (Total)
    - وجسم الجدول يحتوي حصراً على: <tbody>{{items_rows}}</tbody> مع امتداد أسطر الجدول ليملأ ارتفاع الصفحة بتناسق.
 
 5. القسم السفلي المالي والتحقق (Dual Bottom Summary Section):
@@ -417,12 +415,14 @@
     <table class="items-table">
       <thead>
         <tr>
-          <th style="width:5%;">#</th>
-          <th>الصنف / Description</th>
+          <th style="width:12%;">رقم الصنف</th>
+          <th style="width:28%;">اسم الصنف</th>
+          <th style="width:10%;">الوحدة</th>
           <th style="width:10%;">الكمية</th>
-          <th style="width:14%;">السعر</th>
-          <th style="width:14%;">الضريبة (15%)</th>
-          <th style="width:16%;">الإجمالي</th>
+          <th style="width:10%;">السعر</th>
+          <th style="width:10%;">قبل الضريبة</th>
+          <th style="width:10%;">مبلغ الضريبة</th>
+          <th style="width:10%;">شامل الضريبة</th>
         </tr>
       </thead>
       <tbody>

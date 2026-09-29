@@ -38,15 +38,20 @@ type CreateInvoiceLineInput struct {
 	Discount        float64 `json:"discount"`
 	DiscountPercent float64 `json:"discount_percent"`
 	TaxRate         float64 `json:"tax_rate"`
-	taxRateMissing bool
+	taxRateMissing  bool
 }
 
 func (l *CreateInvoiceLineInput) UnmarshalJSON(data []byte) error {
 	type plain CreateInvoiceLineInput
-	if err := json.Unmarshal(data,(*plain)(l)); err != nil { return err }
+	if err := json.Unmarshal(data, (*plain)(l)); err != nil {
+		return err
+	}
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data,&fields); err != nil { return err }
-	v, ok := fields["tax_rate"]; l.taxRateMissing = !ok || string(v) == "null"
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	v, ok := fields["tax_rate"]
+	l.taxRateMissing = !ok || string(v) == "null"
 	return nil
 }
 
@@ -85,8 +90,8 @@ var invoiceStatusLabels = map[string]string{
 
 type InvoiceView struct {
 	models.Invoice
-	IssuerSnapshot *models.Issuer `json:"issuer_snapshot,omitempty"`
-	ClientSnapshot *models.Client `json:"client_snapshot,omitempty"`
+	IssuerSnapshot       *models.Issuer    `json:"issuer_snapshot,omitempty"`
+	ClientSnapshot       *models.Client    `json:"client_snapshot,omitempty"`
 	ClientCode           string            `json:"client_code"`
 	PaymentLabel         string            `json:"payment_label"`
 	StatusLabel          string            `json:"status_label"`
@@ -112,11 +117,17 @@ type InvoiceItemView struct {
 
 func (s *InvoiceService) CreateInvoice(input CreateInvoiceInput, actor, ip string) (*InvoiceView, error) {
 	tx, err := s.db.Begin()
-	if err != nil { return nil,err }
+	if err != nil {
+		return nil, err
+	}
 	defer tx.Rollback()
-	inv, err := s.createInvoiceTx(tx,input,actor,ip)
-	if err != nil { return nil,err }
-	if err = tx.Commit(); err != nil { return nil,err }
+	inv, err := s.createInvoiceTx(tx, input, actor, ip)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
 	return s.GetInvoice(inv.ID)
 }
 
@@ -128,7 +139,7 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		return nil, errors.New("يجب إضافة بند واحد على الأقل للفاتورة")
 	}
 
-	issuer, err := getIssuer(tx,input.IssuerID)
+	issuer, err := getIssuer(tx, input.IssuerID)
 	if err != nil {
 		return nil, errors.New("المنشأة المصدرة غير موجودة")
 	}
@@ -156,9 +167,13 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 	if issueTime == "" {
 		issueTime = nowDt.Format("15:04:05")
 	}
-	if len(issueTime) == 5 { issueTime += ":00" }
+	if len(issueTime) == 5 {
+		issueTime += ":00"
+	}
 	_, err = time.ParseInLocation("2006-01-02T15:04:05", issueDate+"T"+issueTime, riyadhLoc)
-	if err != nil { return nil, errors.New("تاريخ أو وقت الفاتورة غير صالح") }
+	if err != nil {
+		return nil, errors.New("تاريخ أو وقت الفاتورة غير صالح")
+	}
 	issueDatetime := fmt.Sprintf("%sT%sZ", issueDate, issueTime)
 
 	invoiceType := input.InvoiceType
@@ -174,11 +189,17 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 	}
 	paymentMethod := input.PaymentMethod
 	if paymentMethod == "" {
-		paymentMethod = "CASH"
+		paymentMethod = "CREDIT"
 	}
-	if invoiceType != "STANDARD" && invoiceType != "SIMPLIFIED" { return nil,errors.New("نوع الفاتورة غير صالح") }
-	if _, ok := invoicePaymentLabels[paymentMethod]; !ok { return nil,errors.New("طريقة السداد غير صالحة") }
-	if zatcaPhase != "PHASE1" && zatcaPhase != "PHASE2" { return nil,errors.New("مرحلة الفوترة غير صالحة") }
+	if invoiceType != "STANDARD" && invoiceType != "SIMPLIFIED" {
+		return nil, errors.New("نوع الفاتورة غير صالح")
+	}
+	if _, ok := invoicePaymentLabels[paymentMethod]; !ok {
+		return nil, errors.New("طريقة السداد غير صالحة")
+	}
+	if zatcaPhase != "PHASE1" && zatcaPhase != "PHASE2" {
+		return nil, errors.New("مرحلة الفوترة غير صالحة")
+	}
 
 	computedLines, subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor, err := computeInvoiceLines(input.Lines, input.PricesIncludeTax, issuer.DefaultTaxRate)
 	if err != nil {
@@ -207,7 +228,9 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 	invoiceNumber := input.InvoiceNumber
 	var sequenceNo int64
 	if invoiceNumber != "" {
-		if err := tx.QueryRow("SELECT COALESCE(MAX(sequence_no), 0) + 1 FROM invoices WHERE issuer_id = ?", issuer.ID).Scan(&sequenceNo); err != nil { return nil,err }
+		if err := tx.QueryRow("SELECT COALESCE(MAX(sequence_no), 0) + 1 FROM invoices WHERE issuer_id = ?", issuer.ID).Scan(&sequenceNo); err != nil {
+			return nil, err
+		}
 	} else {
 		num, seq, err := s.issuers.NextInvoiceNumber(tx, issuer.ID)
 		if err != nil {
@@ -458,7 +481,9 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 	// If paid immediately via CASH, CARD, or TRANSFER with AutoReceipt
 	if input.AutoReceipt && paymentMethod != "CREDIT" && grandTotalMinor > 0 {
 		voucherNumber, _, errV := s.issuers.NextVoucherNumber(tx, issuer.ID)
-		if errV != nil { return nil,errV }
+		if errV != nil {
+			return nil, errV
+		}
 		{
 			voucherID := crypto.UUID()
 			_, err = tx.Exec(`
@@ -468,18 +493,24 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 					status, created_by, created_at, updated_at
 				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
 			`, voucherID, voucherNumber, issuer.ID, client.ID, issueDate, grandTotalMinor, grandTotalMinor, paymentMethod, invoiceNumber, "سند قبض تلقائي مع الفاتورة", actor, nowIso, nowIso)
-			if err != nil { return nil,err }
+			if err != nil {
+				return nil, err
+			}
 
 			_, err = tx.Exec(`
 				INSERT INTO voucher_allocations (id, voucher_id, invoice_id, allocated_amount, created_at)
 				VALUES (?, ?, ?, ?, ?)
 			`, crypto.UUID(), voucherID, invoiceID, grandTotalMinor, nowIso)
-			if err != nil { return nil,err }
+			if err != nil {
+				return nil, err
+			}
 
 			_, err = tx.Exec(`
 				UPDATE invoices SET paid_amount = ?, remaining_amount = 0, status = 'PAID', updated_at = ? WHERE id = ?
 			`, grandTotalMinor, nowIso, invoiceID)
-			if err != nil { return nil,err }
+			if err != nil {
+				return nil, err
+			}
 
 			_, err = tx.Exec(`
 				INSERT INTO client_ledger (
@@ -487,21 +518,29 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 					transaction_date, debit, credit, description, created_at
 				) VALUES (?, ?, ?, 'RECEIPT', ?, ?, ?, 0, ?, ?, ?)
 			`, crypto.UUID(), client.ID, issuer.ID, voucherID, voucherNumber, issueDate, grandTotalMinor, fmt.Sprintf("سداد فاتورة رقم %s", invoiceNumber), nowIso)
-			if err != nil { return nil,err }
-			if err = db.AuditTx(tx,actor,"VOUCHER_CREATE","voucher",voucherID,issuer.ID,map[string]any{"invoice_id":invoiceID,"amount":models.ToMajor(grandTotalMinor)},ip); err != nil { return nil,err }
+			if err != nil {
+				return nil, err
+			}
+			if err = db.AuditTx(tx, actor, "VOUCHER_CREATE", "voucher", voucherID, issuer.ID, map[string]any{"invoice_id": invoiceID, "amount": models.ToMajor(grandTotalMinor)}, ip); err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	if err := db.AuditTx(tx,actor, "INVOICE_CREATE", "invoice", invoiceID, issuer.ID, map[string]any{
+	if err := db.AuditTx(tx, actor, "INVOICE_CREATE", "invoice", invoiceID, issuer.ID, map[string]any{
 		"invoice_number": invoiceNumber,
 		"grand_total":    models.FmtMoney(grandTotalMinor),
 		"client_name":    client.Name,
-	}, ip); err != nil { return nil,err }
-	if _, err := tx.Exec("INSERT INTO invoice_documents (invoice_id, xml, issuer_json, client_json) VALUES (?,?,?,?)",invoiceID,xml,mustJSON(issuer),mustJSON(client)); err != nil { return nil,err }
-	return &InvoiceView{Invoice:models.Invoice{ID:invoiceID,InvoiceNumber:invoiceNumber,GrandTotal:grandTotalMinor},GrandTotalMajor:models.ToMajor(grandTotalMinor)},nil
+	}, ip); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec("INSERT INTO invoice_documents (invoice_id, xml, issuer_json, client_json) VALUES (?,?,?,?)", invoiceID, xml, mustJSON(issuer), mustJSON(client)); err != nil {
+		return nil, err
+	}
+	return &InvoiceView{Invoice: models.Invoice{ID: invoiceID, InvoiceNumber: invoiceNumber, GrandTotal: grandTotalMinor}, GrandTotalMajor: models.ToMajor(grandTotalMinor)}, nil
 }
 
-func mustJSON(v any) string { b,_:=json.Marshal(v);return string(b) }
+func mustJSON(v any) string { b, _ := json.Marshal(v); return string(b) }
 
 func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 	var inv models.Invoice
@@ -627,10 +666,14 @@ func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 	}
 	view.Lines = view.Items
 
-	var issuerJSON,clientJSON string
-	if err := s.db.QueryRow("SELECT issuer_json,client_json FROM invoice_documents WHERE invoice_id=?",id).Scan(&issuerJSON,&clientJSON); err == nil {
-		if err := json.Unmarshal([]byte(issuerJSON),&view.IssuerSnapshot); err != nil { return nil,err }
-		if err := json.Unmarshal([]byte(clientJSON),&view.ClientSnapshot); err != nil { return nil,err }
+	var issuerJSON, clientJSON string
+	if err := s.db.QueryRow("SELECT issuer_json,client_json FROM invoice_documents WHERE invoice_id=?", id).Scan(&issuerJSON, &clientJSON); err == nil {
+		if err := json.Unmarshal([]byte(issuerJSON), &view.IssuerSnapshot); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(clientJSON), &view.ClientSnapshot); err != nil {
+			return nil, err
+		}
 	}
 	if view.IssuerSnapshot == nil || view.IssuerSnapshot.LogoData == nil || *view.IssuerSnapshot.LogoData == "" {
 		var lData sql.NullString
@@ -883,7 +926,9 @@ func (s *InvoiceService) CancelInvoice(id, actor, ip string) error {
 	if err != nil {
 		return err
 	}
-	if n,err := result.RowsAffected(); err != nil || n != 1 { return errors.New("الفاتورة ملغاة أو لها سدادات؛ ألغِ سندات القبض أولًا") }
+	if n, err := result.RowsAffected(); err != nil || n != 1 {
+		return errors.New("الفاتورة ملغاة أو لها سدادات؛ ألغِ سندات القبض أولًا")
+	}
 
 	// Reversing entry in ledger
 	_, err = tx.Exec(`
@@ -943,7 +988,11 @@ func (s *InvoiceService) DeleteInvoice(id, actor, ip string) error {
 
 func (s *InvoiceService) GetXml(id string) (string, error) {
 	var frozen string
-	if err := s.db.QueryRow("SELECT xml FROM invoice_documents WHERE invoice_id=?",id).Scan(&frozen); err == nil { return frozen,nil } else if !errors.Is(err,sql.ErrNoRows) { return "",err }
+	if err := s.db.QueryRow("SELECT xml FROM invoice_documents WHERE invoice_id=?", id).Scan(&frozen); err == nil {
+		return frozen, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
 	inv, err := s.GetInvoice(id)
 	if err != nil {
 		return "", err
@@ -1121,19 +1170,19 @@ func computeInvoiceLines(lines []CreateInvoiceLineInput, pricesIncludeTax bool, 
 
 		cl := computedInvoiceLine{
 			InvoiceItem: models.InvoiceItem{
-				ID:         crypto.UUID(),
-				ItemID:     itemID,
-				LineNo:     idx + 1,
-				ItemCode:   l.ItemCode,
-				ItemName:   l.ItemName,
-				Unit:       unit,
-				Quantity:   qty,
-				UnitPrice:  unitPriceMinor,
-				Discount:   discountMinor,
-				TaxRate:    taxRate,
-				Taxable:    taxable,
-				TaxAmount:  taxAmount,
-				TotalLine:  totalLine,
+				ID:        crypto.UUID(),
+				ItemID:    itemID,
+				LineNo:    idx + 1,
+				ItemCode:  l.ItemCode,
+				ItemName:  l.ItemName,
+				Unit:      unit,
+				Quantity:  qty,
+				UnitPrice: unitPriceMinor,
+				Discount:  discountMinor,
+				TaxRate:   taxRate,
+				Taxable:   taxable,
+				TaxAmount: taxAmount,
+				TotalLine: totalLine,
 			},
 			taxRateDisplay: fmt.Sprintf("%.2f", taxRate),
 		}
@@ -1149,8 +1198,8 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	if err != nil {
 		return nil, err
 	}
-	if inv.PaidAmount > 0 || inv.Status != "UNPAID" {
-		return nil, errors.New("لا يمكن تعديل فاتورة مسددة أو ملغاة")
+	if inv.Status == "CANCELLED" {
+		return nil, errors.New("لا يمكن تعديل فاتورة ملغاة")
 	}
 
 	tx, err := s.db.Begin()
@@ -1397,17 +1446,33 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	}
 	nowIso := db.NowIso()
 
-	updatePaidMinor := inv.PaidAmount
-	updateRemMinor := grandTotalMinor - inv.PaidAmount
-	if updateRemMinor < 0 {
-		updateRemMinor = 0
-	}
-	updateStatus := inv.Status
+	updatePaidMinor := int64(0)
+	updateRemMinor := grandTotalMinor
+	updateStatus := "UNPAID"
+
 	isCashUpdate := strings.Contains(paymentMethod, "نقد") || strings.EqualFold(paymentMethod, "CASH") || strings.Contains(strings.ToLower(paymentMethod), "cash")
 	if isCashUpdate {
 		updatePaidMinor = grandTotalMinor
 		updateRemMinor = 0
 		updateStatus = "PAID"
+	} else {
+		// إذا تم تغيير الفاتورة إلى آجل (CREDIT)، يتم التحقق من وجود أي سندات قبض مخصصة فعلياً
+		var allocatedVouchersSum int64
+		_ = tx.QueryRow(`SELECT COALESCE(SUM(allocated_amount), 0) FROM voucher_allocations WHERE invoice_id = ?`, id).Scan(&allocatedVouchersSum)
+		if allocatedVouchersSum > 0 {
+			updatePaidMinor = allocatedVouchersSum
+			updateRemMinor = grandTotalMinor - allocatedVouchersSum
+			if updateRemMinor <= 0 {
+				updateRemMinor = 0
+				updateStatus = "PAID"
+			} else {
+				updateStatus = "PARTIALLY_PAID"
+			}
+		} else {
+			updatePaidMinor = 0
+			updateRemMinor = grandTotalMinor
+			updateStatus = "UNPAID"
+		}
 	}
 
 	sellerAddressEn := issuer.AddressEn

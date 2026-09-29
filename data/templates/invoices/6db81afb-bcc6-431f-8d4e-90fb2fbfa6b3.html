@@ -1,53 +1,80 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
-<meta charset="utf-8"/>
-<title>قالب فواتير مخصص1</title>
-<style>
-  @page { size: A4 portrait; margin: 10mm; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'Cairo', Tahoma, Arial, sans-serif;
-    font-size: 12px;
-    color: #1e293b;
-    background-color: #ffffff;
-    padding: 12px;
-    direction: rtl;
-    position: relative;
-    min-height: 297mm;
-    
-  }
-  table { border-collapse: collapse; }
-  .sar-sym { display: inline-flex; align-items: center; vertical-align: middle; margin: 0 2px; }
-  .sar-sym svg { width: 0.88em; height: 0.88em; fill: currentColor; }
-  .canvas-watermark-layer {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(-35deg);
-    font-size: 72px;
-    font-weight: 900;
-    color: #0f172a;
-    opacity: 0.07;
-    pointer-events: none;
-    user-select: none;
-    white-space: nowrap;
-    z-index: 0;
-  }
-  .canvas-bg-image-layer {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-  }
-  @media print {
-    body {
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
+  <meta charset="utf-8" />
+  <title>قالب فواتير مخصص1</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 10mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
       padding: 0;
     }
-  }
-  
+
+    body {
+      font-family: 'Cairo', Tahoma, Arial, sans-serif;
+      font-size: 12px;
+      color: #1e293b;
+      background-color: #ffffff;
+      padding: 12px;
+      direction: rtl;
+      position: relative;
+      min-height: 297mm;
+
+    }
+
+    table {
+      border-collapse: collapse;
+    }
+
+    .sar-sym {
+      display: inline-flex;
+      align-items: center;
+      vertical-align: middle;
+      margin: 0 2px;
+    }
+
+    .sar-sym svg {
+      width: 0.88em;
+      height: 0.88em;
+      fill: currentColor;
+    }
+
+    .canvas-watermark-layer {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-35deg);
+      font-size: 72px;
+      font-weight: 900;
+      color: #0f172a;
+      opacity: 0.07;
+      pointer-events: none;
+      user-select: none;
+      white-space: nowrap;
+      z-index: 0;
+    }
+
+    .canvas-bg-image-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        padding: 0;
+      }
+    }
+
     :root {
       --primary: #163b4d;
       --primary-dark: #0c2632;
@@ -309,12 +336,10 @@
     .logo-flanks span {
       flex: 1;
       height: 1px;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(181, 139, 69, 0.85),
-        transparent
-      );
+      background: linear-gradient(90deg,
+          transparent,
+          rgba(181, 139, 69, 0.85),
+          transparent);
     }
 
     .logo-flanks i {
@@ -982,6 +1007,7 @@
     }
 
     @media print {
+
       html,
       body {
         width: 210mm;
@@ -1017,464 +1043,472 @@
         break-inside: avoid;
       }
     }
-  
-</style>
+  </style>
 </head>
+
 <body>
   <div tabindex="0">
-    
+
     <div class="block-content">
       <div class="invoice-container">
 
-    <svg class="decor-svg" viewBox="0 0 794 1123" preserveAspectRatio="none" aria-hidden="true">
-      <defs>
-        <linearGradient id="waveTopPrimary" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#163b4d" stop-opacity="0.22"></stop>
-          <stop offset="100%" stop-color="#163b4d" stop-opacity="0.04"></stop>
-        </linearGradient>
+        <svg class="decor-svg" viewBox="0 0 794 1123" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="waveTopPrimary" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#163b4d" stop-opacity="0.22"></stop>
+              <stop offset="100%" stop-color="#163b4d" stop-opacity="0.04"></stop>
+            </linearGradient>
 
-        <linearGradient id="waveTopGold" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#b58b45" stop-opacity="0.28"></stop>
-          <stop offset="100%" stop-color="#b58b45" stop-opacity="0.05"></stop>
-        </linearGradient>
+            <linearGradient id="waveTopGold" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#b58b45" stop-opacity="0.28"></stop>
+              <stop offset="100%" stop-color="#b58b45" stop-opacity="0.05"></stop>
+            </linearGradient>
 
-        <linearGradient id="waveBottomPrimary" x1="1" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#163b4d" stop-opacity="0.18"></stop>
-          <stop offset="100%" stop-color="#163b4d" stop-opacity="0.03"></stop>
-        </linearGradient>
-      </defs>
+            <linearGradient id="waveBottomPrimary" x1="1" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#163b4d" stop-opacity="0.18"></stop>
+              <stop offset="100%" stop-color="#163b4d" stop-opacity="0.03"></stop>
+            </linearGradient>
+          </defs>
 
-      <path d="M794 0H530C604 22 651 51 685 92C718 131 754 144 794 150Z" fill="url(#waveTopPrimary)"></path>
+          <path d="M794 0H530C604 22 651 51 685 92C718 131 754 144 794 150Z" fill="url(#waveTopPrimary)"></path>
 
-      <path d="M794 0H627C674 25 704 50 731 78C751 99 770 109 794 115Z" fill="url(#waveTopGold)"></path>
+          <path d="M794 0H627C674 25 704 50 731 78C751 99 770 109 794 115Z" fill="url(#waveTopGold)"></path>
 
-      <path d="M0 1123H288C220 1098 169 1070 128 1030C91 994 52 980 0 975Z" fill="url(#waveBottomPrimary)"></path>
+          <path d="M0 1123H288C220 1098 169 1070 128 1030C91 994 52 980 0 975Z" fill="url(#waveBottomPrimary)"></path>
 
-      <path d="M0 1123H160C119 1097 90 1076 65 1050C44 1029 22 1018 0 1013Z" fill="#b58b45" opacity="0.14"></path>
+          <path d="M0 1123H160C119 1097 90 1076 65 1050C44 1029 22 1018 0 1013Z" fill="#b58b45" opacity="0.14"></path>
 
-      <g opacity="0.12" fill="#b58b45">
-        <polygon points="727,202 794,168 794,181 736,212"></polygon>
-        <polygon points="744,222 794,197 794,208 753,231"></polygon>
-        <polygon points="0,889 54,860 64,869 0,904"></polygon>
-      </g>
-    </svg>
+          <g opacity="0.12" fill="#b58b45">
+            <polygon points="727,202 794,168 794,181 736,212"></polygon>
+            <polygon points="744,222 794,197 794,208 753,231"></polygon>
+            <polygon points="0,889 54,860 64,869 0,904"></polygon>
+          </g>
+        </svg>
 
-    <div class="watermark" aria-hidden="true">
-      <svg viewBox="0 0 300 300">
-        <g fill="none" stroke="#163b4d" stroke-width="3">
-          <circle cx="150" cy="150" r="112"></circle>
-          <circle cx="150" cy="150" r="86"></circle>
-          <rect x="89" y="89" width="122" height="122" rx="8" transform="rotate(45 150 150)"></rect>
-          <path d="M150 38L180 95L244 94L207 146L244 206L180 204L150 262L120 204L56 206L93 146L56 94L120 95Z"></path>
-          <circle cx="150" cy="150" r="29"></circle>
-        </g>
-      </svg>
-    </div>
-
-    <div class="invoice-frame"></div>
-
-    <div class="top-content-wrap">
-
-      <header class="header">
-
-        <section class="seller-block ar">
-          <div class="seller-name" spellcheck="false" style="outline: none;">{{seller_name}}</div>
-
-          <div class="seller-row" spellcheck="false" style="outline: none;">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M4 10.5L12 4l8 6.5V20H4V10.5Z" stroke-width="1.7"></path>
-              <path d="M9 20v-6h6v6" stroke-width="1.7"></path>
-            </svg>
-            <span spellcheck="false" style="outline: none;">{{seller_address}}</span>
-          </div>
-
-          <div class="seller-row" spellcheck="false" style="outline: none;">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M12 21s7-5.1 7-12a7 7 0 1 0-14 0c0 6.9 7 12 7 12Z" stroke-width="1.7"></path>
-              <circle cx="12" cy="9" r="2.5" stroke-width="1.7"></circle>
-            </svg>
-            <span spellcheck="false" style="outline: none;">{{seller_city}} - {{seller_country}}</span>
-          </div>
-
-          <div class="seller-row" spellcheck="false" style="outline: none;">
-            <svg viewBox="0 0 24 24" fill="none">
-              <rect x="4" y="5" width="16" height="14" rx="2" stroke-width="1.7"></rect>
-              <path d="M8 9h8M8 13h5" stroke-width="1.7"></path>
-            </svg>
-            <span spellcheck="false" style="outline: none;">الرقم الضريبي: <b class="latin-number" spellcheck="false" style="outline: none;">{{seller_tax}}</b></span>
-          </div>
-
-          <div class="seller-row" spellcheck="false" style="outline: none;">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M5 20V7h14v13M8 7V4h8v3M8 11h2M14 11h2M8 15h2M14 15h2" stroke-width="1.7"></path>
-            </svg>
-            <span spellcheck="false" style="outline: none;">السجل التجاري: <b class="latin-number" spellcheck="false" style="outline: none;">{{seller_cr}}</b></span>
-          </div>
-        </section>
-
-        <section class="header-center">
-          <div class="logo-shell" spellcheck="false" style="outline: none;">{{logo}}</div>
-
-          <div class="logo-flanks">
-            <span></span>
-            <i></i>
-            <span></span>
-          </div>
-
-          <div class="invoice-title">
-            <div class="invoice-title-ar" spellcheck="false" style="outline: none;">فاتورة ضريبية</div>
-            <div class="invoice-title-en" spellcheck="false" style="outline: none;">TAX INVOICE</div>
-          </div>
-
-          <div class="gold-caption" spellcheck="false" style="outline: none;">وثيقة مالية رسمية</div>
-        </section>
-
-        <section class="seller-block en">
-          <div class="seller-name-en" spellcheck="false" style="outline: none;">{{seller_name_en}}</div>
-
-          <div class="seller-row" spellcheck="false" style="outline: none;">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M4 10.5L12 4l8 6.5V20H4V10.5Z" stroke-width="1.7"></path>
-              <path d="M9 20v-6h6v6" stroke-width="1.7"></path>
-            </svg>
-            <span spellcheck="false" style="outline: none;">{{seller_address_en}}</span>
-          </div>
-
-          <div class="seller-row" spellcheck="false" style="outline: none;">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M12 21s7-5.1 7-12a7 7 0 1 0-14 0c0 6.9 7 12 7 12Z" stroke-width="1.7"></path>
-              <circle cx="12" cy="9" r="2.5" stroke-width="1.7"></circle>
-            </svg>
-            <span spellcheck="false" style="outline: none;">{{seller_city}} - {{seller_country}}</span>
-          </div>
-
-          <div class="seller-row" spellcheck="false" style="outline: none;">
-            <svg viewBox="0 0 24 24" fill="none">
-              <rect x="4" y="5" width="16" height="14" rx="2" stroke-width="1.7"></rect>
-              <path d="M8 9h8M8 13h5" stroke-width="1.7"></path>
-            </svg>
-            <span spellcheck="false" style="outline: none;">VAT: <b class="latin-number" spellcheck="false" style="outline: none;">{{seller_tax}}</b></span>
-          </div>
-
-          <div class="seller-row" spellcheck="false" style="outline: none;">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M5 20V7h14v13M8 7V4h8v3M8 11h2M14 11h2M8 15h2M14 15h2" stroke-width="1.7"></path>
-            </svg>
-            <span spellcheck="false" style="outline: none;">CR: <b class="latin-number" spellcheck="false" style="outline: none;">{{seller_cr}}</b></span>
-          </div>
-        </section>
-
-      </header>
-
-      <section class="invoice-metadata">
-
-        <div class="meta-box">
-
-          <div class="meta-title">
-            <div class="meta-title-icon" spellcheck="false" style="outline: none;">
-              <svg viewBox="0 0 24 24" fill="none">
-                <path d="M7 3h8l4 4v14H7V3Z" stroke-width="1.7"></path>
-                <path d="M15 3v5h5M10 12h6M10 16h6" stroke-width="1.7"></path>
-              </svg>
-              <span spellcheck="false" style="outline: none;">بيانات الفاتورة</span>
-            </div>
-            <span class="en-label" spellcheck="false" style="outline: none;">INVOICE DETAILS</span>
-          </div>
-
-          <div class="meta-grid">
-
-            <div class="meta-row" spellcheck="false" style="outline: none;">
-              <span class="meta-label" spellcheck="false" style="outline: none;">رقم الفاتورة</span>
-              <span class="meta-value latin-number" spellcheck="false" style="outline: none;">{{invoice_number}}</span>
-            </div>
-
-            <div class="meta-row" spellcheck="false" style="outline: none;">
-              <span class="meta-label" spellcheck="false" style="outline: none;">تاريخ الإصدار</span>
-              <span class="meta-value latin-number" spellcheck="false" style="outline: none;">{{issue_date}}</span>
-            </div>
-
-            <div class="meta-row" spellcheck="false" style="outline: none;">
-              <span class="meta-label" spellcheck="false" style="outline: none;">وقت الإصدار</span>
-              <span class="meta-value latin-number" spellcheck="false" style="outline: none;">{{issue_time}}</span>
-            </div>
-
-
-            <div class="meta-row" spellcheck="false" style="outline: none;">
-              <span class="meta-label" spellcheck="false" style="outline: none;">نوع الفاتورة</span>
-              <span class="meta-value" spellcheck="false" style="outline: none;">{{payment_method}}</span>
-            </div>
-
-            <div class="meta-row" spellcheck="false" style="outline: none;">
-              <span class="meta-label" spellcheck="false" style="outline: none;">إجمالي عدد القطع</span>
-              <span class="meta-value latin-number" spellcheck="false" style="outline: none;">{{total_qty}}</span>
-            </div>
-
-          </div>
+        <div class="watermark" aria-hidden="true">
+          <svg viewBox="0 0 300 300">
+            <g fill="none" stroke="#163b4d" stroke-width="3">
+              <circle cx="150" cy="150" r="112"></circle>
+              <circle cx="150" cy="150" r="86"></circle>
+              <rect x="89" y="89" width="122" height="122" rx="8" transform="rotate(45 150 150)"></rect>
+              <path d="M150 38L180 95L244 94L207 146L244 206L180 204L150 262L120 204L56 206L93 146L56 94L120 95Z">
+              </path>
+              <circle cx="150" cy="150" r="29"></circle>
+            </g>
+          </svg>
         </div>
 
-        <div class="meta-box">
+        <div class="invoice-frame"></div>
 
-          <div class="meta-title">
-            <div class="meta-title-icon" spellcheck="false" style="outline: none;">
-              <svg viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="8" r="4" stroke-width="1.7"></circle>
-                <path d="M4.5 21c.7-4.6 3.2-7 7.5-7s6.8 2.4 7.5 7" stroke-width="1.7"></path>
-              </svg>
-              <span spellcheck="false" style="outline: none;">بيانات العميل</span>
-            </div>
-            <span class="en-label" spellcheck="false" style="outline: none;">BUYER DETAILS</span>
-          </div>
+        <div class="top-content-wrap">
 
-          <div class="meta-grid">
+          <header class="header">
 
-            <div class="meta-row" spellcheck="false" style="outline: none;">
-              <span class="meta-label" spellcheck="false" style="outline: none;">اسم العميل</span>
-              <span class="meta-value" spellcheck="false" style="outline: none;">{{buyer_name}}</span>
-            </div>
+            <section class="seller-block ar">
+              <div class="seller-name" spellcheck="false" style="outline: none;">{{seller_name}}</div>
 
-
-            <div class="meta-row" spellcheck="false" style="outline: none;">
-              <span class="meta-label" spellcheck="false" style="outline: none;">الرقم الضريبي</span>
-              <span class="meta-value latin-number" spellcheck="false" style="outline: none;">{{buyer_tax}}</span>
-            </div>
-
-            <div class="meta-row" spellcheck="false" style="outline: none;">
-              <span class="meta-label" spellcheck="false" style="outline: none;">الهاتف</span>
-              <span class="meta-value latin-number" spellcheck="false" style="outline: none;">{{buyer_phone}}</span>
-            </div>
-
-            <div class="meta-row" style="grid-column: 1 / -1; outline: none;" spellcheck="false">
-              <span class="meta-label" spellcheck="false" style="outline: none;">العنوان</span>
-              <span class="meta-value" spellcheck="false" style="outline: none;">{{buyer_address}}</span>
-            </div>
-
-          </div>
-        </div>
-
-      </section>
-
-      <section class="items-table-container">
-        <table class="items-main-table">
-          <thead>
-            <tr>
-              <th style="width: 5%; outline: none;" spellcheck="false">#</th>
-              <th style="width: 12%; outline: none;" spellcheck="false">رقم الصنف<br><small>Item No</small></th>
-              <th style="width: 28%; outline: none;" spellcheck="false">اسم الصنف<br><small>Item Name</small></th>
-              <th style="width: 8%; outline: none;" spellcheck="false">الوحدة<br><small spellcheck="false" style="outline: none;">Unit</small></th>
-              <th style="width: 8%; outline: none;" spellcheck="false">الكمية<br><small spellcheck="false" style="outline: none;">Qty</small></th>
-              <th style="width: 11%; outline: none;" spellcheck="false">سعر الوحدة<br><small spellcheck="false" style="outline: none;">Price</small></th>
-              <th style="width: 12%; outline: none;" spellcheck="false">قبل الضريبة<br><small spellcheck="false" style="outline: none;">Taxable</small></th>
-              <th style="width: 8%; outline: none;" spellcheck="false">الخصم<br><small spellcheck="false" style="outline: none;">Discount</small></th>
-              <th style="width: 8%; outline: none;" spellcheck="false">الضريبة 15%<br><small spellcheck="false" style="outline: none;">VAT</small></th>
-              <th style="width: 14%; outline: none;" spellcheck="false">شامل الضريبة<br><small spellcheck="false" style="outline: none;">Total</small></th>
-            </tr>
-          </thead>
-          <tbody>
-            {{items_rows}}
-          </tbody>
-        </table>
-      </section>
-
-    </div>
-
-    <div class="bottom-content-wrap">
-
-      <section class="summary-section">
-
-        <div class="financial-summary">
-
-          <div class="section-heading" spellcheck="false" style="outline: none;">
-            <strong spellcheck="false" style="outline: none;">الملخص المالي</strong>
-            <span spellcheck="false" style="outline: none;">FINANCIAL SUMMARY</span>
-          </div>
-
-          <div class="summary-lines">
-
-            <div class="summary-line">
-              <div class="summary-label" spellcheck="false" style="outline: none;">
-                <span spellcheck="false" style="outline: none;">الإجمالي قبل الضريبة</span>
-                <small spellcheck="false" style="outline: none;">Subtotal before VAT</small>
+              <div class="seller-row" spellcheck="false" style="outline: none;">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M4 10.5L12 4l8 6.5V20H4V10.5Z" stroke-width="1.7"></path>
+                  <path d="M9 20v-6h6v6" stroke-width="1.7"></path>
+                </svg>
+                <span spellcheck="false" style="outline: none;">{{seller_address}}</span>
               </div>
 
-              <div class="summary-value" spellcheck="false" style="outline: none;">
-                <span class="currency-symbol" spellcheck="false" style="outline: none;">{{sar_symbol}}</span>
-                {{subtotal}}
-              </div>
-            </div>
-
-            <div class="summary-line">
-              <div class="summary-label" spellcheck="false" style="outline: none;">
-                <span spellcheck="false" style="outline: none;">إجمالي الخصم</span>
-                <small spellcheck="false" style="outline: none;">Total Discount</small>
+              <div class="seller-row" spellcheck="false" style="outline: none;">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M12 21s7-5.1 7-12a7 7 0 1 0-14 0c0 6.9 7 12 7 12Z" stroke-width="1.7"></path>
+                  <circle cx="12" cy="9" r="2.5" stroke-width="1.7"></circle>
+                </svg>
+                <span spellcheck="false" style="outline: none;">{{seller_city}} - {{seller_country}}</span>
               </div>
 
-              <div class="summary-value" spellcheck="false" style="outline: none;">
-                <span class="currency-symbol" spellcheck="false" style="outline: none;">{{sar_symbol}}</span>
-                {{discount}}
-              </div>
-            </div>
-
-            <div class="summary-line">
-              <div class="summary-label" spellcheck="false" style="outline: none;">
-                <span spellcheck="false" style="outline: none;">ضريبة القيمة المضافة 15%</span>
-                <small spellcheck="false" style="outline: none;">VAT 15%</small>
+              <div class="seller-row" spellcheck="false" style="outline: none;">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="5" width="16" height="14" rx="2" stroke-width="1.7"></rect>
+                  <path d="M8 9h8M8 13h5" stroke-width="1.7"></path>
+                </svg>
+                <span spellcheck="false" style="outline: none;">الرقم الضريبي: <b class="latin-number"
+                    spellcheck="false" style="outline: none;">{{seller_tax}}</b></span>
               </div>
 
-              <div class="summary-value" spellcheck="false" style="outline: none;">
-                <span class="currency-symbol" spellcheck="false" style="outline: none;">{{sar_symbol}}</span>
-                {{tax_amount}}
+              <div class="seller-row" spellcheck="false" style="outline: none;">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M5 20V7h14v13M8 7V4h8v3M8 11h2M14 11h2M8 15h2M14 15h2" stroke-width="1.7"></path>
+                </svg>
+                <span spellcheck="false" style="outline: none;">السجل التجاري: <b class="latin-number"
+                    spellcheck="false" style="outline: none;">{{seller_cr}}</b></span>
               </div>
-            </div>
+            </section>
 
-            <div class="summary-line">
-              <div class="summary-label" spellcheck="false" style="outline: none;">
-                <span spellcheck="false" style="outline: none;">المبلغ المدفوع</span>
-                <small spellcheck="false" style="outline: none;">Paid Amount</small>
-              </div>
+            <section class="header-center">
+              <div class="logo-shell" spellcheck="false" style="outline: none;">{{logo}}</div>
 
-              <div class="summary-value" spellcheck="false" style="outline: none;">
-                <span class="currency-symbol" spellcheck="false" style="outline: none;">{{sar_symbol}}</span>
-                {{paid_amount}}
-              </div>
-            </div>
-
-            <div class="summary-line">
-              <div class="summary-label" spellcheck="false" style="outline: none;">
-                <span spellcheck="false" style="outline: none;">المبلغ المتبقي</span>
-                <small spellcheck="false" style="outline: none;">Remaining Amount</small>
+              <div class="logo-flanks">
+                <span></span>
+                <i></i>
+                <span></span>
               </div>
 
-              <div class="summary-value" spellcheck="false" style="outline: none;">
-                <span class="currency-symbol" spellcheck="false" style="outline: none;">{{sar_symbol}}</span>
-                {{remaining_amount}}
-              </div>
-            </div>
-
-            <div class="summary-line grand-total">
-              <div class="summary-label" spellcheck="false" style="outline: none;">
-                <span spellcheck="false" style="outline: none;">الإجمالي النهائي شامل الضريبة</span>
-                <small spellcheck="false" style="outline: none;">Grand Total Including VAT</small>
+              <div class="invoice-title">
+                <div class="invoice-title-ar" spellcheck="false" style="outline: none;">فاتورة ضريبية</div>
+                <div class="invoice-title-en" spellcheck="false" style="outline: none;">TAX INVOICE</div>
               </div>
 
-              <div class="summary-value" spellcheck="false" style="outline: none;">
-                <span class="currency-symbol" spellcheck="false" style="outline: none;">{{sar_symbol}}</span>
-                {{grand_total}}
-              </div>
-            </div>
+              <div class="gold-caption" spellcheck="false" style="outline: none;">وثيقة مالية رسمية</div>
+            </section>
 
-          </div>
+            <section class="seller-block en">
+              <div class="seller-name-en" spellcheck="false" style="outline: none;">{{seller_name_en}}</div>
 
-          <div class="amount-words" spellcheck="false" style="outline: none;">
-            <strong spellcheck="false" style="outline: none;">المبلغ كتابة:</strong>
-            {{amount_in_words}}
-          </div>
-
-        </div>
-
-        <div class="verification-panel">
-
-          <div class="section-heading" spellcheck="false" style="outline: none;">
-            <strong spellcheck="false" style="outline: none;">التحقق والملاحظات</strong>
-            <span spellcheck="false" style="outline: none;">VERIFICATION &amp; NOTES</span>
-          </div>
-
-          <div class="verification-body">
-
-            <div class="qr-column">
-
-              <div class="qr-frame">
-                <div class="qr-box" spellcheck="false" style="outline: none;">{{qr_code}}</div>
+              <div class="seller-row" spellcheck="false" style="outline: none;">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M4 10.5L12 4l8 6.5V20H4V10.5Z" stroke-width="1.7"></path>
+                  <path d="M9 20v-6h6v6" stroke-width="1.7"></path>
+                </svg>
+                <span spellcheck="false" style="outline: none;">{{seller_address_en}}</span>
               </div>
 
-            </div>
-
-            <div class="notes-column">
-
-              <div class="notes-title" spellcheck="false" style="outline: none;">
-                <span spellcheck="false" style="outline: none;">ملاحظات</span>
-                <small spellcheck="false" style="outline: none;">NOTES</small>
+              <div class="seller-row" spellcheck="false" style="outline: none;">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M12 21s7-5.1 7-12a7 7 0 1 0-14 0c0 6.9 7 12 7 12Z" stroke-width="1.7"></path>
+                  <circle cx="12" cy="9" r="2.5" stroke-width="1.7"></circle>
+                </svg>
+                <span spellcheck="false" style="outline: none;">{{seller_city}} - {{seller_country}}</span>
               </div>
 
-              <div class="notes-content" spellcheck="false" style="outline: none;">
-                {{notes}}
+              <div class="seller-row" spellcheck="false" style="outline: none;">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="5" width="16" height="14" rx="2" stroke-width="1.7"></rect>
+                  <path d="M8 9h8M8 13h5" stroke-width="1.7"></path>
+                </svg>
+                <span spellcheck="false" style="outline: none;">VAT: <b class="latin-number" spellcheck="false"
+                    style="outline: none;">{{seller_tax}}</b></span>
               </div>
 
-              <div class="payment-mini">
+              <div class="seller-row" spellcheck="false" style="outline: none;">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M5 20V7h14v13M8 7V4h8v3M8 11h2M14 11h2M8 15h2M14 15h2" stroke-width="1.7"></path>
+                </svg>
+                <span spellcheck="false" style="outline: none;">CR: <b class="latin-number" spellcheck="false"
+                    style="outline: none;">{{seller_cr}}</b></span>
+              </div>
+            </section>
 
-                <div class="mini-pill" spellcheck="false" style="outline: none;">
-                  <span spellcheck="false" style="outline: none;">نوع الفاتورة</span>
-                  <strong spellcheck="false" style="outline: none;">{{payment_method}}</strong>
+          </header>
+
+          <section class="invoice-metadata">
+
+            <div class="meta-box">
+
+              <div class="meta-title">
+                <div class="meta-title-icon" spellcheck="false" style="outline: none;">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path d="M7 3h8l4 4v14H7V3Z" stroke-width="1.7"></path>
+                    <path d="M15 3v5h5M10 12h6M10 16h6" stroke-width="1.7"></path>
+                  </svg>
+                  <span spellcheck="false" style="outline: none;">بيانات الفاتورة</span>
+                </div>
+                <span class="en-label" spellcheck="false" style="outline: none;">INVOICE DETAILS</span>
+              </div>
+
+              <div class="meta-grid">
+
+                <div class="meta-row" spellcheck="false" style="outline: none;">
+                  <span class="meta-label" spellcheck="false" style="outline: none;">رقم الفاتورة</span>
+                  <span class="meta-value latin-number" spellcheck="false"
+                    style="outline: none;">{{invoice_number}}</span>
+                </div>
+
+                <div class="meta-row" spellcheck="false" style="outline: none;">
+                  <span class="meta-label" spellcheck="false" style="outline: none;">تاريخ الإصدار</span>
+                  <span class="meta-value latin-number" spellcheck="false" style="outline: none;">{{issue_date}}</span>
+                </div>
+
+                <div class="meta-row" spellcheck="false" style="outline: none;">
+                  <span class="meta-label" spellcheck="false" style="outline: none;">وقت الإصدار</span>
+                  <span class="meta-value latin-number" spellcheck="false" style="outline: none;">{{issue_time}}</span>
                 </div>
 
 
+                <div class="meta-row" spellcheck="false" style="outline: none;">
+                  <span class="meta-label" spellcheck="false" style="outline: none;">نوع الفاتورة</span>
+                  <span class="meta-value" spellcheck="false" style="outline: none;">{{payment_method}}</span>
+                </div>
+
+                <div class="meta-row" spellcheck="false" style="outline: none;">
+                  <span class="meta-label" spellcheck="false" style="outline: none;">إجمالي عدد القطع</span>
+                  <span class="meta-value latin-number" spellcheck="false" style="outline: none;">{{total_qty}}</span>
+                </div>
+
+              </div>
+            </div>
+
+            <div class="meta-box">
+
+              <div class="meta-title">
+                <div class="meta-title-icon" spellcheck="false" style="outline: none;">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="8" r="4" stroke-width="1.7"></circle>
+                    <path d="M4.5 21c.7-4.6 3.2-7 7.5-7s6.8 2.4 7.5 7" stroke-width="1.7"></path>
+                  </svg>
+                  <span spellcheck="false" style="outline: none;">بيانات العميل</span>
+                </div>
+                <span class="en-label" spellcheck="false" style="outline: none;">BUYER DETAILS</span>
+              </div>
+
+              <div class="meta-grid">
+
+                <div class="meta-row" spellcheck="false" style="outline: none;">
+                  <span class="meta-label" spellcheck="false" style="outline: none;">اسم العميل</span>
+                  <span class="meta-value" spellcheck="false" style="outline: none;">{{buyer_name}}</span>
+                </div>
+
+
+                <div class="meta-row" spellcheck="false" style="outline: none;">
+                  <span class="meta-label" spellcheck="false" style="outline: none;">الرقم الضريبي</span>
+                  <span class="meta-value latin-number" spellcheck="false" style="outline: none;">{{buyer_tax}}</span>
+                </div>
+
+                <div class="meta-row" spellcheck="false" style="outline: none;">
+                  <span class="meta-label" spellcheck="false" style="outline: none;">الهاتف</span>
+                  <span class="meta-value latin-number" spellcheck="false" style="outline: none;">{{buyer_phone}}</span>
+                </div>
+
+                <div class="meta-row" style="grid-column: 1 / -1; outline: none;" spellcheck="false">
+                  <span class="meta-label" spellcheck="false" style="outline: none;">العنوان</span>
+                  <span class="meta-value" spellcheck="false" style="outline: none;">{{buyer_address}}</span>
+                </div>
+
+              </div>
+            </div>
+
+          </section>
+
+          <section class="items-table-container">
+            <table class="items-main-table">
+              <thead>
+          <tr>
+            <th style="width: 13%; outline: none;" spellcheck="false">رقم الصنف<br><small>Item No</small></th>
+            <th style="width: 29%; outline: none;" spellcheck="false">اسم الصنف<br><small>Item Name</small></th>
+            <th style="width: 8%; outline: none;" spellcheck="false">الوحدة<br><small spellcheck="false" style="outline: none;">Unit</small></th>
+            <th style="width: 8%; outline: none;" spellcheck="false">الكمية<br><small spellcheck="false" style="outline: none;">Qty</small></th>
+            <th style="width: 10%; outline: none;" spellcheck="false">السعر<br><small spellcheck="false" style="outline: none;">Price</small></th>
+            <th style="width: 10%; outline: none;" spellcheck="false">قبل الضريبة<br><small spellcheck="false" style="outline: none;">Taxable</small></th>
+            <th style="width: 10%; outline: none;" spellcheck="false">مبلغ الضريبة<br><small spellcheck="false" style="outline: none;">VAT</small></th>
+            <th style="width: 12%; outline: none;" spellcheck="false">شامل الضريبة<br><small spellcheck="false" style="outline: none;">Total</small></th>
+          </tr>
+        </thead>
+              <tbody>
+                {{items_rows}}
+              </tbody>
+            </table>
+          </section>
+
+        </div>
+
+        <div class="bottom-content-wrap">
+
+          <section class="summary-section">
+
+            <div class="financial-summary">
+
+              <div class="section-heading" spellcheck="false" style="outline: none;">
+                <strong spellcheck="false" style="outline: none;">الملخص المالي</strong>
+                <span spellcheck="false" style="outline: none;">FINANCIAL SUMMARY</span>
+              </div>
+
+              <div class="summary-lines">
+
+                <div class="summary-line">
+                  <div class="summary-label" spellcheck="false" style="outline: none;">
+                    <span spellcheck="false" style="outline: none;">الإجمالي قبل الضريبة</span>
+                    <small spellcheck="false" style="outline: none;">Subtotal before VAT</small>
+                  </div>
+
+                  <div class="summary-value" spellcheck="false" style="outline: none;">
+                    <span class="currency-symbol" spellcheck="false" style="outline: none;">{{sar_symbol}}</span>
+                    {{subtotal}}
+                  </div>
+                </div>
+
+                <div class="summary-line">
+                  <div class="summary-label" spellcheck="false" style="outline: none;">
+                    <span spellcheck="false" style="outline: none;">إجمالي الخصم</span>
+                    <small spellcheck="false" style="outline: none;">Total Discount</small>
+                  </div>
+
+                  <div class="summary-value" spellcheck="false" style="outline: none;">
+                    <span class="currency-symbol" spellcheck="false" style="outline: none;">{{sar_symbol}}</span>
+                    {{discount}}
+                  </div>
+                </div>
+
+                <div class="summary-line">
+                  <div class="summary-label" spellcheck="false" style="outline: none;">
+                    <span spellcheck="false" style="outline: none;">ضريبة القيمة المضافة 15%</span>
+                    <small spellcheck="false" style="outline: none;">VAT 15%</small>
+                  </div>
+
+                  <div class="summary-value" spellcheck="false" style="outline: none;">
+                    <span class="currency-symbol" spellcheck="false" style="outline: none;">{{sar_symbol}}</span>
+                    {{tax_amount}}
+                  </div>
+                </div>
+
+                <div class="summary-line">
+                  <div class="summary-label" spellcheck="false" style="outline: none;">
+                    <span spellcheck="false" style="outline: none;">المبلغ المدفوع</span>
+                    <small spellcheck="false" style="outline: none;">Paid Amount</small>
+                  </div>
+
+                  <div class="summary-value" spellcheck="false" style="outline: none;">
+                    <span class="currency-symbol" spellcheck="false" style="outline: none;">{{sar_symbol}}</span>
+                    {{paid_amount}}
+                  </div>
+                </div>
+
+                <div class="summary-line">
+                  <div class="summary-label" spellcheck="false" style="outline: none;">
+                    <span spellcheck="false" style="outline: none;">المبلغ المتبقي</span>
+                    <small spellcheck="false" style="outline: none;">Remaining Amount</small>
+                  </div>
+
+                  <div class="summary-value" spellcheck="false" style="outline: none;">
+                    <span class="currency-symbol" spellcheck="false" style="outline: none;">{{sar_symbol}}</span>
+                    {{remaining_amount}}
+                  </div>
+                </div>
+
+                <div class="summary-line grand-total">
+                  <div class="summary-label" spellcheck="false" style="outline: none;">
+                    <span spellcheck="false" style="outline: none;">الإجمالي النهائي شامل الضريبة</span>
+                    <small spellcheck="false" style="outline: none;">Grand Total Including VAT</small>
+                  </div>
+
+                  <div class="summary-value" spellcheck="false" style="outline: none;">
+                    <span class="currency-symbol" spellcheck="false" style="outline: none;">{{sar_symbol}}</span>
+                    {{grand_total}}
+                  </div>
+                </div>
+
+              </div>
+
+              <div class="amount-words" spellcheck="false" style="outline: none;">
+                <strong spellcheck="false" style="outline: none;">المبلغ كتابة:</strong>
+                {{amount_in_words}}
               </div>
 
             </div>
 
-          </div>
+            <div class="verification-panel">
+
+              <div class="section-heading" spellcheck="false" style="outline: none;">
+                <strong spellcheck="false" style="outline: none;">التحقق والملاحظات</strong>
+                <span spellcheck="false" style="outline: none;">VERIFICATION &amp; NOTES</span>
+              </div>
+
+              <div class="verification-body">
+
+                <div class="qr-column">
+
+                  <div class="qr-frame">
+                    <div class="qr-box" spellcheck="false" style="outline: none;">{{qr_code}}</div>
+                  </div>
+
+                </div>
+
+                <div class="notes-column">
+
+                  <div class="notes-title" spellcheck="false" style="outline: none;">
+                    <span spellcheck="false" style="outline: none;">ملاحظات</span>
+                    <small spellcheck="false" style="outline: none;">NOTES</small>
+                  </div>
+
+                  <div class="notes-content" spellcheck="false" style="outline: none;">
+                    {{notes}}
+                  </div>
+
+                  <div class="payment-mini">
+
+                    <div class="mini-pill" spellcheck="false" style="outline: none;">
+                      <span spellcheck="false" style="outline: none;">نوع الفاتورة</span>
+                      <strong spellcheck="false" style="outline: none;">{{payment_method}}</strong>
+                    </div>
+
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </section>
+
+          <footer class="footer-zone">
+
+            <div class="footer-contact">
+
+              <div class="footer-contact-item" spellcheck="false" style="outline: none;">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M5 4h4l2 5-2.5 1.7a14 14 0 0 0 4.8 4.8L15 13l5 2v4c0 .6-.4 1-1 1C10.7 20 4 13.3 4 5c0-.6.4-1 1-1Z"
+                    stroke-width="1.7"></path>
+                </svg>
+                <span class="latin-number" spellcheck="false" style="outline: none;">{{seller_phone}}</span>
+              </div>
+
+              <div class="footer-contact-item" spellcheck="false" style="outline: none;">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="3" y="5" width="18" height="14" rx="2" stroke-width="1.7"></rect>
+                  <path d="m4 7 8 6 8-6" stroke-width="1.7"></path>
+                </svg>
+                <span class="latin-number" spellcheck="false" style="outline: none;">{{seller_email}}</span>
+              </div>
+
+              <div class="footer-contact-item" spellcheck="false" style="outline: none;">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M12 21s7-5.1 7-12a7 7 0 1 0-14 0c0 6.9 7 12 7 12Z" stroke-width="1.7"></path>
+                  <circle cx="12" cy="9" r="2.5" stroke-width="1.7"></circle>
+                </svg>
+                <span spellcheck="false" style="outline: none;">{{seller_address}} - {{seller_city}} -
+                  {{seller_country}}</span>
+              </div>
+
+              <div class="footer-contact-item" spellcheck="false" style="outline: none;">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="5" width="16" height="14" rx="2" stroke-width="1.7"></rect>
+                  <path d="M8 9h8M8 13h5" stroke-width="1.7"></path>
+                </svg>
+                <span spellcheck="false" style="outline: none;">
+                  الرقم الضريبي:
+                  <b class="latin-number" spellcheck="false" style="outline: none;">{{seller_tax}}</b>
+                </span>
+              </div>
+
+            </div>
+
+            <div class="footer-strip">
+
+              <div class="right-text" spellcheck="false" style="outline: none;">
+                هذه الفاتورة صادرة إلكترونياً وتعتبر وثيقة رسمية معتمدة وفق متطلبات الفوترة الضريبية.
+              </div>
+
+              <div class="left-text" spellcheck="false" style="outline: none;">
+                TAX INVOICE • {{invoice_number}}
+              </div>
+
+            </div>
+
+          </footer>
 
         </div>
 
-      </section>
-
-      <footer class="footer-zone">
-
-        <div class="footer-contact">
-
-          <div class="footer-contact-item" spellcheck="false" style="outline: none;">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M5 4h4l2 5-2.5 1.7a14 14 0 0 0 4.8 4.8L15 13l5 2v4c0 .6-.4 1-1 1C10.7 20 4 13.3 4 5c0-.6.4-1 1-1Z" stroke-width="1.7"></path>
-            </svg>
-            <span class="latin-number" spellcheck="false" style="outline: none;">{{seller_phone}}</span>
-          </div>
-
-          <div class="footer-contact-item" spellcheck="false" style="outline: none;">
-            <svg viewBox="0 0 24 24" fill="none">
-              <rect x="3" y="5" width="18" height="14" rx="2" stroke-width="1.7"></rect>
-              <path d="m4 7 8 6 8-6" stroke-width="1.7"></path>
-            </svg>
-            <span class="latin-number" spellcheck="false" style="outline: none;">{{seller_email}}</span>
-          </div>
-
-          <div class="footer-contact-item" spellcheck="false" style="outline: none;">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M12 21s7-5.1 7-12a7 7 0 1 0-14 0c0 6.9 7 12 7 12Z" stroke-width="1.7"></path>
-              <circle cx="12" cy="9" r="2.5" stroke-width="1.7"></circle>
-            </svg>
-            <span spellcheck="false" style="outline: none;">{{seller_address}} - {{seller_city}} - {{seller_country}}</span>
-          </div>
-
-          <div class="footer-contact-item" spellcheck="false" style="outline: none;">
-            <svg viewBox="0 0 24 24" fill="none">
-              <rect x="4" y="5" width="16" height="14" rx="2" stroke-width="1.7"></rect>
-              <path d="M8 9h8M8 13h5" stroke-width="1.7"></path>
-            </svg>
-            <span spellcheck="false" style="outline: none;">
-              الرقم الضريبي:
-              <b class="latin-number" spellcheck="false" style="outline: none;">{{seller_tax}}</b>
-            </span>
-          </div>
-
-        </div>
-
-        <div class="footer-strip">
-
-          <div class="right-text" spellcheck="false" style="outline: none;">
-            هذه الفاتورة صادرة إلكترونياً وتعتبر وثيقة رسمية معتمدة وفق متطلبات الفوترة الضريبية.
-          </div>
-
-          <div class="left-text" spellcheck="false" style="outline: none;">
-            TAX INVOICE • {{invoice_number}}
-          </div>
-
-        </div>
-
-      </footer>
-
-    </div>
-
-  </div>
+      </div>
     </div>
   </div>
 </body>
+
 </html>

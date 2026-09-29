@@ -550,11 +550,53 @@ export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
 }
 
 
+export function translateCityArToEn(cityAr) {
+  const c = String(cityAr || '').trim();
+  const map = {
+    'جدة': 'Jeddah',
+    'جده': 'Jeddah',
+    'الرياض': 'Riyadh',
+    'مكة': 'Makkah',
+    'مكة المكرمة': 'Makkah',
+    'مكه': 'Makkah',
+    'المدينة': 'Madinah',
+    'المدينة المنورة': 'Madinah',
+    'الدمام': 'Dammam',
+    'الخبر': 'Khobar',
+    'الظهران': 'Dhahran',
+    'الجبيل': 'Jubail',
+    'الأحساء': 'Al-Ahsa',
+    'الاحساء': 'Al-Ahsa',
+    'الهفوف': 'Al-Ahsa',
+    'الطائف': 'Taif',
+    'تبوك': 'Tabuk',
+    'بريدة': 'Buraidah',
+    'عنيزة': 'Unaizah',
+    'حائل': 'Hail',
+    'أبها': 'Abha',
+    'خميس مشيط': 'Khamis Mushait',
+    'جازان': 'Jazan',
+    'جيزان': 'Jazan',
+    'نجران': 'Najran',
+    'ينبع': 'Yanbu',
+    'القطيف': 'Qatif',
+  };
+  if (map[c]) return map[c];
+  if (c.includes('جدة') || c.includes('جده')) return 'Jeddah';
+  if (c.includes('الرياض')) return 'Riyadh';
+  if (c.includes('مكة') || c.includes('مكه')) return 'Makkah';
+  if (c.includes('الدمام')) return 'Dammam';
+  return c;
+}
+
 function detectColumnTypeJS(th) {
   const clean = (th || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
 
   if (clean.includes('شامل') || clean.includes('مع الضريبة') || clean.includes('صافي') || clean.includes('with vat') || clean.includes('total with') || clean.includes('gross') || clean.includes('total line')) {
     return 'total';
+  }
+  if (clean.includes('مبلغ الضريبة') || clean.includes('مبلغ ضريبة') || clean.includes('قيمة الضريبة') || clean.includes('vat amount') || clean.includes('tax amount')) {
+    return 'tax_amount';
   }
   if (clean.includes('كود') || clean.includes('رمز') || clean.includes('item code') || clean.includes('item_code') || clean.includes('code') || clean.includes('sku') || clean.includes('barcode') || clean.includes('رقم الصنف') || clean.includes('رقم البند') || clean.includes('item no') || clean.includes('item_no') || clean.includes('part no')) {
     return 'code';
@@ -941,6 +983,18 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
     }
     if (k === 'seller_address' || k === 'issuer_address' || k === 'company_address') return addr;
     if (k === 'seller_address_en') return addrEn;
+    if (k === 'seller_city_en' || k === 'issuer_city_en') {
+      return issuer.city_en || translateCityArToEn(issuer.city || '') || '';
+    }
+    if (k === 'seller_city' || k === 'issuer_city' || k === 'city') {
+      return issuer.city || '';
+    }
+    if (k === 'seller_country_en' || k === 'country_en') {
+      return 'SA';
+    }
+    if (k === 'seller_country' || k === 'country') {
+      return issuer.country || 'المملكة العربية السعودية';
+    }
     if (k === 'seller_phone' || k === 'company_phone' || k === 'phone') return issuer.phone || issuer.mobile || '';
     if (k === 'seller_email' || k === 'company_email' || k === 'email') return issuer.email || '';
     if (k === 'seller_iban' || k === 'iban' || k === 'bank_account') return issuer.iban || '';

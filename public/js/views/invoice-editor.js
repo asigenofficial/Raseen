@@ -124,7 +124,7 @@ export async function render(view, ctx) {
     issue_date: today(),
     issue_time: nowTime(),
     invoice_type: 'STANDARD',
-    payment_method: 'CASH',
+    payment_method: 'CREDIT',
     invoice_number: '',
     notes: '',
     auto_receipt: false,

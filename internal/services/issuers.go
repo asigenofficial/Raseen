@@ -65,10 +65,10 @@ func (s *IssuerService) ListIssuers(activeOnly bool) ([]models.Issuer, error) {
 }
 
 func (s *IssuerService) GetIssuer(id string) (*models.Issuer, error) {
-	return getIssuer(s.db,id)
+	return getIssuer(s.db, id)
 }
 
-func getIssuer(q interface { QueryRow(string, ...any) *sql.Row }, id string) (*models.Issuer, error) {
+func getIssuer(q interface{ QueryRow(string, ...any) *sql.Row }, id string) (*models.Issuer, error) {
 	var iss models.Issuer
 	var logo sql.NullString
 
@@ -642,4 +642,3 @@ func (s *IssuerService) BatchImportIssuers(issuers []ImportIssuerInput) (*Import
 	}
 	return res, nil
 }
-

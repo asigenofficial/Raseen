@@ -126,8 +126,19 @@ dl.card-body{margin:0}
     </section>
     <section class="items-table-container" aria-label="أصناف الفاتورة">
       <table class="items-main-table">
-        <colgroup><col style="width:4%"><col style="width:9%"><col style="width:23%"><col style="width:7%"><col style="width:7%"><col style="width:11%"><col style="width:12%"><col style="width:12%"><col style="width:15%"></colgroup>
-        <thead><tr><th scope="col">م</th><th scope="col">رقم الصنف</th><th scope="col">اسم الصنف</th><th scope="col">الوحدة</th><th scope="col">سعر الوحدة</th><th scope="col">الكمية</th><th scope="col">قبل الضريبة</th><th scope="col">مبلغ الضريبة</th><th scope="col">شامل الضريبة</th></tr></thead>
+        <colgroup><col style="width:12%"><col style="width:28%"><col style="width:8%"><col style="width:8%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:12%"></colgroup>
+        <thead>
+          <tr>
+            <th scope="col" style="width: 12%;">رقم الصنف</th>
+            <th scope="col" style="width: 28%;">اسم الصنف</th>
+            <th scope="col" style="width: 8%;">الوحدة</th>
+            <th scope="col" style="width: 8%;">الكمية</th>
+            <th scope="col" style="width: 11%;">السعر</th>
+            <th scope="col" style="width: 11%;">قبل الضريبة</th>
+            <th scope="col" style="width: 10%;">مبلغ الضريبة</th>
+            <th scope="col" style="width: 12%;">شامل الضريبة</th>
+          </tr>
+        </thead>
         <tbody>
           {{items_rows}}
         </tbody>
