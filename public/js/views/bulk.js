@@ -175,7 +175,8 @@ export async function render(view) {
     issue_vouchers: state.issue_vouchers,
     seed: state.seed === '' ? 0 : toNum(state.seed, 0),
     notes: state.notes,
-  });
+  };
+};
 
   const recalcPreviewSummary = () => {
     if (!state.preview || !state.preview.invoices) return;
