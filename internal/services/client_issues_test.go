@@ -456,3 +456,131 @@ func TestTaxableVsTaxAmountColumns(t *testing.T) {
 
 	t.Logf("Taxable amount vs tax amount columns verified successfully for client invoice data!")
 }
+
+// Test 6: Bulk Invoices Non-Sequential Numbering with Realistic Gaps
+func TestBulkNonSequentialInvoiceNumbers(t *testing.T) {
+	database, invSvc, _ := setupTestServices(t)
+	defer database.Close()
+	issuerID, clientID := createTestIssuerAndClient(t, database)
+
+	issSvc := NewIssuerService(database)
+	cliSvc := NewClientService(database)
+	itmSvc := NewItemService(database)
+	vchSvc := NewVoucherService(database, issSvc)
+	bulkSvc := NewBulkService(database, invSvc, vchSvc, issSvc, cliSvc, itmSvc)
+
+	// 1. Generate preview with StartInvoiceNumber = INV-0500 and count = 8
+	req := PreviewRequest{
+		IssuerID:           issuerID,
+		ClientID:           clientID,
+		Count:              8,
+		StartInvoiceNumber: "INV-0500",
+		DateFrom:           "2026-09-01",
+		DateTo:             "2026-09-30",
+		InvoiceType:        "STANDARD",
+		PaymentMethods:     []string{"CREDIT"},
+		CustomItems: []CustomItemInput{
+			{
+				NameAr:    "صنف تجريبي للدفعة",
+				ItemCode:  "BLK-01",
+				Unit:      "حبة",
+				SalePrice: 150.0,
+				TaxRate:   15.0,
+			},
+		},
+	}
+
+	preview, err := bulkSvc.GeneratePreview(req)
+	if err != nil {
+		t.Fatalf("GeneratePreview failed: %v", err)
+	}
+
+	invs, ok := preview["invoices"].([]map[string]any)
+	if !ok || len(invs) != 8 {
+		t.Fatalf("Expected 8 invoices in preview, got %d", len(invs))
+	}
+
+	numbers := make([]string, len(invs))
+	numericParts := make([]int64, len(invs))
+	for i, inv := range invs {
+		numStr, ok := inv["invoice_number"].(string)
+		if !ok || numStr == "" {
+			t.Fatalf("Invoice %d missing invoice_number", i+1)
+		}
+		numbers[i] = numStr
+		// Parse numeric part
+		var val int64
+		fmt.Sscanf(strings.TrimPrefix(numStr, "INV-"), "%d", &val)
+		numericParts[i] = val
+	}
+
+	t.Logf("Generated non-sequential bulk invoice numbers: %v", numbers)
+
+	// Assert non-sequential property:
+	// 1. All numbers must be unique
+	seen := make(map[string]bool)
+	for _, n := range numbers {
+		if seen[n] {
+			t.Fatalf("Duplicate invoice number generated in bulk batch: %s", n)
+		}
+		seen[n] = true
+	}
+
+	// 2. First invoice must be the starting number INV-0500
+	if numbers[0] != "INV-0500" {
+		t.Fatalf("Expected first invoice number to be INV-0500, got %s", numbers[0])
+	}
+
+	// 3. Every subsequent invoice must have a gap >= 2 (NOT sequential +1!)
+	for i := 1; i < len(numericParts); i++ {
+		diff := numericParts[i] - numericParts[i-1]
+		if diff < 2 {
+			t.Fatalf("Invoice %d (%s) is sequential to invoice %d (%s), gap is %d, expected gap >= 2",
+				i+1, numbers[i], i, numbers[i-1], diff)
+		}
+	}
+
+	// 4. Test CommitBatch and check database persistence
+	commitReq := CommitBatchRequest{
+		RequestID: "req-bulk-test-01",
+		IssuerID:  issuerID,
+		ClientID:  clientID,
+		Invoices:  make([]any, len(invs)),
+	}
+	for i, inv := range invs {
+		commitReq.Invoices[i] = inv
+	}
+
+	commitResult, err := bulkSvc.CommitBatch(commitReq, "admin")
+	if err != nil {
+		t.Fatalf("CommitBatch failed: %v", err)
+	}
+
+	invIds, ok := commitResult["invoice_ids"].([]string)
+	if !ok || len(invIds) != 8 {
+		t.Fatalf("Expected 8 committed invoice IDs, got %d", len(invIds))
+	}
+
+	// Verify all invoice numbers in database match the non-sequential generated numbers
+	for i, id := range invIds {
+		var dbNum string
+		err := database.QueryRow("SELECT invoice_number FROM invoices WHERE id = ?", id).Scan(&dbNum)
+		if err != nil || dbNum != numbers[i] {
+			t.Fatalf("Committed invoice %s has number %s in DB, expected %s", id, dbNum, numbers[i])
+		}
+	}
+
+	// Verify issuer next invoice number was updated past the maximum generated number
+	var nextNo int64
+	err = database.QueryRow("SELECT invoice_next_no FROM issuers WHERE id = ?", issuerID).Scan(&nextNo)
+	if err != nil {
+		t.Fatalf("Failed to query issuer next_no: %v", err)
+	}
+	maxNum := numericParts[len(numericParts)-1]
+	if nextNo <= maxNum {
+		t.Fatalf("Issuer invoice_next_no (%d) was not updated past batch maximum (%d)", nextNo, maxNum)
+	}
+
+	t.Logf("Bulk non-sequential invoice numbering verified successfully! All 8 invoices committed with realistic gaps and issuer counter advanced to %d.", nextNo)
+}
+

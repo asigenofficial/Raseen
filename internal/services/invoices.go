@@ -498,7 +498,7 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		"client_name":    client.Name,
 	}, ip); err != nil { return nil,err }
 	if _, err := tx.Exec("INSERT INTO invoice_documents (invoice_id, xml, issuer_json, client_json) VALUES (?,?,?,?)",invoiceID,xml,mustJSON(issuer),mustJSON(client)); err != nil { return nil,err }
-	return &InvoiceView{Invoice:models.Invoice{ID:invoiceID,GrandTotal:grandTotalMinor},GrandTotalMajor:models.ToMajor(grandTotalMinor)},nil
+	return &InvoiceView{Invoice:models.Invoice{ID:invoiceID,InvoiceNumber:invoiceNumber,GrandTotal:grandTotalMinor},GrandTotalMajor:models.ToMajor(grandTotalMinor)},nil
 }
 
 func mustJSON(v any) string { b,_:=json.Marshal(v);return string(b) }

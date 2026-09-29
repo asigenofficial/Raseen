@@ -81,6 +81,7 @@ export async function render(view) {
     target_total: 680000,
     use_target: true,
     start_invoice_number: '',
+    number_gap_range: '2-7',
     category_ids: [],
     item_ids: [],
     custom_items: [],
@@ -125,16 +126,22 @@ export async function render(view) {
   };
   await loadDraftsList();
 
-  const payload = () => ({
-    issuer_id: state.issuer_id,
-    client_id: state.client_id,
-    date_from: state.date_from,
-    date_to: state.date_to,
-    count: toNum(state.count, 0),
-    target_total: state.use_target ? toNum(state.target_total, 0) : 0,
-    start_invoice_number: (state.start_invoice_number || '').trim(),
-    category_ids: state.category_ids,
-    item_ids: state.item_ids,
+  const payload = () => {
+    const gapParts = (state.number_gap_range || '2-7').split('-').map((x) => parseInt(x, 10));
+    const number_gap_min = gapParts[0] || 2;
+    const number_gap_max = gapParts[1] || 7;
+    return {
+      issuer_id: state.issuer_id,
+      client_id: state.client_id,
+      date_from: state.date_from,
+      date_to: state.date_to,
+      count: toNum(state.count, 0),
+      target_total: state.use_target ? toNum(state.target_total, 0) : 0,
+      start_invoice_number: (state.start_invoice_number || '').trim(),
+      number_gap_min,
+      number_gap_max,
+      category_ids: state.category_ids,
+      item_ids: state.item_ids,
     custom_items: state.custom_items.map((it) => {
       const code = (it.item_code && it.item_code.trim()) ? it.item_code.trim() : generateNextItemCode(state.custom_items, store.items);
       it.item_code = code;
@@ -527,7 +534,15 @@ export async function render(view) {
             </select></div>
           <div class="field" style="max-width:180px"><label>بداية تسلسل الفواتير (اختياري)</label>
             <input type="text" id="start_invoice_number" class="mono" value="${esc(state.start_invoice_number || '')}" placeholder="مثال: INV-0101" />
-            <span class="hint">لتسلسل الترقيم إذا سبق إصدار فواتير للعميل</span></div>
+            <span class="hint">اتركه فارغاً للاستكمال التلقائي</span></div>
+          <div class="field" style="max-width:215px"><label>فوارق ترقيم الفواتير (فواصل واقعية)</label>
+            <select id="number_gap_range">
+              <option value="2-7" ${state.number_gap_range === '2-7' ? 'selected' : ''}>فارق عشوائي (2 إلى 7 أرقام - موصى به)</option>
+              <option value="3-10" ${state.number_gap_range === '3-10' ? 'selected' : ''}>فارق متوسط (3 إلى 10 أرقام)</option>
+              <option value="5-15" ${state.number_gap_range === '5-15' ? 'selected' : ''}>فارق متباعد (5 إلى 15 رقماً)</option>
+              <option value="1-1" ${state.number_gap_range === '1-1' ? 'selected' : ''}>متسلسل بدقة (+1 بدون فواصل)</option>
+            </select>
+            <span class="hint">توليد أرقام غير متتالية كأنها لعملاء متعددين</span></div>
           <div class="field"><label>ملاحظة عامة على كل فواتير الدفعة</label>
             <input type="text" id="notes" value="${esc(state.notes)}" /></div>
         </div>
@@ -702,6 +717,13 @@ export async function render(view) {
     bindNumeric(['count', 'target_total', 'start_invoice_number', 'min_items', 'max_items', 'min_qty', 'max_qty',
       'min_invoice_total', 'max_invoice_total', 'price_jitter_percent', 'discount_min_percent',
       'discount_max_percent', 'discount_probability', 'seed', 'notes']);
+
+    const gapSelect = $('#number_gap_range', view);
+    if (gapSelect) {
+      gapSelect.addEventListener('change', (e) => {
+        state.number_gap_range = e.target.value;
+      });
+    }
 
     const useTargetEl = $('#use_target', view);
     if (useTargetEl) {

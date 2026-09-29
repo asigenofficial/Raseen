@@ -226,6 +226,8 @@ type PreviewRequest struct {
 	CustomItems      []CustomItemInput `json:"custom_items"`
 	DistributionMode   string            `json:"distribution_mode"`
 	StartInvoiceNumber string            `json:"start_invoice_number"`
+	NumberGapMin       int               `json:"number_gap_min"`
+	NumberGapMax       int               `json:"number_gap_max"`
 	MinItems           int               `json:"min_items"`
 	MaxItems           int               `json:"max_items"`
 	MinQty             float64           `json:"min_qty"`
@@ -256,31 +258,56 @@ type ItemCandidate struct {
 	TaxRate   float64
 }
 
-func formatSequenceNumber(pattern string, offset int) string {
+func parseInvoicePattern(pattern string, defaultPrefix string, defaultStartNo int64, defaultPad int) (prefix string, startNo int64, pad int) {
 	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {
-		return ""
+		p := defaultPrefix
+		if p == "" {
+			p = "INV"
+		}
+		s := defaultStartNo
+		if s <= 0 {
+			s = 1
+		}
+		pd := defaultPad
+		if pd <= 0 {
+			pd = 5
+		}
+		return p, s, pd
 	}
+
 	i := len(pattern) - 1
 	for i >= 0 && pattern[i] >= '0' && pattern[i] <= '9' {
 		i--
 	}
-	prefix := pattern[:i+1]
+	prefix = strings.TrimSuffix(pattern[:i+1], "-")
 	digitsStr := pattern[i+1:]
 	if digitsStr == "" {
-		return fmt.Sprintf("%s-%04d", pattern, offset+1)
+		p := strings.TrimSuffix(pattern, "-")
+		s := defaultStartNo
+		if s <= 0 {
+			s = 1
+		}
+		pd := defaultPad
+		if pd <= 0 {
+			pd = 5
+		}
+		return p, s, pd
 	}
+
 	var num int64
 	fmt.Sscanf(digitsStr, "%d", &num)
-	newNum := num + int64(offset)
-	return fmt.Sprintf("%s%0*d", prefix, len(digitsStr), newNum)
+	return prefix, num, len(digitsStr)
 }
 
 func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error) {
 	if req.IssuerID == "" || req.ClientID == "" {
 		return nil, errors.New("يجب تحديد المنشأة المصدرة")
 	}
-	if _,err:=s.issuers.GetIssuer(req.IssuerID);err!=nil{return nil,err}
+	issuer, err := s.issuers.GetIssuer(req.IssuerID)
+	if err != nil {
+		return nil, err
+	}
 	if req.Count <= 0 || req.Count > 5000 { return nil,errors.New("عدد الفواتير يجب أن يكون من 1 إلى 5000") }
 	distMode := strings.ToLower(strings.TrimSpace(req.DistributionMode))
 	if distMode != "" && distMode != "random" && distMode != "balanced" && distMode != "uniform" && distMode != "sequential" { return nil,errors.New("نمط توزيع غير مدعوم") }
@@ -392,6 +419,20 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 	if len(days)==0{return nil,errors.New("الفترة لا تحتوي أيام عمل")}
 	seed:=req.Seed;if seed==0{seed=time.Now().UnixNano()}
 	rng := rand.New(rand.NewSource(seed))
+
+	minGap := req.NumberGapMin
+	maxGap := req.NumberGapMax
+	if minGap <= 0 && maxGap <= 0 {
+		// فوارق أرقام واقعية غير متسلسلة تلقائياً (بين 2 و 7 أرقام بين كل فاتورة)
+		minGap = 2
+		maxGap = 7
+	} else if minGap <= 0 {
+		minGap = 1
+	} else if maxGap < minGap {
+		maxGap = minGap
+	}
+
+	prefix, currInvoiceNo, pad := parseInvoicePattern(req.StartInvoiceNumber, issuer.InvoicePrefix, issuer.InvoiceNextNo, issuer.InvoicePad)
 
 	// Pre-allocate invoice targets if TargetTotal is specified
 	targetPerInv := make([]int64, req.Count)
@@ -577,10 +618,14 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 			}
 		}
 
-		invNumber := ""
-		if req.StartInvoiceNumber != "" {
-			invNumber = formatSequenceNumber(req.StartInvoiceNumber, i)
+		if i > 0 {
+			gap := minGap
+			if maxGap > minGap {
+				gap = minGap + rng.Intn(maxGap-minGap+1)
+			}
+			currInvoiceNo += int64(gap)
 		}
+		invNumber := crypto.FormatSerial(prefix, currInvoiceNo, pad)
 
 		invoices = append(invoices, map[string]any{
 			"temp_id":         fmt.Sprintf("PREV-%04d", i+1),
@@ -657,6 +702,7 @@ func (s *BulkService) CommitBatch(req CommitBatchRequest, username string) (map[
 	batchID,now:=crypto.UUID(),db.NowIso()
 	if _,err=tx.Exec("INSERT INTO invoice_batches (id,issuer_id,client_id,params,status,created_by,created_at) VALUES (?,?,?,?,'COMMITTED',?,?)",batchID,req.IssuerID,req.ClientID,mustJSON(req.Options),username,now);err!=nil{return nil,err}
 	var total int64; vouchers:=0; ids:=[]string{}
+	var maxGenNo int64
 	for idx,raw:=range req.Invoices {
 		b,err:=json.Marshal(raw);if err!=nil{return nil,err}
 		var row struct {
@@ -675,6 +721,20 @@ func (s *BulkService) CommitBatch(req CommitBatchRequest, username string) (map[
 		if _,err=tx.Exec("UPDATE invoices SET batch_id=? WHERE id=?",batchID,inv.ID);err!=nil{return nil,err}
 		total+=inv.GrandTotal;ids=append(ids,inv.ID)
 		if req.IssueVouchers && inv.GrandTotal>0{vouchers++}
+
+		if inv.InvoiceNumber != "" {
+			j := len(inv.InvoiceNumber) - 1
+			for j >= 0 && inv.InvoiceNumber[j] >= '0' && inv.InvoiceNumber[j] <= '9' {
+				j--
+			}
+			var parsed int64
+			if _, errScan := fmt.Sscanf(inv.InvoiceNumber[j+1:], "%d", &parsed); errScan == nil && parsed > maxGenNo {
+				maxGenNo = parsed
+			}
+		}
+	}
+	if maxGenNo > 0 {
+		_, _ = tx.Exec("UPDATE issuers SET invoice_next_no = MAX(invoice_next_no, ?) WHERE id = ?", maxGenNo+1, req.IssuerID)
 	}
 	if _,err=tx.Exec("UPDATE invoice_batches SET invoice_count=?,total_amount=? WHERE id=?",len(ids),total,batchID);err!=nil{return nil,err}
 	if req.DraftID!="" {
