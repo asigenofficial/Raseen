@@ -240,7 +240,7 @@ export async function showVoucher(id, onChange) {
               : '<option value="default">قالب سند قبض (سند HTML)</option>')}
           </select>
           <button class="btn btn-sm" id="btn-adopt-voucher-tpl" type="button" style="font-size:12px;padding:5px 10px;background:rgba(13,148,136,0.15);border:1px solid var(--primary, #0d9488);color:var(--primary, #0d9488);font-weight:700" title="اعتماد هذا القالب كقالب افتراضي لجميع سندات المنشأة">
-            ⭐ اعتماد كقالب افتراضي للمنشأة
+            اعتماد كقالب افتراضي للمنشأة
           </button>
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
