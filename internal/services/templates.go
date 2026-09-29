@@ -588,15 +588,15 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 	filePath, err := s.GetFilePath(style)
 	if err != nil || filePath == "" {
 		// Fallback: use built-in default template
-		return substituteInvoiceTags(defaultInvoiceHTMLTemplate(), inv), nil
+		return s.substituteInvoiceTags(defaultInvoiceHTMLTemplate(), inv), nil
 	}
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return substituteInvoiceTags(defaultInvoiceHTMLTemplate(), inv), nil
+		return s.substituteInvoiceTags(defaultInvoiceHTMLTemplate(), inv), nil
 	}
 
-	return substituteInvoiceTags(string(data), inv), nil
+	return s.substituteInvoiceTags(string(data), inv), nil
 }
 
 // GenerateQRSVG generates an ultra-sharp, high-resolution vector SVG representation of the ZATCA QR code.
@@ -698,7 +698,7 @@ func formatNationalAddressEn(cityEn, districtEn, streetEn, buildingNo, postalCod
 
 // ─── Tag Substitution Engine ──────────────────────────────────────────────────
 
-func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
+func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 	buyerName := inv.BuyerName
 	buyerTax := inv.BuyerTaxNumber
 	buyerAddress := inv.BuyerAddress
@@ -760,6 +760,32 @@ func substituteInvoiceTags(tpl string, inv *InvoiceView) string {
 		}
 		if inv.IssuerSnapshot.LogoData != nil && *inv.IssuerSnapshot.LogoData != "" {
 			sellerLogoHtml = fmt.Sprintf(`<img src="%s" alt="Logo" style="max-height:75px;max-width:140px;object-fit:contain;" />`, *inv.IssuerSnapshot.LogoData)
+		}
+	}
+
+	// استرجاع العنوان الوطني والعنوان الإنجليزي في حال لم يتواجد في النسخة المحفوظة للفاتورة
+	if sellerAddress == "" && inv.SellerAddress != "" {
+		sellerAddress = inv.SellerAddress
+	}
+	if sellerAddressEn == "" && inv.SellerAddressEn != "" {
+		sellerAddressEn = inv.SellerAddressEn
+	}
+	if (sellerAddress == "" || sellerAddressEn == "") && inv.IssuerID != "" && s != nil && s.db != nil {
+		var aEn, cEn, dEn, sEn, bNo, pCode, cityAr, distAr, strtAr, bldAr, postAr sql.NullString
+		_ = s.db.QueryRow(`
+			SELECT address_en, city_en, district_en, street_en, building_no, postal_code,
+			       city, district, street, building_no, postal_code
+			FROM issuers WHERE id = ?
+		`, inv.IssuerID).Scan(&aEn, &cEn, &dEn, &sEn, &bNo, &pCode, &cityAr, &distAr, &strtAr, &bldAr, &postAr)
+		if sellerAddress == "" && cityAr.Valid {
+			sellerAddress = formatNationalAddress(cityAr.String, distAr.String, strtAr.String, bldAr.String, postAr.String)
+		}
+		if sellerAddressEn == "" {
+			if aEn.Valid && aEn.String != "" {
+				sellerAddressEn = aEn.String
+			} else if cEn.Valid {
+				sellerAddressEn = formatNationalAddressEn(cEn.String, dEn.String, sEn.String, bNo.String, pCode.String)
+			}
 		}
 	}
 	if sellerLogoHtml == "" {
@@ -1243,6 +1269,16 @@ func generateSmartRowsSlice(tpl string, lines []InvoiceItemView, offset int) str
 				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%s</td>`, html.EscapeString(code)))
 			case colName:
 				nameHtml := html.EscapeString(item.ItemName)
+				hasUnitCol := false
+				for _, c := range cols {
+					if c == colUnit {
+						hasUnitCol = true
+						break
+					}
+				}
+				if !hasUnitCol && item.Unit != "" {
+					nameHtml += fmt.Sprintf(` <span style="font-size:11px;font-weight:normal;color:#64748b;">(%s)</span>`, html.EscapeString(item.Unit))
+				}
 				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;font-weight:600;text-align:right;">%s</td>`, nameHtml))
 			case colUnit:
 				u := item.Unit
@@ -1364,11 +1400,39 @@ func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string
 		chunk := inv.Lines[start:end]
 		rowsHtml := generateSmartRowsSlice(htmlStr, chunk, start)
 
+		pageBadge := ""
+		if p == 1 {
+			pageBadge = fmt.Sprintf(`
+<div class="invoice-page-indicator" style="display:flex; justify-content:space-between; align-items:center; padding:4px 0 6px 0; margin-bottom:8px; border-bottom:1px solid #e2e8f0; font-size:11px; font-weight:700; color:#64748b;">
+  <span>فاتورة ضريبية رقم: %s</span>
+  <span style="direction:ltr;">Page 1 of %d &bull; صفحة 1 من %d</span>
+</div>`, inv.InvoiceNumber, totalPages, totalPages)
+		} else {
+			pageBadge = fmt.Sprintf(`
+<div class="invoice-continuation-header" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; margin-bottom:12px; background:#f8fafc; border:1px solid #cbd5e1; border-right:4px solid #059669; border-radius:6px; font-size:12px; font-weight:700; color:#1e293b;">
+  <span><span style="background:#059669; color:#fff; padding:2px 8px; border-radius:4px; font-size:11px; margin-left:6px;">متابعة</span> تابع فاتورة ضريبية رقم: %s</span>
+  <span style="direction:ltr; color:#475569;">(Page %d of %d) Continuation Sheet</span>
+</div>`, inv.InvoiceNumber, p, totalPages)
+		}
+
+		nextPageIndicator := ""
+		if p < totalPages {
+			nextPageIndicator = fmt.Sprintf(`
+<div class="invoice-continuation-footer" style="text-align:center; padding:8px 0; margin-top:8px; font-size:11px; font-weight:700; color:#475569; border-top:1px dashed #cbd5e1;">
+  يتبع في الصفحة التالية ⬅ (صفحة %d من %d) &bull; Continued on Next Page
+</div>`, p+1, totalPages)
+		} else {
+			nextPageIndicator = fmt.Sprintf(`
+<div class="invoice-continuation-footer" style="text-align:left; padding:4px 0; margin-top:4px; font-size:10px; color:#94a3b8;">
+  نهاية بنود الفاتورة &bull; صفحة %d من %d &bull; End of Invoice Items
+</div>`, p, totalPages)
+		}
+
 		var pageInner string
 		if p < totalPages {
-			pageInner = beforeTable + tableOpen + rowsHtml + tableClose + tableWrapClose
+			pageInner = pageBadge + beforeTable + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose
 		} else {
-			pageInner = beforeTable + tableOpen + rowsHtml + tableClose + tableWrapClose + bottomContent
+			pageInner = pageBadge + beforeTable + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose + bottomContent
 		}
 
 		pOpen := strings.Replace(contOpen, "<div", fmt.Sprintf(`<div data-invoice-page="%d"`, p), 1)

@@ -376,6 +376,11 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		initStatus = "PAID"
 	}
 
+	sellerAddressEn := issuer.AddressEn
+	if sellerAddressEn == "" {
+		sellerAddressEn = formatNationalAddressEn(issuer.CityEn, issuer.DistrictEn, issuer.StreetEn, issuer.BuildingNo, issuer.PostalCode)
+	}
+
 	_, err = tx.Exec(`
 		INSERT INTO invoices (
 			id, issuer_id, client_id, invoice_number, sequence_no, invoice_type, zatca_phase,
@@ -404,7 +409,7 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor,
 		initPaidMinor, initRemMinor, initStatus, paymentMethod,
 		input.DueDate, input.ChequeDate, input.ChequeNo, pricesIncInt,
-		issuer.NameAr, issuer.TaxNumber, issuer.CommercialRegister, sellerAddr, issuer.AddressEn,
+		issuer.NameAr, issuer.TaxNumber, issuer.CommercialRegister, sellerAddr, sellerAddressEn,
 		client.Name, client.TaxNumber, client.CommercialRegister, buyerAddr,
 		qrPayload, invHash, pih, signature, signatureMode,
 		input.Notes, actor, nowIso, nowIso,
@@ -1279,8 +1284,21 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		})
 	}
 
+	invoiceNumber := inv.InvoiceNumber
+	if strings.TrimSpace(input.InvoiceNumber) != "" {
+		cleanedNum := strings.TrimSpace(input.InvoiceNumber)
+		if cleanedNum != inv.InvoiceNumber {
+			var dupCount int
+			_ = tx.QueryRow("SELECT COUNT(*) FROM invoices WHERE issuer_id = ? AND invoice_number = ? AND id != ?", issuer.ID, cleanedNum, id).Scan(&dupCount)
+			if dupCount > 0 {
+				return nil, fmt.Errorf("رقم الفاتورة «%s» مستخدم بالفعل في فاتورة أخرى لهذه المنشأة", cleanedNum)
+			}
+			invoiceNumber = cleanedNum
+		}
+	}
+
 	ublInv := zatca.UblInvoiceInfo{
-		InvoiceNumber:  inv.InvoiceNumber,
+		InvoiceNumber:  invoiceNumber,
 		UUID:           inv.UUID,
 		IssueDate:      issueDate,
 		IssueTime:      issueTime,
@@ -1392,8 +1410,14 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		updateStatus = "PAID"
 	}
 
+	sellerAddressEn := issuer.AddressEn
+	if sellerAddressEn == "" {
+		sellerAddressEn = formatNationalAddressEn(issuer.CityEn, issuer.DistrictEn, issuer.StreetEn, issuer.BuildingNo, issuer.PostalCode)
+	}
+
 	_, err = tx.Exec(`
 		UPDATE invoices SET
+			invoice_number = ?,
 			client_id = ?, invoice_type = ?, zatca_phase = ?,
 			issue_date = ?, issue_time = ?, issue_datetime = ?,
 			subtotal = ?, discount_amount = ?, taxable_amount = ?, tax_amount = ?, grand_total = ?,
@@ -1404,18 +1428,21 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 			qr_payload = ?, invoice_hash = ?, signature = ?, signature_mode = ?, notes = ?, updated_at = ?
 		WHERE id = ?
 	`,
+		invoiceNumber,
 		client.ID, invoiceType, zatcaPhase,
 		issueDate, issueTime, issueDatetime,
 		subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor,
 		updatePaidMinor, updateRemMinor, updateStatus, paymentMethod,
 		input.DueDate, input.ChequeDate, input.ChequeNo, pricesIncInt,
-		issuer.NameAr, issuer.TaxNumber, issuer.CommercialRegister, sellerAddr, issuer.AddressEn,
+		issuer.NameAr, issuer.TaxNumber, issuer.CommercialRegister, sellerAddr, sellerAddressEn,
 		client.Name, client.TaxNumber, client.CommercialRegister, buyerAddr,
 		qrPayload, invHash, signature, signatureMode, input.Notes, nowIso, id,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update invoice: %w", err)
 	}
+
+	_, _ = tx.Exec("UPDATE accounting_entries SET memo = ? WHERE reference_id = ?", fmt.Sprintf("فاتورة مبيعات رقم %s", invoiceNumber), id)
 
 	_, _ = tx.Exec(`
 		INSERT INTO invoice_documents (invoice_id, xml, issuer_json, client_json)

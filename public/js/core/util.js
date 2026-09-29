@@ -683,8 +683,11 @@ function generateSmartRowsJS(htmlSnippet, rawLines, offset = 0) {
           return `<td class="c" style="padding:6px 8px;text-align:center;">${offset + idx + 1}</td>`;
         case 'code':
           return `<td class="c" style="padding:6px 8px;text-align:center;font-family:Tahoma,sans-serif;">${esc(itemCode)}</td>`;
-        case 'name':
-          return `<td class="r" style="padding:6px 8px;font-weight:600;text-align:right;">${esc(itemName)}</td>`;
+        case 'name': {
+          const hasUnit = cols.includes('unit');
+          const unitBadge = !hasUnit && unit ? ` <span style="font-size:11px;font-weight:normal;color:#64748b;">(${esc(unit)})</span>` : '';
+          return `<td class="r" style="padding:6px 8px;font-weight:600;text-align:right;">${esc(itemName)}${unitBadge}</td>`;
+        }
         case 'unit':
           return `<td class="c" style="padding:6px 8px;text-align:center;">${esc(unit)}</td>`;
         case 'price':
@@ -879,7 +882,31 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
     }
     return parts.join(' - ');
   };
+  const formatAddrObjEn = (o = {}) => {
+    if (!o) return '';
+    if (o.address_en && o.address_en.trim()) return o.address_en.trim();
+    if (invoice?.seller_address_en && invoice.seller_address_en.trim()) return invoice.seller_address_en.trim();
+    const parts = [];
+    if (o.city_en && o.city_en.trim()) parts.push(o.city_en.trim());
+    if (o.district_en && o.district_en.trim()) {
+      const d = o.district_en.trim();
+      parts.push(d.toLowerCase().includes('dist') ? d : `${d} Dist.`);
+    }
+    if (o.street_en && o.street_en.trim()) {
+      const s = o.street_en.trim();
+      parts.push(s.toLowerCase().includes('st') || s.toLowerCase().includes('rd') ? s : `${s} St.`);
+    }
+    if (o.building_no && String(o.building_no).trim()) {
+      parts.push(`Bldg. ${String(o.building_no).trim()}`);
+    }
+    if (o.postal_code && String(o.postal_code).trim()) {
+      parts.push(String(o.postal_code).trim());
+    }
+    if (parts.length > 0) return parts.join(' - ');
+    return o.address_en || o.street_en || o.city_en || '';
+  };
   const addr = formatAddrObj(issuer) || issuer.address || issuer.city || '';
+  const addrEn = formatAddrObjEn(issuer) || invoice?.seller_address_en || issuer.address_en || '';
   const clientAddr = formatAddrObj(client) || client.address || client.city || '';
 
   const docTotal = Number(voucher?.total_amount ?? invoice?.grand_total ?? 0);
@@ -909,7 +936,7 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       return issuer.commercial_register || '';
     }
     if (k === 'seller_address' || k === 'issuer_address' || k === 'company_address') return addr;
-    if (k === 'seller_address_en') return issuer.address_en || '';
+    if (k === 'seller_address_en') return addrEn;
     if (k === 'seller_phone' || k === 'company_phone' || k === 'phone') return issuer.phone || issuer.mobile || '';
     if (k === 'seller_email' || k === 'company_email' || k === 'email') return issuer.email || '';
     if (k === 'seller_iban' || k === 'iban' || k === 'bank_account') return issuer.iban || '';
@@ -933,7 +960,7 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
     }
     if (k === 'seller_meta_en') {
       const parts = [];
-      if (issuer.address_en) parts.push(issuer.address_en);
+      if (addrEn) parts.push(addrEn);
       if (issuer.tax_number) {
         parts.push(issuer.tax_number.toUpperCase().includes('TAX') ? issuer.tax_number : `TAX NO.: ${issuer.tax_number}`);
       }
@@ -1172,8 +1199,8 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
   }
 
   const lines = invoice?.lines || (Array.isArray(invoice?.items) ? invoice.items : []);
-  if (lines.length > 12) {
-    result = paginateInvoiceHtmlJS(result, { ...invoice, lines }, 12);
+  if (lines.length > 15) {
+    result = paginateInvoiceHtmlJS(result, { ...invoice, lines }, 15);
   }
 
   result = result
@@ -1185,9 +1212,9 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
 }
 
 /**
- * تقسيم أي قالب فاتورة HTML ديناميكياً إلى صفحات A4 عند زيادة عدد الأصناف عن 12 صنفاً.
+ * تقسيم أي قالب فاتورة HTML ديناميكياً إلى صفحات A4 عند زيادة عدد الأصناف عن 15 صنفاً.
  */
-export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 12) {
+export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 15) {
   const lines = inv?.lines || [];
   if (lines.length <= chunkSize) return htmlStr;
 
@@ -1246,6 +1273,7 @@ export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 12) {
     bottomContent = afterTableRaw.slice(bottomLoc);
   }
 
+  const invNum = inv?.invoice_number || '';
   const pages = [];
   for (let p = 1; p <= totalPages; p++) {
     const start = (p - 1) * chunkSize;
@@ -1253,11 +1281,29 @@ export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 12) {
     const chunk = lines.slice(start, end);
     const rowsHtml = generateSmartRowsJS(htmlStr, chunk, start);
 
+    const pageBadge = p === 1
+      ? `<div class="invoice-page-indicator" style="display:flex; justify-content:space-between; align-items:center; padding:4px 0 6px 0; margin-bottom:8px; border-bottom:1px solid #e2e8f0; font-size:11px; font-weight:700; color:#64748b;">
+          <span>فاتورة ضريبية رقم: ${invNum}</span>
+          <span style="direction:ltr;">Page 1 of ${totalPages} &bull; صفحة 1 من ${totalPages}</span>
+        </div>`
+      : `<div class="invoice-continuation-header" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; margin-bottom:12px; background:#f8fafc; border:1px solid #cbd5e1; border-right:4px solid #059669; border-radius:6px; font-size:12px; font-weight:700; color:#1e293b;">
+          <span><span style="background:#059669; color:#fff; padding:2px 8px; border-radius:4px; font-size:11px; margin-left:6px;">متابعة</span> تابع فاتورة ضريبية رقم: ${invNum}</span>
+          <span style="direction:ltr; color:#475569;">(Page ${p} of ${totalPages}) Continuation Sheet</span>
+        </div>`;
+
+    const nextPageIndicator = p < totalPages
+      ? `<div class="invoice-continuation-footer" style="text-align:center; padding:8px 0; margin-top:8px; font-size:11px; font-weight:700; color:#475569; border-top:1px dashed #cbd5e1;">
+          يتبع في الصفحة التالية ⬅ (صفحة ${p + 1} من ${totalPages}) &bull; Continued on Next Page
+        </div>`
+      : `<div class="invoice-continuation-footer" style="text-align:left; padding:4px 0; margin-top:4px; font-size:10px; color:#94a3b8;">
+          نهاية بنود الفاتورة &bull; صفحة ${p} من ${totalPages} &bull; End of Invoice Items
+        </div>`;
+
     let pageInner = '';
     if (p < totalPages) {
-      pageInner = beforeTable + tableOpen + rowsHtml + tableClose + tableWrapClose;
+      pageInner = pageBadge + beforeTable + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose;
     } else {
-      pageInner = beforeTable + tableOpen + rowsHtml + tableClose + tableWrapClose + bottomContent;
+      pageInner = pageBadge + beforeTable + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose + bottomContent;
     }
 
     const pOpen = contOpen.replace('<div', `<div data-invoice-page="${p}"`);
