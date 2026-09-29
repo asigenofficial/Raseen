@@ -25,18 +25,18 @@ export async function render(view) {
       </div>
       ${raw(isAdmin ? `
         <div class="page-actions" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <input type="file" id="import-db-input" accept=".db,.sqlite,.sqlite3" style="display:none;" />
-          <button class="btn btn-outline" id="btn-export-db" type="button" title="تصدير وتحميل قاعدة البيانات كاملة كملف SQLite (.db)">
+          <input type="file" id="import-pkg-input" accept=".zip,.db,.sqlite,.sqlite3" style="display:none;" />
+          <button class="btn btn-outline" id="btn-export-pkg-top" type="button" title="تصدير حزمة النظام الشاملة (.zip) — قاعدة البيانات وكافة القوالب الـ 39">
             ${icon.download({ size: 16, style: 'vertical-align:text-bottom; margin-left:4px; color:var(--primary, #059669);' })}
-            تصدير البيانات
+            تصدير الحزمة (.zip)
           </button>
-          <button class="btn btn-danger" id="btn-import-db" type="button" title="استيراد واستعادة قاعدة البيانات كاملة من ملف SQLite (.db)">
+          <button class="btn btn-danger" id="btn-import-pkg-top" type="button" title="استيراد واستعادة حزمة النظام أو القوالب أو قاعدة البيانات (.zip أو .db)">
             ${icon.upload({ size: 16, style: 'vertical-align:text-bottom; margin-left:4px;' })}
-            استيراد البيانات
+            استيراد البيانات والقوالب
           </button>
           <button class="btn" id="btn-create-server-backup" type="button" title="أخذ نسخة احتياطية فورية على السيرفر">
             ${icon.refresh({ size: 16, style: 'vertical-align:text-bottom; margin-left:4px;' })}
-            نسخة احتياطية
+            نسخة سريعة
           </button>
         </div>
       ` : '')}
@@ -108,10 +108,10 @@ export async function render(view) {
           <div>
             <h3 style="display:flex; align-items:center; gap:8px; margin:0; font-size:16px;">
               ${icon.shieldCheck({ size: 20, style: 'color:var(--primary, #059669)' })}
-              إدارة قاعدة البيانات والنسخ الاحتياطي
+              إدارة بيانات النظام، القوالب، والنسخ الاحتياطي
             </h3>
             <p style="margin:4px 0 0; color:var(--text-muted, #64748b); font-size:13px;">
-              تصدير واستيراد قاعدة بيانات النظام بالكامل — خاص بمدير النظام (ADMIN).
+              تصدير واستيراد حزمة النظام الشاملة (قاعدة البيانات + القوالب) كملف مضغوط ZIP أو ملف SQLite — خاص بمدير النظام (ADMIN).
             </p>
           </div>
           <span class="badge" style="background:rgba(5,150,105,0.12); color:#059669; font-weight:700; font-size:12px; padding:4px 10px; border-radius:12px; border:1px solid rgba(5,150,105,0.25);">خاص بالمدير فقط</span>
@@ -126,18 +126,23 @@ export async function render(view) {
                   ${icon.download({ size: 20 })}
                 </div>
                 <div>
-                  <h4 style="margin:0; font-size:15px; font-weight:700;">تصدير قاعدة البيانات كاملة</h4>
-                  <span style="font-size:12px; color:var(--text-muted, #64748b);">ملف SQLite (.db) متكامل ولحظي</span>
+                  <h4 style="margin:0; font-size:15px; font-weight:700;">تصدير حزمة النظام الشاملة</h4>
+                  <span style="font-size:12px; color:var(--text-muted, #64748b);">ملف مضغوط ZIP (قاعدة البيانات + القوالب)</span>
                 </div>
               </div>
               <p style="margin:0 0 16px 0; font-size:13px; color:var(--text-muted, #64748b); line-height:1.6;">
-                تنزيل نسخة مطابقة وفورية لكامل قاعدة البيانات بصيغة <code>.db</code> تحتوي على جميع الفواتير، السندات، العملاء، الأصناف، وسجل الحركات المحاسبية.
+                تنزيل حزمة متكاملة بصيغة <code>.zip</code> تحتوي على قاعدة البيانات الكاملة (فواتير، سندات، عملاء، أصناف) مع كافة قوالب الفواتير والسندات الـ 39 والملفات المساعدة.
               </p>
             </div>
-            <button type="button" class="btn btn-primary" id="btn-export-db-card" style="width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;">
-              ${icon.download({ size: 16 })}
-              تصدير وتحميل قاعدة البيانات
-            </button>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <button type="button" class="btn btn-primary" id="btn-export-pkg-card" style="width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;">
+                ${icon.download({ size: 16 })}
+                تصدير حزمة النظام الشاملة (.zip)
+              </button>
+              <button type="button" class="btn btn-outline" id="btn-export-db-only" style="width:100%; display:inline-flex; align-items:center; justify-content:center; gap:6px; font-size:12px;">
+                تنزيل قاعدة البيانات فقط (.db)
+              </button>
+            </div>
           </div>
 
           <!-- بطاقة الاستيراد -->
@@ -148,17 +153,17 @@ export async function render(view) {
                   ${icon.upload({ size: 20 })}
                 </div>
                 <div>
-                  <h4 style="margin:0; font-size:15px; font-weight:700; color:var(--danger, #dc2626);">استيراد واستعادة قاعدة البيانات</h4>
-                  <span style="font-size:12px; color:var(--text-muted, #64748b);">استرجاع كامل مع نسخة وقائية</span>
+                  <h4 style="margin:0; font-size:15px; font-weight:700; color:var(--danger, #dc2626);">استيراد واستعادة النظام والقوالب</h4>
+                  <span style="font-size:12px; color:var(--text-muted, #64748b);">يدعم (.zip) و (.db) مع نسخة وقائية</span>
                 </div>
               </div>
               <p style="margin:0 0 16px 0; font-size:13px; color:var(--text-muted, #64748b); line-height:1.6;">
-                استعادة قاعدة البيانات من ملف خارجي (بصيغة <code>.db</code>). يقوم النظام تلقائياً بإنشاء نسخة احتياطية وقائية قبل أي عملية استيراد لحماية بياناتك من أي فقدان.
+                استعادة قاعدة البيانات وتحديث قوالب الفواتير والسندات من ملف مضغوط <code>.zip</code> (أو ملف <code>.db</code> منفرد). يقوم النظام تلقائياً بحفظ نسخة احتياطية وقائية قبل أي تعديل.
               </p>
             </div>
-            <button type="button" class="btn btn-danger" id="btn-import-db-card" style="width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;">
+            <button type="button" class="btn btn-danger" id="btn-import-pkg-card" style="width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;">
               ${icon.upload({ size: 16 })}
-              استيراد واستعادة البيانات
+              استيراد واستعادة الحزمة / القوالب (.zip / .db)
             </button>
           </div>
         </div>
@@ -183,21 +188,32 @@ export async function render(view) {
     }
   });
 
-  // إدارة قاعدة البيانات (خاص بمدير النظام فقط)
+  // إدارة بيانات النظام والقوالب (خاص بمدير النظام فقط)
   if (isAdmin) {
-    const triggerExport = () => {
+    const triggerExportPackage = () => {
+      const link = document.createElement('a');
+      link.href = '/api/system/export-package';
+      link.download = `raseen_package_${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toastOk('تم بدء تنزيل حزمة النظام الشاملة (.zip) بنجاح');
+    };
+
+    const triggerExportDbOnly = () => {
       const link = document.createElement('a');
       link.href = '/api/system/export-db';
       link.download = `raseen_database_${new Date().toISOString().slice(0, 10)}.db`;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      toastOk('تم بدء تنزيل قاعدة البيانات بنجاح');
+      toastOk('تم بدء تنزيل ملف قاعدة البيانات (.db) بنجاح');
     };
 
-    // أزرار التصدير (في رأس الصفحة وفي البطاقة)
-    $('#btn-export-db', view)?.addEventListener('click', triggerExport);
-    $('#btn-export-db-card', view)?.addEventListener('click', triggerExport);
+    // أزرار التصدير
+    $('#btn-export-pkg-top', view)?.addEventListener('click', triggerExportPackage);
+    $('#btn-export-pkg-card', view)?.addEventListener('click', triggerExportPackage);
+    $('#btn-export-db-only', view)?.addEventListener('click', triggerExportDbOnly);
 
     // زر النسخة السريعة على السيرفر
     $('#btn-create-server-backup', view)?.addEventListener('click', async (e) => {
@@ -211,12 +227,12 @@ export async function render(view) {
         toastErr(err.message || 'فشل حفظ النسخة الاحتياطية');
       } finally {
         btn.disabled = false;
-        btn.innerHTML = `${icon.refresh({ size: 16, style: 'vertical-align:text-bottom; margin-left:4px;' })} نسخة احتياطية`;
+        btn.innerHTML = `${icon.refresh({ size: 16, style: 'vertical-align:text-bottom; margin-left:4px;' })} نسخة سريعة`;
       }
     });
 
     // أزرار الاستيراد تفتح نافذة اختيار الملف تلقائياً
-    const fileInput = $('#import-db-input', view);
+    const fileInput = $('#import-pkg-input', view);
     const triggerImport = () => {
       if (fileInput) {
         fileInput.value = '';
@@ -224,20 +240,23 @@ export async function render(view) {
       }
     };
 
-    $('#btn-import-db', view)?.addEventListener('click', triggerImport);
-    $('#btn-import-db-card', view)?.addEventListener('click', triggerImport);
+    $('#btn-import-pkg-top', view)?.addEventListener('click', triggerImport);
+    $('#btn-import-pkg-card', view)?.addEventListener('click', triggerImport);
 
-    // معالجة الملف بعد اختياره من الجهاز
+    // معالجة الملف بعد اختياره من الجهاز (.zip أو .db)
     if (fileInput) {
       fileInput.addEventListener('change', async () => {
         const file = fileInput.files?.[0];
         if (!file) return;
 
+        const isZip = file.name.toLowerCase().endsWith('.zip');
+        const fileTypeLabel = isZip ? 'حزمة بيانات وقوالب مضغوطة (.zip)' : 'قاعدة بيانات SQLite (.db)';
+
         const confirmed = await confirmDialog({
-          title: 'تأكيد استيراد واستعادة قاعدة البيانات',
-          message: `تحذير هام: هل أنت متأكد من استيراد قاعدة البيانات من الملف «${file.name}»؟ سيتم استبدال البيانات الحالية بالبيانات الموجودة في الملف. سيقوم النظام بحفظ نسخة احتياطية وقائية قبل الاستبدال.`,
+          title: 'تأكيد استيراد واستعادة بيانات النظام',
+          message: `هل أنت متأكد من استيراد الملف «${file.name}» (${fileTypeLabel})؟ سيتم تحديث محتويات النظام وفقاً للملف مع أخذ نسخة احتياطية وقائية لحماية بياناتك تلقائياً قبل أي تعديل.`,
           danger: true,
-          okText: 'نعم، استيراد واستبدال البيانات',
+          okText: 'نعم، استيراد واستعادة البيانات',
         });
 
         if (!confirmed) {
@@ -245,38 +264,39 @@ export async function render(view) {
           return;
         }
 
-        const btnCard = $('#btn-import-db-card', view);
-        const btnTop = $('#btn-import-db', view);
-        if (btnCard) { btnCard.disabled = true; btnCard.textContent = 'جارٍ فحص واستيراد البيانات...'; }
+        const btnCard = $('#btn-import-pkg-card', view);
+        const btnTop = $('#btn-import-pkg-top', view);
+        if (btnCard) { btnCard.disabled = true; btnCard.textContent = 'جارٍ فحص واستيراد البيانات والقوالب...'; }
         if (btnTop) { btnTop.disabled = true; btnTop.textContent = 'جارٍ الاستيراد...'; }
 
         try {
           const fd = new FormData();
+          fd.append('package_file', file);
           fd.append('database_file', file);
 
-          const res = await fetch('/api/system/import-db', {
+          const res = await fetch('/api/system/import-package', {
             method: 'POST',
             body: fd,
           });
 
           const data = await res.json();
           if (!res.ok || !data.ok) {
-            throw new Error(data.error || 'فشل استيراد قاعدة البيانات');
+            throw new Error(data.error || 'فشل استيراد البيانات');
           }
 
-          toastOk('تم استيراد واستعادة كافة بيانات النظام بنجاح! جارٍ تحديث الصفحة...');
+          toastOk(data.message || 'تم استيراد واستعادة الحزمة بنجاح! جارٍ تحديث الصفحة...');
           setTimeout(() => {
             window.location.reload();
           }, 1500);
         } catch (err) {
-          toastErr(err.message || 'حدث خطأ أثناء استيراد قاعدة البيانات');
+          toastErr(err.message || 'حدث خطأ أثناء استيراد البيانات');
           if (btnCard) {
             btnCard.disabled = false;
-            btnCard.innerHTML = `${icon.upload({ size: 16 })} استيراد واستعادة البيانات`;
+            btnCard.innerHTML = `${icon.upload({ size: 16 })} استيراد واستعادة الحزمة / القوالب (.zip / .db)`;
           }
           if (btnTop) {
             btnTop.disabled = false;
-            btnTop.innerHTML = `${icon.upload({ size: 16, style: 'vertical-align:text-bottom; margin-left:4px;' })} استيراد البيانات`;
+            btnTop.innerHTML = `${icon.upload({ size: 16, style: 'vertical-align:text-bottom; margin-left:4px;' })} استيراد البيانات والقوالب`;
           }
         }
       });

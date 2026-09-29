@@ -1,6 +1,7 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"math"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -175,91 +177,15 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, res)
 	})
 
-	// تصدير وتحميل قاعدة البيانات كاملة كملف SQLite (.db) (خاص بالمدير فقط)
-	mux.HandleFunc("GET /api/system/export-db", func(w http.ResponseWriter, r *http.Request) {
-		u := s.getSessionUser(r)
-		if u == nil || u.Role != "ADMIN" {
-			s.err(w, 403, "تصدير قاعدة البيانات محصور بمدير النظام فقط")
-			return
-		}
+	// تصدير حزمة النظام الشاملة كملف مضغوط (.zip) تحتوي على قاعدة البيانات + القوالب + الملفات
+	mux.HandleFunc("GET /api/system/export-package", s.handleExportPackage)
 
-		res, err := s.db.CreateBackup()
-		if err != nil {
-			s.err(w, 500, "فشل إنشاء ملف التصدير: "+err.Error())
-			return
-		}
+	// تصدير وتحميل قاعدة البيانات فقط كملف SQLite (.db) (خاص بالمدير فقط)
+	mux.HandleFunc("GET /api/system/export-db", s.handleExportDB)
 
-		s.db.Audit(u.Username, "DATABASE_EXPORT", "system", "", "", map[string]any{
-			"backup_file": res.Filename,
-			"size_bytes":  res.SizeBytes,
-		}, s.clientIP(r))
-
-		exportName := fmt.Sprintf("raseen_database_%s.db", time.Now().Format("2006-01-02_150405"))
-		w.Header().Set("Content-Type", "application/x-sqlite3")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", exportName))
-		w.Header().Set("Content-Length", strconv.FormatInt(res.SizeBytes, 10))
-		http.ServeFile(w, r, res.Path)
-	})
-
-	// استيراد واستعادة قاعدة البيانات كاملة من ملف SQLite (.db) (خاص بالمدير فقط)
-	mux.HandleFunc("POST /api/system/import-db", func(w http.ResponseWriter, r *http.Request) {
-		u := s.getSessionUser(r)
-		if u == nil || u.Role != "ADMIN" {
-			s.err(w, 403, "استيراد واستعادة قاعدة البيانات محصور بمدير النظام فقط")
-			return
-		}
-
-		// تحديد سقف حجم الملف المرفوع بـ 300MB
-		if err := r.ParseMultipartForm(300 << 20); err != nil {
-			s.err(w, 400, "تعذر قراءة الملف المرفوع أو تجاوز الحد المسموح: "+err.Error())
-			return
-		}
-
-		file, header, err := r.FormFile("database_file")
-		if err != nil {
-			s.err(w, 400, "يرجى تحديد ملف قاعدة البيانات المراد استيراده")
-			return
-		}
-		defer file.Close()
-
-		tempDir := s.cfg.BackupDir
-		if err := os.MkdirAll(tempDir, 0755); err != nil {
-			s.err(w, 500, "فشل تجهيز مجلد الاستيراد: "+err.Error())
-			return
-		}
-
-		tempPath := filepath.Join(tempDir, fmt.Sprintf("import_upload_%d.tmp", time.Now().UnixNano()))
-		tempFile, err := os.Create(tempPath)
-		if err != nil {
-			s.err(w, 500, "تعذر إنشاء ملف الاستيراد المؤقت: "+err.Error())
-			return
-		}
-		_, copyErr := io.Copy(tempFile, file)
-		tempFile.Close()
-		defer os.Remove(tempPath)
-
-		if copyErr != nil {
-			s.err(w, 500, "فشل حفظ محتويات الملف المرفوع: "+copyErr.Error())
-			return
-		}
-
-		preBackup, restoreErr := s.db.RestoreFrom(tempPath)
-		if restoreErr != nil {
-			s.err(w, 400, restoreErr.Error())
-			return
-		}
-
-		s.db.Audit(u.Username, "DATABASE_IMPORT", "system", "", "", map[string]any{
-			"original_filename":  header.Filename,
-			"pre_restore_backup": preBackup.Filename,
-		}, s.clientIP(r))
-
-		s.json(w, 200, map[string]any{
-			"ok":                 true,
-			"message":            "تم استيراد واستعادة كافة بيانات النظام بنجاح تام",
-			"pre_restore_backup": preBackup.Filename,
-		})
-	})
+	// استيراد واستعادة حزمة النظام أو قاعدة البيانات (.zip أو .db) (خاص بالمدير فقط)
+	mux.HandleFunc("POST /api/system/import-package", s.handleImportSystemPackage)
+	mux.HandleFunc("POST /api/system/import-db", s.handleImportSystemPackage)
 
 	// ---------------------------------------------------- المصادقة
 	mux.HandleFunc("POST /api/auth/login", func(w http.ResponseWriter, r *http.Request) {
@@ -2136,5 +2062,340 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		mux.ServeHTTP(w, r)
+	})
+}
+
+// ─── إدارة النظام: تصدير واستيراد الحزمة الشاملة وقاعدة البيانات ─────────
+
+func (s *Server) handleExportDB(w http.ResponseWriter, r *http.Request) {
+	u := s.getSessionUser(r)
+	if u == nil || u.Role != "ADMIN" {
+		s.err(w, 403, "تصدير قاعدة البيانات محصور بمدير النظام فقط")
+		return
+	}
+
+	res, err := s.db.CreateBackup()
+	if err != nil {
+		s.err(w, 500, "فشل إنشاء ملف التصدير: "+err.Error())
+		return
+	}
+
+	s.db.Audit(u.Username, "DATABASE_EXPORT", "system", "", "", map[string]any{
+		"backup_file": res.Filename,
+		"size_bytes":  res.SizeBytes,
+	}, s.clientIP(r))
+
+	exportName := fmt.Sprintf("raseen_database_%s.db", time.Now().Format("2006-01-02_150405"))
+	w.Header().Set("Content-Type", "application/x-sqlite3")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", exportName))
+	w.Header().Set("Content-Length", strconv.FormatInt(res.SizeBytes, 10))
+	http.ServeFile(w, r, res.Path)
+}
+
+func (s *Server) handleExportPackage(w http.ResponseWriter, r *http.Request) {
+	u := s.getSessionUser(r)
+	if u == nil || u.Role != "ADMIN" {
+		s.err(w, 403, "تصدير حزمة النظام محصور بمدير النظام فقط")
+		return
+	}
+
+	res, err := s.db.CreateBackup()
+	if err != nil {
+		s.err(w, 500, "فشل إنشاء نسخة متناسقة من قاعدة البيانات: "+err.Error())
+		return
+	}
+
+	exportName := fmt.Sprintf("raseen_package_%s.zip", time.Now().Format("2006-01-02_150405"))
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", exportName))
+
+	zw := zip.NewWriter(w)
+	defer zw.Close()
+
+	addFileToZip := func(diskPath, zipRelPath string) error {
+		data, err := os.ReadFile(diskPath)
+		if err != nil {
+			return err
+		}
+		f, err := zw.Create(filepath.ToSlash(zipRelPath))
+		if err != nil {
+			return err
+		}
+		_, err = f.Write(data)
+		return err
+	}
+
+	// 1. إضافة قاعدة البيانات zsystem.db من النسخة الاحتياطية المتناسقة
+	_ = addFileToZip(res.Path, "zsystem.db")
+
+	// 2. إضافة رمز الريال السعودي saudi_riyal_symbol.svg
+	sarSvg := filepath.Join(s.cfg.DataDir, "saudi_riyal_symbol.svg")
+	if _, err := os.Stat(sarSvg); err == nil {
+		_ = addFileToZip(sarSvg, "saudi_riyal_symbol.svg")
+	}
+
+	// 3. إضافة مجلد القوالب templates
+	tplBaseDir := filepath.Join(s.cfg.DataDir, "templates")
+	var invoiceCount, docCount int
+	_ = filepath.Walk(tplBaseDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(s.cfg.DataDir, path)
+		if err != nil {
+			return nil
+		}
+		relSlash := filepath.ToSlash(rel)
+		if strings.HasSuffix(strings.ToLower(relSlash), ".html") {
+			if strings.Contains(relSlash, "invoices") {
+				invoiceCount++
+			} else if strings.Contains(relSlash, "documents") {
+				docCount++
+			}
+		}
+		_ = addFileToZip(path, relSlash)
+		return nil
+	})
+
+	// 4. ملف manifest.json
+	manifest := map[string]any{
+		"app":                "Raseen",
+		"version":            "1.0",
+		"created_at":         time.Now().Format(time.RFC3339),
+		"database_file":      "zsystem.db",
+		"database_size":      res.SizeBytes,
+		"invoice_templates":  invoiceCount,
+		"document_templates": docCount,
+	}
+	if mb, err := json.MarshalIndent(manifest, "", "  "); err == nil {
+		if mf, err := zw.Create("manifest.json"); err == nil {
+			_, _ = mf.Write(mb)
+		}
+	}
+
+	s.db.Audit(u.Username, "PACKAGE_EXPORT", "system", "", "", manifest, s.clientIP(r))
+}
+
+func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Request) {
+	u := s.getSessionUser(r)
+	if u == nil || u.Role != "ADMIN" {
+		s.err(w, 403, "استيراد واستعادة بيانات النظام محصور بمدير النظام فقط")
+		return
+	}
+
+	// سقف حجم الملف 300MB
+	if err := r.ParseMultipartForm(300 << 20); err != nil {
+		s.err(w, 400, "تعذر قراءة الملف المرفوع أو تجاوز الحد المسموح: "+err.Error())
+		return
+	}
+
+	var file multipart.File
+	var header *multipart.FileHeader
+	var err error
+
+	for _, field := range []string{"package_file", "database_file", "file"} {
+		file, header, err = r.FormFile(field)
+		if err == nil && file != nil {
+			break
+		}
+	}
+	if file == nil || header == nil {
+		s.err(w, 400, "يرجى تحديد ملف الحزمة المضغوطة (.zip) أو ملف قاعدة البيانات (.db) المراد استيراده")
+		return
+	}
+	defer file.Close()
+
+	tempDir := s.cfg.BackupDir
+	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		s.err(w, 500, "فشل تجهيز مجلد الاستيراد: "+err.Error())
+		return
+	}
+
+	tempPath := filepath.Join(tempDir, fmt.Sprintf("import_upload_%d.tmp", time.Now().UnixNano()))
+	tempFile, err := os.Create(tempPath)
+	if err != nil {
+		s.err(w, 500, "تعذر إنشاء ملف الاستيراد المؤقت: "+err.Error())
+		return
+	}
+	_, copyErr := io.Copy(tempFile, file)
+	tempFile.Close()
+	defer os.Remove(tempPath)
+
+	if copyErr != nil {
+		s.err(w, 500, "فشل حفظ محتويات الملف المرفوع: "+copyErr.Error())
+		return
+	}
+
+	// فحص ما إذا كان الملف المرفوع أرشيف مضغوط ZIP
+	zipReader, zipErr := zip.OpenReader(tempPath)
+	if zipErr == nil {
+		defer zipReader.Close()
+
+		var dbRestored bool
+		var preBackupFilename string
+		var templatesCount int
+		var foundDbInZip *zip.File
+
+		// البحث عن أي ملف قاعدة بيانات SQLite داخل الـ ZIP
+		for _, f := range zipReader.File {
+			cleanName := filepath.ToSlash(f.Name)
+			lower := strings.ToLower(cleanName)
+			if strings.HasPrefix(lower, "__macosx") || strings.HasPrefix(filepath.Base(lower), ".") || strings.Contains(lower, "/backups/") {
+				continue
+			}
+			if strings.HasSuffix(lower, ".db") || strings.HasSuffix(lower, ".sqlite") || strings.HasSuffix(lower, ".sqlite3") {
+				if foundDbInZip == nil || strings.Contains(lower, "zsystem.db") || strings.Contains(lower, "database.db") {
+					foundDbInZip = f
+				}
+			}
+		}
+
+		if foundDbInZip != nil {
+			rc, err := foundDbInZip.Open()
+			if err != nil {
+				s.err(w, 500, "تعذر فتح ملف قاعدة البيانات داخل الحزمة: "+err.Error())
+				return
+			}
+			tempDbPath := filepath.Join(tempDir, fmt.Sprintf("extracted_db_%d.tmp", time.Now().UnixNano()))
+			outDb, err := os.Create(tempDbPath)
+			if err != nil {
+				rc.Close()
+				s.err(w, 500, "تعذر إنشاء ملف قاعدة البيانات المؤقت: "+err.Error())
+				return
+			}
+			_, copyDbErr := io.Copy(outDb, rc)
+			rc.Close()
+			outDb.Close()
+			defer os.Remove(tempDbPath)
+
+			if copyDbErr != nil {
+				s.err(w, 500, "فشل استخراج قاعدة البيانات من الأرشيف: "+copyDbErr.Error())
+				return
+			}
+
+			preBackup, restoreErr := s.db.RestoreFrom(tempDbPath)
+			if restoreErr != nil {
+				s.err(w, 400, "فشل استعادة قاعدة البيانات من الحزمة: "+restoreErr.Error())
+				return
+			}
+			dbRestored = true
+			if preBackup != nil {
+				preBackupFilename = preBackup.Filename
+			}
+		}
+
+		// استخراج قوالب HTML والملفات التابعة
+		for _, f := range zipReader.File {
+			cleanName := filepath.ToSlash(f.Name)
+			lower := strings.ToLower(cleanName)
+			if strings.HasPrefix(lower, "__macosx") || strings.HasPrefix(filepath.Base(lower), ".") || f.FileInfo().IsDir() {
+				continue
+			}
+			// حماية من Zip-Slip
+			if strings.Contains(cleanName, "..") {
+				continue
+			}
+
+			// رمز الريال السعودي SVG
+			if filepath.Base(lower) == "saudi_riyal_symbol.svg" {
+				rc, err := f.Open()
+				if err == nil {
+					svgData, _ := io.ReadAll(rc)
+					rc.Close()
+					if len(svgData) > 0 {
+						_ = os.WriteFile(filepath.Join(s.cfg.DataDir, "saudi_riyal_symbol.svg"), svgData, 0644)
+					}
+				}
+				continue
+			}
+
+			// قوالب HTML
+			if strings.HasSuffix(lower, ".html") {
+				baseName := filepath.Base(cleanName)
+				if baseName == "index.html" || strings.HasPrefix(baseName, ".") {
+					continue
+				}
+
+				targetSub := "invoices"
+				if strings.Contains(lower, "documents") || strings.Contains(lower, "vouchers") || strings.Contains(lower, "سند") {
+					targetSub = "documents"
+				}
+
+				targetDir := filepath.Join(s.cfg.DataDir, "templates", targetSub)
+				_ = os.MkdirAll(targetDir, 0755)
+				targetPath := filepath.Join(targetDir, baseName)
+
+				rc, err := f.Open()
+				if err != nil {
+					continue
+				}
+				content, err := io.ReadAll(rc)
+				rc.Close()
+				if err == nil && len(content) > 0 {
+					if errWrite := os.WriteFile(targetPath, content, 0644); errWrite == nil {
+						templatesCount++
+					}
+				}
+			}
+		}
+
+		if templatesCount > 0 || dbRestored {
+			_ = s.templates.SyncDiskTemplates()
+		}
+
+		if !dbRestored && templatesCount == 0 {
+			s.err(w, 400, "الملف المضغوط لا يحتوي على قاعدة بيانات SQLite (.db) أو قوالب HTML صالحة")
+			return
+		}
+
+		msg := fmt.Sprintf("تم استيراد واستعادة الحزمة بنجاح: تم تحديث وتثبيت %d قالب", templatesCount)
+		if dbRestored && templatesCount > 0 {
+			msg = fmt.Sprintf("تم استيراد واستعادة الحزمة بالكامل بنجاح: تم استرجاع قاعدة البيانات وتثبيت وتحديث %d قالب", templatesCount)
+		} else if dbRestored {
+			msg = "تم استيراد واستعادة قاعدة البيانات بالكامل بنجاح"
+		}
+
+		s.db.Audit(u.Username, "PACKAGE_IMPORT", "system", "", "", map[string]any{
+			"original_filename":  header.Filename,
+			"db_restored":        dbRestored,
+			"templates_count":    templatesCount,
+			"pre_restore_backup": preBackupFilename,
+		}, s.clientIP(r))
+
+		s.json(w, 200, map[string]any{
+			"ok":                 true,
+			"message":            msg,
+			"db_restored":        dbRestored,
+			"templates_count":    templatesCount,
+			"pre_restore_backup": preBackupFilename,
+		})
+		return
+	}
+
+	// في حال لم يكن أرشيف ZIP، يتم التعامل معه كملف قاعدة بيانات SQLite مباشر
+	preBackup, restoreErr := s.db.RestoreFrom(tempPath)
+	if restoreErr != nil {
+		s.err(w, 400, restoreErr.Error())
+		return
+	}
+
+	_ = s.templates.SyncDiskTemplates()
+
+	var preBackupFilename string
+	if preBackup != nil {
+		preBackupFilename = preBackup.Filename
+	}
+
+	s.db.Audit(u.Username, "DATABASE_IMPORT", "system", "", "", map[string]any{
+		"original_filename":  header.Filename,
+		"pre_restore_backup": preBackupFilename,
+	}, s.clientIP(r))
+
+	s.json(w, 200, map[string]any{
+		"ok":                 true,
+		"message":            "تم استيراد واستعادة كافة بيانات النظام بنجاح تام",
+		"db_restored":        true,
+		"templates_count":    0,
+		"pre_restore_backup": preBackupFilename,
 	})
 }
