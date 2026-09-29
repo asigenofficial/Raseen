@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -192,6 +193,117 @@ func pruneOldBackups(dir string, keepCount int) {
 	for i := 0; i < toDelete; i++ {
 		_ = os.Remove(filepath.Join(dir, backupFiles[i]))
 	}
+}
+
+// RestoreFrom safely replaces the live database with an imported SQLite database.
+// It verifies the SQLite header and schema integrity, takes a pre-restore backup,
+// closes the current database, overwrites the DB file, and reopens the connection cleanly.
+func (d *DB) RestoreFrom(sourcePath string) (*BackupResult, error) {
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		return nil, fmt.Errorf("ملف الاستيراد غير موجود: %w", err)
+	}
+	if info.Size() < 100 {
+		return nil, fmt.Errorf("حجم الملف صغير جداً وغير صالح كقاعدة بيانات")
+	}
+
+	f, err := os.Open(sourcePath)
+	if err != nil {
+		return nil, fmt.Errorf("تعذر فتح ملف الاستيراد: %w", err)
+	}
+	header := make([]byte, 16)
+	_, _ = f.Read(header)
+	f.Close()
+	if !strings.HasPrefix(string(header), "SQLite format 3\x00") {
+		return nil, fmt.Errorf("الملف المرفوع ليس ملف قاعدة بيانات SQLite صالح")
+	}
+
+	testDsn := fmt.Sprintf("%s?_pragma=busy_timeout(3000)", filepath.ToSlash(sourcePath))
+	testDb, err := sql.Open("sqlite", testDsn)
+	if err != nil {
+		return nil, fmt.Errorf("فشل فحص ملف قاعدة البيانات: %w", err)
+	}
+	var integrity string
+	err = testDb.QueryRow("PRAGMA integrity_check").Scan(&integrity)
+	if err != nil || integrity != "ok" {
+		testDb.Close()
+		return nil, fmt.Errorf("فحص سلامة قاعدة البيانات المرفوعة لم ينجح: %s", integrity)
+	}
+	var tableCount int
+	_ = testDb.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('users', 'invoices', 'issuers', 'settings')").Scan(&tableCount)
+	testDb.Close()
+	if tableCount == 0 {
+		return nil, fmt.Errorf("ملف قاعدة البيانات لا يحتوي على جداول رسين المعتمدة")
+	}
+
+	// 1. أخذ نسخة احتياطية وقائية فورية من قاعدة البيانات الحالية لضمان عدم ضياع أي بيانات
+	preBackup, err := d.CreateBackup()
+	if err != nil {
+		return nil, fmt.Errorf("فشل أخذ نسخة احتياطية وقائية قبل الاستيراد: %w", err)
+	}
+
+	// 2. إغلاق الاتصال الحالي
+	if err := d.DB.Close(); err != nil {
+		return nil, fmt.Errorf("تعذر إغلاق قاعدة البيانات الحالية: %w", err)
+	}
+
+	// 3. حذف ملفات WAL و SHM المؤقتة لضمان نظافة الاستبدال
+	_ = os.Remove(d.cfg.DbFile + "-wal")
+	_ = os.Remove(d.cfg.DbFile + "-shm")
+
+	// 4. نسخ ملف قاعدة البيانات المستورد فوق DbFile
+	if err := copyFile(sourcePath, d.cfg.DbFile); err != nil {
+		_ = copyFile(preBackup.Path, d.cfg.DbFile)
+		_ = d.reopen()
+		return nil, fmt.Errorf("فشل استبدال ملف قاعدة البيانات: %w", err)
+	}
+
+	// 5. إعادة فتح الاتصال
+	if err := d.reopen(); err != nil {
+		_ = copyFile(preBackup.Path, d.cfg.DbFile)
+		_ = d.reopen()
+		return nil, fmt.Errorf("فشل إعادة فتح قاعدة البيانات بعد الاستيراد: %w", err)
+	}
+
+	// 6. تشغيل المخطط والتجهيزات لضمان توافق أي جداول جديدة
+	_ = d.initSchema()
+	_ = d.bootstrap()
+
+	return preBackup, nil
+}
+
+func (d *DB) reopen() error {
+	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)", d.cfg.DbFile)
+	sqldb, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return err
+	}
+	sqldb.SetMaxOpenConns(1)
+	if err := sqldb.Ping(); err != nil {
+		sqldb.Close()
+		return err
+	}
+	d.DB = sqldb
+	return nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err = io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Sync()
 }
 
 func (d *DB) Audit(userName, action, entityType, entityId, issuerId string, details any, ip string) {

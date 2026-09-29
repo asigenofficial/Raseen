@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"raseen/internal/config"
 	"raseen/internal/crypto"
@@ -172,6 +173,92 @@ func (s *Server) Handler() http.Handler {
 		}
 		s.db.Audit(u.Username, "DATABASE_BACKUP", "system", "", "", nil, s.clientIP(r))
 		s.json(w, 200, res)
+	})
+
+	// تصدير وتحميل قاعدة البيانات كاملة كملف SQLite (.db) (خاص بالمدير فقط)
+	mux.HandleFunc("GET /api/system/export-db", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil || u.Role != "ADMIN" {
+			s.err(w, 403, "تصدير قاعدة البيانات محصور بمدير النظام فقط")
+			return
+		}
+
+		res, err := s.db.CreateBackup()
+		if err != nil {
+			s.err(w, 500, "فشل إنشاء ملف التصدير: "+err.Error())
+			return
+		}
+
+		s.db.Audit(u.Username, "DATABASE_EXPORT", "system", "", "", map[string]any{
+			"backup_file": res.Filename,
+			"size_bytes":  res.SizeBytes,
+		}, s.clientIP(r))
+
+		exportName := fmt.Sprintf("raseen_database_%s.db", time.Now().Format("2006-01-02_150405"))
+		w.Header().Set("Content-Type", "application/x-sqlite3")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", exportName))
+		w.Header().Set("Content-Length", strconv.FormatInt(res.SizeBytes, 10))
+		http.ServeFile(w, r, res.Path)
+	})
+
+	// استيراد واستعادة قاعدة البيانات كاملة من ملف SQLite (.db) (خاص بالمدير فقط)
+	mux.HandleFunc("POST /api/system/import-db", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil || u.Role != "ADMIN" {
+			s.err(w, 403, "استيراد واستعادة قاعدة البيانات محصور بمدير النظام فقط")
+			return
+		}
+
+		// تحديد سقف حجم الملف المرفوع بـ 300MB
+		if err := r.ParseMultipartForm(300 << 20); err != nil {
+			s.err(w, 400, "تعذر قراءة الملف المرفوع أو تجاوز الحد المسموح: "+err.Error())
+			return
+		}
+
+		file, header, err := r.FormFile("database_file")
+		if err != nil {
+			s.err(w, 400, "يرجى تحديد ملف قاعدة البيانات المراد استيراده")
+			return
+		}
+		defer file.Close()
+
+		tempDir := s.cfg.BackupDir
+		if err := os.MkdirAll(tempDir, 0755); err != nil {
+			s.err(w, 500, "فشل تجهيز مجلد الاستيراد: "+err.Error())
+			return
+		}
+
+		tempPath := filepath.Join(tempDir, fmt.Sprintf("import_upload_%d.tmp", time.Now().UnixNano()))
+		tempFile, err := os.Create(tempPath)
+		if err != nil {
+			s.err(w, 500, "تعذر إنشاء ملف الاستيراد المؤقت: "+err.Error())
+			return
+		}
+		_, copyErr := io.Copy(tempFile, file)
+		tempFile.Close()
+		defer os.Remove(tempPath)
+
+		if copyErr != nil {
+			s.err(w, 500, "فشل حفظ محتويات الملف المرفوع: "+copyErr.Error())
+			return
+		}
+
+		preBackup, restoreErr := s.db.RestoreFrom(tempPath)
+		if restoreErr != nil {
+			s.err(w, 400, restoreErr.Error())
+			return
+		}
+
+		s.db.Audit(u.Username, "DATABASE_IMPORT", "system", "", "", map[string]any{
+			"original_filename":  header.Filename,
+			"pre_restore_backup": preBackup.Filename,
+		}, s.clientIP(r))
+
+		s.json(w, 200, map[string]any{
+			"ok":                 true,
+			"message":            "تم استيراد واستعادة كافة بيانات النظام بنجاح تام",
+			"pre_restore_backup": preBackup.Filename,
+		})
 	})
 
 	// ---------------------------------------------------- المصادقة
