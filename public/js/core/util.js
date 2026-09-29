@@ -577,10 +577,14 @@ function detectColumnTypeJS(th) {
   if (clean.includes('نسبة') || clean.includes('معدل') || clean.includes('rate') || clean === '%' || clean === '15%') {
     return 'tax_rate';
   }
-  if (clean.includes('ضريبة') || clean.includes('vat') || clean.includes('tax')) {
+  // فحص "قبل الضريبة" أو "الخاضع للضريبة" قبل كلمة "ضريبة" لأن عبارة "قبل الضريبة" تحتوي على لفظ "ضريبة"
+  if (clean.includes('قبل') || clean.includes('خاضع') || clean.includes('taxable') || clean.includes('subtotal') || clean.includes('amount before')) {
+    return 'taxable';
+  }
+  if ((clean.includes('ضريبة') || clean.includes('vat') || clean.includes('tax')) && !clean.includes('شامل')) {
     return 'tax_amount';
   }
-  if (clean.includes('قبل') || clean.includes('خاضع') || clean.includes('taxable') || clean.includes('إجمالي') || clean.includes('subtotal') || clean.includes('total') || clean.includes('مبلغ')) {
+  if (clean.includes('إجمالي') || clean.includes('total') || clean.includes('مبلغ')) {
     return 'taxable';
   }
   if (clean.includes('ملاحظ') || clean.includes('note')) {

@@ -1105,10 +1105,14 @@ func detectColumnType(th string) colType {
 	if strings.Contains(clean, "نسبة") || strings.Contains(clean, "rate") || clean == "%" || clean == "15%" {
 		return colTaxRate
 	}
-	if strings.Contains(clean, "ضريبة") || strings.Contains(clean, "vat") || strings.Contains(clean, "tax") {
+	// فحص "قبل الضريبة" أو "الخاضع للضريبة" قبل كلمة "ضريبة" لأن عبارة "قبل الضريبة" تحتوي على لفظ "ضريبة"
+	if strings.Contains(clean, "قبل") || strings.Contains(clean, "خاضع") || strings.Contains(clean, "taxable") || strings.Contains(clean, "subtotal") || strings.Contains(clean, "amount before") {
+		return colTaxable
+	}
+	if (strings.Contains(clean, "ضريبة") || strings.Contains(clean, "vat") || strings.Contains(clean, "tax")) && !strings.Contains(clean, "شامل") {
 		return colTaxAmount
 	}
-	if strings.Contains(clean, "قبل") || strings.Contains(clean, "خاضع") || strings.Contains(clean, "taxable") || strings.Contains(clean, "إجمالي") || strings.Contains(clean, "subtotal") || strings.Contains(clean, "total") || strings.Contains(clean, "مبلغ") {
+	if strings.Contains(clean, "إجمالي") || strings.Contains(clean, "total") || strings.Contains(clean, "مبلغ") {
 		return colTaxable
 	}
 	if strings.Contains(clean, "ملاحظ") || strings.Contains(clean, "note") {

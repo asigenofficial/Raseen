@@ -362,3 +362,97 @@ func TestAllTemplatesRenderUnitAndContinuation(t *testing.T) {
 	}
 	t.Logf("All %d templates successfully verified for unit rendering!", len(tplFiles))
 }
+
+func TestTaxableVsTaxAmountColumns(t *testing.T) {
+	// 1. Unit tests on detectColumnType
+	cases := []struct {
+		header   string
+		expected colType
+	}{
+		{"قبل الضريبة", colTaxable},
+		{"المبلغ قبل الضريبة", colTaxable},
+		{"الخاضع للضريبة", colTaxable},
+		{"الإجمالي قبل الضريبة", colTaxable},
+		{"مبلغ الضريبة", colTaxAmount},
+		{"قيمة الضريبة", colTaxAmount},
+		{"ضريبة", colTaxAmount},
+		{"ضريبة 15%", colTaxAmount},
+		{"شامل الضريبة", colTotal},
+		{"الإجمالي شامل الضريبة", colTotal},
+	}
+
+	for _, tc := range cases {
+		actual := detectColumnType(tc.header)
+		if actual != tc.expected {
+			t.Errorf("detectColumnType(%q) = %v, expected %v", tc.header, actual, tc.expected)
+		}
+	}
+
+	// 2. Integration test matching the exact numbers in the client photo:
+	// Item 1: Qty 135, UnitPrice 3.41 => Taxable: 460.35, Tax: 69.05, Total: 529.40
+	// Item 2: Qty 1, UnitPrice 14.00 => Taxable: 14.00, Tax: 2.10, Total: 16.10
+	database, invSvc, tplSvc := setupTestServices(t)
+	defer database.Close()
+	issuerID, clientID := createTestIssuerAndClient(t, database)
+
+	invInput := CreateInvoiceInput{
+		IssuerID:      issuerID,
+		ClientID:      clientID,
+		InvoiceNumber: "INV-TAXABLE-TEST",
+		IssueDate:     "2026-09-27",
+		PaymentMethod: "CREDIT",
+		Lines: []CreateInvoiceLineInput{
+			{
+				ItemName:  "شاحن قماش تايب سي",
+				ItemCode:  "SK-12301",
+				Unit:      "حبة",
+				UnitPrice: 3.41,
+				Quantity:  135,
+				TaxRate:   15.0,
+			},
+			{
+				ItemName:  "كيبل ايفون",
+				ItemCode:  "SK-12302",
+				Unit:      "حبة",
+				UnitPrice: 14.00,
+				Quantity:  1,
+				TaxRate:   15.0,
+			},
+		},
+	}
+
+	inv, err := invSvc.CreateInvoice(invInput, "admin", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateInvoice failed: %v", err)
+	}
+
+	// Render using template 07-violet-facets (which has قبل الضريبة, مبلغ الضريبة, شامل الضريبة)
+	rendered, err := tplSvc.RenderInvoiceHTML(inv, "07-violet-facets")
+	if err != nil {
+		t.Fatalf("RenderInvoiceHTML failed: %v", err)
+	}
+
+	// Verify Item 1 taxable is 460.35, tax is 69.05, total is 529.40
+	if !strings.Contains(rendered, "460.35") {
+		t.Errorf("Rendered HTML missing taxable amount 460.35 for item 1 in 'قبل الضريبة'")
+	}
+	if !strings.Contains(rendered, "69.05") {
+		t.Errorf("Rendered HTML missing tax amount 69.05 for item 1")
+	}
+	if !strings.Contains(rendered, "529.40") {
+		t.Errorf("Rendered HTML missing total amount 529.40 for item 1")
+	}
+
+	// Verify Item 2 taxable is 14.00, tax is 2.10, total is 16.10
+	if !strings.Contains(rendered, "14.00") {
+		t.Errorf("Rendered HTML missing taxable amount 14.00 for item 2 in 'قبل الضريبة'")
+	}
+	if !strings.Contains(rendered, "2.10") {
+		t.Errorf("Rendered HTML missing tax amount 2.10 for item 2")
+	}
+	if !strings.Contains(rendered, "16.10") {
+		t.Errorf("Rendered HTML missing total amount 16.10 for item 2")
+	}
+
+	t.Logf("Taxable amount vs tax amount columns verified successfully for client invoice data!")
+}
