@@ -331,8 +331,10 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 	clientCode := "CASH-001"
 	if req.ClientID != "" {
 		cli, err := s.clients.GetClient(req.ClientID)
-		if err != nil {return nil,err}
-		if err == nil && cli != nil {
+		if err != nil {
+			return nil, err
+		}
+		if cli != nil {
 			clientName = cli.Name
 			clientCode = cli.ClientCode
 		}
@@ -343,7 +345,9 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		var autoCodeIdx int = 1
 		for _, ci := range req.CustomItems {
 			rate := ci.TaxRate
-			if strings.TrimSpace(ci.NameAr)==""||!validAmount(ci.SalePrice)||!validAmount(rate)||rate>100{return nil,errors.New("بيانات الصنف المخصص غير صالحة")}
+			if strings.TrimSpace(ci.NameAr) == "" || !validAmount(ci.SalePrice) || !validAmount(rate) || rate > 100 {
+				return nil, errors.New("بيانات الصنف المخصص غير صالحة")
+			}
 			code := strings.TrimSpace(ci.ItemCode)
 			if code == "" {
 				code = fmt.Sprintf("ITM-%04d", autoCodeIdx)
@@ -359,21 +363,25 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		}
 	} else {
 		dbItems, err := s.items.ListItems("", "", true)
-		if err != nil {return nil,err}
-		if err == nil {
-			for _, it := range dbItems {
-				if len(req.CategoryIDs)>0&&(it.CategoryID==nil||!slices.Contains(req.CategoryIDs,*it.CategoryID)){continue}
-				if len(req.ItemIDs)>0&&!slices.Contains(req.ItemIDs,it.ID){continue}
-				id:=it.ID
-				availableItems = append(availableItems, ItemCandidate{
-					ID: &id,
-					NameAr:    it.NameAr,
-					ItemCode:  it.ItemCode,
-					Unit:      it.Unit,
-					SalePrice: it.SalePriceMajor,
-					TaxRate:   it.TaxRate,
-				})
+		if err != nil {
+			return nil, err
+		}
+		for _, it := range dbItems {
+			if len(req.CategoryIDs) > 0 && (it.CategoryID == nil || !slices.Contains(req.CategoryIDs, *it.CategoryID)) {
+				continue
 			}
+			if len(req.ItemIDs) > 0 && !slices.Contains(req.ItemIDs, it.ID) {
+				continue
+			}
+			id := it.ID
+			availableItems = append(availableItems, ItemCandidate{
+				ID:        &id,
+				NameAr:    it.NameAr,
+				ItemCode:  it.ItemCode,
+				Unit:      it.Unit,
+				SalePrice: it.SalePriceMajor,
+				TaxRate:   it.TaxRate,
+			})
 		}
 	}
 

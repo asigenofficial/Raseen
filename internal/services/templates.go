@@ -1604,7 +1604,9 @@ func generateItemsTable(inv *InvoiceView) string {
 	sb.WriteString(`<table style="width:100%;border-collapse:collapse;font-size:12px;" dir="rtl">`)
 	sb.WriteString(`<thead><tr style="background:#059669;color:#fff;">`)
 	for _, h := range []string{"#", "اسم الصنف بالكامل", "الكمية", "سعر الوحدة", "الضريبة", "الإجمالي"} {
-		sb.WriteString(`<th style="padding:6px 8px;text-align:right;border:1px solid #ccc;">` + h + `</th>`)
+		sb.WriteString(`<th style="padding:6px 8px;text-align:right;border:1px solid #ccc;">`)
+		sb.WriteString(h)
+		sb.WriteString(`</th>`)
 	}
 	sb.WriteString(`</tr></thead><tbody>`)
 
