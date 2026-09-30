@@ -476,17 +476,49 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		}
 	}
 
+	type invDateTime struct {
+		DateStr string
+		TimeStr string
+		TimeVal time.Time
+	}
+
+	dateTimes := make([]invDateTime, req.Count)
+	for i := 0; i < req.Count; i++ {
+		var dayIndex int
+		if req.DistributionMode == "uniform" || req.DistributionMode == "balanced" {
+			dayIndex = i * len(days) / req.Count
+		} else {
+			dayIndex = rng.Intn(len(days))
+		}
+		day := days[dayIndex]
+		minute := req.WorkStart + rng.Intn(req.WorkEnd-req.WorkStart)
+		sec := rng.Intn(60)
+		tVal := time.Date(day.Year(), day.Month(), day.Day(), minute/60, minute%60, sec, 0, day.Location())
+		dateTimes[i] = invDateTime{
+			DateStr: day.Format("2006-01-02"),
+			TimeStr: fmt.Sprintf("%02d:%02d:%02d", minute/60, minute%60, sec),
+			TimeVal: tVal,
+		}
+	}
+
+	// فرز التواريخ والأوقات تصاعدياً من الأقدم للأحدث لضمان التوافق الزمني التام مع أرقام الفواتير
+	// بحيث تكون الفاتورة الأقدم تاريخاً ذات رقم تسلسلي أسبق، والفاتورة الأحدث ذات رقم تسلسلي لاحق
+	slices.SortFunc(dateTimes, func(a, b invDateTime) int {
+		if a.TimeVal.Before(b.TimeVal) {
+			return -1
+		}
+		if a.TimeVal.After(b.TimeVal) {
+			return 1
+		}
+		return 0
+	})
+
 	invoices := make([]map[string]any, 0, req.Count)
 	var totalSubtotal, totalDiscount, totalTax, totalGrand float64
 
 	for i := 0; i < req.Count; i++ {
-		dayIndex := rng.Intn(len(days))
-		if req.DistributionMode == "uniform" || req.DistributionMode == "balanced" {
-			dayIndex = i * len(days) / req.Count
-		}
-		invDate := days[dayIndex].Format("2006-01-02")
-		minute := req.WorkStart + rng.Intn(req.WorkEnd-req.WorkStart)
-		invTime := fmt.Sprintf("%02d:%02d:%02d", minute/60, minute%60, rng.Intn(60))
+		invDate := dateTimes[i].DateStr
+		invTime := dateTimes[i].TimeStr
 
 		linesCount := minItems
 		if maxItems > minItems {
