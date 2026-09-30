@@ -1652,10 +1652,10 @@ func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string
 
 func generateItemsTable(inv *InvoiceView) string {
 	var sb strings.Builder
-	sb.WriteString(`<table style="width:100%;border-collapse:collapse;font-size:12px;" dir="rtl">`)
+	sb.WriteString(`<table style="width:100%;border-collapse:collapse;font-size:10px;line-height:1.35;" dir="rtl">`)
 	sb.WriteString(`<thead><tr style="background:#059669;color:#fff;">`)
 	for _, h := range []string{"#", "اسم الصنف بالكامل", "الكمية", "سعر الوحدة", "الضريبة", "الإجمالي"} {
-		sb.WriteString(`<th style="padding:6px 8px;text-align:right;border:1px solid #ccc;">`)
+		sb.WriteString(`<th style="padding:4px 6px;text-align:right;border:1px solid #ccc;font-size:10px;">`)
 		sb.WriteString(h)
 		sb.WriteString(`</th>`)
 	}
@@ -1667,12 +1667,12 @@ func generateItemsTable(inv *InvoiceView) string {
 			bg = "#f0fdf4"
 		}
 		sb.WriteString(fmt.Sprintf(`<tr style="background:%s;">`, bg))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;text-align:center;">%d</td>`, i+1))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;font-weight:600;">%s</td>`, html.EscapeString(item.ItemName)))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;text-align:center;">%.2f</td>`, item.Quantity))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">%.2f</td>`, item.UnitPriceMajor))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;">%.2f</td>`, item.TaxAmountMajor))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;border:1px solid #e2e8f0;font-weight:700;">%.2f</td>`, item.TotalLineMajor))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:3px 6px;border:1px solid #e2e8f0;text-align:center;">%d</td>`, i+1))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:3px 6px;border:1px solid #e2e8f0;font-weight:600;">%s</td>`, html.EscapeString(item.ItemName)))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:3px 6px;border:1px solid #e2e8f0;text-align:center;">%.2f</td>`, item.Quantity))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:3px 6px;border:1px solid #e2e8f0;">%.2f</td>`, item.UnitPriceMajor))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:3px 6px;border:1px solid #e2e8f0;">%.2f</td>`, item.TaxAmountMajor))
+		sb.WriteString(fmt.Sprintf(`<td style="padding:3px 6px;border:1px solid #e2e8f0;font-weight:700;">%.2f</td>`, item.TotalLineMajor))
 		sb.WriteString(`</tr>`)
 	}
 
@@ -1842,26 +1842,25 @@ func defaultInvoiceHTMLTemplate() string {
 <head>
 <meta charset="utf-8"/>
 <style>
-  @page { size: A4 portrait; margin: 0; }
+  @page { size: A4 portrait; margin: 6mm 8mm; }
   * { box-sizing: border-box; }
   html, body {
     margin: 0;
     padding: 0;
-    height: 100%;
     background: #fff;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
   body {
     font-family: Tahoma, 'Cairo', Arial, sans-serif;
-    font-size: 13px;
+    font-size: 11px;
     color: #1e293b;
     background: #fff;
-    min-height: 297mm;
+    min-height: 268mm;
     width: 210mm;
     max-width: 100%;
     margin: 0 auto;
-    padding: 12mm 15mm;
+    padding: 6mm 10mm;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -1872,25 +1871,26 @@ func defaultInvoiceHTMLTemplate() string {
   }
   .bottom-wrap {
     margin-top: auto;
+    padding-top: 6px;
     width: 100%;
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #059669; padding-bottom: 10px; margin-bottom: 14px; }
-  .header-title { font-size: 22px; font-weight: 900; color: #059669; }
-  .header-meta { font-size: 11px; line-height: 1.9; }
-  .section { margin-bottom: 12px; }
-  .section-title { font-weight: 700; font-size: 12px; color: #fff; background: #059669; padding: 4px 10px; border-radius: 4px; display: inline-block; margin-bottom: 6px; }
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; font-size: 12px; }
-  .info-row { display: flex; gap: 6px; }
-  .info-label { color: #64748b; font-size: 11px; min-width: 90px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #059669; padding-bottom: 6px; margin-bottom: 8px; }
+  .header-title { font-size: 18px; font-weight: 900; color: #059669; }
+  .header-meta { font-size: 10px; line-height: 1.5; }
+  .section { margin-bottom: 6px; }
+  .section-title { font-weight: 700; font-size: 10.5px; color: #fff; background: #059669; padding: 2px 8px; border-radius: 3px; display: inline-block; margin-bottom: 4px; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; font-size: 10.5px; }
+  .info-row { display: flex; gap: 4px; }
+  .info-label { color: #64748b; font-size: 10px; min-width: 80px; }
   .info-value { font-weight: 600; }
   .summary-section {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    margin-bottom: 14px;
-    gap: 20px;
+    margin-bottom: 6px;
+    gap: 14px;
   }
   .qr-col {
     display: flex;
@@ -1902,6 +1902,8 @@ func defaultInvoiceHTMLTemplate() string {
     margin: 0;
   }
   .qr-wrap svg {
+    width: 90px !important;
+    height: 90px !important;
     margin: 0 !important;
   }
   .totals-col {
@@ -1909,33 +1911,61 @@ func defaultInvoiceHTMLTemplate() string {
     justify-content: flex-end;
   }
   .totals-table {
-    font-size: 12px;
+    font-size: 10.5px;
     border-collapse: collapse;
-    min-width: 300px;
+    min-width: 270px;
   }
-  .totals-table td { padding: 4px 10px; }
-  .totals-table tr:last-child td { font-weight: 900; font-size: 14px; color: #059669; border-top: 2px solid #059669; }
+  .totals-table td { padding: 2.5px 6px; }
+  .totals-table tr:last-child td { font-weight: 900; font-size: 12px; color: #059669; border-top: 2px solid #059669; }
   .money-cell { text-align: left; direction: ltr; white-space: nowrap; }
   .footer {
     text-align: center;
-    font-size: 11px;
+    font-size: 9.5px;
     color: #64748b;
     border-top: 1px solid #e2e8f0;
-    padding-top: 10px;
-    padding-bottom: 2mm;
+    padding-top: 4px;
+    padding-bottom: 1mm;
     width: 100%;
+    line-height: 1.4;
   }
   @media print {
-    body {
-      width: 100%;
-      min-height: 297mm;
+    @page {
+      size: A4 portrait;
+      margin: 6mm 8mm;
+    }
+    html, body {
+      background: #fff !important;
       height: 100%;
-      padding: 10mm;
-      margin: 0;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    body {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-height: 268mm !important;
+      height: auto !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      box-sizing: border-box !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+    }
+    .top-wrap {
+      flex-shrink: 0;
     }
     .bottom-wrap {
+      margin-top: auto;
       break-inside: avoid;
       page-break-inside: avoid;
+    }
+    table {
+      page-break-inside: auto;
+    }
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
     }
   }
 </style>
@@ -2001,26 +2031,25 @@ func defaultVoucherHTMLTemplate() string {
 <head>
 <meta charset="utf-8"/>
 <style>
-  @page { size: A4 portrait; margin: 0; }
+  @page { size: A4 portrait; margin: 6mm 8mm; }
   * { box-sizing: border-box; }
   html, body {
     margin: 0;
     padding: 0;
-    height: 100%;
     background: #fff;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
   body {
     font-family: Tahoma, 'Cairo', Arial, sans-serif;
-    font-size: 13px;
+    font-size: 11.5px;
     color: #1e293b;
     background: #fff;
-    min-height: 297mm;
+    min-height: 268mm;
     width: 210mm;
     max-width: 100%;
     margin: 0 auto;
-    padding: 12mm 15mm;
+    padding: 8mm 12mm;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -2029,26 +2058,30 @@ func defaultVoucherHTMLTemplate() string {
   .top-wrap { flex-shrink: 0; }
   .bottom-wrap {
     margin-top: auto;
+    padding-top: 6px;
     width: 100%;
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  .header { text-align: center; border-bottom: 3px solid #7c3aed; padding-bottom: 10px; margin-bottom: 16px; }
-  .header-title { font-size: 24px; font-weight: 900; color: #7c3aed; }
-  .voucher-box { border: 2px solid #7c3aed; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
-  .info-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; }
+  .header { text-align: center; border-bottom: 2px solid #7c3aed; padding-bottom: 8px; margin-bottom: 12px; }
+  .header-title { font-size: 20px; font-weight: 900; color: #7c3aed; }
+  .voucher-box { border: 1.5px solid #7c3aed; border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+  .info-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #e2e8f0; font-size: 11.5px; }
   .info-row:last-child { border-bottom: none; }
   .info-label { color: #64748b; }
   .info-value { font-weight: 700; }
-  .amount-box { text-align: center; background: #f5f3ff; border-radius: 6px; padding: 14px; margin: 14px 0; }
-  .amount-value { font-size: 28px; font-weight: 900; color: #7c3aed; direction: ltr; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-  .qr-wrap { text-align: center; margin-top: 14px; margin-bottom: 10px; }
-  .footer { width: 100%; flex-shrink: 0; }
-  .sig-row { display: flex; justify-content: space-between; margin-top: 16px; }
-  .sig-line { width: 40%; border-top: 1px solid #64748b; text-align: center; padding-top: 6px; font-size: 11px; color: #64748b; }
+  .amount-box { text-align: center; background: #f5f3ff; border-radius: 6px; padding: 10px; margin: 10px 0; }
+  .amount-value { font-size: 24px; font-weight: 900; color: #7c3aed; direction: ltr; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .qr-wrap { text-align: center; margin-top: 10px; margin-bottom: 8px; }
+  .qr-wrap svg { width: 95px !important; height: 95px !important; margin: 0 auto !important; }
+  .footer { width: 100%; flex-shrink: 0; font-size: 10px; }
+  .sig-row { display: flex; justify-content: space-between; margin-top: 12px; }
+  .sig-line { width: 40%; border-top: 1px solid #64748b; text-align: center; padding-top: 4px; font-size: 10px; color: #64748b; }
   @media print {
-    body { width: 100%; min-height: 297mm; height: 100%; padding: 10mm; margin: 0; }
-    .bottom-wrap { break-inside: avoid; page-break-inside: avoid; }
+    @page { size: A4 portrait; margin: 6mm 8mm; }
+    html, body { background: #fff !important; height: 100%; min-height: 0 !important; margin: 0 !important; padding: 0 !important; }
+    body { width: 100% !important; max-width: 100% !important; min-height: 268mm !important; height: auto !important; padding: 0 !important; margin: 0 !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
+    .bottom-wrap { margin-top: auto; break-inside: avoid; page-break-inside: avoid; }
   }
 </style>
 </head>
