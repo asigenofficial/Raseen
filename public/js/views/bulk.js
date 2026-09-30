@@ -104,6 +104,7 @@ export async function render(view) {
     issuer_id: store.activeIssuerId || activeIssuers[0].id,
     client_id: store.clients[0].id,
     selected_template: initialTplStyle,
+    zatca_phase: activeIssuer?.zatca_phase || 'PHASE1',
     date_from: firstOfYear(),
     date_to: today(),
     count: 25,
@@ -214,6 +215,7 @@ export async function render(view) {
     work_end_minutes: timeToMinutes(state.work_end),
     payment_methods: state.payment_methods,
     invoice_type: state.invoice_type,
+    zatca_phase: state.zatca_phase || 'PHASE1',
     issue_vouchers: state.issue_vouchers,
     seed: state.seed === '' ? 0 : toNum(state.seed, 0),
     notes: state.notes,
@@ -460,6 +462,7 @@ export async function render(view) {
                 <div class="row align-center">
                   <span class="badge blue" style="font-size:.85rem;font-weight:bold">فاتورة #${idx + 1}</span>
                   <span class="badge green num" style="font-size:.85rem;font-weight:bold">${money(inv.grand_total)} ${esc(cur)}</span>
+                  <span class="badge ${(inv.zatca_phase || state.zatca_phase) === 'PHASE2' ? 'teal' : 'gray'} tiny" title="${(inv.zatca_phase || state.zatca_phase) === 'PHASE2' ? 'باركود المرحلة الثانية' : 'باركود المرحلة الأولى'}">${(inv.zatca_phase || state.zatca_phase) === 'PHASE2' ? 'م2 (مشفّر)' : 'م1 (أساسي)'}</span>
                   <span class="tiny muted">${esc(inv.lines.length)} أصناف</span>
                   <div class="spacer"></div>
                   <button class="btn btn-sm" data-preview-inv="${idx}" type="button" style="background:#0d9488;color:#fff;font-weight:600" title="معاينة هذه الفاتورة بالقالب وتبديل القوالب">
@@ -578,6 +581,19 @@ export async function render(view) {
               <option value="STANDARD" ${raw(state.invoice_type === 'STANDARD' ? 'selected' : '')}>ضريبية</option>
               <option value="SIMPLIFIED" ${raw(state.invoice_type === 'SIMPLIFIED' ? 'selected' : '')}>مبسطة</option>
             </select></div>
+          <div class="field" style="min-width:270px;flex:1"><label>مرحلة باركود هيئة الزكاة (QR)</label>
+            <div class="row align-center" style="gap:1rem;margin-top:.25rem;padding:.35rem .75rem;background:rgba(255,255,255,0.03);border:1px solid var(--line);border-radius:var(--radius-sm)">
+              <label class="check" style="margin:0;cursor:pointer">
+                <input type="radio" name="bulk_zatca_phase" value="PHASE1" ${state.zatca_phase === 'PHASE1' ? 'checked' : ''} />
+                <b>المرحلة الأولى</b> <span class="muted tiny">(5 حقول)</span>
+              </label>
+              <label class="check" style="margin:0;cursor:pointer">
+                <input type="radio" name="bulk_zatca_phase" value="PHASE2" ${state.zatca_phase === 'PHASE2' ? 'checked' : ''} />
+                <b>المرحلة الثانية</b> <span class="badge teal tiny" style="margin-right:2px">مشفّر وموقّع</span>
+              </label>
+            </div>
+            <span class="hint" id="bulk-phase-hint">${state.zatca_phase === 'PHASE2' ? 'باركود مشفر وموقع رقمياً (هاش وتوقيع وسلسلة فواتير)' : 'باركود مشفر بالحقول الخمسة الأساسية'}</span>
+          </div>
           <div class="field" style="max-width:260px"><label>قالب الفاتورة المعتمد للدفعة</label>
             <select id="selected_template">
               ${raw(buildTemplateOptions(state.selected_template))}
@@ -760,6 +776,17 @@ export async function render(view) {
             const area = $('#drafts-area', view);
             if (area) area.innerHTML = draftsSectionHtml();
             const currIss = activeIssuers.find((i) => i.id === state.issuer_id);
+            if (currIss) {
+              state.zatca_phase = currIss.zatca_phase || 'PHASE1';
+              const radio = $(`input[name="bulk_zatca_phase"][value="${state.zatca_phase}"]`, view);
+              if (radio) radio.checked = true;
+              const hint = $('#bulk-phase-hint', view);
+              if (hint) {
+                hint.textContent = state.zatca_phase === 'PHASE2'
+                  ? 'باركود مشفر وموقع رقمياً (هاش وتوقيع وسلسلة فواتير)'
+                  : 'باركود مشفر بالحقول الخمسة الأساسية';
+              }
+            }
             if (currIss?.print_settings) {
               try {
                 const cfg = typeof currIss.print_settings === 'string' ? JSON.parse(currIss.print_settings) : currIss.print_settings;
@@ -1088,6 +1115,26 @@ export async function render(view) {
       if (radio.checked) state.distribution_mode = radio.value;
     });
 
+    // تغيير مرحلة باركود الزكاة
+    delegate(view, 'change', 'input[name="bulk_zatca_phase"]', (e, radio) => {
+      if (radio.checked) {
+        state.zatca_phase = radio.value;
+        const hint = $('#bulk-phase-hint', view);
+        if (hint) {
+          hint.textContent = state.zatca_phase === 'PHASE2'
+            ? 'باركود مشفر وموقع رقمياً (هاش وتوقيع وسلسلة فواتير)'
+            : 'باركود مشفر بالحقول الخمسة الأساسية';
+        }
+        if (state.preview && state.preview.invoices) {
+          state.preview.invoices.forEach((inv) => {
+            inv.zatca_phase = state.zatca_phase;
+          });
+          const area = $('#preview-area', view);
+          if (area) area.innerHTML = previewHtml();
+        }
+      }
+    });
+
     delegate(view, 'click', '[data-pay]', (e, chip) => {
       const id = chip.dataset.pay;
       if (state.payment_methods.includes(id)) {
@@ -1123,6 +1170,17 @@ export async function render(view) {
           options: draft.options || {},
           title: draft.title,
         };
+        if (draft.options?.zatca_phase) {
+          state.zatca_phase = draft.options.zatca_phase;
+          const radio = $(`input[name="bulk_zatca_phase"][value="${state.zatca_phase}"]`, view);
+          if (radio) radio.checked = true;
+          const hint = $('#bulk-phase-hint', view);
+          if (hint) {
+            hint.textContent = state.zatca_phase === 'PHASE2'
+              ? 'باركود مشفر وموقع رقمياً (هاش وتوقيع وسلسلة فواتير)'
+              : 'باركود مشفر بالحقول الخمسة الأساسية';
+          }
+        }
         recalcPreviewSummary();
         const area = $('#preview-area', view);
         if (area) area.innerHTML = previewHtml();
@@ -1150,7 +1208,126 @@ export async function render(view) {
       }
     });
 
-    bindPreviewArea();
+    // تفويض نقرات أزرار وإجراءات المعاينة بشكل دائم على الحاوية view لتفادي فقدان الأحداث عند إعادة بناء DOM
+    delegate(view, 'click', '#btn-sample-print', () => openBulkInvoicePreviewModal(0));
+    delegate(view, 'click', '[data-preview-inv]', (e, btn) => openBulkInvoicePreviewModal(Number(btn.dataset.previewInv)));
+    delegate(view, 'click', '#commit', () => commit());
+    delegate(view, 'click', '#btn-save-draft', () => saveDraft());
+    delegate(view, 'click', '#btn-print-preview', () => printBulkPreview());
+    delegate(view, 'click', '#regen', () => regenPreview());
+    delegate(view, 'click', '#pv-csv', () => exportBulkCsv());
+    delegate(view, 'click', '#pv-xls', () => exportBulkXls());
+
+    delegate(view, 'click', '[data-toggle-edit]', (e, btn) => {
+      const idx = Number(btn.dataset.toggleEdit);
+      state.activeEditIndex = state.activeEditIndex === idx ? null : idx;
+      const area = $('#preview-area', view);
+      if (area) area.innerHTML = previewHtml();
+    });
+
+    delegate(view, 'click', '[data-remove-inv]', (e, btn) => {
+      const idx = Number(btn.dataset.removeInv);
+      if (!state.preview || !state.preview.invoices[idx]) return;
+      state.preview.invoices.splice(idx, 1);
+      recalcPreviewSummary();
+      const area = $('#preview-area', view);
+      if (area) area.innerHTML = previewHtml();
+      toastOk('تم حذف الفاتورة من الدفعة');
+    });
+
+    delegate(view, 'change', '.inv-field', (e, input) => {
+      const idx = Number(input.dataset.idx);
+      const field = input.dataset.field;
+      if (!state.preview || !state.preview.invoices[idx]) return;
+      state.preview.invoices[idx][field] = input.value;
+    });
+
+    delegate(view, 'click', '#btn-add-manual-inv', () => {
+      if (!state.preview) return;
+      const defaultItem = state.custom_items[0] || store.items[0] || { id: null, name_ar: 'صنف عام', sale_price: 100, unit: 'حبة', tax_rate: 15 };
+      const newInv = {
+        temp_id: `tmp-${state.preview.invoices.length + 1}`,
+        issue_date: state.preview.invoices.length ? state.preview.invoices[state.preview.invoices.length - 1].issue_date : state.date_to,
+        issue_time: '12:00:00',
+        invoice_type: state.invoice_type,
+        zatca_phase: state.zatca_phase || 'PHASE1',
+        payment_method: state.payment_methods[0] || 'CREDIT',
+        notes: '',
+        lines: [
+          {
+            item_id: defaultItem.id || null,
+            item_code: defaultItem.item_code || '',
+            item_name: defaultItem.name_ar,
+            unit: defaultItem.unit || 'حبة',
+            quantity: 1,
+            unit_price: defaultItem.sale_price,
+            discount: 0,
+            tax_rate: defaultItem.tax_rate !== undefined ? defaultItem.tax_rate : 15,
+          },
+        ],
+        subtotal: defaultItem.sale_price,
+        discount_amount: 0,
+        taxable_amount: defaultItem.sale_price,
+        tax_amount: Math.round(defaultItem.sale_price * 0.15 * 100) / 100,
+        grand_total: Math.round(defaultItem.sale_price * 1.15 * 100) / 100,
+      };
+      state.preview.invoices.push(newInv);
+      state.activeEditIndex = state.preview.invoices.length - 1;
+      recalcPreviewSummary();
+      const area = $('#preview-area', view);
+      if (area) area.innerHTML = previewHtml();
+      toastOk('تمت إضافة فاتورة يدوية جديدة إلى الدفعة');
+    });
+
+    delegate(view, 'change', '.line-input', (e, input) => {
+      const invIdx = Number(input.dataset.inv);
+      const lineIdx = Number(input.dataset.line);
+      const lfield = input.dataset.lfield;
+      if (!state.preview || !state.preview.invoices[invIdx] || !state.preview.invoices[invIdx].lines[lineIdx]) return;
+      if (lfield === 'item_code' || lfield === 'unit' || lfield === 'item_name') {
+        state.preview.invoices[invIdx].lines[lineIdx][lfield] = input.value;
+      } else {
+        state.preview.invoices[invIdx].lines[lineIdx][lfield] = Number(input.value) || 0;
+        recalcPreviewSummary();
+        const area = $('#preview-area', view);
+        if (area) area.innerHTML = previewHtml();
+      }
+    });
+
+    delegate(view, 'click', '[data-add-item]', (e, btn) => {
+      const idx = Number(btn.dataset.addItem);
+      const select = $(`#quick-add-item-${idx}`, view);
+      if (!select || !select.value) { toastErr('اختر صنفاً أولاً'); return; }
+      const it = store.items.find((item) => item.id === select.value);
+      if (!it) return;
+      state.preview.invoices[idx].lines.push({
+        item_id: it.id,
+        item_code: it.item_code,
+        item_name: it.name_ar,
+        unit: it.unit || 'حبة',
+        quantity: 1,
+        unit_price: it.sale_price,
+        discount: 0,
+        tax_rate: 15,
+      });
+      recalcPreviewSummary();
+      const area = $('#preview-area', view);
+      if (area) area.innerHTML = previewHtml();
+      toastOk(`تمت إضافة الصنف: ${it.name_ar}`);
+    });
+
+    delegate(view, 'click', '[data-del-line]', (e, btn) => {
+      const [invIdx, lineIdx] = btn.dataset.delLine.split(':').map(Number);
+      if (!state.preview || !state.preview.invoices[invIdx]) return;
+      if (state.preview.invoices[invIdx].lines.length <= 1) {
+        toastErr('يجب أن تحتوي الفاتورة على بند واحد على الأقل');
+        return;
+      }
+      state.preview.invoices[invIdx].lines.splice(lineIdx, 1);
+      recalcPreviewSummary();
+      const area = $('#preview-area', view);
+      if (area) area.innerHTML = previewHtml();
+    });
   }
 
   async function openBulkInvoicePreviewModal(targetIndex = 0) {
@@ -1282,6 +1459,8 @@ export async function render(view) {
                 invoice_number: inv.invoice_number || `${issuer.invoice_prefix || 'INV'}-${String(currentIdx + 1).padStart(4, '0')}`,
                 issue_date: inv.issue_date,
                 issue_time: inv.issue_time || '10:00:00',
+                invoice_type: inv.invoice_type || state.invoice_type || 'STANDARD',
+                zatca_phase: inv.zatca_phase || state.zatca_phase || 'PHASE1',
                 payment_method: inv.payment_method || 'CREDIT',
                 notes: inv.notes || '',
                 subtotal: inv.subtotal,
@@ -1307,6 +1486,8 @@ export async function render(view) {
       // Fallback: Client-side rendering via invoiceA4
       const fullSample = {
         ...inv,
+        invoice_type: inv.invoice_type || state.invoice_type || 'STANDARD',
+        zatca_phase: inv.zatca_phase || state.zatca_phase || 'PHASE1',
         invoice_number: inv.invoice_number || `${issuer.invoice_prefix || 'INV'}-${String(currentIdx + 1).padStart(4, '0')}`,
         seller_name: issuer.name_ar,
         seller_tax_number: issuer.tax_number,
@@ -1423,203 +1604,97 @@ export async function render(view) {
     syncNav();
   }
 
-  function bindPreviewArea() {
-    const regen = $('#regen', view);
-    if (regen) {
-      regen.addEventListener('click', () => {
-        state.seed = String(Math.floor(Math.random() * 2000000000));
-        const seedInput = $('#seed', view);
-        if (seedInput) seedInput.value = state.seed;
-        runPreview();
-      });
+  const printBulkPreview = () => {
+    if (!state.preview || !state.preview.invoices || !state.preview.invoices.length) {
+      toastErr('لا توجد فواتير مُولَّدة للطباعة');
+      return;
     }
+    const issuer = store.issuers.find((i) => i.id === state.issuer_id) || { name_ar: 'الشركة المصدرة', currency: 'SAR' };
+    const client = store.clients.find((c) => c.id === state.client_id) || { name: 'العميل' };
+    printDoc(bulkPreviewReport({
+      issuer,
+      client,
+      invoices: state.preview.invoices,
+      summary: state.preview.summary,
+      options: state.preview.options || payload(),
+      title: state.preview.title || `معاينة دفعة فواتير — ${issuer.name_ar}`,
+    }));
+  };
 
-    const commitBtn = $('#commit', view);
-    if (commitBtn) commitBtn.addEventListener('click', commit);
-
-    const saveDraftBtn = $('#btn-save-draft', view);
-    if (saveDraftBtn) {
-      saveDraftBtn.addEventListener('click', async () => {
-        if (!state.preview || !state.preview.invoices.length) return;
-        const defaultTitle = state.preview.title || `معاينة دفعة ${today()} (${state.preview.invoices.length} فاتورة)`;
-        const title = await promptDialog({ title: 'حفظ المسودة', label: 'اسم / عنوان المسودة', value: defaultTitle });
-        if (!title) return;
-        try {
-          const res = await api.post('/api/bulk/drafts', {
-            id: state.current_draft_id || undefined,
-            title,
-            issuer_id: state.issuer_id,
-            client_id: state.client_id,
-            invoices: state.preview.invoices,
-            options: state.preview.options || payload(),
-          });
-          state.current_draft_id = res.id;
-          state.preview.title = res.title;
-          await loadDraftsList();
-          const draftsArea = $('#drafts-area', view);
-          if (draftsArea) draftsArea.innerHTML = draftsSectionHtml();
-          toastOk(`تم حفظ المسودة بنجاح (${res.title})`);
-        } catch (err) {
-          toastErr(err.message || 'تعذر حفظ المسودة');
-        }
-      });
+  const saveDraft = async () => {
+    if (!state.preview || !state.preview.invoices || !state.preview.invoices.length) {
+      toastErr('لا توجد فواتير مُولَّدة لحفظها كمسودة');
+      return;
     }
-
-    // معاينة وطباعة الفاتورة بالقالب التفاعلي (Interactive Template Preview & Sample Print)
-    const samplePrintBtn = $('#btn-sample-print', view);
-    if (samplePrintBtn) {
-      samplePrintBtn.addEventListener('click', () => {
-        openBulkInvoicePreviewModal(0);
+    const defaultTitle = state.preview.title || `معاينة دفعة ${today()} (${state.preview.invoices.length} فاتورة)`;
+    const title = await promptDialog({ title: 'حفظ المسودة', label: 'اسم / عنوان المسودة', value: defaultTitle });
+    if (!title) return;
+    try {
+      const res = await api.post('/api/bulk/drafts', {
+        id: state.current_draft_id || undefined,
+        title,
+        issuer_id: state.issuer_id,
+        client_id: state.client_id,
+        invoices: state.preview.invoices,
+        options: state.preview.options || payload(),
       });
+      state.current_draft_id = res.id;
+      state.preview.title = res.title;
+      await loadDraftsList();
+      const draftsArea = $('#drafts-area', view);
+      if (draftsArea) draftsArea.innerHTML = draftsSectionHtml();
+      toastOk(`تم حفظ المسودة بنجاح (${res.title})`);
+    } catch (err) {
+      toastErr(err.message || 'تعذر حفظ المسودة');
     }
+  };
 
-    delegate(view, 'click', '[data-preview-inv]', (e, btn) => {
-      const idx = Number(btn.dataset.previewInv);
-      openBulkInvoicePreviewModal(idx);
-    });
+  const regenPreview = () => {
+    state.seed = String(Math.floor(Math.random() * 2000000000));
+    const seedInput = $('#seed', view);
+    if (seedInput) seedInput.value = state.seed;
+    runPreview();
+  };
 
-    // طباعة تقرير المعاينة الشامل (PDF Print Preview)
-    const printPrevBtn = $('#btn-print-preview', view);
-    if (printPrevBtn) {
-      printPrevBtn.addEventListener('click', () => {
-        if (!state.preview || !state.preview.invoices.length) return;
-        const issuer = store.issuers.find((i) => i.id === state.issuer_id) || { name_ar: 'الشركة المصدرة', currency: 'SAR' };
-        const client = store.clients.find((c) => c.id === state.client_id) || { name: 'العميل' };
-        printDoc(bulkPreviewReport({
-          issuer,
-          client,
-          invoices: state.preview.invoices,
-          summary: state.preview.summary,
-          options: state.preview.options,
-          title: state.preview.title || `معاينة دفعة فواتير — ${issuer.name_ar}`,
-        }));
-      });
+  const exportBulkCsv = () => {
+    if (!state.preview || !state.preview.invoices || !state.preview.invoices.length) {
+      toastErr('لا توجد بيانات للتصدير');
+      return;
     }
+    const headers = ['#', 'التاريخ', 'الوقت', 'عدد الأصناف', 'طريقة الدفع', 'قبل الضريبة', 'الخصم', 'الضريبة', 'الإجمالي'];
+    const rows = state.preview.invoices.map((inv, i) => [
+      i + 1,
+      inv.issue_date,
+      inv.issue_time || '10:00:00',
+      (inv.lines || inv.items || []).length,
+      PAY_LABELS[inv.payment_method] || inv.payment_method,
+      inv.taxable_amount,
+      inv.discount_amount,
+      inv.tax_amount,
+      inv.grand_total,
+    ]);
+    exportCsv('معاينة-الدفعة', headers, rows);
+  };
 
-    // تصدير CSV / Excel
-    const csv = $('#pv-csv', view);
-    if (csv) {
-      const headers = ['#', 'التاريخ', 'الوقت', 'عدد الأصناف', 'طريقة الدفع', 'قبل الضريبة', 'الخصم', 'الضريبة', 'الإجمالي'];
-      const rows = () => state.preview.invoices.map((inv, i) => [i + 1, inv.issue_date, inv.issue_time,
-        inv.lines.length, PAY_LABELS[inv.payment_method] || inv.payment_method,
-        inv.taxable_amount, inv.discount_amount, inv.tax_amount, inv.grand_total]);
-      csv.addEventListener('click', () => exportCsv('معاينة-الدفعة', headers, rows()));
-      $('#pv-xls', view).addEventListener('click', () => exportExcel('معاينة-الدفعة', 'معاينة دفعة الفواتير', headers, rows()));
+  const exportBulkXls = () => {
+    if (!state.preview || !state.preview.invoices || !state.preview.invoices.length) {
+      toastErr('لا توجد بيانات للتصدير');
+      return;
     }
-
-    // تفاعل تعديل الفواتير والبنود
-    delegate(view, 'click', '[data-toggle-edit]', (e, btn) => {
-      const idx = Number(btn.dataset.toggleEdit);
-      state.activeEditIndex = state.activeEditIndex === idx ? null : idx;
-      const area = $('#preview-area', view);
-      if (area) area.innerHTML = previewHtml();
-    });
-
-    delegate(view, 'click', '[data-remove-inv]', (e, btn) => {
-      const idx = Number(btn.dataset.removeInv);
-      if (!state.preview || !state.preview.invoices[idx]) return;
-      state.preview.invoices.splice(idx, 1);
-      recalcPreviewSummary();
-      const area = $('#preview-area', view);
-      if (area) area.innerHTML = previewHtml();
-      toastOk('تم حذف الفاتورة من الدفعة');
-    });
-
-    delegate(view, 'change', '.inv-field', (e, input) => {
-      const idx = Number(input.dataset.idx);
-      const field = input.dataset.field;
-      if (!state.preview || !state.preview.invoices[idx]) return;
-      state.preview.invoices[idx][field] = input.value;
-    });
-
-    // إضافة فاتورة يدوية مباشرة إلى قائمة المعاينة
-    delegate(view, 'click', '#btn-add-manual-inv', () => {
-      if (!state.preview) return;
-      const defaultItem = state.custom_items[0] || store.items[0] || { id: null, name_ar: 'صنف عام', sale_price: 100, unit: 'حبة', tax_rate: 15 };
-      const newInv = {
-        temp_id: `tmp-${state.preview.invoices.length + 1}`,
-        issue_date: state.preview.invoices.length ? state.preview.invoices[state.preview.invoices.length - 1].issue_date : state.date_to,
-        issue_time: '12:00:00',
-        invoice_type: state.invoice_type,
-        payment_method: state.payment_methods[0] || 'CREDIT',
-        notes: '',
-        lines: [
-          {
-            item_id: defaultItem.id || null,
-            item_code: defaultItem.item_code || '',
-            item_name: defaultItem.name_ar,
-            unit: defaultItem.unit || 'حبة',
-            quantity: 1,
-            unit_price: defaultItem.sale_price,
-            discount: 0,
-            tax_rate: defaultItem.tax_rate !== undefined ? defaultItem.tax_rate : 15,
-          },
-        ],
-        subtotal: defaultItem.sale_price,
-        discount_amount: 0,
-        taxable_amount: defaultItem.sale_price,
-        tax_amount: Math.round(defaultItem.sale_price * 0.15 * 100) / 100,
-        grand_total: Math.round(defaultItem.sale_price * 1.15 * 100) / 100,
-      };
-      state.preview.invoices.push(newInv);
-      state.activeEditIndex = state.preview.invoices.length - 1;
-      recalcPreviewSummary();
-      const area = $('#preview-area', view);
-      if (area) area.innerHTML = previewHtml();
-      toastOk('تمت إضافة فاتورة يدوية جديدة إلى الدفعة');
-    });
-
-    delegate(view, 'change', '.line-input', (e, input) => {
-      const invIdx = Number(input.dataset.inv);
-      const lineIdx = Number(input.dataset.line);
-      const lfield = input.dataset.lfield;
-      if (!state.preview || !state.preview.invoices[invIdx] || !state.preview.invoices[invIdx].lines[lineIdx]) return;
-      if (lfield === 'item_code' || lfield === 'unit' || lfield === 'item_name') {
-        state.preview.invoices[invIdx].lines[lineIdx][lfield] = input.value;
-      } else {
-        state.preview.invoices[invIdx].lines[lineIdx][lfield] = Number(input.value) || 0;
-        recalcPreviewSummary();
-        // تحديث المجاميع المعروضة
-        const area = $('#preview-area', view);
-        if (area) area.innerHTML = previewHtml();
-      }
-    });
-
-    delegate(view, 'click', '[data-add-item]', (e, btn) => {
-      const idx = Number(btn.dataset.addItem);
-      const select = $(`#quick-add-item-${idx}`, view);
-      if (!select || !select.value) { toastErr('اختر صنفاً أولاً'); return; }
-      const it = store.items.find((item) => item.id === select.value);
-      if (!it) return;
-      state.preview.invoices[idx].lines.push({
-        item_id: it.id,
-        item_code: it.item_code,
-        item_name: it.name_ar,
-        unit: it.unit || 'حبة',
-        quantity: 1,
-        unit_price: it.sale_price,
-        discount: 0,
-        tax_rate: 15,
-      });
-      recalcPreviewSummary();
-      const area = $('#preview-area', view);
-      if (area) area.innerHTML = previewHtml();
-      toastOk(`تمت إضافة الصنف: ${it.name_ar}`);
-    });
-
-    delegate(view, 'click', '[data-del-line]', (e, btn) => {
-      const [invIdx, lineIdx] = btn.dataset.delLine.split(':').map(Number);
-      if (!state.preview || !state.preview.invoices[invIdx]) return;
-      if (state.preview.invoices[invIdx].lines.length <= 1) {
-        toastErr('يجب أن تحتوي الفاتورة على بند واحد على الأقل');
-        return;
-      }
-      state.preview.invoices[invIdx].lines.splice(lineIdx, 1);
-      recalcPreviewSummary();
-      const area = $('#preview-area', view);
-      if (area) area.innerHTML = previewHtml();
-    });
-  }
+    const headers = ['#', 'التاريخ', 'الوقت', 'عدد الأصناف', 'طريقة الدفع', 'قبل الضريبة', 'الخصم', 'الضريبة', 'الإجمالي'];
+    const rows = state.preview.invoices.map((inv, i) => [
+      i + 1,
+      inv.issue_date,
+      inv.issue_time || '10:00:00',
+      (inv.lines || inv.items || []).length,
+      PAY_LABELS[inv.payment_method] || inv.payment_method,
+      inv.taxable_amount,
+      inv.discount_amount,
+      inv.tax_amount,
+      inv.grand_total,
+    ]);
+    exportExcel('معاينة-الدفعة', 'معاينة دفعة الفواتير', headers, rows);
+  };
 
   async function runPreview() {
     if (state.busy) return;
@@ -1654,7 +1729,6 @@ export async function render(view) {
 
       const area = $('#preview-area', view);
       if (area) area.innerHTML = previewHtml();
-      bindPreviewArea();
       toastOk(`تم توليد ${state.preview.summary.count} فاتورة للمعاينة`);
     } catch (err) {
       toastErr(err.message || 'فشل التوليد');
@@ -1683,13 +1757,15 @@ export async function render(view) {
       btn.textContent = 'جارٍ الحفظ والترحيل…';
     }
     try {
+      const reqId = state.preview.request_id || (window.crypto?.randomUUID ? window.crypto.randomUUID() : (`req-${Date.now()}-${Math.random().toString(36).slice(2)}`));
+      state.preview.request_id = reqId;
       const res = await api.post('/api/bulk/commit', {
-		request_id: state.preview.request_id ||= crypto.randomUUID(),
+        request_id: reqId,
         draft_id: state.current_draft_id || undefined,
         issuer_id: state.issuer_id,
         client_id: state.client_id,
         invoices: state.preview.invoices,
-        options: state.preview.options,
+        options: state.preview.options || payload(),
         issue_vouchers: state.issue_vouchers,
       });
       const vText = res.vouchers_count ? ` و ${res.vouchers_count} سند قبض` : '';

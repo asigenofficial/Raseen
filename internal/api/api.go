@@ -1008,6 +1008,8 @@ func (s *Server) Handler() http.Handler {
 			Style    string `json:"style"`
 			Invoice  struct {
 				InvoiceNumber   string  `json:"invoice_number"`
+				InvoiceType     string  `json:"invoice_type"`
+				ZatcaPhase      string  `json:"zatca_phase"`
 				IssueDate       string  `json:"issue_date"`
 				IssueTime       string  `json:"issue_time"`
 				PaymentMethod   string  `json:"payment_method"`
@@ -1051,10 +1053,20 @@ func (s *Server) Handler() http.Handler {
 		if strings.TrimSpace(issTime) == "" {
 			issTime = "10:00:00"
 		}
+		zp := req.Invoice.ZatcaPhase
+		if zp == "" {
+			zp = "PHASE1"
+		}
+		it := req.Invoice.InvoiceType
+		if it == "" {
+			it = "STANDARD"
+		}
 
 		invView := &services.InvoiceView{
 			Invoice: models.Invoice{
 				InvoiceNumber:  invNum,
+				InvoiceType:    it,
+				ZatcaPhase:     zp,
 				IssueDate:      issDate,
 				IssueTime:      issTime,
 				PaymentMethod:  req.Invoice.PaymentMethod,

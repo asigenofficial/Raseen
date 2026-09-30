@@ -1791,9 +1791,40 @@ func defaultInvoiceHTMLTemplate() string {
 <head>
 <meta charset="utf-8"/>
 <style>
-  @page { size: A4 portrait; margin: 10mm; }
+  @page { size: A4 portrait; margin: 0; }
   * { box-sizing: border-box; }
-  body { font-family: Tahoma, 'Cairo', Arial, sans-serif; font-size: 13px; color: #1e293b; background: #fff; margin: 0; padding: 10mm; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #fff;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body {
+    font-family: Tahoma, 'Cairo', Arial, sans-serif;
+    font-size: 13px;
+    color: #1e293b;
+    background: #fff;
+    min-height: 297mm;
+    width: 210mm;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 12mm 15mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .top-wrap {
+    flex-shrink: 0;
+  }
+  .bottom-wrap {
+    margin-top: auto;
+    width: 100%;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
   .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #059669; padding-bottom: 10px; margin-bottom: 14px; }
   .header-title { font-size: 22px; font-weight: 900; color: #059669; }
   .header-meta { font-size: 11px; line-height: 1.9; }
@@ -1803,58 +1834,111 @@ func defaultInvoiceHTMLTemplate() string {
   .info-row { display: flex; gap: 6px; }
   .info-label { color: #64748b; font-size: 11px; min-width: 90px; }
   .info-value { font-weight: 600; }
-  .totals { margin-top: 10px; border-top: 2px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: flex-end; }
-  .totals-table { font-size: 12px; border-collapse: collapse; min-width: 280px; }
+  .summary-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 14px;
+    gap: 20px;
+  }
+  .qr-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .qr-wrap {
+    text-align: right;
+    margin: 0;
+  }
+  .qr-wrap svg {
+    margin: 0 !important;
+  }
+  .totals-col {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .totals-table {
+    font-size: 12px;
+    border-collapse: collapse;
+    min-width: 300px;
+  }
   .totals-table td { padding: 4px 10px; }
   .totals-table tr:last-child td { font-weight: 900; font-size: 14px; color: #059669; border-top: 2px solid #059669; }
-  .footer { margin-top: 14px; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; }
-  .qr-wrap { text-align: left; margin-top: 10px; }
-  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  .money-cell { text-align: left; direction: ltr; white-space: nowrap; }
+  .footer {
+    text-align: center;
+    font-size: 11px;
+    color: #64748b;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 10px;
+    padding-bottom: 2mm;
+    width: 100%;
+  }
+  @media print {
+    body {
+      width: 100%;
+      min-height: 297mm;
+      height: 100%;
+      padding: 10mm;
+      margin: 0;
+    }
+    .bottom-wrap {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+  }
 </style>
 </head>
 <body>
-<div class="header">
-  <div>
-    <div class="header-title">{{seller_name}}</div>
-    <div style="font-size:11px;color:#64748b;">الرقم الضريبي: {{seller_tax}}</div>
-    <div style="font-size:11px;color:#64748b;">{{seller_address}}</div>
+<div class="top-wrap">
+  <div class="header">
+    <div>
+      <div class="header-title">{{seller_name}}</div>
+      <div style="font-size:11px;color:#64748b;">الرقم الضريبي: {{seller_tax}}</div>
+      <div style="font-size:11px;color:#64748b;">{{seller_address}}</div>
+    </div>
+    <div class="header-meta">
+      <div><strong>فاتورة ضريبية</strong></div>
+      <div>رقم الفاتورة: <strong>{{invoice_number}}</strong></div>
+      <div>تاريخ الإصدار: <strong>{{issue_date}}</strong></div>
+      <div>نوع الفاتورة: <strong>{{payment_method}}</strong></div>
+    </div>
   </div>
-  <div class="header-meta">
-    <div><strong>فاتورة ضريبية</strong></div>
-    <div>رقم الفاتورة: <strong>{{invoice_number}}</strong></div>
-    <div>تاريخ الإصدار: <strong>{{issue_date}}</strong></div>
-    <div>نوع الفاتورة: <strong>{{payment_method}}</strong></div>
+
+  <div class="section">
+    <div class="section-title">بيانات العميل</div>
+    <div class="info-grid">
+      <div class="info-row"><span class="info-label">الاسم:</span><span class="info-value">{{buyer_name}}</span></div>
+      <div class="info-row"><span class="info-label">الرقم الضريبي:</span><span class="info-value">{{buyer_tax}}</span></div>
+      <div class="info-row"><span class="info-label">العنوان:</span><span class="info-value">{{buyer_address}}</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">الأصناف والخدمات</div>
+    {{items_table}}
   </div>
 </div>
 
-<div class="section">
-  <div class="section-title">بيانات العميل</div>
-  <div class="info-grid">
-    <div class="info-row"><span class="info-label">الاسم:</span><span class="info-value">{{buyer_name}}</span></div>
-    <div class="info-row"><span class="info-label">الرقم الضريبي:</span><span class="info-value">{{buyer_tax}}</span></div>
-    <div class="info-row"><span class="info-label">العنوان:</span><span class="info-value">{{buyer_address}}</span></div>
+<div class="bottom-wrap">
+  <div class="summary-section">
+    <div class="qr-col">
+      <div class="qr-wrap">{{qr_code}}</div>
+    </div>
+    <div class="totals-col">
+      <table class="totals-table">
+        <tr><td>المجموع قبل الضريبة</td><td class="money-cell">{{sar_symbol}} {{subtotal}}</td></tr>
+        <tr><td>الخصم</td><td class="money-cell">{{sar_symbol}} {{discount}}</td></tr>
+        <tr><td>ضريبة القيمة المضافة (15%)</td><td class="money-cell">{{sar_symbol}} {{tax_amount}}</td></tr>
+        <tr><td>الإجمالي المستحق</td><td class="money-cell">{{sar_symbol}} {{grand_total}}</td></tr>
+      </table>
+    </div>
   </div>
-</div>
 
-<div class="section">
-  <div class="section-title">الأصناف والخدمات</div>
-  {{items_table}}
-</div>
-
-<div class="totals">
-  <table class="totals-table">
-    <tr><td>المجموع قبل الضريبة</td><td style="text-align:left;">{{subtotal}} ر.س</td></tr>
-    <tr><td>الخصم</td><td style="text-align:left;">{{discount}} ر.س</td></tr>
-    <tr><td>ضريبة القيمة المضافة (15%)</td><td style="text-align:left;">{{tax_amount}} ر.س</td></tr>
-    <tr><td>الإجمالي المستحق</td><td style="text-align:left;">{{grand_total}} ر.س</td></tr>
-  </table>
-</div>
-
-<div class="qr-wrap">{{qr_code}}</div>
-
-<div class="footer">
-  {{notes}}<br/>
-  هذه الفاتورة صادرة إلكترونياً ولا تحتاج إلى توقيع يدوي
+  <div class="footer">
+    {{notes}}<br/>
+    هذه الفاتورة صادرة إلكترونياً ولا تحتاج إلى توقيع يدوي
+  </div>
 </div>
 </body>
 </html>`
@@ -1866,9 +1950,38 @@ func defaultVoucherHTMLTemplate() string {
 <head>
 <meta charset="utf-8"/>
 <style>
-  @page { size: A4 portrait; margin: 10mm; }
+  @page { size: A4 portrait; margin: 0; }
   * { box-sizing: border-box; }
-  body { font-family: Tahoma, 'Cairo', Arial, sans-serif; font-size: 13px; color: #1e293b; background: #fff; margin: 0; padding: 10mm; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #fff;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body {
+    font-family: Tahoma, 'Cairo', Arial, sans-serif;
+    font-size: 13px;
+    color: #1e293b;
+    background: #fff;
+    min-height: 297mm;
+    width: 210mm;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 12mm 15mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .top-wrap { flex-shrink: 0; }
+  .bottom-wrap {
+    margin-top: auto;
+    width: 100%;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
   .header { text-align: center; border-bottom: 3px solid #7c3aed; padding-bottom: 10px; margin-bottom: 16px; }
   .header-title { font-size: 24px; font-weight: 900; color: #7c3aed; }
   .voucher-box { border: 2px solid #7c3aed; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
@@ -1877,36 +1990,47 @@ func defaultVoucherHTMLTemplate() string {
   .info-label { color: #64748b; }
   .info-value { font-weight: 700; }
   .amount-box { text-align: center; background: #f5f3ff; border-radius: 6px; padding: 14px; margin: 14px 0; }
-  .amount-value { font-size: 28px; font-weight: 900; color: #7c3aed; }
-  .sig-row { display: flex; justify-content: space-between; margin-top: 30px; }
+  .amount-value { font-size: 28px; font-weight: 900; color: #7c3aed; direction: ltr; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .qr-wrap { text-align: center; margin-top: 14px; margin-bottom: 10px; }
+  .footer { width: 100%; flex-shrink: 0; }
+  .sig-row { display: flex; justify-content: space-between; margin-top: 16px; }
   .sig-line { width: 40%; border-top: 1px solid #64748b; text-align: center; padding-top: 6px; font-size: 11px; color: #64748b; }
-  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  @media print {
+    body { width: 100%; min-height: 297mm; height: 100%; padding: 10mm; margin: 0; }
+    .bottom-wrap { break-inside: avoid; page-break-inside: avoid; }
+  }
 </style>
 </head>
 <body>
-<div class="header">
-  <div class="header-title">سند قبض</div>
-  <div style="font-size:12px;color:#64748b;">{{seller_name}} — الرقم الضريبي: {{seller_tax}}</div>
+<div class="top-wrap">
+  <div class="header">
+    <div class="header-title">سند قبض</div>
+    <div style="font-size:12px;color:#64748b;">{{seller_name}} — الرقم الضريبي: {{seller_tax}}</div>
+  </div>
+
+  <div class="voucher-box">
+    <div class="info-row"><span class="info-label">رقم السند:</span><span class="info-value">{{invoice_number}}</span></div>
+    <div class="info-row"><span class="info-label">التاريخ:</span><span class="info-value">{{issue_date}}</span></div>
+    <div class="info-row"><span class="info-label">استلمنا من:</span><span class="info-value">{{buyer_name}}</span></div>
+    <div class="info-row"><span class="info-label">البيان:</span><span class="info-value">{{notes}}</span></div>
+    <div class="info-row"><span class="info-label">طريقة الدفع:</span><span class="info-value">{{payment_method}}</span></div>
+  </div>
 </div>
 
-<div class="voucher-box">
-  <div class="info-row"><span class="info-label">رقم السند:</span><span class="info-value">{{invoice_number}}</span></div>
-  <div class="info-row"><span class="info-label">التاريخ:</span><span class="info-value">{{issue_date}}</span></div>
-  <div class="info-row"><span class="info-label">استلمنا من:</span><span class="info-value">{{buyer_name}}</span></div>
-  <div class="info-row"><span class="info-label">البيان:</span><span class="info-value">{{notes}}</span></div>
-  <div class="info-row"><span class="info-label">طريقة الدفع:</span><span class="info-value">{{payment_method}}</span></div>
-</div>
+<div class="bottom-wrap">
+  <div class="amount-box">
+    <div style="font-size:13px;color:#64748b;margin-bottom:4px;">المبلغ المستلم</div>
+    <div class="amount-value">{{sar_symbol}} <span>{{grand_total}}</span></div>
+  </div>
 
-<div class="amount-box">
-  <div style="font-size:13px;color:#64748b;margin-bottom:4px;">المبلغ المستلم</div>
-  <div class="amount-value">{{grand_total}} ر.س</div>
-</div>
+  <div class="qr-wrap">{{qr_code}}</div>
 
-<div class="qr-wrap" style="text-align:left;">{{qr_code}}</div>
-
-<div class="sig-row">
-  <div class="sig-line">توقيع المستلم</div>
-  <div class="sig-line">توقيع المسلّم</div>
+  <div class="footer">
+    <div class="sig-row">
+      <div class="sig-line">توقيع المستلم</div>
+      <div class="sig-line">توقيع المسلّم</div>
+    </div>
+  </div>
 </div>
 </body>
 </html>`

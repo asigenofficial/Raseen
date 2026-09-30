@@ -245,6 +245,7 @@ type PreviewRequest struct {
 	WorkEnd            int               `json:"work_end_minutes"`
 	PaymentMethods     []string          `json:"payment_methods"`
 	InvoiceType        string            `json:"invoice_type"`
+	ZatcaPhase         string            `json:"zatca_phase"`
 	Seed               int64             `json:"seed"`
 	Notes              string            `json:"notes"`
 }
@@ -317,6 +318,15 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 	if req.WorkStart<0||req.WorkEnd>24*60||req.WorkEnd<=req.WorkStart{return nil,errors.New("نطاق ساعات العمل غير صالح")}
 	if req.InvoiceType==""{req.InvoiceType="STANDARD"}
 	if req.InvoiceType!="STANDARD"&&req.InvoiceType!="SIMPLIFIED"{return nil,errors.New("نوع فاتورة غير صالح")}
+	if req.ZatcaPhase == "" {
+		req.ZatcaPhase = issuer.ZatcaPhase
+	}
+	if req.ZatcaPhase == "" {
+		req.ZatcaPhase = "PHASE1"
+	}
+	if req.ZatcaPhase != "PHASE1" && req.ZatcaPhase != "PHASE2" {
+		return nil, errors.New("مرحلة الفوترة غير صالحة")
+	}
 	if len(req.PaymentMethods)==0{req.PaymentMethods=[]string{"CREDIT"}}
 	for _,p:=range req.PaymentMethods{if _,ok:=invoicePaymentLabels[p];!ok{return nil,errors.New("طريقة سداد غير صالحة")}}
 
@@ -639,6 +649,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 			"temp_id":         fmt.Sprintf("PREV-%04d", i+1),
 			"invoice_number":  invNumber,
 			"invoice_type":    req.InvoiceType,
+			"zatca_phase":     req.ZatcaPhase,
 			"payment_method":  req.PaymentMethods[rng.Intn(len(req.PaymentMethods))],
 			"notes":           req.Notes,
 			"issue_date":      invDate,
@@ -725,6 +736,13 @@ func (s *BulkService) CommitBatch(req CommitBatchRequest, username string) (map[
 		}
 		row.AutoReceipt=req.IssueVouchers
 		if req.IssueVouchers && (row.PaymentMethod=="" || row.PaymentMethod=="CREDIT") {row.PaymentMethod="TRANSFER"}
+		if row.ZatcaPhase == "" {
+			if optMap, ok := req.Options.(map[string]any); ok {
+				if zp, ok := optMap["zatca_phase"].(string); ok && zp != "" {
+					row.ZatcaPhase = zp
+				}
+			}
+		}
 		inv,err:=s.invoices.createInvoiceTx(tx,row.CreateInvoiceInput,username,"");if err!=nil{return nil,fmt.Errorf("الفاتورة %d: %w",idx+1,err)}
 		if _,err=tx.Exec("UPDATE invoices SET batch_id=? WHERE id=?",batchID,inv.ID);err!=nil{return nil,err}
 		total+=inv.GrandTotal;ids=append(ids,inv.ID)
