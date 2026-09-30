@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -69,6 +70,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("فشل تحميل مفتاح التشفير الرئيسي: %v", err)
 	}
+
+	ensureDataInitialized(cfg.DataDir)
 
 	database, err := db.Open(cfg)
 	if err != nil {
@@ -137,5 +140,55 @@ func main() {
 
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("خطأ في تشغيل الخادم: %v", err)
+	}
+}
+
+// ensureDataInitialized ensures that if dataDir is empty or mounted via a fresh volume,
+// it is automatically initialized with initial database, templates, and assets from data_defaults.
+func ensureDataInitialized(dataDir string) {
+	_ = os.MkdirAll(dataDir, 0755)
+	defaultsDir := "data_defaults"
+	if fi, err := os.Stat(defaultsDir); err != nil || !fi.IsDir() {
+		return
+	}
+
+	// 1. Database file: if zsystem.db does not exist in dataDir, copy it from defaults
+	targetDb := filepath.Join(dataDir, "zsystem.db")
+	if _, err := os.Stat(targetDb); os.IsNotExist(err) {
+		srcDb := filepath.Join(defaultsDir, "zsystem.db")
+		if srcBytes, errRead := os.ReadFile(srcDb); errRead == nil && len(srcBytes) > 0 {
+			_ = os.WriteFile(targetDb, srcBytes, 0644)
+			log.Printf("[Init] تم تهيئة قاعدة البيانات الأولية في مسار التخزين الدائم: %s", targetDb)
+		}
+	}
+
+	// 2. Templates: copy any missing templates from defaults
+	for _, sub := range []string{"invoices", "documents"} {
+		targetSub := filepath.Join(dataDir, "templates", sub)
+		_ = os.MkdirAll(targetSub, 0755)
+		srcSub := filepath.Join(defaultsDir, "templates", sub)
+		if entries, err := os.ReadDir(srcSub); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					continue
+				}
+				destPath := filepath.Join(targetSub, e.Name())
+				if _, errStat := os.Stat(destPath); os.IsNotExist(errStat) {
+					if content, errRead := os.ReadFile(filepath.Join(srcSub, e.Name())); errRead == nil {
+						_ = os.WriteFile(destPath, content, 0644)
+					}
+				}
+			}
+		}
+	}
+
+	// 3. Assets: copy svg or other assets if missing
+	for _, f := range []string{"saudi_riyal_symbol.svg"} {
+		dest := filepath.Join(dataDir, f)
+		if _, err := os.Stat(dest); os.IsNotExist(err) {
+			if content, errRead := os.ReadFile(filepath.Join(defaultsDir, f)); errRead == nil {
+				_ = os.WriteFile(dest, content, 0644)
+			}
+		}
 	}
 }

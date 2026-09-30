@@ -41,6 +41,9 @@ func Load() *Config {
 
 	dataDir := os.Getenv("ZS_DATA_DIR")
 	if dataDir == "" {
+		dataDir = os.Getenv("DATA_DIR")
+	}
+	if dataDir == "" {
 		dataDir = filepath.Join(pwd, "data")
 	}
 

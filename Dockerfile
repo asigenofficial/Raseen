@@ -48,6 +48,7 @@ COPY --from=builder /app/raseen .
 # نسخ الملفات الثابتة (قوالب، JS، CSS، إلخ)
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/data ./data
+COPY --from=builder /app/data ./data_defaults
 
 EXPOSE 8080
 
