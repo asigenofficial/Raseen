@@ -303,6 +303,16 @@ func (s *ItemService) BatchImportItems(items []ImportItemInput, replaceExisting 
 
 	doReplace := len(replaceExisting) > 0 && replaceExisting[0]
 
+	// Cache or create categories BEFORE opening transaction to avoid SQLite deadlock
+	cats, err := s.ListCategories()
+	if err != nil {
+		return nil, err
+	}
+	catMap := make(map[string]string) // name -> id
+	for _, c := range cats {
+		catMap[strings.ToLower(strings.TrimSpace(c.Name))] = c.ID
+	}
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
@@ -313,16 +323,6 @@ func (s *ItemService) BatchImportItems(items []ImportItemInput, replaceExisting 
 		if _, err := tx.Exec("DELETE FROM items"); err != nil {
 			return nil, err
 		}
-	}
-
-	// Cache or create categories
-	cats, err := s.ListCategories()
-	if err != nil {
-		return nil, err
-	}
-	catMap := make(map[string]string) // name -> id
-	for _, c := range cats {
-		catMap[strings.ToLower(strings.TrimSpace(c.Name))] = c.ID
 	}
 
 	stmtFindByName, err := tx.Prepare("SELECT id FROM items WHERE LOWER(TRIM(name_ar)) = LOWER(TRIM(?)) LIMIT 1")

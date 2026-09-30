@@ -239,7 +239,7 @@ function openImportModal(onSuccess) {
               </tbody>
             </table>
           </div>
-          ${parsedItems.length > 25 ? `<div class="tiny muted text-center" style="padding:.4rem">تم عرض أول 25 صنفاً فقط من أصل ${parsedItems.length}…</div>` : ''}
+          ${raw(parsedItems.length > 25 ? `<div class="tiny muted text-center" style="padding:.4rem">تم عرض أول 25 صنفاً فقط من أصل ${parsedItems.length}…</div>` : '')}
         </div>
         ${raw(errorsSnippet)}
       `;
