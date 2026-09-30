@@ -87,6 +87,7 @@ type ItemCategory struct {
 	Name        string  `json:"name"`
 	ParentID    *string `json:"parent_id"`
 	Description string  `json:"description"`
+	ItemsCount  int     `json:"items_count"`
 	CreatedAt   string  `json:"created_at"`
 }
 

@@ -21,8 +21,9 @@ func NewItemService(d *db.DB) *ItemService {
 
 func (s *ItemService) ListCategories() ([]models.ItemCategory, error) {
 	rows, err := s.db.Query(`
-		SELECT id, code, name, parent_id, description, created_at
-		FROM item_categories ORDER BY name ASC
+		SELECT c.id, c.code, c.name, c.parent_id, c.description, c.created_at,
+		       (SELECT COUNT(*) FROM items i WHERE i.category_id = c.id) AS items_count
+		FROM item_categories c ORDER BY c.name ASC
 	`)
 	if err != nil {
 		return nil, err
@@ -33,7 +34,7 @@ func (s *ItemService) ListCategories() ([]models.ItemCategory, error) {
 	for rows.Next() {
 		var cat models.ItemCategory
 		var parent sql.NullString
-		if err := rows.Scan(&cat.ID, &cat.Code, &cat.Name, &parent, &cat.Description, &cat.CreatedAt); err == nil {
+		if err := rows.Scan(&cat.ID, &cat.Code, &cat.Name, &parent, &cat.Description, &cat.CreatedAt, &cat.ItemsCount); err == nil {
 			if parent.Valid {
 				cat.ParentID = &parent.String
 			}

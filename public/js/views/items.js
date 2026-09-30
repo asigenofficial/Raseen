@@ -255,6 +255,7 @@ function openImportModal(onSuccess) {
       const saveRes = await api.post('/api/items/import', { items: parsedItems });
       toastOk(`تم استيراد الأصناف بنجاح (جديد: ${saveRes.created || 0}، محدث: ${saveRes.updated || 0})`);
       m.close();
+      clearFilterState('items');
       invalidate('items');
       invalidate('categories');
       await loadCategories(true);
@@ -285,15 +286,16 @@ export async function render(view, ctx) {
   const writable = can('items.write');
 
   const load = async () => {
-    const params = { q: state.q, category_id: state.categoryId };
-    if (state.status) params.status = state.status;
     try {
-      const [itemsRes, catsRes] = await Promise.all([
-        api.get(qs('/api/items', params)),
-        api.get('/api/categories'),
-      ]);
-      state.items = Array.isArray(itemsRes) ? itemsRes : [];
+      const catsRes = await api.get('/api/categories');
       state.categories = Array.isArray(catsRes) ? catsRes : [];
+      if (state.categoryId && !state.categories.some((c) => c.id === state.categoryId)) {
+        state.categoryId = '';
+      }
+      const params = { q: state.q, category_id: state.categoryId };
+      if (state.status) params.status = state.status;
+      const itemsRes = await api.get(qs('/api/items', params));
+      state.items = Array.isArray(itemsRes) ? itemsRes : [];
     } catch {
       state.items = [];
       state.categories = [];
@@ -444,7 +446,15 @@ export async function render(view, ctx) {
     const addItemBtn = $('#add-item', view);
     if (addItemBtn) addItemBtn.addEventListener('click', () => openItemModal(null, state.categories, async () => { await load(); draw(); }));
     const importItemsBtn = $('#import-items-btn', view);
-    if (importItemsBtn) importItemsBtn.addEventListener('click', () => openImportModal(async () => { await load(); draw(); }));
+    if (importItemsBtn) importItemsBtn.addEventListener('click', () => openImportModal(async () => {
+      clearFilterState('items');
+      state.q = '';
+      state.categoryId = '';
+      state.status = '';
+      state.tab = 'items';
+      await load();
+      draw();
+    }));
     const addCatBtn = $('#add-cat', view);
     if (addCatBtn) addCatBtn.addEventListener('click', () => openCategoryModal(null, state.categories, async () => { await load(); draw(); }));
 
