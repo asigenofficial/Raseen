@@ -1461,6 +1461,8 @@ export async function render(view) {
                 issue_time: inv.issue_time || '10:00:00',
                 invoice_type: inv.invoice_type || state.invoice_type || 'STANDARD',
                 zatca_phase: inv.zatca_phase || state.zatca_phase || 'PHASE1',
+                qr_payload: inv.qr_payload || '',
+                invoice_hash: inv.invoice_hash || '',
                 payment_method: inv.payment_method || 'CREDIT',
                 notes: inv.notes || '',
                 subtotal: inv.subtotal,
@@ -1484,16 +1486,20 @@ export async function render(view) {
       } catch { /* fallback to client rendering */ }
 
       // Fallback: Client-side rendering via invoiceA4
+      const invPhase = inv.zatca_phase || state.zatca_phase || 'PHASE1';
       const fullSample = {
         ...inv,
         invoice_type: inv.invoice_type || state.invoice_type || 'STANDARD',
-        zatca_phase: inv.zatca_phase || state.zatca_phase || 'PHASE1',
+        zatca_phase: invPhase,
+        signature_mode: invPhase === 'PHASE2' ? 'LOCAL' : 'NONE',
         invoice_number: inv.invoice_number || `${issuer.invoice_prefix || 'INV'}-${String(currentIdx + 1).padStart(4, '0')}`,
         seller_name: issuer.name_ar,
         seller_tax_number: issuer.tax_number,
         buyer_name: client.name,
         buyer_tax_number: client.tax_number,
-        qr_payload: 'AQVTYW1wbGUSCjMxMDAwMDAwMDMTAzEwMBQEMjMwMA==',
+        qr_payload: inv.qr_payload || (invPhase === 'PHASE2'
+          ? buildZatcaTlv(issuer.name_ar, issuer.tax_number, (inv.issue_date || '2026-09-30') + 'T' + (inv.issue_time || '10:00:00') + 'Z', inv.grand_total, inv.tax_amount, { isPhase2: true })
+          : 'AQVTYW1wbGUSCjMxMDAwMDAwMDMTAzEwMBQEMjMwMA=='),
       };
       currentHtml = invoiceA4({
         invoice: fullSample,

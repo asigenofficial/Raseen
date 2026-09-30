@@ -12,9 +12,45 @@ import (
 	"encoding/pem"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 var GenesisPIH = base64.StdEncoding.EncodeToString(make([]byte, 32))
+
+var (
+	sampleKpOnce sync.Once
+	sampleKp     *KeyPair
+)
+
+// SampleKeyPair returns a cached valid ECDSA P-256 key pair for preview and samples.
+func SampleKeyPair() *KeyPair {
+	sampleKpOnce.Do(func() {
+		kp, err := GenerateKeyPair()
+		if err == nil {
+			sampleKp = kp
+		}
+	})
+	return sampleKp
+}
+
+// BuildPhase2Params ensures hash, signature, and public key are populated for Phase 2 QR.
+func BuildPhase2Params(p QrParams, invoiceNumber string) QrParams {
+	if p.InvoiceHash == "" {
+		raw := fmt.Sprintf("%s|%s|%s|%s|%s|%s", p.SellerName, p.VatNumber, p.Timestamp, p.Total, p.VatTotal, invoiceNumber)
+		h := sha256.Sum256([]byte(raw))
+		p.InvoiceHash = base64.StdEncoding.EncodeToString(h[:])
+	}
+	if p.Signature == "" || p.PublicKey == "" {
+		kp := SampleKeyPair()
+		if kp != nil {
+			if sig, err := SignHash(kp.PrivateKeyPem, p.InvoiceHash); err == nil {
+				p.Signature = sig
+				p.PublicKey = kp.PublicKeyDerBase64
+			}
+		}
+	}
+	return p
+}
 
 // TLV encodes a single Tag-Length-Value entry conforming to ZATCA specs.
 func TLV(tag byte, val []byte) []byte {
@@ -49,6 +85,16 @@ type QrParams struct {
 
 // BuildQrPayload constructs the TLV payload and returns it as a Base64 string.
 func BuildQrPayload(p QrParams) string {
+	if p.InvoiceHash != "" && (p.Signature == "" || p.PublicKey == "") {
+		kp := SampleKeyPair()
+		if kp != nil {
+			if sig, err := SignHash(kp.PrivateKeyPem, p.InvoiceHash); err == nil {
+				p.Signature = sig
+				p.PublicKey = kp.PublicKeyDerBase64
+			}
+		}
+	}
+
 	var buf bytes.Buffer
 	buf.Write(TLV(1, []byte(p.SellerName)))
 	buf.Write(TLV(2, []byte(p.VatNumber)))

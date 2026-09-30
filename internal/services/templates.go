@@ -894,7 +894,17 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 
 	qrB64 := ""
 	payload := inv.QrPayload
-	if payload == "" {
+
+	isPhase2 := inv.ZatcaPhase == "PHASE2" || (inv.SignatureMode != "" && inv.SignatureMode != "NONE")
+	needRegen := payload == ""
+	if !needRegen && isPhase2 {
+		tags, err := zatca.ParseQrPayload(payload)
+		if err != nil || len(tags) < 6 {
+			needRegen = true
+		}
+	}
+
+	if needRegen {
 		sName := sellerName
 		if sName == "" {
 			sName = "شركة تجريبية للتقنية"
@@ -923,13 +933,21 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 			vat = "150.00"
 		}
 		sampleParams := zatca.QrParams{
-			SellerName: sName,
-			VatNumber:  sTax,
-			Timestamp:  issDate + "T" + issTime + "Z",
-			Total:      tot,
-			VatTotal:   vat,
+			SellerName:  sName,
+			VatNumber:   sTax,
+			Timestamp:   issDate + "T" + issTime + "Z",
+			Total:       tot,
+			VatTotal:    vat,
+			InvoiceHash: inv.InvoiceHash,
+		}
+		if isPhase2 {
+			sampleParams = zatca.BuildPhase2Params(sampleParams, inv.InvoiceNumber)
+			if inv.InvoiceHash == "" {
+				inv.InvoiceHash = sampleParams.InvoiceHash
+			}
 		}
 		payload = zatca.BuildQrPayload(sampleParams)
+		inv.QrPayload = payload
 	}
 
 	if svg := GenerateQRSVG(payload); svg != "" {
@@ -1106,6 +1124,28 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 		"{{sar_symbol}}", SarSymbolSVG,
 		"{{currency_symbol}}", SarSymbolSVG,
 
+		// ─── مرحلة الفوترة وبيانات الزكاة ───
+		"{{zatca_phase}}", inv.ZatcaPhase,
+		"{{zatca_phase_name}}", func() string {
+			if isPhase2 {
+				return "المرحلة الثانية"
+			}
+			return "المرحلة الأولى"
+		}(),
+		"{{zatca_phase_label}}", func() string {
+			if isPhase2 {
+				return "المرحلة الثانية (الربط والتكامل المشفر)"
+			}
+			return "المرحلة الأولى (الأساسية)"
+		}(),
+		"{{zatca_phase_badge}}", func() string {
+			if isPhase2 {
+				return `<span class="badge badge-teal" style="font-size:7.5pt; font-weight:700; background:#0d9488; color:#fff; padding:2px 8px; border-radius:4px;">م2 — مشفر وموقّع ZATCA</span>`
+			}
+			return `<span class="badge badge-gray" style="font-size:7.5pt; font-weight:700; background:#64748b; color:#fff; padding:2px 8px; border-radius:4px;">م1 — أساسي</span>`
+		}(),
+		"{{invoice_hash}}", inv.InvoiceHash,
+
 		// ─── جدول الأصناف والباركود ───
 		"{{items_rows}}", smartRows,
 		"{{items_table}}", generateItemsTable(inv),
@@ -1127,6 +1167,17 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 	// استبدال ذكي لجميع وسوم الباركود ورمز الاستجابة السريع بكافة الصيغ الممكنة
 	qrTagRegex := regexp.MustCompile(`(?i)\{\{\s*(qr_code|qr|qrcode|barcode|zatca_qr|zatca_code|zatca_payload|رمز_الاستجابة|الباركود|باركود)\s*\}\}`)
 	result = qrTagRegex.ReplaceAllString(result, qrB64)
+
+	// استبدال ذكي لوسوم شارة ومرحلة الفوترة
+	zatcaBadgeRegex := regexp.MustCompile(`(?i)\{\{\s*(zatca_phase_badge|zatca_badge|شارة_المرحلة)\s*\}\}`)
+	phaseBadge := `<span class="badge badge-gray" style="font-size:7.5pt; font-weight:700; background:#64748b; color:#fff; padding:2px 8px; border-radius:4px;">م1 — أساسي</span>`
+	if isPhase2 {
+		phaseBadge = `<span class="badge badge-teal" style="font-size:7.5pt; font-weight:700; background:#0d9488; color:#fff; padding:2px 8px; border-radius:4px;">م2 — مشفر وموقّع ZATCA</span>`
+	}
+	result = zatcaBadgeRegex.ReplaceAllString(result, phaseBadge)
+
+	zatcaPhaseRegex := regexp.MustCompile(`(?i)\{\{\s*(zatca_phase|مرحلة_الزكاة|مرحلة_الفوترة)\s*\}\}`)
+	result = zatcaPhaseRegex.ReplaceAllString(result, inv.ZatcaPhase)
 
 	// استبدال ذكي لجميع وسوم الشعار بكافة الصيغ الممكنة
 	logoTagRegex := regexp.MustCompile(`(?i)\{\{\s*(logo|seller_logo|company_logo|شعار|الشعار)\s*\}\}`)

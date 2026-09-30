@@ -14,6 +14,7 @@ import (
 	"raseen/internal/crypto"
 	"raseen/internal/db"
 	"raseen/internal/models"
+	"raseen/internal/zatca"
 )
 
 type BulkService struct {
@@ -677,11 +678,42 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		}
 		invNumber := crypto.FormatSerial(prefix, currInvoiceNo, pad)
 
+		issTimeClean := invTime
+		if len(issTimeClean) == 5 {
+			issTimeClean += ":00"
+		}
+		timestamp := invDate + "T" + issTimeClean + "Z"
+		totStr := fmt.Sprintf("%.2f", invTotal)
+		vatStr := fmt.Sprintf("%.2f", invTax)
+		sName := issuer.NameAr
+		if sName == "" {
+			sName = "شركة تجريبية للتقنية"
+		}
+		sTax := issuer.TaxNumber
+		if sTax == "" || len(sTax) != 15 {
+			sTax = "300000000000003"
+		}
+		qrParams := zatca.QrParams{
+			SellerName: sName,
+			VatNumber:  sTax,
+			Timestamp:  timestamp,
+			Total:      totStr,
+			VatTotal:   vatStr,
+		}
+		invHash := ""
+		if req.ZatcaPhase == "PHASE2" {
+			qrParams = zatca.BuildPhase2Params(qrParams, invNumber)
+			invHash = qrParams.InvoiceHash
+		}
+		qrPayload := zatca.BuildQrPayload(qrParams)
+
 		invoices = append(invoices, map[string]any{
 			"temp_id":         fmt.Sprintf("PREV-%04d", i+1),
 			"invoice_number":  invNumber,
 			"invoice_type":    req.InvoiceType,
 			"zatca_phase":     req.ZatcaPhase,
+			"qr_payload":      qrPayload,
+			"invoice_hash":    invHash,
 			"payment_method":  req.PaymentMethods[rng.Intn(len(req.PaymentMethods))],
 			"notes":           req.Notes,
 			"issue_date":      invDate,

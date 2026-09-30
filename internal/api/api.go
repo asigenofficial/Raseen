@@ -1010,6 +1010,8 @@ func (s *Server) Handler() http.Handler {
 				InvoiceNumber   string  `json:"invoice_number"`
 				InvoiceType     string  `json:"invoice_type"`
 				ZatcaPhase      string  `json:"zatca_phase"`
+				QrPayload       string  `json:"qr_payload"`
+				InvoiceHash     string  `json:"invoice_hash"`
 				IssueDate       string  `json:"issue_date"`
 				IssueTime       string  `json:"issue_time"`
 				PaymentMethod   string  `json:"payment_method"`
@@ -1067,6 +1069,8 @@ func (s *Server) Handler() http.Handler {
 				InvoiceNumber:  invNum,
 				InvoiceType:    it,
 				ZatcaPhase:     zp,
+				QrPayload:      req.Invoice.QrPayload,
+				InvoiceHash:    req.Invoice.InvoiceHash,
 				IssueDate:      issDate,
 				IssueTime:      issTime,
 				PaymentMethod:  req.Invoice.PaymentMethod,
