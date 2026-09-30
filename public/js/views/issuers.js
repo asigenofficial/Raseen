@@ -121,14 +121,14 @@ function issuerForm(data = {}) {
         <div class="field"><label>اسم البنك</label><input type="text" name="bank_name" value="${v('bank_name')}" /></div>
         <div class="field"><label>رقم الآيبان</label><input type="text" name="bank_iban" value="${v('bank_iban')}" class="ltr" /></div>
       </div>
-      <div class="card mt pad-sm" style="background:var(--bg-alt, #f8fafc)">
-        <h4 style="margin:0 0 .5rem;font-size:.9rem">إعدادات رمز الاستجابة السريعة (QR)</h4>
-        <div class="row">
+      <div class="card mt" style="background:var(--bg-alt, rgba(255, 255, 255, 0.035)); border:1px solid var(--line-strong); border-radius:var(--radius-sm, 9px); padding:1.1rem 1.3rem;">
+        <h4 style="margin:0 0 .75rem; font-size:.95rem; font-weight:700; color:var(--text-heading, #fff)">إعدادات رمز الاستجابة السريعة (QR)</h4>
+        <div class="row" style="gap:1.5rem; flex-wrap:wrap">
           <label class="check"><input type="checkbox" id="qr_show_a4" ${raw(v('qr_settings', {}).show_a4 !== false ? 'checked' : '')} /> إظهار QR في فاتورة A4</label>
           <label class="check mr"><input type="checkbox" id="qr_show_thermal" ${raw(v('qr_settings', {}).show_thermal !== false ? 'checked' : '')} /> إظهار QR في الفاتورة الحرارية</label>
         </div>
-        <div class="row mt">
-          <div class="field" style="max-width:180px">
+        <div class="row mt" style="margin-top:.8rem">
+          <div class="field" style="max-width:200px">
             <label>حجم رمز QR</label>
             <select name="qr_size">
               <option value="small" ${raw(v('qr_settings', {}).size === 'small' ? 'selected' : '')}>صغير</option>

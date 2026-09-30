@@ -11,7 +11,7 @@ import {
   $, delegate, debounce, exportCsv, exportExcel, parseSpreadsheetText, printDoc, modal, toastErr, formValues,
   confirmDialog, icon, downloadPdfFromHtml, amount, sarSvg,
 } from '../core/util.js';
-import { invoiceA4 } from '../print/templates.js';
+import { invoiceA4, voucherPrint } from '../print/templates.js';
 
 const PAGE = 50;
 
@@ -211,8 +211,17 @@ export async function render(view, ctx) {
             </div>
           </div>
         </div>
-        ${raw(state.batch_id ? `<div class="alert alert-info mt tiny">التصفية مقيّدة بدفعة توليد محددة (<span class="mono">${esc(state.batch_id.slice(0, 8))}</span>).
-          <a href="#/invoices">إزالة</a></div>` : '')}
+        ${raw(state.batch_id ? `<div class="alert alert-info mt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:8px 12px">
+          <div>
+            <b>دفعة توليد محددة:</b> <span class="mono" style="font-weight:700">${esc(state.batch_id.slice(0, 8))}</span>
+            <a href="#/invoices" style="margin-inline-start:8px;text-decoration:underline">إلغاء التصفية</a>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-sm btn-primary" id="btn-batch-print-all" type="button" title="طباعة كافة فواتير الدفعة دفعة واحدة">${raw(icon.printer({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}طباعة كل الفواتير</button>
+            <a class="btn btn-sm btn-outline" id="btn-batch-dl-pdf" href="/api/bulk/batches/${esc(state.batch_id)}/pdf" target="_blank" download="batch_${esc(state.batch_id.slice(0, 8))}.pdf" title="تحميل ملف PDF مجمّع لجميع فواتير الدفعة">${raw(icon.pdf({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}تحميل PDF مجمّع</a>
+            <button class="btn btn-sm btn-outline" id="btn-batch-print-vouchers" type="button" title="طباعة كافة سندات القبض الصادرة لهذه الدفعة">${raw(icon.receipt({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}طباعة سندات الدفعة</button>
+          </div>
+        </div>` : '')}
       </div>
 
       <div class="grid grid-4">
@@ -277,6 +286,62 @@ export async function render(view, ctx) {
     $('#exp-csv', view).addEventListener('click', () => exportCsv('الفواتير', headers, rows()));
     $('#exp-xls', view).addEventListener('click', () => exportExcel('الفواتير', 'قائمة الفواتير', headers, rows(),
       { footer: ['الإجمالي', '', '', '', '', '', '', '', money(t.tax), money(t.grand_total), money(t.paid), money(t.remaining), ''] }));
+
+    const batchPrintBtn = $('#btn-batch-print-all', view);
+    if (batchPrintBtn && state.batch_id) {
+      batchPrintBtn.addEventListener('click', async () => {
+        batchPrintBtn.disabled = true;
+        batchPrintBtn.textContent = 'جارٍ التجهيز…';
+        try {
+          const res = await fetch(`/api/bulk/batches/${encodeURIComponent(state.batch_id)}/render-html`);
+          if (!res.ok) throw new Error('تعذر جلب فواتير الدفعة');
+          const docHtml = await res.text();
+          printDoc(docHtml);
+        } catch (err) {
+          toastErr(err.message || 'فشلت عملية الطباعة');
+        } finally {
+          batchPrintBtn.disabled = false;
+          batchPrintBtn.innerHTML = `${icon.printer({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}طباعة كل الفواتير`;
+        }
+      });
+    }
+
+    const batchVouchersBtn = $('#btn-batch-print-vouchers', view);
+    if (batchVouchersBtn && state.batch_id) {
+      batchVouchersBtn.addEventListener('click', async () => {
+        batchVouchersBtn.disabled = true;
+        batchVouchersBtn.textContent = 'جارٍ التجهيز…';
+        try {
+          const vouchers = await api.get(`/api/bulk/batches/${encodeURIComponent(state.batch_id)}/vouchers`);
+          if (!vouchers || !vouchers.length) {
+            toastErr('لا توجد سندات قبض مرتبطة بهذه الدفعة');
+            return;
+          }
+          const docs = [];
+          for (const v of vouchers) {
+            const issuer = store.issuers.find((i) => i.id === v.issuer_id) || store.activeIssuer || {};
+            const client = store.clients.find((c) => c.id === v.client_id) || { id: v.client_id, name_ar: v.client_name };
+            docs.push(voucherPrint({ voucher: v, issuer, client }));
+          }
+          const combined = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>سندات القبض</title>
+          <style>
+            @media print {
+              body { margin: 0; padding: 0; background: #fff !important; }
+              .page-break { page-break-after: always; break-after: page; }
+              .page-break:last-child { page-break-after: auto; break-after: auto; }
+            }
+          </style></head><body>
+          ${docs.map((d) => `<div class="page-break">${d}</div>`).join('')}
+          </body></html>`;
+          printDoc(combined);
+        } catch (err) {
+          toastErr(err.message || 'فشلت طباعة سندات القبض');
+        } finally {
+          batchVouchersBtn.disabled = false;
+          batchVouchersBtn.innerHTML = `${icon.receipt({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}طباعة سندات الدفعة`;
+        }
+      });
+    }
 
     const getInvoiceListDocHtml = () => {
       return `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>تقرير قائمة الفواتير</title>

@@ -10,7 +10,7 @@ import {
   toastOk, toastErr, $, delegate, confirmDialog, promptDialog, exportCsv, exportExcel,
   modal, printDoc, icon, generateNextItemCode,
 } from '../core/util.js';
-import { invoiceA4, invoiceThermal, bulkPreviewReport } from '../print/templates.js';
+import { invoiceA4, invoiceThermal, bulkPreviewReport, INVOICE_TEMPLATES, voucherPrint } from '../print/templates.js';
 
 const PAY_LABELS = { CASH: 'نقداً', CARD: 'شبكة', TRANSFER: 'تحويل', CREDIT: 'آجل' };
 
@@ -72,9 +72,38 @@ export async function render(view) {
     return undefined;
   }
 
+  let availableTemplates = [];
+  try {
+    const res = await api.get('/api/invoices/templates?type=invoices');
+    availableTemplates = Array.isArray(res) ? res : (res?.data || []);
+    if (!availableTemplates.length) {
+      const fallbackRes = await api.get('/api/invoices/templates?type=all');
+      const allList = Array.isArray(fallbackRes) ? fallbackRes : (fallbackRes?.data || []);
+      availableTemplates = allList.filter((t) => !t.category || t.category === 'invoices');
+    }
+  } catch {
+    try {
+      const fallbackRes = await api.get('/api/invoices/templates?type=all');
+      const allList = Array.isArray(fallbackRes) ? fallbackRes : (fallbackRes?.data || []);
+      availableTemplates = allList.filter((t) => !t.category || t.category === 'invoices');
+    } catch {
+      availableTemplates = [];
+    }
+  }
+
+  const activeIssuer = activeIssuers.find((i) => i.id === (store.activeIssuerId || activeIssuers[0].id)) || activeIssuers[0];
+  let issuerPrintCfg = {};
+  try {
+    issuerPrintCfg = typeof activeIssuer?.print_settings === 'string'
+      ? JSON.parse(activeIssuer.print_settings || '{}')
+      : (activeIssuer?.print_settings || {});
+  } catch {}
+  const initialTplStyle = issuerPrintCfg?.template_style || (availableTemplates[0]?.id) || '01-royal-navy';
+
   const state = {
     issuer_id: store.activeIssuerId || activeIssuers[0].id,
     client_id: store.clients[0].id,
+    selected_template: initialTplStyle,
     date_from: firstOfYear(),
     date_to: today(),
     count: 25,
@@ -115,6 +144,18 @@ export async function render(view) {
     activeEditIndex: null,
   };
 
+  const buildTemplateOptions = (selectedId) => {
+    const excelGroup = availableTemplates.length ? `
+      <optgroup label="قوالب الفواتير المعتمدة والمخصصة (${availableTemplates.length} قالب)">
+        ${availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedId ? 'selected' : ''}>${esc(t.name_ar || t.name || t.id)} (${esc(t.badge || 'فاتورة HTML')})</option>`).join('')}
+      </optgroup>` : '';
+    const builtinGroup = `
+      <optgroup label="القوالب الرسمية القياسية (A4)">
+        ${INVOICE_TEMPLATES.map((t) => `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
+      </optgroup>`;
+    return excelGroup + builtinGroup;
+  };
+
   const cur = currencyLabel();
 
   const loadDraftsList = async () => {
@@ -133,6 +174,7 @@ export async function render(view) {
     return {
       issuer_id: state.issuer_id,
       client_id: state.client_id,
+      template_style: state.selected_template,
       date_from: state.date_from,
       date_to: state.date_to,
       count: toNum(state.count, 0),
@@ -391,7 +433,7 @@ export async function render(view) {
 
         <div class="row mt-sm" style="gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-sm" id="btn-save-draft" type="button" style="background:#0284c7;color:#fff">${raw(icon.copy({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}حفظ المسودة</button>
-          <button class="btn btn-sm" id="btn-sample-print" type="button" style="background:#475569;color:#fff">${raw(icon.eye({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}إصدار عينة تجريبية</button>
+          <button class="btn btn-sm" id="btn-sample-print" type="button" style="background:#0d9488;color:#fff;font-weight:bold">${raw(icon.eye({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}معاينة الفواتير بالقالب 📄</button>
           <button class="btn btn-sm" id="btn-print-preview" type="button" style="background:#d97706;color:#fff">${raw(icon.printer({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}طباعة المعاينة / PDF</button>
           <button class="btn btn-sm" id="pv-csv" type="button">${raw(icon.fileText({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}تصدير CSV</button>
           <button class="btn btn-sm" id="pv-xls" type="button">${raw(icon.fileSpreadsheet({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}تصدير Excel</button>
@@ -420,6 +462,9 @@ export async function render(view) {
                   <span class="badge green num" style="font-size:.85rem;font-weight:bold">${money(inv.grand_total)} ${esc(cur)}</span>
                   <span class="tiny muted">${esc(inv.lines.length)} أصناف</span>
                   <div class="spacer"></div>
+                  <button class="btn btn-sm" data-preview-inv="${idx}" type="button" style="background:#0d9488;color:#fff;font-weight:600" title="معاينة هذه الفاتورة بالقالب وتبديل القوالب">
+                    ${raw(icon.eye({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}معاينة بالقالب
+                  </button>
                   <button class="btn btn-sm ${state.activeEditIndex === idx ? 'btn-primary' : ''}" data-toggle-edit="${idx}" type="button">
                     ${raw(icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}${state.activeEditIndex === idx ? 'إغلاق التعديل' : 'تعديل البنود'}
                   </button>
@@ -532,6 +577,10 @@ export async function render(view) {
             <select id="invoice_type">
               <option value="STANDARD" ${raw(state.invoice_type === 'STANDARD' ? 'selected' : '')}>ضريبية</option>
               <option value="SIMPLIFIED" ${raw(state.invoice_type === 'SIMPLIFIED' ? 'selected' : '')}>مبسطة</option>
+            </select></div>
+          <div class="field" style="max-width:260px"><label>قالب الفاتورة المعتمد للدفعة</label>
+            <select id="selected_template">
+              ${raw(buildTemplateOptions(state.selected_template))}
             </select></div>
           <div class="field" style="max-width:180px"><label>بداية تسلسل الفواتير (اختياري)</label>
             <input type="text" id="start_invoice_number" class="mono" value="${esc(state.start_invoice_number || '')}" placeholder="مثال: INV-0101" />
@@ -701,7 +750,7 @@ export async function render(view) {
   });
 
   function bind() {
-    ['issuer_id', 'client_id', 'date_from', 'date_to', 'invoice_type', 'work_start', 'work_end'].forEach((id) => {
+    ['issuer_id', 'client_id', 'date_from', 'date_to', 'invoice_type', 'selected_template', 'work_start', 'work_end'].forEach((id) => {
       const el = $(`#${id}`, view);
       if (el) {
         el.addEventListener('change', async (e) => {
@@ -710,6 +759,17 @@ export async function render(view) {
             await loadDraftsList();
             const area = $('#drafts-area', view);
             if (area) area.innerHTML = draftsSectionHtml();
+            const currIss = activeIssuers.find((i) => i.id === state.issuer_id);
+            if (currIss?.print_settings) {
+              try {
+                const cfg = typeof currIss.print_settings === 'string' ? JSON.parse(currIss.print_settings) : currIss.print_settings;
+                if (cfg.template_style) {
+                  state.selected_template = cfg.template_style;
+                  const tplEl = $('#selected_template', view);
+                  if (tplEl) tplEl.value = cfg.template_style;
+                }
+              } catch {}
+            }
           }
         });
       }
@@ -1093,6 +1153,276 @@ export async function render(view) {
     bindPreviewArea();
   }
 
+  async function openBulkInvoicePreviewModal(targetIndex = 0) {
+    if (!state.preview || !state.preview.invoices || !state.preview.invoices.length) {
+      toastErr('لا توجد فواتير مُولَّدة بعد للمعاينة');
+      return;
+    }
+
+    let currentIdx = Math.max(0, Math.min(targetIndex, state.preview.invoices.length - 1));
+    let currentStyle = state.selected_template || '01-royal-navy';
+    let zoomLevel = 100;
+    let currentHtml = '';
+
+    const modalInst = modal({
+      title: 'معاينة فواتير الدفعة بالقالب التفاعلي',
+      wide: true,
+      body: html`
+        <div class="bulk-preview-modal-content" style="display:flex;flex-direction:column;gap:.75rem">
+          <!-- شريط التحكم العلوي: اختيار القالب والتنقل بين الفواتير والإجراءات -->
+          <div class="card" style="padding:.65rem .85rem;margin:0;background:var(--card-bg, #0f172a);border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem">
+            <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+              <span style="font-weight:700;font-size:13px;color:var(--brand, #0d9488);white-space:nowrap">
+                قالب الفاتورة:
+              </span>
+              <select id="modal-bulk-tpl-picker" class="input input-sm" style="min-width:280px;max-width:440px;font-size:13px;padding:5px 10px;border-radius:6px;border:1px solid var(--line-strong);background:var(--bg, #090d16);color:var(--text, #f8fafc);font-weight:700;cursor:pointer">
+                ${raw(buildTemplateOptions(currentStyle))}
+              </select>
+              <button class="btn btn-sm" id="modal-btn-adopt-tpl" type="button" style="font-size:12px;padding:5px 10px;background:rgba(13,148,136,0.15);border:1px solid var(--brand, #0d9488);color:var(--brand, #0d9488);font-weight:700;white-space:nowrap;border-radius:6px" title="اعتماد هذا القالب للدفعة الحالية">
+                ${raw(icon.checkCircle({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}اعتماد هذا القالب للدفعة
+              </button>
+            </div>
+
+            <!-- أزرار التنقل بين الفواتير -->
+            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+              <button class="btn btn-sm" id="modal-bulk-prev" type="button" title="الفاتورة السابقة">
+                ◀ السابق
+              </button>
+              <select id="modal-bulk-inv-select" class="input input-sm" style="font-size:12px;padding:4px 8px;border-radius:6px;max-width:240px;font-weight:600">
+                ${raw(state.preview.invoices.map((inv, i) => `
+                  <option value="${i}" ${i === currentIdx ? 'selected' : ''}>
+                    فاتورة #${i + 1} (${money(inv.grand_total)} ${esc(cur)})
+                  </option>
+                `).join(''))}
+              </select>
+              <button class="btn btn-sm" id="modal-bulk-next" type="button" title="الفاتورة التالية">
+                التالي ▶
+              </button>
+            </div>
+
+            <!-- أدوات التكبير/التصغير والإجراءات -->
+            <div style="display:flex;align-items:center;gap:.5rem">
+              <div class="tpl-zoom-controls" style="display:inline-flex;align-items:center;border:1px solid var(--line-strong);border-radius:6px;overflow:hidden">
+                <button type="button" class="btn btn-sm pad0" id="modal-zoom-out" style="width:26px;height:26px;border-radius:0" title="تصغير">−</button>
+                <span id="modal-zoom-val" style="padding:0 8px;font-size:11px;font-weight:bold" class="num">${zoomLevel}%</span>
+                <button type="button" class="btn btn-sm pad0" id="modal-zoom-in" style="width:26px;height:26px;border-radius:0" title="تكبير">+</button>
+              </div>
+              <button class="btn btn-sm" id="modal-bulk-print" type="button" style="background:#0284c7;color:#fff;font-weight:600">
+                ${raw(icon.printer({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}طباعة الفاتورة
+              </button>
+              <button class="btn btn-sm" id="modal-bulk-pdf" type="button" style="background:#d97706;color:#fff;font-weight:600">
+                ${raw(icon.pdf({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}تحميل PDF
+              </button>
+            </div>
+          </div>
+
+          <!-- شاشة عرض المستند الورقي الحقيقي -->
+          <div class="tpl-paper-wrapper" style="min-height:72vh;max-height:76vh;overflow:auto;background:rgba(0,0,0,0.3);border-radius:8px;padding:1.5rem 1rem;display:flex;justify-content:center;align-items:flex-start">
+            <div id="modal-paper-frame" style="transform:scale(1);transform-origin:top center;transition:transform 0.15s ease;width:100%;max-width:960px;box-shadow:0 8px 30px rgba(0,0,0,0.5);border-radius:4px;overflow:hidden">
+              <iframe id="modal-preview-iframe" style="width:100%;min-height:297mm;border:none;background:#ffffff;display:block" title="معاينة الفاتورة"></iframe>
+            </div>
+          </div>
+        </div>
+      `,
+      footer: null,
+    });
+
+    const modalEl = modalInst.el.querySelector('.modal');
+    if (modalEl) {
+      modalEl.style.maxWidth = '1260px';
+      modalEl.style.width = '96vw';
+    }
+
+    const iframe = modalInst.el.querySelector('#modal-preview-iframe');
+    const tplPicker = modalInst.el.querySelector('#modal-bulk-tpl-picker');
+    const invSelect = modalInst.el.querySelector('#modal-bulk-inv-select');
+    const prevBtn = modalInst.el.querySelector('#modal-bulk-prev');
+    const nextBtn = modalInst.el.querySelector('#modal-bulk-next');
+    const adoptBtn = modalInst.el.querySelector('#modal-btn-adopt-tpl');
+    const printBtn = modalInst.el.querySelector('#modal-bulk-print');
+    const pdfBtn = modalInst.el.querySelector('#modal-bulk-pdf');
+    const zoomInBtn = modalInst.el.querySelector('#modal-zoom-in');
+    const zoomOutBtn = modalInst.el.querySelector('#modal-zoom-out');
+    const zoomVal = modalInst.el.querySelector('#modal-zoom-val');
+    const paperFrame = modalInst.el.querySelector('#modal-paper-frame');
+
+    const updateZoom = (z) => {
+      zoomLevel = Math.max(50, Math.min(150, z));
+      if (zoomVal) zoomVal.textContent = `${zoomLevel}%`;
+      if (paperFrame) paperFrame.style.transform = `scale(${zoomLevel / 100})`;
+    };
+
+    if (zoomInBtn) zoomInBtn.addEventListener('click', () => updateZoom(zoomLevel + 10));
+    if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => updateZoom(zoomLevel - 10));
+
+    async function loadCurrentInvoiceHtml() {
+      const inv = state.preview.invoices[currentIdx];
+      if (!inv || !iframe) return;
+
+      iframe.srcdoc = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+        <style>body{margin:0;min-height:297mm;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:sans-serif;background:#fff;color:#475569;}
+        .spin{width:40px;height:40px;border:3px solid #e2e8f0;border-top-color:#0d9488;border-radius:50%;animation:s .7s linear infinite;}@keyframes s{to{transform:rotate(360deg)}}
+        </style></head><body><div class="spin"></div><p style="margin-top:14px;font-weight:bold;font-size:14px">جارٍ تطبيق وتجهيز القالب (${esc(currentStyle)})...</p></body></html>`;
+
+      const issuer = store.issuers.find((i) => i.id === state.issuer_id) || { name_ar: 'الشركة المصدرة', currency: 'SAR' };
+      const client = store.clients.find((c) => c.id === state.client_id) || { name: 'العميل' };
+
+      const isBuiltin = ['corporate_multipage', 'standard', 'modern', 'classic', 'compact', 'detailed_address'].includes(currentStyle);
+
+      try {
+        if (!isBuiltin) {
+          const res = await fetch('/api/invoices/preview-render-html', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              issuer_id: state.issuer_id,
+              client_id: state.client_id,
+              style: currentStyle,
+              invoice: {
+                invoice_number: inv.invoice_number || `${issuer.invoice_prefix || 'INV'}-${String(currentIdx + 1).padStart(4, '0')}`,
+                issue_date: inv.issue_date,
+                issue_time: inv.issue_time || '10:00:00',
+                payment_method: inv.payment_method || 'CREDIT',
+                notes: inv.notes || '',
+                subtotal: inv.subtotal,
+                discount_amount: inv.discount_amount,
+                taxable_amount: inv.taxable_amount,
+                tax_amount: inv.tax_amount,
+                grand_total: inv.grand_total,
+                lines: inv.lines,
+              },
+            }),
+          });
+          if (res.ok) {
+            const htmlText = await res.text();
+            if (htmlText && htmlText.length > 500) {
+              currentHtml = htmlText;
+              iframe.srcdoc = htmlText;
+              return;
+            }
+          }
+        }
+      } catch { /* fallback to client rendering */ }
+
+      // Fallback: Client-side rendering via invoiceA4
+      const fullSample = {
+        ...inv,
+        invoice_number: inv.invoice_number || `${issuer.invoice_prefix || 'INV'}-${String(currentIdx + 1).padStart(4, '0')}`,
+        seller_name: issuer.name_ar,
+        seller_tax_number: issuer.tax_number,
+        buyer_name: client.name,
+        buyer_tax_number: client.tax_number,
+        qr_payload: 'AQVTYW1wbGUSCjMxMDAwMDAwMDMTAzEwMBQEMjMwMA==',
+      };
+      currentHtml = invoiceA4({
+        invoice: fullSample,
+        issuer,
+        client,
+        printSettings: { template_style: currentStyle },
+        autoPrint: false,
+      });
+      iframe.srcdoc = currentHtml;
+    }
+
+    const syncNav = () => {
+      if (prevBtn) prevBtn.disabled = currentIdx <= 0;
+      if (nextBtn) nextBtn.disabled = currentIdx >= state.preview.invoices.length - 1;
+      if (invSelect) invSelect.value = String(currentIdx);
+      loadCurrentInvoiceHtml();
+    };
+
+    if (tplPicker) {
+      tplPicker.addEventListener('change', (e) => {
+        currentStyle = e.target.value;
+        state.selected_template = currentStyle;
+        loadCurrentInvoiceHtml();
+      });
+    }
+
+    if (invSelect) {
+      invSelect.addEventListener('change', (e) => {
+        currentIdx = Number(e.target.value);
+        syncNav();
+      });
+    }
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', () => {
+        if (currentIdx > 0) {
+          currentIdx--;
+          syncNav();
+        }
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        if (currentIdx < state.preview.invoices.length - 1) {
+          currentIdx++;
+          syncNav();
+        }
+      });
+    }
+
+    if (adoptBtn) {
+      adoptBtn.addEventListener('click', () => {
+        state.selected_template = currentStyle;
+        const mainTplSelect = $('#selected_template', view);
+        if (mainTplSelect) mainTplSelect.value = currentStyle;
+        toastOk(`تم اعتماد القالب (${currentStyle}) لهذه الدفعة`);
+      });
+    }
+
+    if (printBtn) {
+      printBtn.addEventListener('click', () => {
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        } else if (currentHtml) {
+          printDoc(currentHtml);
+        }
+      });
+    }
+
+    if (pdfBtn) {
+      pdfBtn.addEventListener('click', async () => {
+        if (!currentHtml) return;
+        pdfBtn.disabled = true;
+        pdfBtn.textContent = '⏳ جاري إنشاء الـ PDF…';
+        try {
+          const inv = state.preview.invoices[currentIdx];
+          const invNum = inv?.invoice_number || `INV-${currentIdx + 1}`;
+          const res = await fetch('/api/pdf/render', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              html: currentHtml,
+              filename: `invoice_${invNum}.pdf`,
+            }),
+          });
+          if (!res.ok) throw new Error('فشل توليد ملف PDF');
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `invoice_${invNum}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+          toastOk('تم تحميل ملف PDF بنجاح');
+        } catch (err) {
+          toastErr(err.message || 'تعذر تحميل PDF');
+        } finally {
+          pdfBtn.disabled = false;
+          pdfBtn.innerHTML = `${raw(icon.pdf({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}تحميل PDF`;
+        }
+      });
+    }
+
+    syncNav();
+  }
+
   function bindPreviewArea() {
     const regen = $('#regen', view);
     if (regen) {
@@ -1135,50 +1465,18 @@ export async function render(view) {
       });
     }
 
-    // طباعة عينة تجريبية (Sample Test Print)
+    // معاينة وطباعة الفاتورة بالقالب التفاعلي (Interactive Template Preview & Sample Print)
     const samplePrintBtn = $('#btn-sample-print', view);
     if (samplePrintBtn) {
-      samplePrintBtn.addEventListener('click', async () => {
-        if (!state.preview || !state.preview.invoices.length) return;
-        const sampleInv = state.preview.invoices[0];
-        const issuer = store.issuers.find((i) => i.id === state.issuer_id) || { name_ar: 'الشركة المصدرة', currency: 'SAR' };
-        const client = store.clients.find((c) => c.id === state.client_id) || { name: 'العميل التجريبي' };
-
-        const fullSample = {
-          ...sampleInv,
-          invoice_number: `${issuer.invoice_prefix || 'INV'}-SAMPLE-01`,
-          seller_name: issuer.name_ar,
-          seller_tax_number: issuer.tax_number,
-          buyer_name: client.name,
-          buyer_tax_number: client.tax_number,
-          qr_payload: 'AQVTYW1wbGUSCjMxMDAwMDAwMDMTAzEwMBQEMjMwMA==',
-        };
-
-        const kind = await new Promise((resolve) => {
-          modal({
-            title: 'إصدار وطباعة فاتورة تجريبية (عينة)',
-            slim: true,
-            body: html`<p>اختر قالب الطباعة لمعاينة الفاتورة الأولى كعينة قبل اعتماد كامل الدفعة:</p>
-              <div class="row mt" style="justify-content:center;gap:1rem">
-                <button class="btn btn-primary" id="btn-sample-a4" type="button">مقاس A4</button>
-                <button class="btn" id="btn-sample-th" type="button">إيصال حراري (80mm)</button>
-              </div>`,
-            footer: '<button class="btn" data-close type="button">إلغاء</button>',
-            onClose: () => resolve(null),
-          });
-          const a4Btn = $('#btn-sample-a4');
-          if (a4Btn) a4Btn.addEventListener('click', () => { a4Btn.closest('.modal-backdrop').remove(); resolve('a4'); });
-          const thBtn = $('#btn-sample-th');
-          if (thBtn) thBtn.addEventListener('click', () => { thBtn.closest('.modal-backdrop').remove(); resolve('thermal'); });
-        });
-
-        if (kind === 'a4') {
-          printDoc(invoiceA4({ invoice: fullSample, issuer, client }));
-        } else if (kind === 'thermal') {
-          printDoc(invoiceThermal({ invoice: fullSample, issuer, client }));
-        }
+      samplePrintBtn.addEventListener('click', () => {
+        openBulkInvoicePreviewModal(0);
       });
     }
+
+    delegate(view, 'click', '[data-preview-inv]', (e, btn) => {
+      const idx = Number(btn.dataset.previewInv);
+      openBulkInvoicePreviewModal(idx);
+    });
 
     // طباعة تقرير المعاينة الشامل (PDF Print Preview)
     const printPrevBtn = $('#btn-print-preview', view);
@@ -1396,7 +1694,14 @@ export async function render(view) {
       });
       const vText = res.vouchers_count ? ` و ${res.vouchers_count} سند قبض` : '';
       toastOk(`تم حفظ ${res.count} فاتورة${vText} بإجمالي ${money(res.total_amount)} ${cur}`);
-      router.go(`invoices?batch_id=${res.batch_id}`);
+      showBatchSuccessModal({
+        batchId: res.batch_id,
+        count: res.count,
+        vouchersCount: res.vouchers_count || 0,
+        totalAmount: res.total_amount,
+        cur,
+        style: state.invoice_template || 'default',
+      });
     } catch (err) {
       if (btn) {
         btn.disabled = false;
@@ -1406,6 +1711,141 @@ export async function render(view) {
     }
   }
 
+  function showBatchSuccessModal({ batchId, count, vouchersCount, totalAmount, cur, style }) {
+    const m = modal({
+      title: 'تم اعتماد وحفظ الدفعة بنجاح',
+      wide: true,
+      body: html`
+        <div class="stack" style="gap:1.2rem;padding:.5rem 0;">
+          <div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:10px;padding:1.2rem 1.4rem;display:flex;align-items:center;gap:1rem;">
+            <div style="font-size:2.2rem;line-height:1;color:var(--success, #10b981);">✓</div>
+            <div>
+              <h3 style="margin:0 0 .3rem 0;color:var(--text, #fff);font-size:1.15rem;">تم إصدار وحفظ ${num(count)} فاتورة رسمية بنجاح</h3>
+              <p style="margin:0;font-size:.88rem;color:var(--muted);line-height:1.5;">
+                إجمالي الدفعة: <b class="num" style="color:var(--text);font-size:1rem;">${money(totalAmount)} ${cur}</b>
+                ${raw(vouchersCount > 0 ? ` — تم إصدار <b style="color:var(--primary, #0d9488)">${num(vouchersCount)}</b> سند قبض آلياً.` : '')}
+                <br><span class="tiny mono" style="opacity:.8">معرّف الدفعة: ${esc(batchId)}</span>
+              </p>
+            </div>
+          </div>
+
+          <div style="font-size:.92rem;font-weight:700;color:var(--text);margin-top:.4rem;">إجراءات الطباعة والتحميل الفورية للدفعة:</div>
+
+          <div class="grid grid-3" style="gap:.8rem;">
+            <div class="card" style="padding:1rem;display:flex;flex-direction:column;justify-content:space-between;border:1px solid var(--border-color, #334155);background:var(--card-bg, #1e293b);">
+              <div>
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
+                  <span style="color:var(--primary, #0d9488);">${raw(icon.printer({ size: 20 }))}</span>
+                  <b style="font-size:.95rem;">طباعة فواتير الدفعة (A4)</b>
+                </div>
+                <p class="tiny muted" style="margin:0 0 1rem 0;line-height:1.4;">إرسال كافة فواتير الدفعة (${num(count)} فاتورة) إلى أمر طباعة موحد مع فواصل صفحات نظيفة لكل فاتورة.</p>
+              </div>
+              <button class="btn btn-primary" id="btn-modal-print-batch" type="button" style="width:100%;justify-content:center;">
+                ${raw(icon.printer({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }))} طباعة كافة الفواتير
+              </button>
+            </div>
+
+            <div class="card" style="padding:1rem;display:flex;flex-direction:column;justify-content:space-between;border:1px solid var(--border-color, #334155);background:var(--card-bg, #1e293b);">
+              <div>
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
+                  <span style="color:var(--primary, #0d9488);">${raw(icon.pdf({ size: 20 }))}</span>
+                  <b style="font-size:.95rem;">تحميل ملف PDF مجمّع</b>
+                </div>
+                <p class="tiny muted" style="margin:0 0 1rem 0;line-height:1.4;">توليد وتنزيل ملف PDF واحد متكامل يضم جميع الفواتير مرتبة ومجهزة للأرشفة أو الإرسال.</p>
+              </div>
+              <a class="btn btn-outline" id="btn-modal-dl-pdf" href="/api/bulk/batches/${esc(batchId)}/pdf?style=${esc(style)}" target="_blank" download="batch_${esc(batchId.slice(0, 8))}.pdf" style="width:100%;justify-content:center;">
+                ${raw(icon.pdf({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }))} تنزيل PDF مجمّع
+              </a>
+            </div>
+
+            <div class="card" style="padding:1rem;display:flex;flex-direction:column;justify-content:space-between;border:1px solid var(--border-color, #334155);background:var(--card-bg, #1e293b);${vouchersCount > 0 ? '' : 'opacity:.5;'}">
+              <div>
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
+                  <span style="color:var(--primary, #0d9488);">${raw(icon.receipt({ size: 20 }))}</span>
+                  <b style="font-size:.95rem;">طباعة سندات القبض</b>
+                </div>
+                <p class="tiny muted" style="margin:0 0 1rem 0;line-height:1.4;">${vouchersCount > 0 ? `طباعة ${num(vouchersCount)} سند قبض تم توليدها وتخصيصها للفواتير دفعة واحدة.` : 'لم يتم تحديد إصدار سندات قبض لهذه الدفعة.'}</p>
+              </div>
+              <button class="btn btn-outline" id="btn-modal-print-vouchers" type="button" style="width:100%;justify-content:center;" ${vouchersCount > 0 ? '' : 'disabled'}>
+                ${raw(icon.receipt({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }))} طباعة السندات (${num(vouchersCount)})
+              </button>
+            </div>
+          </div>
+        </div>
+      `,
+      footer: html`
+        <div class="flex" style="justify-content:space-between;align-items:center;width:100%;">
+          <button class="btn btn-primary" id="btn-modal-go-invoices" type="button">
+            عرض فواتير الدفعة في جدول الفواتير ←
+          </button>
+          <button class="btn" data-close type="button">إغلاق</button>
+        </div>
+      `,
+    });
+
+    const printBatchBtn = $('#btn-modal-print-batch', m.body);
+    if (printBatchBtn) {
+      printBatchBtn.addEventListener('click', async () => {
+        printBatchBtn.disabled = true;
+        printBatchBtn.textContent = 'جارٍ تجهيز الطباعة…';
+        try {
+          const res = await fetch(`/api/bulk/batches/${encodeURIComponent(batchId)}/render-html?style=${encodeURIComponent(style)}`);
+          if (!res.ok) throw new Error('تعذر جلب فواتير الدفعة');
+          const docHtml = await res.text();
+          printDoc(docHtml);
+        } catch (err) {
+          toastErr(err.message || 'فشلت عملية الطباعة');
+        } finally {
+          printBatchBtn.disabled = false;
+          printBatchBtn.innerHTML = `${icon.printer({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })} طباعة كافة الفواتير`;
+        }
+      });
+    }
+
+    const printVouchersBtn = $('#btn-modal-print-vouchers', m.body);
+    if (printVouchersBtn && vouchersCount > 0) {
+      printVouchersBtn.addEventListener('click', async () => {
+        printVouchersBtn.disabled = true;
+        printVouchersBtn.textContent = 'جارٍ تجهيز السندات…';
+        try {
+          const vouchers = await api.get(`/api/bulk/batches/${encodeURIComponent(batchId)}/vouchers`);
+          if (!vouchers || !vouchers.length) {
+            toastErr('لم يتم العثور على سندات قبض لهذه الدفعة');
+            return;
+          }
+          const docs = [];
+          for (const v of vouchers) {
+            const issuer = store.issuers.find((i) => i.id === v.issuer_id) || store.activeIssuer || {};
+            const client = store.clients.find((c) => c.id === v.client_id) || { id: v.client_id, name_ar: v.client_name };
+            docs.push(voucherPrint({ voucher: v, issuer, client }));
+          }
+          const combined = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>سندات القبض</title>
+          <style>
+            @media print {
+              body { margin: 0; padding: 0; background: #fff !important; }
+              .page-break { page-break-after: always; break-after: page; }
+              .page-break:last-child { page-break-after: auto; break-after: auto; }
+            }
+          </style></head><body>
+          ${docs.map((d) => `<div class="page-break">${d}</div>`).join('')}
+          </body></html>`;
+          printDoc(combined);
+        } catch (err) {
+          toastErr(err.message || 'فشلت طباعة سندات القبض');
+        } finally {
+          printVouchersBtn.disabled = false;
+          printVouchersBtn.innerHTML = `${icon.receipt({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })} طباعة السندات (${num(vouchersCount)})`;
+        }
+      });
+    }
+
+    $('#btn-modal-go-invoices', m.footer)?.addEventListener('click', () => {
+      m.close();
+      router.go(`invoices?batch_id=${batchId}`);
+    });
+  }
+
   draw();
   return undefined;
 }
+

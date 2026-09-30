@@ -1000,6 +1000,193 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte(htmlStr))
 	})
 
+	mux.HandleFunc("POST /api/invoices/preview-render-html", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			IssuerID string `json:"issuer_id"`
+			ClientID string `json:"client_id"`
+			Style    string `json:"style"`
+			Invoice  struct {
+				InvoiceNumber   string  `json:"invoice_number"`
+				IssueDate       string  `json:"issue_date"`
+				IssueTime       string  `json:"issue_time"`
+				PaymentMethod   string  `json:"payment_method"`
+				Notes           string  `json:"notes"`
+				Subtotal        float64 `json:"subtotal"`
+				DiscountAmount  float64 `json:"discount_amount"`
+				TaxableAmount   float64 `json:"taxable_amount"`
+				TaxAmount       float64 `json:"tax_amount"`
+				GrandTotal      float64 `json:"grand_total"`
+				PaidAmount      float64 `json:"paid_amount"`
+				RemainingAmount float64 `json:"remaining_amount"`
+				Lines           []struct {
+					LineNo        int     `json:"line_no"`
+					ItemCode      string  `json:"item_code"`
+					ItemName      string  `json:"item_name"`
+					Unit          string  `json:"unit"`
+					Quantity      float64 `json:"quantity"`
+					UnitPrice     float64 `json:"unit_price"`
+					Discount      float64 `json:"discount"`
+					TaxRate       float64 `json:"tax_rate"`
+					TaxableAmount float64 `json:"taxable_amount"`
+					TaxAmount     float64 `json:"tax_amount"`
+					GrandTotal    float64 `json:"grand_total"`
+				} `json:"lines"`
+			} `json:"invoice"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+
+		invNum := req.Invoice.InvoiceNumber
+		if strings.TrimSpace(invNum) == "" {
+			invNum = "INV-PREVIEW-01"
+		}
+		issDate := req.Invoice.IssueDate
+		if strings.TrimSpace(issDate) == "" {
+			issDate = time.Now().Format("2006-01-02")
+		}
+		issTime := req.Invoice.IssueTime
+		if strings.TrimSpace(issTime) == "" {
+			issTime = "10:00:00"
+		}
+
+		invView := &services.InvoiceView{
+			Invoice: models.Invoice{
+				InvoiceNumber:  invNum,
+				IssueDate:      issDate,
+				IssueTime:      issTime,
+				PaymentMethod:  req.Invoice.PaymentMethod,
+				Notes:          req.Invoice.Notes,
+				Subtotal:       models.ToMinor(req.Invoice.Subtotal),
+				DiscountAmount: models.ToMinor(req.Invoice.DiscountAmount),
+				TaxableAmount:  models.ToMinor(req.Invoice.TaxableAmount),
+				TaxAmount:      models.ToMinor(req.Invoice.TaxAmount),
+				GrandTotal:     models.ToMinor(req.Invoice.GrandTotal),
+				Currency:       "SAR",
+				Status:         "ISSUED",
+			},
+			SubtotalMajor:        req.Invoice.Subtotal,
+			DiscountAmountMajor:  req.Invoice.DiscountAmount,
+			TaxableAmountMajor:   req.Invoice.TaxableAmount,
+			TaxAmountMajor:       req.Invoice.TaxAmount,
+			GrandTotalMajor:      req.Invoice.GrandTotal,
+			PaidAmountMajor:      req.Invoice.PaidAmount,
+			RemainingAmountMajor: req.Invoice.RemainingAmount,
+			Items:                make([]services.InvoiceItemView, 0, len(req.Invoice.Lines)),
+			Lines:                make([]services.InvoiceItemView, 0, len(req.Invoice.Lines)),
+		}
+
+		if req.IssuerID != "" {
+			if iss, err := s.issuers.GetIssuer(req.IssuerID); err == nil && iss != nil {
+				invView.IssuerSnapshot = iss
+				invView.IssuerID = iss.ID
+				invView.IssuerName = iss.NameAr
+				invView.SellerName = iss.NameAr
+				invView.SellerTaxNumber = iss.TaxNumber
+				invView.SellerCr = iss.CommercialRegister
+				addrParts := []string{iss.City, iss.District, iss.Street, iss.BuildingNo, iss.PostalCode}
+				var cleanParts []string
+				for _, p := range addrParts {
+					if strings.TrimSpace(p) != "" {
+						cleanParts = append(cleanParts, strings.TrimSpace(p))
+					}
+				}
+				invView.SellerAddress = strings.Join(cleanParts, " - ")
+				invView.SellerAddressEn = iss.AddressEn
+			}
+		}
+
+		if req.ClientID != "" {
+			if cl, err := s.clients.GetClient(req.ClientID); err == nil && cl != nil {
+				invView.ClientSnapshot = &cl.Client
+				invView.ClientID = cl.ID
+				invView.ClientCode = cl.ClientCode
+				invView.ClientName = cl.Name
+				invView.BuyerName = cl.Name
+				invView.BuyerTaxNumber = cl.TaxNumber
+				invView.BuyerCr = cl.CommercialRegister
+				invView.BuyerAddress = cl.Address
+			}
+		}
+
+		var calcSubtotal, calcDiscount, calcTaxable, calcTax, calcGrand float64
+		for i, l := range req.Invoice.Lines {
+			lineNo := l.LineNo
+			if lineNo <= 0 {
+				lineNo = i + 1
+			}
+			taxRate := l.TaxRate
+			if taxRate == 0 {
+				taxRate = 15
+			}
+			taxable := l.TaxableAmount
+			if taxable == 0 && l.Quantity > 0 {
+				taxable = (l.Quantity * l.UnitPrice) - l.Discount
+			}
+			taxAmt := l.TaxAmount
+			if taxAmt == 0 {
+				taxAmt = taxable * (taxRate / 100.0)
+			}
+			tot := l.GrandTotal
+			if tot == 0 {
+				tot = taxable + taxAmt
+			}
+
+			calcSubtotal += l.Quantity * l.UnitPrice
+			calcDiscount += l.Discount
+			calcTaxable += taxable
+			calcTax += taxAmt
+			calcGrand += tot
+
+			iv := services.InvoiceItemView{
+				InvoiceItem: models.InvoiceItem{
+					LineNo:    lineNo,
+					ItemCode:  l.ItemCode,
+					ItemName:  l.ItemName,
+					Unit:      l.Unit,
+					Quantity:  l.Quantity,
+					UnitPrice: models.ToMinor(l.UnitPrice),
+					Discount:  models.ToMinor(l.Discount),
+					TaxRate:   taxRate,
+					Taxable:   models.ToMinor(taxable),
+					TaxAmount: models.ToMinor(taxAmt),
+					TotalLine: models.ToMinor(tot),
+				},
+				UnitPriceMajor: l.UnitPrice,
+				DiscountMajor:  l.Discount,
+				TaxableMajor:   taxable,
+				TaxAmountMajor: taxAmt,
+				TotalLineMajor: tot,
+			}
+			invView.Lines = append(invView.Lines, iv)
+		}
+		invView.Items = invView.Lines
+
+		if invView.GrandTotalMajor == 0 && len(invView.Lines) > 0 {
+			invView.SubtotalMajor = calcSubtotal
+			invView.DiscountAmountMajor = calcDiscount
+			invView.TaxableAmountMajor = calcTaxable
+			invView.TaxAmountMajor = calcTax
+			invView.GrandTotalMajor = calcGrand
+			invView.Subtotal = models.ToMinor(calcSubtotal)
+			invView.DiscountAmount = models.ToMinor(calcDiscount)
+			invView.TaxableAmount = models.ToMinor(calcTaxable)
+			invView.TaxAmount = models.ToMinor(calcTax)
+			invView.GrandTotal = models.ToMinor(calcGrand)
+		}
+
+		style := req.Style
+		htmlStr, err := s.templates.RenderInvoiceHTML(invView, style)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(htmlStr))
+	})
+
 	mux.HandleFunc("GET /api/invoices/{id}/pdf", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		inv, err := s.invoices.GetInvoice(id)
@@ -1858,6 +2045,133 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, res)
 	})
 
+	mux.HandleFunc("GET /api/bulk/batches/{id}/render-html", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		style := r.URL.Query().Get("style")
+		rows, err := s.db.Query("SELECT id FROM invoices WHERE batch_id = ? ORDER BY issue_date ASC, sequence_no ASC, invoice_number ASC", id)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		defer rows.Close()
+
+		var invIDs []string
+		for rows.Next() {
+			var invID string
+			if err := rows.Scan(&invID); err == nil {
+				invIDs = append(invIDs, invID)
+			}
+		}
+		if len(invIDs) == 0 {
+			s.err(w, 404, "لا توجد فواتير لهذه الدفعة")
+			return
+		}
+
+		var docs []string
+		for _, invID := range invIDs {
+			inv, err := s.invoices.GetInvoice(invID)
+			if err != nil {
+				continue
+			}
+			htmlStr, err := s.templates.RenderInvoiceHTML(inv, style)
+			if err != nil {
+				continue
+			}
+			docs = append(docs, htmlStr)
+		}
+
+		combined := services.CombineHTMLDocuments(docs)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(combined))
+	})
+
+	mux.HandleFunc("GET /api/bulk/batches/{id}/pdf", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		style := r.URL.Query().Get("style")
+		rows, err := s.db.Query("SELECT id FROM invoices WHERE batch_id = ? ORDER BY issue_date ASC, sequence_no ASC, invoice_number ASC", id)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		defer rows.Close()
+
+		var invIDs []string
+		for rows.Next() {
+			var invID string
+			if err := rows.Scan(&invID); err == nil {
+				invIDs = append(invIDs, invID)
+			}
+		}
+		if len(invIDs) == 0 {
+			s.err(w, 404, "لا توجد فواتير لهذه الدفعة")
+			return
+		}
+
+		var docs []string
+		for _, invID := range invIDs {
+			inv, err := s.invoices.GetInvoice(invID)
+			if err != nil {
+				continue
+			}
+			htmlStr, err := s.templates.RenderInvoiceHTML(inv, style)
+			if err != nil {
+				continue
+			}
+			docs = append(docs, htmlStr)
+		}
+
+		combined := services.CombineHTMLDocuments(docs)
+		pdfBytes, err := services.RenderHTMLToPDF(combined)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		shortID := id
+		if len(shortID) > 8 {
+			shortID = shortID[:8]
+		}
+		filename := fmt.Sprintf("batch_%s.pdf", shortID)
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(pdfBytes)
+	})
+
+	mux.HandleFunc("GET /api/bulk/batches/{id}/vouchers", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		rows, err := s.db.Query(`
+			SELECT DISTINCT v.id 
+			FROM receipt_vouchers v
+			JOIN voucher_allocations va ON va.voucher_id = v.id
+			JOIN invoices i ON i.id = va.invoice_id
+			WHERE i.batch_id = ?
+			ORDER BY v.voucher_date ASC, v.voucher_number ASC
+		`, id)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		defer rows.Close()
+
+		var vIDs []string
+		for rows.Next() {
+			var vID string
+			if err := rows.Scan(&vID); err == nil {
+				vIDs = append(vIDs, vID)
+			}
+		}
+		rows.Close()
+
+		list := make([]*services.VoucherView, 0, len(vIDs))
+		for _, vID := range vIDs {
+			if vView, errV := s.vouchers.GetVoucher(vID); errV == nil && vView != nil {
+				list = append(list, vView)
+			}
+		}
+		s.json(w, 200, list)
+	})
+
 	// ---------------------------------------------------- إعدادات النظام
 	mux.HandleFunc("GET /api/settings", func(w http.ResponseWriter, r *http.Request) {
 		rows, err := s.db.Query("SELECT key, value FROM settings")
@@ -2113,15 +2427,17 @@ func (s *Server) handleExportPackage(w http.ResponseWriter, r *http.Request) {
 	defer zw.Close()
 
 	addFileToZip := func(diskPath, zipRelPath string) error {
-		data, err := os.ReadFile(diskPath)
+		src, err := os.Open(diskPath)
 		if err != nil {
 			return err
 		}
+		defer src.Close()
+
 		f, err := zw.Create(filepath.ToSlash(zipRelPath))
 		if err != nil {
 			return err
 		}
-		_, err = f.Write(data)
+		_, err = io.Copy(f, src)
 		return err
 	}
 
@@ -2183,8 +2499,8 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// سقف حجم الملف 300MB
-	if err := r.ParseMultipartForm(300 << 20); err != nil {
+	// سقف حجم الملف 2GB لضمان رفع أضخم قواعد البيانات وحزم الأرشيف
+	if err := r.ParseMultipartForm(2048 << 20); err != nil {
 		s.err(w, 400, "تعذر قراءة الملف المرفوع أو تجاوز الحد المسموح: "+err.Error())
 		return
 	}
@@ -2236,16 +2552,36 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 		var templatesCount int
 		var foundDbInZip *zip.File
 
-		// البحث عن أي ملف قاعدة بيانات SQLite داخل الـ ZIP
+		// البحث الذكي عن أي ملف قاعدة بيانات SQLite داخل الـ ZIP مهما كان المجلد أو التسمية
+		// المسار 1: الأولوية لـ zsystem.db أو database.db أو أي قاعدة خارج مجلد النسخ الاحتياطية
 		for _, f := range zipReader.File {
 			cleanName := filepath.ToSlash(f.Name)
 			lower := strings.ToLower(cleanName)
-			if strings.HasPrefix(lower, "__macosx") || strings.HasPrefix(filepath.Base(lower), ".") || strings.Contains(lower, "/backups/") {
+			if strings.HasPrefix(lower, "__macosx") || strings.HasPrefix(filepath.Base(lower), ".") || f.FileInfo().IsDir() {
 				continue
 			}
 			if strings.HasSuffix(lower, ".db") || strings.HasSuffix(lower, ".sqlite") || strings.HasSuffix(lower, ".sqlite3") {
-				if foundDbInZip == nil || strings.Contains(lower, "zsystem.db") || strings.Contains(lower, "database.db") {
+				if strings.Contains(lower, "zsystem.db") || strings.Contains(lower, "database.db") {
 					foundDbInZip = f
+					break
+				}
+				if !strings.Contains(lower, "/backups/") && foundDbInZip == nil {
+					foundDbInZip = f
+				}
+			}
+		}
+
+		// المسار 2: إذا لم يُعثر عليها، ابحث عن أي ملف قاعدة بيانات .db داخل الأرشيف
+		if foundDbInZip == nil {
+			for _, f := range zipReader.File {
+				cleanName := filepath.ToSlash(f.Name)
+				lower := strings.ToLower(cleanName)
+				if strings.HasPrefix(lower, "__macosx") || strings.HasPrefix(filepath.Base(lower), ".") || f.FileInfo().IsDir() {
+					continue
+				}
+				if strings.HasSuffix(lower, ".db") || strings.HasSuffix(lower, ".sqlite") || strings.HasSuffix(lower, ".sqlite3") {
+					foundDbInZip = f
+					break
 				}
 			}
 		}

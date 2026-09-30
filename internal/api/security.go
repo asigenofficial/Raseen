@@ -45,14 +45,18 @@ func routePermission(pattern string) string {
 
 func (s *Server) authorize(w http.ResponseWriter, r *http.Request, mux *http.ServeMux) bool {
 	if !strings.HasPrefix(r.URL.Path,"/api/") { return true }
-	r.Body = http.MaxBytesReader(w,r.Body,s.cfg.MaxBodyBytes)
+	limit := s.cfg.MaxBodyBytes
+	if strings.Contains(r.URL.Path, "import") || strings.Contains(r.URL.Path, "backup") || strings.Contains(r.URL.Path, "package") || strings.Contains(r.URL.Path, "analyze-excel") {
+		limit = 2 * 1024 * 1024 * 1024 // 2GB
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if r.Method != "GET" && r.Method != "HEAD" {
 		if origin := r.Header.Get("Origin"); origin != "" {
 			u, err := url.Parse(origin)
 			if err != nil || u.Host != r.Host || (u.Scheme != "http" && u.Scheme != "https") { s.err(w,403,"مصدر الطلب غير مسموح"); return false }
 		}
 	}
-	if (r.Method == "POST" && r.URL.Path == "/api/auth/login") || (r.Method == "GET" && (r.URL.Path == "/api/health" || r.URL.Path == "/api/meta" || strings.HasSuffix(r.URL.Path, "/render-html"))) { return true }
+	if (r.Method == "POST" && (r.URL.Path == "/api/auth/login" || r.URL.Path == "/api/invoices/preview-render-html")) || (r.Method == "GET" && (r.URL.Path == "/api/health" || r.URL.Path == "/api/meta" || strings.HasSuffix(r.URL.Path, "/render-html"))) { return true }
 	u := s.getSessionUser(r)
 	if u == nil { s.err(w,401,"يلزم تسجيل الدخول"); return false }
 	_, pattern := mux.Handler(r)

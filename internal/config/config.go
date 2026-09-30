@@ -78,7 +78,7 @@ func Load() *Config {
 		}
 	}
 
-	maxBody := int64(12 * 1024 * 1024) // 12MB
+	maxBody := int64(512 * 1024 * 1024) // 512MB default
 	if mStr := os.Getenv("ZS_MAX_BODY"); mStr != "" {
 		if m, err := strconv.ParseInt(mStr, 10, 64); err == nil {
 			maxBody = m

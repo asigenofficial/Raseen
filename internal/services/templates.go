@@ -853,6 +853,16 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 		}
 	}
 
+	if sellerName == "" && inv.SellerName != "" {
+		sellerName = inv.SellerName
+	}
+	if sellerTax == "" && inv.SellerTaxNumber != "" {
+		sellerTax = inv.SellerTaxNumber
+	}
+	if sellerCR == "" && inv.SellerCr != "" {
+		sellerCR = inv.SellerCr
+	}
+
 	// استرجاع العنوان الوطني والعنوان الإنجليزي في حال لم يتواجد في النسخة المحفوظة للفاتورة
 	if sellerAddress == "" && inv.SellerAddress != "" {
 		sellerAddress = inv.SellerAddress
@@ -1983,3 +1993,40 @@ func init() {
 	_ = moneySarRegex2
 	_ = SarSymbolSVG
 }
+
+// CombineHTMLDocuments merges multiple HTML invoice documents into a single printable document with page breaks.
+func CombineHTMLDocuments(docs []string) string {
+	if len(docs) == 0 {
+		return ""
+	}
+	if len(docs) == 1 {
+		return docs[0]
+	}
+	var sb strings.Builder
+	sb.WriteString(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+@page { size: A4 portrait; margin: 0; }
+@media print {
+  body { margin: 0; padding: 0; background: #fff !important; }
+  .batch-page-wrap { margin: 0; padding: 0; }
+  .batch-page-break { page-break-after: always; break-after: page; height: 0; line-height: 0; margin: 0; padding: 0; }
+}
+@media screen {
+  body { background: #334155; padding: 20px 0; }
+  .batch-page-wrap { margin-bottom: 25px; }
+  .batch-page-break { height: 25px; }
+}
+</style></head><body style="margin:0;padding:0;">`)
+
+	for i, doc := range docs {
+		sb.WriteString(`<div class="batch-page-wrap">`)
+		sb.WriteString(doc)
+		sb.WriteString(`</div>`)
+		if i < len(docs)-1 {
+			sb.WriteString(`<div class="batch-page-break"></div>`)
+		}
+	}
+	sb.WriteString(`</body></html>`)
+	return sb.String()
+}
+

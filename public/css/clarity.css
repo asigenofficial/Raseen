@@ -11,6 +11,7 @@ html[data-theme="light"] {
   --card: #fff; --card-solid: #fff; --card-hover: #f8fafb;
   --sidebar: #fff; --sidebar-hover: #f1f5f4; --topbar: #fff;
   --field-bg: #fff; --field-focus-bg: #fff;
+  --bg-alt: #f8fafb;
 
   --text: #243648; --text-heading: #172b3a; --muted: #526575; --dim: #64748b;
 
