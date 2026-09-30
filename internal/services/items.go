@@ -296,9 +296,23 @@ type ImportItemsResult struct {
 	Errors    int `json:"errors"`
 }
 
-func (s *ItemService) BatchImportItems(items []ImportItemInput) (*ImportItemsResult, error) {
+func (s *ItemService) BatchImportItems(items []ImportItemInput, replaceExisting ...bool) (*ImportItemsResult, error) {
 	if len(items) == 0 {
 		return &ImportItemsResult{}, nil
+	}
+
+	doReplace := len(replaceExisting) > 0 && replaceExisting[0]
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	if doReplace {
+		if _, err := tx.Exec("DELETE FROM items"); err != nil {
+			return nil, err
+		}
 	}
 
 	// Cache or create categories
@@ -310,12 +324,6 @@ func (s *ItemService) BatchImportItems(items []ImportItemInput) (*ImportItemsRes
 	for _, c := range cats {
 		catMap[strings.ToLower(strings.TrimSpace(c.Name))] = c.ID
 	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
 
 	stmtFindByName, err := tx.Prepare("SELECT id FROM items WHERE LOWER(TRIM(name_ar)) = LOWER(TRIM(?)) LIMIT 1")
 	if err != nil {

@@ -138,6 +138,13 @@ function openImportModal(onSuccess) {
         </div>
 
         <div id="import-preview-area" style="display:none"></div>
+
+        <div style="margin-top:14px;padding:10px 14px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:8px;">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.88rem;margin:0;">
+            <input type="checkbox" id="replace-existing-items" style="width:16px;height:16px;accent-color:var(--danger, #dc2626);" />
+            <span><b>استبدال وحذف كافة الأصناف السابقة</b> (ينصح به عند رفع ملف شامل جديد لتجنب تراكم الملفات وتكرار الأصناف)</span>
+          </label>
+        </div>
       </div>
     `,
     footer: `
@@ -249,11 +256,15 @@ function openImportModal(onSuccess) {
 
   commitBtn.addEventListener('click', async () => {
     if (!parsedItems.length) return;
+    const replaceExisting = !!m.el.querySelector('#replace-existing-items')?.checked;
     commitBtn.disabled = true;
     commitBtn.textContent = 'جارٍ الحفظ في قاعدة البيانات…';
     try {
-      const saveRes = await api.post('/api/items/import', { items: parsedItems });
-      toastOk(`تم استيراد الأصناف بنجاح (جديد: ${saveRes.created || 0}، محدث: ${saveRes.updated || 0})`);
+      const saveRes = await api.post('/api/items/import', { items: parsedItems, replace_existing: replaceExisting });
+      const msg = replaceExisting
+        ? `تم استبدال وحفظ الأصناف بنجاح (إجمالي: ${saveRes.created || parsedItems.length})`
+        : `تم استيراد الأصناف بنجاح (جديد: ${saveRes.created || 0}، محدث: ${saveRes.updated || 0})`;
+      toastOk(msg);
       m.close();
       clearFilterState('items');
       invalidate('items');

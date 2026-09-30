@@ -833,13 +833,14 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("POST /api/items/import", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			Items []services.ImportItemInput `json:"items"`
+			Items           []services.ImportItemInput `json:"items"`
+			ReplaceExisting bool                       `json:"replace_existing"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			s.err(w, 400, "بيانات غير صالحة")
 			return
 		}
-		res, err := s.items.BatchImportItems(req.Items)
+		res, err := s.items.BatchImportItems(req.Items, req.ReplaceExisting)
 		if err != nil {
 			s.err(w, 400, err.Error())
 			return
@@ -2618,6 +2619,29 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 			if preBackup != nil {
 				preBackupFilename = preBackup.Filename
 			}
+		}
+
+		// فحص ما إذا كانت الحزمة تحتوي على قوالب HTML
+		var zipHasTemplates bool
+		for _, f := range zipReader.File {
+			cleanName := filepath.ToSlash(f.Name)
+			lower := strings.ToLower(cleanName)
+			if strings.HasPrefix(lower, "__macosx") || strings.HasPrefix(filepath.Base(lower), ".") || f.FileInfo().IsDir() {
+				continue
+			}
+			baseName := filepath.Base(cleanName)
+			if strings.HasSuffix(lower, ".html") && baseName != "index.html" {
+				zipHasTemplates = true
+				break
+			}
+		}
+
+		// تنظيف مجلدات القوالب السابقة إذا كانت الحزمة تحتوي على قوالب جديدة لمنع تراكم الملفات وتكرارها
+		if zipHasTemplates {
+			_ = os.RemoveAll(filepath.Join(s.cfg.DataDir, "templates", "invoices"))
+			_ = os.RemoveAll(filepath.Join(s.cfg.DataDir, "templates", "documents"))
+			_ = os.MkdirAll(filepath.Join(s.cfg.DataDir, "templates", "invoices"), 0755)
+			_ = os.MkdirAll(filepath.Join(s.cfg.DataDir, "templates", "documents"), 0755)
 		}
 
 		// استخراج قوالب HTML والملفات التابعة
