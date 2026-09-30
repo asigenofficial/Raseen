@@ -62,6 +62,7 @@ func openBrowser(url string) {
 }
 
 func main() {
+	log.SetOutput(os.Stdout)
 	cfg := config.Load()
 
 	masterKey, err := crypto.GetMasterKey(cfg.KeyFile)
