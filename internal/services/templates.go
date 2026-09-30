@@ -1599,10 +1599,19 @@ func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string
 		}
 
 		var pageInner string
-		if p < totalPages {
-			pageInner = pageBadge + beforeTable + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose
+		if p == 1 {
+			if p < totalPages {
+				pageInner = pageBadge + beforeTable + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose
+			} else {
+				pageInner = pageBadge + beforeTable + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose + bottomContent
+			}
 		} else {
-			pageInner = pageBadge + beforeTable + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose + bottomContent
+			// صفحة المتابعة لا تكرر ترويسة وبيانات العميل الضخمة بل تكتفي بترويسة المتابعة وجدول الأصناف
+			if p < totalPages {
+				pageInner = pageBadge + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose
+			} else {
+				pageInner = pageBadge + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose + bottomContent
+			}
 		}
 
 		pOpen := strings.Replace(contOpen, "<div", fmt.Sprintf(`<div data-invoice-page="%d"`, p), 1)
@@ -1614,26 +1623,33 @@ func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string
 @page { size: A4 portrait; margin: 6mm 8mm; }
 @media screen {
   body { background: #47556914 !important; padding: 20px 0 !important; }
-  .invoice-container, .invoice-frame {
+  .invoice-container, .invoice-frame, [data-invoice-page] {
     margin: 0 auto 24px auto !important;
     box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
     min-height: 268mm !important;
     max-height: none !important;
     height: auto !important;
     box-sizing: border-box !important;
+    background: #fff !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
   }
 }
 @media print {
   body { background: #fff !important; padding: 0 !important; }
-  .invoice-container, .invoice-frame {
+  .invoice-container, .invoice-frame, [data-invoice-page] {
     margin: 0 !important;
     box-shadow: none !important;
     page-break-after: always !important;
     break-after: page !important;
     min-height: 268mm !important;
     box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
   }
-  .invoice-container:last-child, .invoice-frame:last-child {
+  .invoice-container:last-child, .invoice-frame:last-child, [data-invoice-page]:last-child {
     page-break-after: auto !important;
     break-after: auto !important;
   }
@@ -1867,6 +1883,14 @@ func defaultInvoiceHTMLTemplate() string {
     flex-direction: column;
     justify-content: space-between;
   }
+  .invoice-container {
+    width: 100%;
+    min-height: 268mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
   .top-wrap {
     flex-shrink: 0;
   }
@@ -1972,6 +1996,7 @@ func defaultInvoiceHTMLTemplate() string {
 </style>
 </head>
 <body>
+<div class="invoice-container">
 <div class="top-wrap">
   <div class="header">
     <div>
@@ -2021,6 +2046,7 @@ func defaultInvoiceHTMLTemplate() string {
     {{notes}}<br/>
     هذه الفاتورة صادرة إلكترونياً ولا تحتاج إلى توقيع يدوي
   </div>
+</div>
 </div>
 </body>
 </html>`
@@ -2240,4 +2266,3 @@ func CombineHTMLDocuments(docs []string) string {
 	sb.WriteString(`</body></html>`)
 	return sb.String()
 }
-

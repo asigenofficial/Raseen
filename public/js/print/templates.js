@@ -858,12 +858,13 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
       body { background: #47556914; padding: 16px 0; }
       .page { margin: 0 auto 16px auto; box-shadow: 0 4px 18px rgba(0,0,0,0.12); border-radius: 4px; }
     }
+    @page { size: A4 portrait; margin: 6mm 8mm; }
     @media print {
       body { background: #fff; padding: 0; }
-      .page { margin: 0; box-shadow: none; border-radius: 0; page-break-after: always; break-after: page; }
-      .page:last-child { page-break-after: auto; break-after: auto; }
+      .page { margin: 0 !important; box-shadow: none !important; border-radius: 0 !important; page-break-after: always !important; break-after: page !important; min-height: 268mm !important; }
+      .page:last-child { page-break-after: auto !important; break-after: auto !important; }
     }
-    .page { width: 210mm; min-height: 297mm; padding: 10mm 9mm; position: relative; box-sizing: border-box; background: ${printCfg.light_color && printCfg.light_color !== '#ffffff' ? printCfg.light_color : '#ffffff'}; ${isCustomTemplate ? `border: 1.5px solid ${brandColor}88;` : ''} display: flex; flex-direction: column; justify-content: space-between; }
+    .page { width: 210mm; min-height: 268mm; padding: 6mm 10mm; position: relative; box-sizing: border-box; background: ${printCfg.light_color && printCfg.light_color !== '#ffffff' ? printCfg.light_color : '#ffffff'}; ${isCustomTemplate ? `border: 1.5px solid ${brandColor}88;` : ''} display: flex; flex-direction: column; justify-content: space-between; }
     .watermark { position: absolute; inset: 0; display: grid; place-items: center; font-size: 90pt; color: rgba(220,38,38,.13); font-weight: 800; transform: rotate(-20deg); pointer-events: none; z-index: 0; }
     .head { display: flex; gap: 8mm; justify-content: space-between; border-bottom: 2px solid ${brandColor}; padding-bottom: 4mm; }
     .head.head-center { align-items: center; }
