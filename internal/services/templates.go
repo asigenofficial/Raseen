@@ -1611,12 +1611,13 @@ func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string
 
 	multiCss := `
 <style>
+@page { size: A4 portrait; margin: 6mm 8mm; }
 @media screen {
   body { background: #47556914 !important; padding: 20px 0 !important; }
   .invoice-container, .invoice-frame {
     margin: 0 auto 24px auto !important;
     box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
-    min-height: 297mm !important;
+    min-height: 268mm !important;
     max-height: none !important;
     height: auto !important;
     box-sizing: border-box !important;
@@ -1629,7 +1630,7 @@ func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string
     box-shadow: none !important;
     page-break-after: always !important;
     break-after: page !important;
-    min-height: 297mm !important;
+    min-height: 268mm !important;
     box-sizing: border-box !important;
   }
   .invoice-container:last-child, .invoice-frame:last-child {
@@ -2215,7 +2216,7 @@ func CombineHTMLDocuments(docs []string) string {
 	var sb strings.Builder
 	sb.WriteString(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <style>
-@page { size: A4 portrait; margin: 0; }
+@page { size: A4 portrait; margin: 6mm 8mm; }
 @media print {
   body { margin: 0; padding: 0; background: #fff !important; }
   .batch-page-wrap { margin: 0; padding: 0; }
