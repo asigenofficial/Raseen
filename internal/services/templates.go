@@ -1212,6 +1212,69 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 
 	if len(inv.Lines) > 15 {
 		result = paginateInvoiceHtml(result, inv, 15)
+	} else {
+		singlePagePrintCss := `
+<style>
+@page { size: A4 portrait; margin: 5mm 6mm; }
+@media print {
+  html, body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+  }
+  .invoice-container, .invoice-frame {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 auto !important;
+    padding: 2mm 4mm !important;
+    display: block !important;
+    box-shadow: none !important;
+    page-break-after: auto !important;
+    break-after: auto !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-sizing: border-box !important;
+    position: relative !important;
+  }
+  .invoice-container:after {
+    display: none !important;
+  }
+  .top-content-wrap {
+    display: block !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .bottom-content-wrap {
+    margin-top: 8px !important;
+    padding-top: 0 !important;
+    display: block !important;
+    position: static !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  .items-main-table {
+    margin-bottom: 0 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  .summary-section {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+</style>`
+		if strings.Contains(strings.ToLower(result), "</head>") {
+			headRegex := regexp.MustCompile(`(?i)</head>`)
+			result = headRegex.ReplaceAllString(result, singlePagePrintCss+"\n</head>")
+		} else {
+			result = singlePagePrintCss + "\n" + result
+		}
 	}
 
 	dupNoOtherRegex := regexp.MustCompile(`(لا غير\s*)+لا غير`)
@@ -1620,7 +1683,7 @@ func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string
 
 	multiCss := `
 <style>
-@page { size: A4 portrait; margin: 6mm 8mm; }
+@page { size: A4 portrait; margin: 5mm 6mm; }
 @media screen {
   body { background: #47556914 !important; padding: 20px 0 !important; }
   .invoice-container, .invoice-frame, [data-invoice-page] {
@@ -1637,21 +1700,35 @@ func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string
   }
 }
 @media print {
-  body { background: #fff !important; padding: 0 !important; }
+  body { background: #fff !important; padding: 0 !important; margin: 0 !important; }
   .invoice-container, .invoice-frame, [data-invoice-page] {
-    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 2mm 4mm !important;
+    display: block !important;
     box-shadow: none !important;
     page-break-after: always !important;
     break-after: page !important;
-    min-height: 268mm !important;
+    min-height: 0 !important;
+    height: auto !important;
     box-sizing: border-box !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
+    position: relative !important;
   }
   .invoice-container:last-child, .invoice-frame:last-child, [data-invoice-page]:last-child {
     page-break-after: auto !important;
     break-after: auto !important;
+  }
+  .invoice-container:after {
+    display: none !important;
+  }
+  .bottom-content-wrap {
+    margin-top: 8px !important;
+    padding-top: 0 !important;
+    display: block !important;
+    position: static !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }
 </style>`
@@ -2242,7 +2319,7 @@ func CombineHTMLDocuments(docs []string) string {
 	var sb strings.Builder
 	sb.WriteString(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <style>
-@page { size: A4 portrait; margin: 6mm 8mm; }
+@page { size: A4 portrait; margin: 5mm 6mm; }
 @media print {
   body { margin: 0; padding: 0; background: #fff !important; }
   .batch-page-wrap { margin: 0; padding: 0; }
