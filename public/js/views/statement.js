@@ -78,24 +78,25 @@ export async function render(view, ctx) {
       </div>
 
       <div class="card">
-        <div class="row">
-          <div class="field" style="flex:1.3"><label>العميل</label>
+        <div class="filter-row">
+          <div class="field flex-2"><label>العميل</label>
             <select id="client_id">
               ${raw(store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join(''))}
             </select></div>
-          <div class="field"><label>نطاق الكشف</label>
+          <div class="field flex-2"><label>نطاق الكشف</label>
             <select id="issuer_id">
               <option value="">كل الشركات (موحّد)</option>
               ${raw(store.issuers.map((i) => `<option value="${esc(i.id)}" ${i.id === state.issuer_id ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}
             </select></div>
-          <div class="field" style="max-width:160px"><label>من تاريخ</label><input type="date" id="from" value="${state.from}" /></div>
-          <div class="field" style="max-width:160px"><label>إلى تاريخ</label><input type="date" id="to" value="${state.to}" /></div>
-          <div class="field" style="max-width:260px"><label>&nbsp;</label>
-            <div class="flex">
+          <div class="field field-date"><label>من تاريخ</label><input type="date" id="from" value="${state.from}" /></div>
+          <div class="field field-date"><label>إلى تاريخ</label><input type="date" id="to" value="${state.to}" /></div>
+          <div class="filter-actions-col">
+            <div class="filter-btn-group">
               <button class="btn btn-sm" data-quick="month" type="button">${raw(icon.calendar({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}هذا الشهر</button>
               <button class="btn btn-sm" data-quick="year" type="button">${raw(icon.calendar({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}هذه السنة</button>
               <button class="btn btn-sm" data-quick="all" type="button">كل الحركات</button>
-            </div></div>
+            </div>
+          </div>
         </div>
         ${raw(d.scope === 'ISSUER' && !d.includes_opening_balance_row
     ? '<div class="alert alert-warn mt tiny mb0">الرصيد الافتتاحي للعميل غير مرتبط بشركة معينة، لذلك لا يظهر في الكشف المقيّد بشركة واحدة. اختر «كل الشركات» لرؤيته.</div>'
@@ -113,36 +114,54 @@ export async function render(view, ctx) {
         <div class="card-head"><h3>الحركات</h3><div class="spacer"></div>
           <span class="tiny muted">${num(d.entries.length)} حركة — صدر ${dateTimeAr(d.generated_at)}</span></div>
         <div class="table-wrap">
-          <table class="tbl">
-            <thead><tr><th style="width:30px">#</th><th>التاريخ</th><th>النوع</th><th>المستند</th>
-              <th>الشركة</th><th>البيان</th>
-              <th class="text-end">مدين <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
-              <th class="text-end">دائن <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
-              <th class="text-end">الرصيد <span class="cur-sym">${sarSvg({ size: 11 })}</span></th></tr></thead>
+          <table class="tbl statement-tbl">
+            <thead><tr>
+              <th style="width:36px" class="text-center nowrap">#</th>
+              <th class="nowrap" style="min-width:110px;white-space:nowrap">التاريخ</th>
+              <th class="text-center nowrap" style="min-width:90px;white-space:nowrap">النوع</th>
+              <th class="nowrap" style="min-width:130px;white-space:nowrap">المستند</th>
+              <th style="min-width:150px">الشركة</th>
+              <th style="min-width:190px">البيان</th>
+              <th class="text-end nowrap" style="min-width:105px;white-space:nowrap">مدين <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
+              <th class="text-end nowrap" style="min-width:105px;white-space:nowrap">دائن <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
+              <th class="text-end nowrap" style="min-width:115px;white-space:nowrap">الرصيد <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
+            </tr></thead>
             <tbody>
               <tr class="row-open">
-                <td colspan="6"><b>الرصيد الافتتاحي ${d.period.from ? `في ${dateAr(d.period.from)}` : ''}</b></td>
-                <td colspan="2"></td><td class="text-end num"><b>${amount(d.opening_balance_period)}</b></td>
+                <td class="text-center tiny muted">—</td>
+                <td class="tiny nowrap" style="white-space:nowrap">${d.period.from ? esc(dateAr(d.period.from)) : '—'}</td>
+                <td class="text-center nowrap"><span class="badge gray">رصيد افتتاحي</span></td>
+                <td class="mono tiny muted">—</td>
+                <td class="tiny muted">—</td>
+                <td><b>الرصيد الافتتاحي ${d.period.from ? `(حتى ${dateAr(d.period.from)})` : ''}</b></td>
+                <td class="text-end num nowrap">${d.opening_balance_period > 0 ? amount(d.opening_balance_period) : ''}</td>
+                <td class="text-end num nowrap">${d.opening_balance_period < 0 ? amount(Math.abs(d.opening_balance_period)) : ''}</td>
+                <td class="text-end num nowrap"><b>${amount(d.opening_balance_period)}</b></td>
               </tr>
               ${raw(d.entries.map((e, i) => `<tr>
-                <td class="tiny">${i + 1}</td>
-                <td class="tiny nowrap">${esc(dateAr(e.transaction_date))}</td>
-                <td><span class="badge ${e.doc_type === 'INVOICE' ? 'blue' : e.doc_type === 'RECEIPT' ? 'green' : 'gray'}">${esc(e.doc_type_label)}</span></td>
-                <td class="mono tiny">${e.doc_type === 'INVOICE' && e.doc_id
-    ? `<a href="#/invoice-view/${esc(e.doc_id)}">${esc(e.doc_number || '')}</a>` : esc(e.doc_number || '—')}</td>
-                <td class="tiny">${esc(e.issuer_name)}</td>
-                <td class="tiny">${esc(e.description || '')}</td>
-                <td class="text-end num">${e.debit ? amount(e.debit) : ''}</td>
-                <td class="text-end num">${e.credit ? amount(e.credit) : ''}</td>
-                <td class="text-end num"><b>${amount(e.balance_after)}</b></td>
+                <td class="tiny text-center muted">${i + 1}</td>
+                <td class="tiny nowrap" style="white-space:nowrap">${esc(dateAr(e.transaction_date))}</td>
+                <td class="text-center nowrap"><span class="badge ${e.doc_type === 'INVOICE' ? 'blue' : e.doc_type === 'RECEIPT' ? 'green' : 'gray'}">${esc(e.doc_type_label)}</span></td>
+                <td class="mono tiny nowrap" style="white-space:nowrap;font-weight:700">
+                  ${e.doc_type === 'INVOICE' && e.doc_id
+    ? `<a class="invoice-no-link" href="#/invoice-view/${esc(e.doc_id)}" title="عرض الفاتورة">${esc(e.doc_number || '')}</a>`
+    : e.doc_type === 'RECEIPT' && e.doc_id
+      ? `<a class="invoice-no-link" href="#/vouchers?q=${encodeURIComponent(e.doc_number || '')}" title="عرض السند">${esc(e.doc_number || '')}</a>`
+      : esc(e.doc_number || '—')}
+                </td>
+                <td class="cell-issuer"><div class="issuer-name" title="${esc(e.issuer_name || '')}">${esc(e.issuer_name || '—')}</div></td>
+                <td class="cell-desc"><div style="line-height:1.4;word-break:normal">${esc(e.description || '—')}</div></td>
+                <td class="text-end num nowrap">${e.debit ? amount(e.debit) : ''}</td>
+                <td class="text-end num nowrap">${e.credit ? amount(e.credit) : ''}</td>
+                <td class="text-end num nowrap" style="font-weight:700;color:${e.balance_after > 0.004 ? 'var(--danger)' : e.balance_after < -0.004 ? 'var(--success)' : 'inherit'}">${amount(e.balance_after)}</td>
               </tr>`).join(''))}
               ${raw(d.entries.length ? '' : '<tr><td colspan="9" class="text-center muted" style="padding:2rem">لا توجد حركات في هذه الفترة</td></tr>')}
             </tbody>
             <tfoot><tr>
               <td colspan="6" class="text-end"><b>الإجماليات</b></td>
-              <td class="text-end num"><b>${amount(t.debit)}</b></td>
-              <td class="text-end num"><b>${amount(t.credit)}</b></td>
-              <td class="text-end num" style="color:${balColor}"><b>${amount(t.closing_balance)}</b></td>
+              <td class="text-end num nowrap"><b>${amount(t.debit)}</b></td>
+              <td class="text-end num nowrap"><b>${amount(t.credit)}</b></td>
+              <td class="text-end num nowrap" style="color:${balColor}"><b>${amount(t.closing_balance)}</b></td>
             </tr></tfoot>
           </table>
         </div>

@@ -373,8 +373,8 @@
   <style>
     @page { size: A4 portrait; margin: 8mm; }
     * { box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; direction: rtl; text-align: right; margin: 0; padding: 0; color: #1e293b; background: #fff; }
-    .invoice-card { width: 100%; max-width: 210mm; margin: 0 auto; }
+    body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; direction: rtl; text-align: right; margin: 0; padding: 0; color: #1e293b; background: #fff; min-height: 280mm; }
+    .invoice-card { width: 100%; max-width: 210mm; min-height: 280mm; margin: 0 auto; display: flex; flex-direction: column; justify-content: space-between; }
     .header-grid { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
     .logo-box { width: 130px; }
     .logo-box img { max-width: 100%; max-height: 75px; object-fit: contain; }
@@ -384,7 +384,7 @@
     .items-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11.5px; }
     .items-table th, .items-table td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: right; }
     .items-table th { background: #f8fafc; font-weight: 800; }
-    .totals-box { width: 320px; margin-right: auto; margin-left: 0; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; }
+    .totals-box { width: 320px; margin-right: auto; margin-left: 0; margin-top: auto; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; }
     .totals-row { display: flex; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
     .totals-row.grand { font-size: 14px; font-weight: 900; background: #f8fafc; border-bottom: none; }
     @media print {

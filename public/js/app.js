@@ -114,7 +114,7 @@ function navHtml() {
     }
     const active = current === entry.name || (current === 'invoice-view' && entry.name === 'invoices');
     parts.push(`<a class="nav-item ${active ? 'active' : ''}" href="#/${entry.name}" title="${esc(entry.label)}">
-        ${entry.icon ? `<span class="ico">${entry.icon}</span>` : ''}<span>${esc(entry.label)}</span></a>`);
+        ${entry.icon || ''}<span>${esc(entry.label)}</span></a>`);
   }
   return parts.join('');
 }
@@ -439,6 +439,69 @@ async function boot() {
   }
   router.start();
   preloadViews();
+
+  const viewEl = document.getElementById('view');
+  if (viewEl && window.MutationObserver) {
+    let tTimer = null;
+    const mo = new MutationObserver(() => {
+      clearTimeout(tTimer);
+      tTimer = setTimeout(() => initTableScrolls(viewEl), 50);
+    });
+    mo.observe(viewEl, { childList: true, subtree: true });
+    window.addEventListener('resize', () => {
+      clearTimeout(tTimer);
+      tTimer = setTimeout(() => initTableScrolls(viewEl), 80);
+    });
+  }
+}
+
+// ------------------------------------------------ شريط التمرير الأفقي المزدوج للجداول
+function initTableScrolls(root = document) {
+  const wraps = root.querySelectorAll ? root.querySelectorAll('.table-wrap') : [];
+  wraps.forEach((wrap) => {
+    const parent = wrap.parentElement;
+    if (!parent) return;
+
+    const hasOverflow = wrap.scrollWidth > wrap.clientWidth + 4;
+    let topScroll = (wrap.previousElementSibling && wrap.previousElementSibling.classList.contains('table-top-scroll'))
+      ? wrap.previousElementSibling
+      : parent.querySelector(':scope > .table-top-scroll');
+
+    if (!hasOverflow) {
+      if (topScroll) topScroll.style.display = 'none';
+      return;
+    }
+
+    if (!topScroll) {
+      topScroll = document.createElement('div');
+      topScroll.className = 'table-top-scroll';
+      topScroll.setAttribute('dir', 'rtl');
+      const inner = document.createElement('div');
+      inner.className = 'table-top-scroll-inner';
+      topScroll.appendChild(inner);
+      parent.insertBefore(topScroll, wrap);
+
+      let syncing = false;
+      topScroll.addEventListener('scroll', () => {
+        if (syncing) return;
+        syncing = true;
+        wrap.scrollLeft = topScroll.scrollLeft;
+        syncing = false;
+      }, { passive: true });
+
+      wrap.addEventListener('scroll', () => {
+        if (syncing) return;
+        syncing = true;
+        topScroll.scrollLeft = wrap.scrollLeft;
+        syncing = false;
+      }, { passive: true });
+    }
+
+    topScroll.style.display = 'block';
+    const inner = topScroll.querySelector('.table-top-scroll-inner');
+    if (inner) inner.style.width = `${wrap.scrollWidth}px`;
+    topScroll.scrollLeft = wrap.scrollLeft;
+  });
 }
 
 setUnauthorizedHandler(() => {

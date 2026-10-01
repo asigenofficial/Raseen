@@ -22,44 +22,44 @@ function issuerForm(data = {}) {
     </div>
 
     <div data-panel="basic">
-      <div class="row">
+      <div class="form-grid-2">
         <div class="field"><label class="req">كود الشركة</label>
           <input type="text" name="code" value="${v('code')}" class="ltr" placeholder="ZS-001" /></div>
         <div class="field"><label class="req">الاسم الرسمي بالعربية</label>
           <input type="text" name="name_ar" value="${v('name_ar')}" /></div>
       </div>
-      <div class="row mt">
+      <div class="form-grid-2 mt">
         <div class="field"><label>الاسم بالإنجليزية</label>
           <input type="text" name="name_en" value="${v('name_en')}" class="ltr" /></div>
         <div class="field"><label>الرقم الضريبي (15 رقماً)</label>
           <input type="text" name="tax_number" value="${v('tax_number')}" class="ltr" maxlength="15" placeholder="3XXXXXXXXXXXXX3" />
           <span class="hint">يجب أن يبدأ وينتهي بالرقم 3</span></div>
       </div>
-      <div class="row mt">
+      <div class="form-grid-2 mt">
         <div class="field"><label>رقم السجل التجاري</label>
           <input type="text" name="commercial_register" value="${v('commercial_register')}" class="ltr" /></div>
         <div class="field"><label>الهاتف</label>
           <input type="text" name="phone" value="${v('phone')}" class="ltr" /></div>
       </div>
-      <div class="row mt">
+      <div class="form-grid-2 mt">
         <div class="field"><label>البريد الإلكتروني</label>
           <input type="email" name="email" value="${v('email')}" class="ltr" /></div>
         <div class="field"><label>الموقع الإلكتروني</label>
           <input type="text" name="website" value="${v('website')}" class="ltr" /></div>
       </div>
-      <div class="row mt">
+      <div class="form-grid-2 mt">
         <div class="field">
           <label>شعار المنشأة (يظهر في الفاتورة)</label>
           <input type="file" id="logo-file" accept="image/png,image/jpeg,image/svg+xml,image/webp" />
           <span class="hint">الحد الأقصى 2 ميجابايت — يُحفظ داخل قاعدة البيانات</span>
+          <input type="hidden" name="logo_data" value="${v('logo_data')}" />
         </div>
-        <div class="field" style="max-width:150px">
+        <div class="field">
           <label>معاينة</label>
           <div id="logo-preview" style="border:1px dashed var(--line-strong);border-radius:8px;padding:.4rem;min-height:70px;display:grid;place-items:center">
             ${raw(v('logo_data') ? `<img src="${esc(v('logo_data'))}" style="max-width:100%;max-height:70px" alt="الشعار" />` : '<span class="tiny muted">لا يوجد شعار</span>')}
           </div>
-          <input type="hidden" name="logo_data" value="${v('logo_data')}" />
-          <button class="btn btn-sm" type="button" id="logo-clear">إزالة الشعار</button>
+          <button class="btn btn-sm" type="button" id="logo-clear" style="margin-top:.4rem">إزالة الشعار</button>
         </div>
       </div>
       <label class="check mt"><input type="checkbox" name="is_active" ${raw(v('is_active', true) ? 'checked' : '')} /> الشركة نشطة (تظهر في شاشات الإصدار)</label>
@@ -492,7 +492,7 @@ export async function render(view) {
               <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">ضريبي:</span> <span class="mono" style="font-weight:600">${esc(i.tax_number || '—')}</span></div>
               <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">سجل:</span> <span class="mono">${esc(i.commercial_register || '—')}</span></div>
               <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">المدينة:</span> <span>${esc(i.city || '—')}</span></div>
-              <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">ترقيم:</span> <span class="mono">${esc(i.invoice_prefix)}-${String(i.invoice_next_no).padStart(i.invoice_pad, '0')}</span> (${esc(String(i.default_tax_rate))}%)</div>
+              <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">ترقيم:</span> <span class="mono">${esc((i.invoice_prefix || 'INV').replace(/[-\s]+$/, '').trim() || 'INV')}-${String(i.invoice_next_no).padStart(i.invoice_pad, '0')}</span> (${esc(String(i.default_tax_rate))}%)</div>
             </div>
 
             <!-- أزرار الإجراءات المصغرة -->

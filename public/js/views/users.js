@@ -557,7 +557,7 @@ export async function render(view) {
 
       <!-- جدول المستخدمين -->
       <div class="card pad0">
-        <div class="table-wrap">
+        <div class="table-wrap users-table-wrap">
           <table class="tbl">
             <thead><tr><th>المستخدم</th><th>الدور</th><th>الحالة</th><th>الصلاحيات الفعالة</th>
               <th>آخر دخول</th><th>تاريخ الإنشاء</th><th></th></tr></thead>

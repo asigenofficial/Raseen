@@ -11,12 +11,26 @@ import {
   $, delegate, debounce, exportCsv, exportExcel, parseSpreadsheetText, printDoc, modal, toastErr, formValues,
   confirmDialog, icon, downloadPdfFromHtml, amount, sarSvg,
 } from '../core/util.js';
-import { invoiceA4, voucherPrint } from '../print/templates.js';
+import { invoiceA4, voucherPrint, INVOICE_TEMPLATES } from '../print/templates.js';
 
 const PAGE = 50;
 
 export async function render(view, ctx) {
   await loadClients();
+
+  let availableTemplates = [];
+  try {
+    const tplRes = await api.get('/api/invoices/templates?type=invoices');
+    availableTemplates = Array.isArray(tplRes) ? tplRes : (tplRes?.data || []);
+  } catch {}
+
+  const renderTemplateOptions = (selectedId) => {
+    const customOpts = availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedId ? 'selected' : ''}>${esc(t.name_ar || t.name || t.id)}</option>`).join('');
+    const builtinOpts = (INVOICE_TEMPLATES || []).map((t) => `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
+    return (customOpts ? `<optgroup label="قوالب مخصصة">${customOpts}</optgroup>` : '') +
+      `<optgroup label="قوالب قياسية">${builtinOpts}</optgroup>`;
+  };
+
   const q0 = (ctx && ctx.query) || {};
   const defaults = {
     issuer_id: store.activeIssuerId,
@@ -109,32 +123,58 @@ export async function render(view, ctx) {
   const rowsHtml = () => {
     const items = Array.isArray(state.data?.items) ? state.data.items : [];
     if (!items.length) {
-      return '<tr><td colspan="10" class="text-center muted" style="padding:2rem">لا توجد فواتير مطابقة للتصفية</td></tr>';
+      return '<tr><td colspan="11" class="text-center muted" style="padding:2rem">لا توجد فواتير مطابقة للتصفية</td></tr>';
     }
     return items.map((i) => `<tr>
-      <td><a class="mono" href="#/invoice-view/${esc(i.id)}"><b>${esc(i.invoice_number)}</b></a>
-        ${i.batch_id ? '<span class="badge blue tiny">دفعة</span>' : ''}
-        <span class="badge ${i.zatca_phase === 'PHASE2' ? 'teal' : 'gray'} tiny" title="${i.zatca_phase === 'PHASE2' ? 'باركود المرحلة الثانية' : 'باركود المرحلة الأولى'}">${i.zatca_phase === 'PHASE2' ? 'م2' : 'م1'}</span>
+      <td class="nowrap" style="white-space:nowrap">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap">
+          <a class="mono invoice-no-link" href="#/invoice-view/${esc(i.id)}" style="font-weight:700;white-space:nowrap" title="عرض تفاصيل الفاتورة"><b>${esc(i.invoice_number)}</b></a>
+          ${i.batch_id ? '<span class="badge blue tiny" style="white-space:nowrap">دفعة</span>' : ''}
+          <span class="badge ${i.zatca_phase === 'PHASE2' ? 'teal' : 'gray'} tiny" style="white-space:nowrap" title="${i.zatca_phase === 'PHASE2' ? 'المرحلة 2' : 'المرحلة 1'}">${i.zatca_phase === 'PHASE2' ? 'م2' : 'م1'}</span>
+        </div>
       </td>
-      <td class="nowrap tiny">${esc(dateAr(i.issue_date))}<div class="muted mono">${esc(i.issue_time)}</div></td>
-      <td>${esc(i.client_name)}<div class="tiny muted mono">${esc(i.client_code)}</div></td>
-      <td class="tiny">${esc(i.issuer_name)}</td>
-      <td class="tiny">${esc(i.payment_label)}</td>
-      <td class="text-end num">${amount(i.taxable_amount)}</td>
-      <td class="text-end num">${amount(i.tax_amount)}</td>
-      <td class="text-end num"><b>${amount(i.grand_total)}</b></td>
-      <td class="text-end num" style="color:${i.remaining_amount > 0 ? 'var(--danger)' : 'var(--success)'}">${amount(i.remaining_amount)}</td>
-      <td class="actions">
+      <td class="nowrap tiny" style="white-space:nowrap">
+        <div>${esc(dateAr(i.issue_date))}</div>
+        <div class="muted mono tiny">${esc(i.issue_time)}</div>
+      </td>
+      <td class="cell-client">
+        <div class="client-name" title="${esc(i.client_name)}">${esc(i.client_name)}</div>
+        ${i.client_code ? `<div class="tiny muted mono">${esc(i.client_code)}</div>` : ''}
+      </td>
+      <td class="cell-issuer">
+        <div class="issuer-name" title="${esc(i.issuer_name)}">${esc(i.issuer_name)}</div>
+      </td>
+      <td class="tiny nowrap" style="white-space:nowrap">${esc(i.payment_label)}</td>
+      <td class="text-end num nowrap" style="white-space:nowrap">${amount(i.taxable_amount)}</td>
+      <td class="text-end num nowrap" style="white-space:nowrap">${amount(i.tax_amount)}</td>
+      <td class="text-end num nowrap" style="white-space:nowrap"><b>${amount(i.grand_total)}</b></td>
+      <td class="text-end num nowrap" style="white-space:nowrap;color:${i.remaining_amount > 0 ? 'var(--danger)' : 'var(--success)'}">${amount(i.remaining_amount)}</td>
+      <td class="text-center nowrap" style="white-space:nowrap">
         ${statusBadge(i.status, i.status_label)}
-        <a class="btn btn-sm" href="#/invoice-view/${esc(i.id)}" title="عرض الفاتورة">${icon.eye({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}عرض</a>
-        ${i.status !== 'CANCELLED' && can('invoices.edit') ? `<a class="btn btn-sm" href="#/invoice?edit=${esc(i.id)}" title="تعديل الفاتورة يدوياً">${icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}تعديل</a>` : ''}
-        <button class="btn btn-sm btn-primary" data-act="download" data-id="${esc(i.id)}" type="button" title="تحميل ملف الفاتورة PDF">
-          ${icon.pdf({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}تحميل</button>
-        <button class="btn btn-sm" data-act="share" data-id="${esc(i.id)}" type="button" style="background:#10b981;border-color:#10b981;color:#fff;font-weight:600" title="مشاركة الفاتورة">
-          ${icon.share({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}مشاركة</button>
-        ${i.status !== 'CANCELLED' && i.remaining_amount > 0 && can('vouchers.create')
-    ? `<button class="btn btn-sm" data-act="pay" data-id="${esc(i.id)}" type="button" title="سند قبض">${icon.receipt({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}سند</button>` : ''}
-        <button class="btn btn-sm btn-danger" data-act="del" data-id="${esc(i.id)}" data-no="${esc(i.invoice_number)}" type="button" title="حذف الفاتورة">${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}حذف</button>
+      </td>
+      <td class="actions">
+        <div class="row-actions-group">
+          <a class="btn btn-sm btn-ghost" href="#/invoice-view/${esc(i.id)}" title="عرض تفاصيل الفاتورة" style="padding:.28rem .55rem">
+            ${icon.eye({ size: 14, style: 'vertical-align:middle' })}<span>عرض</span>
+          </a>
+          <button class="btn btn-sm btn-icon btn-primary" data-act="download" data-id="${esc(i.id)}" type="button" title="تحميل ملف PDF">
+            ${icon.pdf({ size: 14, style: 'vertical-align:middle' })}
+          </button>
+          <button class="btn btn-sm btn-icon" data-act="share" data-id="${esc(i.id)}" type="button" style="background:#10b981;border-color:#10b981;color:#fff" title="مشاركة الفاتورة">
+            ${icon.share({ size: 13, style: 'vertical-align:middle' })}
+          </button>
+          ${i.status !== 'CANCELLED' && can('invoices.edit') ? `
+          <a class="btn btn-sm btn-icon" href="#/invoice?edit=${esc(i.id)}" title="تعديل الفاتورة يدوياً">
+            ${icon.edit({ size: 13, style: 'vertical-align:middle' })}
+          </a>` : ''}
+          ${i.status !== 'CANCELLED' && i.remaining_amount > 0 && can('vouchers.create') ? `
+          <button class="btn btn-sm btn-icon" data-act="pay" data-id="${esc(i.id)}" type="button" title="إصدار سند قبض" style="color:var(--brand);border-color:var(--brand)">
+            ${icon.receipt({ size: 13, style: 'vertical-align:middle' })}
+          </button>` : ''}
+          <button class="btn btn-sm btn-icon btn-danger" data-act="del" data-id="${esc(i.id)}" data-no="${esc(i.invoice_number)}" type="button" title="حذف الفاتورة">
+            ${icon.trash({ size: 13, style: 'vertical-align:middle' })}
+          </button>
+        </div>
       </td>
     </tr>`).join('');
   };
@@ -211,15 +251,25 @@ export async function render(view, ctx) {
             </div>
           </div>
         </div>
-        ${raw(state.batch_id ? `<div class="alert alert-info mt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:8px 12px">
-          <div>
-            <b>دفعة توليد محددة:</b> <span class="mono" style="font-weight:700">${esc(state.batch_id.slice(0, 8))}</span>
-            <a href="#/invoices" style="margin-inline-start:8px;text-decoration:underline">إلغاء التصفية</a>
+        ${raw(state.batch_id ? `<div class="alert alert-info mt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:10px 14px;border-radius:8px;">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div>
+              <b>دفعة توليد:</b> <span class="mono" style="font-weight:700">${esc(state.batch_id.slice(0, 8))}</span>
+              <a href="#/invoices" style="margin-inline-start:8px;text-decoration:underline">إلغاء التصفية</a>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <label for="batch-template-select" style="font-size:12px;margin:0;font-weight:600">القالب:</label>
+              <select id="batch-template-select" class="input input-sm" style="max-width:210px;height:30px;padding:2px 8px;font-size:12px;">
+                ${raw(renderTemplateOptions(state.batch_style || 'default'))}
+              </select>
+            </div>
           </div>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            <button class="btn btn-sm btn-primary" id="btn-batch-print-all" type="button" title="طباعة كافة فواتير الدفعة دفعة واحدة">${raw(icon.printer({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}طباعة كل الفواتير</button>
-            <a class="btn btn-sm btn-outline" id="btn-batch-dl-pdf" href="/api/bulk/batches/${esc(state.batch_id)}/pdf" target="_blank" download="batch_${esc(state.batch_id.slice(0, 8))}.pdf" title="تحميل ملف PDF مجمّع لجميع فواتير الدفعة">${raw(icon.pdf({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}تحميل PDF مجمّع</a>
-            <button class="btn btn-sm btn-outline" id="btn-batch-print-vouchers" type="button" title="طباعة كافة سندات القبض الصادرة لهذه الدفعة">${raw(icon.receipt({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}طباعة سندات الدفعة</button>
+            <button class="btn btn-sm btn-primary" id="btn-batch-print-all" type="button" title="طباعة كافة فواتير الدفعة دفعة واحدة بالقالب المختار">${raw(icon.printer({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}طباعة كل الفواتير</button>
+            <a class="btn btn-sm btn-outline" id="btn-batch-dl-pdf" href="/api/bulk/batches/${esc(state.batch_id)}/pdf?style=${esc(state.batch_style || 'default')}" target="_blank" download="batch_${esc(state.batch_id.slice(0, 8))}.pdf" title="تحميل ملف PDF مجمّع لجميع فواتير الدفعة بالقالب المختار">${raw(icon.pdf({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}تحميل PDF مجمّع</a>
+            <button class="btn btn-sm btn-outline" id="btn-batch-gen-vouchers" type="button" title="توليد وإصدار سندات قبض لكافة فواتير الدفعة غير المسددة">${raw(icon.receipt({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}إصدار سندات الدفعة</button>
+            <button class="btn btn-sm btn-outline" id="btn-batch-print-vouchers" type="button" title="طباعة كافة سندات القبض الصادرة لهذه الدفعة">${raw(icon.receipt({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}طباعة السندات</button>
+            <button class="btn btn-sm btn-danger" id="btn-batch-delete" type="button" title="حذف الدفعة بالكامل والتراجع عنها">${raw(icon.trash({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}حذف الدفعة</button>
           </div>
         </div>` : '')}
       </div>
@@ -233,13 +283,19 @@ export async function render(view, ctx) {
 
       <div class="card pad0 mt">
         <div class="table-wrap">
-          <table class="tbl">
+          <table class="tbl invoices-tbl">
             <thead><tr>
-              <th>الرقم</th><th>التاريخ</th><th>العميل</th><th>الشركة</th><th>الدفع</th>
-              <th class="text-end">قبل الضريبة <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
-              <th class="text-end">الضريبة <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
-              <th class="text-end">الإجمالي <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
-              <th class="text-end">المتبقي <span class="cur-sym">${sarSvg({ size: 12 })}</span></th><th></th>
+              <th style="white-space:nowrap;min-width:125px">الرقم</th>
+              <th style="white-space:nowrap;min-width:115px">التاريخ</th>
+              <th style="min-width:190px">العميل</th>
+              <th style="min-width:140px">الشركة</th>
+              <th style="white-space:nowrap">الدفع</th>
+              <th class="text-end nowrap" style="white-space:nowrap">قبل الضريبة <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
+              <th class="text-end nowrap" style="white-space:nowrap">الضريبة <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
+              <th class="text-end nowrap" style="white-space:nowrap">الإجمالي <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
+              <th class="text-end nowrap" style="white-space:nowrap">المتبقي <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
+              <th class="text-center nowrap" style="min-width:85px;white-space:nowrap">الحالة</th>
+              <th class="text-center nowrap" style="min-width:165px;white-space:nowrap">الإجراءات</th>
             </tr></thead>
             <tbody>${raw(rowsHtml())}</tbody>
           </table>
@@ -287,13 +343,25 @@ export async function render(view, ctx) {
     $('#exp-xls', view).addEventListener('click', () => exportExcel('الفواتير', 'قائمة الفواتير', headers, rows(),
       { footer: ['الإجمالي', '', '', '', '', '', '', '', money(t.tax), money(t.grand_total), money(t.paid), money(t.remaining), ''] }));
 
+    const bTplSelect = $('#batch-template-select', view);
+    if (bTplSelect && state.batch_id) {
+      bTplSelect.addEventListener('change', () => {
+        state.batch_style = bTplSelect.value;
+        const dlBtn = $('#btn-batch-dl-pdf', view);
+        if (dlBtn) {
+          dlBtn.href = `/api/bulk/batches/${encodeURIComponent(state.batch_id)}/pdf?style=${encodeURIComponent(state.batch_style)}`;
+        }
+      });
+    }
+
     const batchPrintBtn = $('#btn-batch-print-all', view);
     if (batchPrintBtn && state.batch_id) {
       batchPrintBtn.addEventListener('click', async () => {
         batchPrintBtn.disabled = true;
         batchPrintBtn.textContent = 'جارٍ التجهيز…';
         try {
-          const res = await fetch(`/api/bulk/batches/${encodeURIComponent(state.batch_id)}/render-html`);
+          const style = state.batch_style || (bTplSelect ? bTplSelect.value : 'default');
+          const res = await fetch(`/api/bulk/batches/${encodeURIComponent(state.batch_id)}/render-html?style=${encodeURIComponent(style)}`);
           if (!res.ok) throw new Error('تعذر جلب فواتير الدفعة');
           const docHtml = await res.text();
           printDoc(docHtml);
@@ -302,6 +370,54 @@ export async function render(view, ctx) {
         } finally {
           batchPrintBtn.disabled = false;
           batchPrintBtn.innerHTML = `${icon.printer({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}طباعة كل الفواتير`;
+        }
+      });
+    }
+
+    const batchGenVouchersBtn = $('#btn-batch-gen-vouchers', view);
+    if (batchGenVouchersBtn && state.batch_id) {
+      batchGenVouchersBtn.addEventListener('click', async () => {
+        const ok = await confirmDialog({
+          title: 'إصدار سندات قبض للدفعة',
+          message: 'هل ترغب في توليد سندات قبض لكافة فواتير هذه الدفعة غير المسددة وتحويل حالتها إلى مسددة؟',
+          okText: 'إصدار السندات',
+        });
+        if (!ok) return;
+        batchGenVouchersBtn.disabled = true;
+        batchGenVouchersBtn.textContent = 'جارٍ التوليد…';
+        try {
+          const res = await api.post(`/api/bulk/batches/${encodeURIComponent(state.batch_id)}/generate-vouchers`, { payment_type: 'TRANSFER' });
+          toastOk(`تم إصدار ${num(res.vouchers_count || 0)} سند قبض بنجاح`);
+          await reload();
+        } catch (err) {
+          toastErr(err.message || 'فشل توليد السندات');
+        } finally {
+          batchGenVouchersBtn.disabled = false;
+          batchGenVouchersBtn.innerHTML = `${icon.receipt({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}إصدار سندات الدفعة`;
+        }
+      });
+    }
+
+    const batchDeleteBtn = $('#btn-batch-delete', view);
+    if (batchDeleteBtn && state.batch_id) {
+      batchDeleteBtn.addEventListener('click', async () => {
+        const ok = await confirmDialog({
+          title: 'حذف الدفعة بالكامل',
+          message: 'تحذير: سيتم حذف كافة الفواتير التابعة لهذه الدفعة، وسندات القبض المخصصة لها، وحركاتها من كشف الحساب نهائياً، مع إعادة المسودة إلى حالة مسودة إن وجدت. هل ترغب بالتراجع وحذف الدفعة؟',
+          okText: 'نعم، احذف الدفعة بالكامل',
+          danger: true,
+        });
+        if (!ok) return;
+        batchDeleteBtn.disabled = true;
+        batchDeleteBtn.textContent = 'جارٍ الحذف…';
+        try {
+          await api.delete(`/api/bulk/batches/${encodeURIComponent(state.batch_id)}`);
+          toastOk('تم حذف الدفعة وكافة ملحقاتها بنجاح');
+          window.location.hash = '#/invoices';
+        } catch (err) {
+          toastErr(err.message || 'فشل حذف الدفعة');
+          batchDeleteBtn.disabled = false;
+          batchDeleteBtn.innerHTML = `${icon.trash({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}حذف الدفعة`;
         }
       });
     }

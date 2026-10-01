@@ -43,8 +43,10 @@ func Token(byteLen int) string {
 func FormatSerial(prefix string, number int64, width int) string {
 	format := fmt.Sprintf("%%0%dd", width)
 	numStr := fmt.Sprintf(format, number)
-	if prefix != "" {
-		return fmt.Sprintf("%s-%s", prefix, numStr)
+	cleanPrefix := strings.TrimRight(strings.TrimSpace(prefix), "-")
+	cleanPrefix = strings.TrimSpace(cleanPrefix)
+	if cleanPrefix != "" {
+		return fmt.Sprintf("%s-%s", cleanPrefix, numStr)
 	}
 	return numStr
 }

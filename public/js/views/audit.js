@@ -128,20 +128,32 @@ export async function render(view) {
 
       <div class="card pad0">
         <div class="table-wrap">
-          <table class="tbl">
-            <thead><tr><th style="width:150px">الوقت</th><th>المستخدم</th><th>العملية</th>
-              <th>الكيان</th><th>التفاصيل</th><th>IP</th><th></th></tr></thead>
+          <table class="tbl audit-tbl">
+            <thead><tr>
+              <th class="nowrap" style="min-width:160px;white-space:nowrap">الوقت</th>
+              <th class="nowrap" style="min-width:100px">المستخدم</th>
+              <th class="text-center nowrap" style="min-width:110px">العملية</th>
+              <th class="text-center nowrap" style="min-width:85px">الكيان</th>
+              <th style="min-width:260px">التفاصيل</th>
+              <th class="mono nowrap" style="min-width:125px">IP</th>
+              <th class="text-center nowrap" style="min-width:115px">الإجراءات</th>
+            </tr></thead>
             <tbody>
               ${raw(items.length ? items.map((r) => `<tr>
-                <td class="tiny nowrap">${esc(dateTimeAr(r.created_at))}</td>
-                <td><b>${esc(r.user_name)}</b></td>
-                <td><span class="badge ${ACTION_TONE(r.action)}">${esc(ACTION_LABELS[r.action] || r.action)}</span></td>
-                <td class="tiny muted">${esc(r.entity_type)}</td>
-                <td class="tiny" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(describe(r.details))}</td>
-                <td class="tiny mono">${esc(r.ip || '—')}</td>
+                <td class="tiny nowrap" style="white-space:nowrap">${esc(dateTimeAr(r.created_at))}</td>
+                <td class="nowrap"><b>${esc(r.user_name)}</b></td>
+                <td class="text-center nowrap"><span class="badge ${ACTION_TONE(r.action)}" style="white-space:nowrap">${esc(ACTION_LABELS[r.action] || r.action)}</span></td>
+                <td class="tiny text-center nowrap"><span class="badge gray mono tiny">${esc(r.entity_type)}</span></td>
+                <td class="tiny cell-desc" style="max-width:440px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(describe(r.details))}">${esc(describe(r.details))}</td>
+                <td class="tiny mono nowrap" style="white-space:nowrap">${esc(r.ip || '—')}</td>
                 <td class="actions">
-                  ${r.entity_type === 'invoice' && r.action !== 'INVOICE_DELETE' ? `<a class="btn btn-sm" href="#/invoice-view/${esc(r.entity_id)}">${icon.eye({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}الفاتورة</a>` : ''}
-                  <button class="btn btn-sm" data-json="${esc(r.id)}" type="button">JSON</button>
+                  <div class="row-actions-group">
+                    ${r.entity_type === 'invoice' && r.action !== 'INVOICE_DELETE' ? `
+                      <a class="btn btn-sm btn-ghost" href="#/invoice-view/${esc(r.entity_id)}" title="عرض الفاتورة" style="padding:.28rem .55rem">
+                        ${icon.eye({ size: 13, style: 'vertical-align:middle;margin-left:3px' })}<span>الفاتورة</span>
+                      </a>` : ''}
+                    <button class="btn btn-sm btn-ghost" data-json="${esc(r.id)}" type="button" title="عرض تفاصيل JSON كاملة" style="padding:.28rem .55rem;font-family:monospace">JSON</button>
+                  </div>
                 </td>
               </tr>`).join('') : '<tr><td colspan="7" class="text-center muted" style="padding:2rem">لا توجد سجلات مطابقة</td></tr>')}
             </tbody>

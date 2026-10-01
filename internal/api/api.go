@@ -2189,6 +2189,40 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, list)
 	})
 
+	mux.HandleFunc("DELETE /api/bulk/batches/{id}", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		username := "system"
+		if u != nil {
+			username = u.Username
+		}
+		id := r.PathValue("id")
+		if err := s.bulk.DeleteBatch(id, username, s.clientIP(r)); err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{"ok": true, "message": "تم حذف الدفعة وجميع فواتيرها وسنداتها بنجاح"})
+	})
+
+	mux.HandleFunc("POST /api/bulk/batches/{id}/generate-vouchers", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		username := "system"
+		if u != nil {
+			username = u.Username
+		}
+		id := r.PathValue("id")
+		var body struct {
+			PaymentType string `json:"payment_type"`
+			VoucherDate string `json:"voucher_date"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		res, err := s.bulk.GenerateBatchVouchers(id, body.PaymentType, body.VoucherDate, username, s.clientIP(r))
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, res)
+	})
+
 	// ---------------------------------------------------- إعدادات النظام
 	mux.HandleFunc("GET /api/settings", func(w http.ResponseWriter, r *http.Request) {
 		rows, err := s.db.Query("SELECT key, value FROM settings")

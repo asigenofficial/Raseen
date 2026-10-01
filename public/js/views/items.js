@@ -16,13 +16,13 @@ const UNITS = ['حبة', 'كرتون', 'كيس', 'علبة', 'كيلو', 'جرا
 function itemForm(data = {}, categories = []) {
   const v = (k, def = '') => (data[k] === undefined || data[k] === null ? def : data[k]);
   return html`
-    <div class="row">
-      <div class="field" style="max-width:170px"><label>رقم / كود الصنف</label>
+    <div class="form-grid-3">
+      <div class="field"><label>رقم / كود الصنف</label>
         <input type="text" name="item_code" value="${v('item_code')}" class="ltr" placeholder="تلقائي" /></div>
-      <div class="field"><label class="req">اسم الصنف</label>
+      <div class="field" style="grid-column: span 2"><label class="req">اسم الصنف</label>
         <input type="text" name="name_ar" value="${v('name_ar')}" /></div>
     </div>
-    <div class="row mt">
+    <div class="form-grid-2 mt">
       <div class="field"><label>الاسم بالإنجليزية</label><input type="text" name="name_en" value="${v('name_en')}" class="ltr" /></div>
       <div class="field"><label>المجموعة</label>
         <select name="category_id">
@@ -30,16 +30,16 @@ function itemForm(data = {}, categories = []) {
           ${raw(categories.map((c) => `<option value="${esc(c.id)}" ${c.id === v('category_id') ? 'selected' : ''}>${esc(c.name)}</option>`).join(''))}
         </select></div>
     </div>
-    <div class="row mt">
+    <div class="form-grid-2 mt">
       <div class="field"><label>الباركود</label><input type="text" name="barcode" value="${v('barcode')}" class="ltr" /></div>
-      <div class="field" style="max-width:160px"><label>وحدة القياس</label>
+      <div class="field"><label>وحدة القياس</label>
         <input type="text" name="unit" value="${v('unit', 'حبة')}" list="units-list" />
         <datalist id="units-list">${raw(UNITS.map((u) => `<option value="${esc(u)}"></option>`).join(''))}</datalist></div>
     </div>
-    <div class="row mt">
+    <div class="form-grid-3 mt">
       <div class="field"><label>سعر التكلفة</label><input type="number" name="cost_price" value="${v('cost_price', 0)}" step="0.01" min="0" /></div>
       <div class="field"><label class="req">سعر البيع</label><input type="number" name="sale_price" value="${v('sale_price', 0)}" step="0.01" min="0" /></div>
-      <div class="field" style="max-width:140px"><label>الضريبة %</label><input type="number" name="tax_rate" value="${v('tax_rate', 15)}" step="0.01" min="0" max="100" /></div>
+      <div class="field"><label>الضريبة %</label><input type="number" name="tax_rate" value="${v('tax_rate', 15)}" step="0.01" min="0" max="100" /></div>
     </div>
     <div class="field mt"><label>ملاحظات</label><textarea name="notes" style="min-height:52px">${v('notes')}</textarea></div>
     <label class="check mt"><input type="checkbox" name="is_active" ${raw(v('is_active', true) ? 'checked' : '')} /> صنف نشط</label>`;
@@ -323,37 +323,66 @@ export async function render(view, ctx) {
 
   const itemsRows = () => {
     const list = Array.isArray(state.items) ? state.items : [];
-    if (!list.length) return '<tr><td colspan="9" class="text-center muted" style="padding:1.5rem">لا توجد أصناف</td></tr>';
+    if (!list.length) return '<tr><td colspan="10" class="text-center muted" style="padding:1.5rem">لا توجد أصناف</td></tr>';
     return list.map((i) => `<tr>
-      <td class="mono tiny">${esc(i.item_code)}</td>
-      <td><b>${esc(i.name_ar)}</b>${i.name_en ? `<div class="tiny muted ltr">${esc(i.name_en)}</div>` : ''}</td>
+      <td class="mono tiny nowrap" style="white-space:nowrap;font-weight:700">
+        <span class="badge gray mono" style="font-size:11px;padding:2px 6px;letter-spacing:0.3px;white-space:nowrap">${esc(i.item_code)}</span>
+      </td>
+      <td style="min-width:190px;max-width:280px">
+        <div style="font-weight:600;line-height:1.4;word-break:normal">${esc(i.name_ar)}</div>
+        ${i.name_en ? `<div class="tiny muted ltr" style="font-size:11px;margin-top:2px">${esc(i.name_en)}</div>` : ''}
+      </td>
       <td class="tiny">${esc(i.category_name || '—')}</td>
-      <td class="tiny">${esc(i.unit)}</td>
-      <td class="mono tiny">${esc(i.barcode || '—')}</td>
-      <td class="text-end num">${amount(i.cost_price)}</td>
-      <td class="text-end num"><b>${amount(i.sale_price)}</b></td>
-      <td class="text-center tiny">${i.tax_rate}%</td>
+      <td class="tiny nowrap" style="white-space:nowrap">${esc(i.unit)}</td>
+      <td class="mono tiny nowrap" style="white-space:nowrap">${esc(i.barcode || '—')}</td>
+      <td class="text-end num nowrap" style="white-space:nowrap">${amount(i.cost_price)}</td>
+      <td class="text-end num nowrap" style="white-space:nowrap"><b>${amount(i.sale_price)}</b></td>
+      <td class="text-center tiny nowrap" style="white-space:nowrap">${i.tax_rate}%</td>
+      <td class="text-center nowrap" style="white-space:nowrap">
+        <span class="badge ${i.is_active ? 'green' : 'gray'}" style="white-space:nowrap">${i.is_active ? 'نشط' : 'موقوف'}</span>
+      </td>
       <td class="actions">
-        <span class="badge ${i.is_active ? 'green' : 'gray'}">${i.is_active ? 'نشط' : 'موقوف'}</span>
-        ${writable ? `<button class="btn btn-sm" data-act="edit-item" data-id="${esc(i.id)}" type="button" title="تعديل">${icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}تعديل</button>` : ''}
-        ${writable ? `<button class="btn btn-sm btn-danger" data-act="del-item" data-id="${esc(i.id)}" type="button" title="حذف">${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}حذف</button>` : ''}
+        <div class="row-actions-group">
+          ${writable ? `
+            <button class="btn btn-sm btn-icon" data-act="edit-item" data-id="${esc(i.id)}" type="button" title="تعديل الصنف">
+              ${icon.edit({ size: 13, style: 'vertical-align:middle' })}
+            </button>
+            <button class="btn btn-sm btn-icon btn-danger" data-act="del-item" data-id="${esc(i.id)}" type="button" title="حذف الصنف">
+              ${icon.trash({ size: 13, style: 'vertical-align:middle' })}
+            </button>
+          ` : ''}
+        </div>
       </td>
     </tr>`).join('');
   };
 
   const catRows = () => {
     const list = Array.isArray(state.categories) ? state.categories : [];
-    if (!list.length) return '<tr><td colspan="5" class="text-center muted" style="padding:1.5rem">لا توجد مجموعات</td></tr>';
+    if (!list.length) return '<tr><td colspan="6" class="text-center muted" style="padding:1.5rem">لا توجد مجموعات</td></tr>';
     return list.map((c) => `<tr>
-      <td class="mono tiny">${esc(c.code)}</td>
+      <td class="mono tiny nowrap" style="white-space:nowrap;font-weight:700">
+        <span class="badge gray mono" style="font-size:11px;padding:2px 6px;letter-spacing:0.3px;white-space:nowrap">${esc(c.code)}</span>
+      </td>
       <td><b>${esc(c.name)}</b></td>
       <td class="tiny">${esc(c.parent_name || '—')}</td>
-      <td class="tiny">${esc(c.description || '')}</td>
+      <td class="tiny">${esc(c.description || '—')}</td>
+      <td class="text-center nowrap" style="white-space:nowrap">
+        <span class="badge gray mono" style="font-size:11px;white-space:nowrap">${num(c.items_count)} صنف</span>
+      </td>
       <td class="actions">
-        <span class="badge gray">${num(c.items_count)} صنف</span>
-        <a class="btn btn-sm" href="#/items?tab=items&cat=${esc(c.id)}" title="أصناف المجموعة">${icon.eye({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}الأصناف</a>
-        ${writable ? `<button class="btn btn-sm" data-act="edit-cat" data-id="${esc(c.id)}" type="button" title="تعديل">${icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}تعديل</button>` : ''}
-        ${writable ? `<button class="btn btn-sm btn-danger" data-act="del-cat" data-id="${esc(c.id)}" type="button" title="حذف">${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}حذف</button>` : ''}
+        <div class="row-actions-group">
+          <a class="btn btn-sm btn-ghost" href="#/items?tab=items&cat=${esc(c.id)}" title="عرض أصناف المجموعة" style="padding:.28rem .55rem">
+            ${icon.eye({ size: 13, style: 'vertical-align:middle;margin-left:3px' })}<span>الأصناف</span>
+          </a>
+          ${writable ? `
+            <button class="btn btn-sm btn-icon" data-act="edit-cat" data-id="${esc(c.id)}" type="button" title="تعديل المجموعة">
+              ${icon.edit({ size: 13, style: 'vertical-align:middle' })}
+            </button>
+            <button class="btn btn-sm btn-icon btn-danger" data-act="del-cat" data-id="${esc(c.id)}" type="button" title="حذف المجموعة">
+              ${icon.trash({ size: 13, style: 'vertical-align:middle' })}
+            </button>
+          ` : ''}
+        </div>
       </td>
     </tr>`).join('');
   };
@@ -404,15 +433,32 @@ export async function render(view, ctx) {
           </div>
         </div>
         <div class="card pad0">
-          <div class="table-wrap"><table class="tbl">
-            <thead><tr><th>رقم / كود الصنف</th><th>الصنف</th><th>المجموعة</th><th>الوحدة</th><th>الباركود</th>
-              <th class="text-end">التكلفة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th class="text-end">سعر البيع <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th class="text-center">الضريبة</th><th></th></tr></thead>
+          <div class="table-wrap"><table class="tbl items-tbl">
+            <thead><tr>
+              <th class="nowrap" style="min-width:125px;white-space:nowrap">رقم / كود الصنف</th>
+              <th style="min-width:200px">الصنف</th>
+              <th style="min-width:110px">المجموعة</th>
+              <th class="nowrap" style="min-width:70px;white-space:nowrap">الوحدة</th>
+              <th class="mono nowrap" style="min-width:110px;white-space:nowrap">الباركود</th>
+              <th class="text-end nowrap" style="min-width:95px;white-space:nowrap">التكلفة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
+              <th class="text-end nowrap" style="min-width:95px;white-space:nowrap">سعر البيع <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
+              <th class="text-center nowrap" style="min-width:65px;white-space:nowrap">الضريبة</th>
+              <th class="text-center nowrap" style="min-width:80px;white-space:nowrap">الحالة</th>
+              <th class="text-center nowrap" style="min-width:95px;white-space:nowrap">الإجراءات</th>
+            </tr></thead>
             <tbody>${itemsRows()}</tbody>
           </table></div>
         </div>` : `
         <div class="card pad0">
-          <div class="table-wrap"><table class="tbl">
-            <thead><tr><th>الكود</th><th>المجموعة</th><th>المجموعة الأم</th><th>الوصف</th><th></th></tr></thead>
+          <div class="table-wrap"><table class="tbl categories-tbl">
+            <thead><tr>
+              <th class="nowrap" style="min-width:90px;white-space:nowrap">الكود</th>
+              <th style="min-width:160px">المجموعة</th>
+              <th style="min-width:140px">المجموعة الأم</th>
+              <th style="min-width:180px">الوصف</th>
+              <th class="text-center nowrap" style="min-width:90px;white-space:nowrap">الأصناف</th>
+              <th class="text-center nowrap" style="min-width:130px;white-space:nowrap">الإجراءات</th>
+            </tr></thead>
             <tbody>${catRows()}</tbody>
           </table></div>
         </div>`)}`;

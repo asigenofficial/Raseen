@@ -12,6 +12,8 @@ html[data-theme="light"] {
   --sidebar: #fff; --sidebar-hover: #f1f5f4; --topbar: #fff;
   --field-bg: #fff; --field-focus-bg: #fff;
   --bg-alt: #f8fafb;
+  --card-bg: #ffffff;
+  --border-color: var(--line);
 
   --text: #243648; --text-heading: #172b3a; --muted: #526575; --dim: #64748b;
 
@@ -24,7 +26,6 @@ html[data-theme="light"] {
 
   --shadow: 0 2px 6px #172b3a06; --shadow-lg: 0 16px 45px #172b3a24;
   --radius: 14px; --radius-sm: 9px; --radius-lg: 20px; --glass-blur: none;
-  --sidebar-width: 260px;
 }
 
 /* ---------- تصحيحات ألوان النصوص والعناصر في وضع الضوء ---------- */
@@ -87,9 +88,14 @@ html[data-theme="light"] .login-card { backdrop-filter: none; }
 
 html[data-theme="light"] .btn-primary,
 html[data-theme="light"] .avatar { background: var(--brand); color: white; }
-html[data-theme="light"] .btn-primary:hover { background: var(--brand-dark); }
-html[data-theme="light"] .btn:hover { transform: none; }
-html[data-theme="light"] .btn-ghost:hover { color: var(--brand); background: var(--brand-light); }
+
+@media (hover: hover) and (pointer: fine) {
+  html[data-theme="light"] .btn-primary:hover { background: var(--brand-dark); transform: translateY(-1px); }
+  html[data-theme="light"] .btn:hover { transform: translateY(-1px); }
+  html[data-theme="light"] .btn-ghost:hover { color: var(--brand); background: var(--brand-light); }
+}
+
+html[data-theme="light"] .btn:active { transform: scale(0.97) !important; }
 html[data-theme="light"] .page-head .titles p { max-width: 70ch; }
 
 html[data-theme="light"] .tbl thead th { background: #f6f8fa; color: #526575; }
@@ -100,6 +106,28 @@ html[data-theme="light"] .stat .stat-ico { box-shadow: none; }
 
 html[data-theme="light"] .badge,
 html[data-theme="light"] .doc-tpl-chip { color: var(--text); border-color: var(--line); background: #f1f5f9; }
+html[data-theme="light"] .chip {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #1e293b;
+  font-weight: 600;
+}
+html[data-theme="light"] .chip:hover {
+  background: #e2e8f0;
+  border-color: #059669;
+  color: #0f172a;
+}
+html[data-theme="light"] .chip.on {
+  background: var(--brand, #059669);
+  border-color: var(--brand, #059669);
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.35);
+}
+html[data-theme="light"] .badge.gray {
+  color: #475569;
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
 html[data-theme="light"] .badge.green,
 html[data-theme="light"] .doc-tpl-chip.green { color: var(--success); background: var(--success-light); }
 html[data-theme="light"] .badge.blue,
@@ -207,8 +235,43 @@ html[data-theme="light"] .skeleton-sub::after {
 /* nav scrollbar */
 html[data-theme="light"] .nav { scrollbar-color: rgba(23,43,58,0.15) transparent; }
 html[data-theme="light"] .nav::-webkit-scrollbar-thumb { background: rgba(23,43,58,0.15); }
-html[data-theme="light"] .table-wrap { scrollbar-color: rgba(23,43,58,0.15) transparent; }
-html[data-theme="light"] .table-wrap::-webkit-scrollbar-thumb { background: rgba(23,43,58,0.15); }
+html[data-theme="light"] .table-wrap { scrollbar-color: #94a3b8 #f1f5f9; }
+html[data-theme="light"] .table-wrap::-webkit-scrollbar-track { background: #f1f5f9; }
+html[data-theme="light"] .table-wrap::-webkit-scrollbar-thumb { background: #94a3b8; }
+html[data-theme="light"] .table-wrap::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+html[data-theme="light"] .table-top-scroll { background: #f8fafc; scrollbar-color: #94a3b8 #f1f5f9; }
+html[data-theme="light"] .table-top-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+html[data-theme="light"] .table-top-scroll::-webkit-scrollbar-thumb { background: #94a3b8; }
+html[data-theme="light"] .table-top-scroll::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+html[data-theme="light"] .doc-tpl-grid { scrollbar-color: #94a3b8 #f1f5f9; }
+html[data-theme="light"] .doc-tpl-grid::-webkit-scrollbar-track { background: #f1f5f9; }
+html[data-theme="light"] .doc-tpl-grid::-webkit-scrollbar-thumb { background: #94a3b8; }
+html[data-theme="light"] .doc-tpl-grid::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+html[data-theme="light"] .bulk-drafts-grid { scrollbar-color: #94a3b8 #f1f5f9; }
+html[data-theme="light"] .bulk-drafts-grid::-webkit-scrollbar-track { background: #f1f5f9; }
+html[data-theme="light"] .bulk-drafts-grid::-webkit-scrollbar-thumb { background: #94a3b8; }
+html[data-theme="light"] .bulk-drafts-grid::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+html[data-theme="light"] .invoices-list { scrollbar-color: #94a3b8 #f1f5f9; }
+html[data-theme="light"] .invoices-list::-webkit-scrollbar-track { background: #f1f5f9; }
+html[data-theme="light"] .invoices-list::-webkit-scrollbar-thumb { background: #94a3b8; }
+html[data-theme="light"] .invoices-list::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+html[data-theme="light"] table.tbl thead th { background: #f8fafc !important; color: #334155 !important; box-shadow: 0 1px 0 var(--line); }
+
+/* مسرح معاينة المستندات والسندات الورقية في وضع الضوء */
+html[data-theme="light"] .modal-paper-stage {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
+html[data-theme="light"] .modal-paper-sheet {
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+}
 
 /* kv list */
 html[data-theme="light"] .kv dt { color: var(--muted); }
@@ -308,44 +371,44 @@ html[data-theme="light"] .tab-pill-group {
   border: 1px solid #e2e8f0;
 }
 
-/* تثبيت أحجام الأيقونات والعناصر بدقة متطابقة بين الثيمين */
-.ico {
+/* تثبيت أحجام وتنسيق الأيقونات بدقة متطابقة تماماً بين الثيمين لمنع أي انزياح */
+.ico,
+svg.ico {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  vertical-align: middle;
   flex-shrink: 0;
-  box-sizing: content-box;
+  box-sizing: border-box;
 }
 
 .theme-toggle {
-  width: 38px !important;
-  height: 38px !important;
-  min-width: 38px !important;
-  min-height: 38px !important;
-  padding: 0 !important;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 .user-chip .avatar {
-  width: 32px !important;
-  height: 32px !important;
-  min-width: 32px !important;
-  min-height: 32px !important;
-  font-size: .82rem !important;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  box-sizing: border-box;
 }
 
 .nav-item .ico {
-  width: 20px !important;
-  height: 20px !important;
-  min-width: 20px !important;
-  font-size: 1rem !important;
-}
-
-@media (max-width: 720px) {
-  html[data-theme="light"] .page-head { align-items: stretch; }
-  html[data-theme="light"] .page-actions { width: 100%; flex-wrap: wrap; }
-  html[data-theme="light"] .issuer-pick { min-width: 0; }
-  html[data-theme="light"] #issuer-select { min-width: 120px !important; max-width: 160px; }
-  html[data-theme="light"] .user-meta { display: none; }
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  flex: none;
+  box-sizing: border-box;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -658,5 +721,67 @@ html[data-theme="light"] #btn-cancel-paste-modal {
   border: 1px solid #cbd5e1 !important;
   color: #475569 !important;
 }
+
+/* ── دعم عناصر هندسة التصميم في وضع الضوء ── */
+html[data-theme="light"] .segmented-control {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+html[data-theme="light"] .segmented-option {
+  color: #64748b;
+}
+
+html[data-theme="light"] .segmented-option:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+html[data-theme="light"] .segmented-option.is-active,
+html[data-theme="light"] .segmented-option:has(input:checked) {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #7dd3fc;
+}
+
+html[data-theme="light"] .bulk-options-bar {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+html[data-theme="light"] .check-pill:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+html[data-theme="light"] .check-pill-content b {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .bulk-items-bar {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+html[data-theme="light"] .distribution-cards {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+html[data-theme="light"] .distribution-card {
+  background: #fff;
+  border-color: #e2e8f0;
+}
+
+html[data-theme="light"] .distribution-card:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+html[data-theme="light"] .distribution-card:has(input:checked) {
+  background: #e0f2fe;
+  border-color: var(--brand);
+}
+
 
 

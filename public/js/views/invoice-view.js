@@ -400,10 +400,10 @@ export async function render(view, ctx) {
               </div>
 
               <div id="tpl-select-wrap" style="display:${activeViewMode === 'template' ? 'flex' : 'none'};align-items:center;gap:10px;flex-wrap:wrap">
-                <span style="font-weight:700;font-size:13px;color:var(--primary, #0d9488);white-space:nowrap">
+                <span style="font-weight:700;font-size:13px;color:var(--brand);white-space:nowrap">
                   قالب الفاتورة:
                 </span>
-                <select id="sel-invoice-tpl" class="input input-sm" style="min-width:320px;max-width:500px;font-size:13px;padding:6px 12px;border-radius:6px;border:1px solid var(--border-color, #475569);background:var(--card-bg, #0f172a);color:var(--text, #f8fafc);font-weight:700;cursor:pointer;flex-shrink:0">
+                <select id="sel-invoice-tpl" class="input input-sm" style="min-width:0;width:100%;max-width:440px;font-size:13px;padding:6px 12px;border-radius:6px;border:1px solid var(--line);background:var(--field-bg, var(--card));color:var(--text);font-weight:700;cursor:pointer;">
                   ${raw(`
                     ${availableTemplates.length ? `
                     <optgroup label="قوالب الفواتير المعتمدة والمخصصة (${availableTemplates.length} قالب)">
@@ -414,7 +414,7 @@ export async function render(view, ctx) {
                     </optgroup>
                   `)}
                 </select>
-                <button class="btn btn-sm" id="btn-adopt-invoice-tpl" type="button" style="font-size:12px;padding:6px 12px;background:rgba(13,148,136,0.15);border:1px solid var(--primary, #0d9488);color:var(--primary, #0d9488);font-weight:700;white-space:nowrap;border-radius:6px;flex-shrink:0" title="اعتماد هذا القالب كقالب افتراضي لجميع فواتير المنشأة">
+                <button class="btn btn-sm" id="btn-adopt-invoice-tpl" type="button" style="font-size:12px;padding:6px 12px;background:var(--brand-light);border:1px solid var(--brand);color:var(--brand);font-weight:700;white-space:nowrap;border-radius:6px;flex-shrink:0" title="اعتماد هذا القالب كقالب افتراضي لجميع فواتير المنشأة">
                   اعتماد كقالب افتراضي للمنشأة
                 </button>
               </div>

@@ -1210,12 +1210,17 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 		result = strings.ReplaceAll(result, "overflow:hidden", "overflow:visible")
 	}
 
-	if len(inv.Lines) > 15 {
+	totalLinesCount := len(inv.Lines)
+	if totalLinesCount == 0 && len(inv.Items) > 0 {
+		totalLinesCount = len(inv.Items)
+	}
+
+	if totalLinesCount > 15 {
 		result = paginateInvoiceHtml(result, inv, 15)
 	} else {
 		singlePagePrintCss := `
 <style>
-@page { size: A4 portrait; margin: 5mm 6mm; }
+@page { size: A4 portrait; margin: 4mm 5mm; }
 @media print {
   html, body {
     background: #fff !important;
@@ -1224,15 +1229,21 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
     height: auto !important;
     min-height: 0 !important;
     width: 100% !important;
+    font-size: 9.5px !important;
+    line-height: 1.35 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  .invoice-container, .invoice-frame {
+  .invoice-container, .invoice-frame, .page {
     width: 100% !important;
     max-width: 100% !important;
     min-height: 0 !important;
     height: auto !important;
     margin: 0 auto !important;
-    padding: 2mm 4mm !important;
-    display: block !important;
+    padding: 3mm 5mm !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
     box-shadow: none !important;
     page-break-after: auto !important;
     break-after: auto !important;
@@ -1249,23 +1260,129 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
     position: static !important;
     margin: 0 !important;
     padding: 0 !important;
+    flex-shrink: 1 !important;
   }
-  .bottom-content-wrap {
-    margin-top: 8px !important;
-    padding-top: 0 !important;
+  .header, .masthead {
+    padding-bottom: 4px !important;
+    margin-bottom: 6px !important;
+    gap: 8px !important;
+  }
+  .logo-shell {
+    height: 48px !important;
+    max-height: 48px !important;
+    margin-bottom: 4px !important;
+  }
+  .logo-shell img, .logo-shell svg {
+    max-height: 48px !important;
+  }
+  .invoice-metadata, .metadata, .parties {
+    gap: 8px !important;
+    margin: 4px 0 6px 0 !important;
+  }
+  .info-card, .meta-panel, .party {
+    border-radius: 3px !important;
+  }
+  .card-title, .panel-heading, .party-h {
+    padding: 3px 6px !important;
+    font-size: 10px !important;
+  }
+  .card-body, dl, table.kv td {
+    padding: 3px 5px !important;
+  }
+  .field {
+    margin-bottom: 2px !important;
+    line-height: 1.3 !important;
+  }
+  .seller-contact, .contact-strip {
+    margin: 3px 0 !important;
+    padding: 2px 0 !important;
+    font-size: 8.5px !important;
+  }
+  .items-main-table, table.items {
+    font-size: 8.5px !important;
+    line-height: 1.25 !important;
+    margin-top: 2px !important;
+    margin-bottom: 0 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  .items-main-table th, table.items th {
+    padding: 3px 2px !important;
+    font-size: 8.5px !important;
+  }
+  .items-main-table td, table.items td {
+    padding: 2.5px 2px !important;
+    font-size: 8.5px !important;
+  }
+  .bottom-content-wrap, .bottom {
+    margin-top: 4px !important;
+    padding-top: 2px !important;
     display: block !important;
     position: static !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
-  .items-main-table {
-    margin-bottom: 0 !important;
+  .summary-section, .bottom {
+    gap: 8px !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
-  .summary-section {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
+  .totals, .totals-panel {
+    padding: 4px 6px !important;
+  }
+  .totals-heading {
+    margin-bottom: 2px !important;
+    font-size: 9.5px !important;
+  }
+  .total-row, table.totals td {
+    padding: 1.8px 3px !important;
+    font-size: 8.5px !important;
+  }
+  .grand, tr.grand td {
+    padding: 3px 5px !important;
+    font-size: 10px !important;
+  }
+  .grand .money {
+    font-size: 11px !important;
+  }
+  .amount-words, .words {
+    margin-top: 2px !important;
+    padding-top: 2px !important;
+    font-size: 8px !important;
+  }
+  .verification, .verification-panel {
+    padding: 4px 6px !important;
+    gap: 8px !important;
+  }
+  .qr-box, .qr {
+    width: 85px !important;
+    height: 85px !important;
+    min-width: 85px !important;
+    min-height: 85px !important;
+    padding: 2px !important;
+  }
+  .qr-box svg, .qr-box img, .qr svg {
+    width: 80px !important;
+    height: 80px !important;
+    max-width: 80px !important;
+    max-height: 80px !important;
+  }
+  .notes h2, .notes h3 {
+    margin-bottom: 2px !important;
+    font-size: 9.5px !important;
+  }
+  .notes-body, .notes-content, .note {
+    font-size: 8px !important;
+    line-height: 1.35 !important;
+  }
+  .footer-zone, footer.foot {
+    margin-top: 3px !important;
+    padding-top: 2px !important;
+    font-size: 7.5px !important;
+  }
+  .corner-art, .luxury-art {
+    max-width: 45mm !important;
+    max-height: 25mm !important;
   }
 }
 </style>`
@@ -1936,25 +2053,27 @@ func defaultInvoiceHTMLTemplate() string {
 <head>
 <meta charset="utf-8"/>
 <style>
-  @page { size: A4 portrait; margin: 6mm 8mm; }
+  @page { size: A4 portrait; margin: 4mm 5mm; }
   * { box-sizing: border-box; }
   html, body {
     margin: 0;
     padding: 0;
+    height: 100%;
+    min-height: 100%;
     background: #fff;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
   body {
     font-family: Tahoma, 'Cairo', Arial, sans-serif;
-    font-size: 11px;
+    font-size: 10.5px;
     color: #1e293b;
     background: #fff;
-    min-height: 268mm;
-    width: 210mm;
-    max-width: 100%;
+    min-height: 282mm;
+    width: 100%;
+    max-width: 200mm;
     margin: 0 auto;
-    padding: 6mm 10mm;
+    padding: 3mm 5mm;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -1962,7 +2081,8 @@ func defaultInvoiceHTMLTemplate() string {
   }
   .invoice-container {
     width: 100%;
-    min-height: 268mm;
+    min-height: 276mm;
+    flex: 1;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -1972,7 +2092,7 @@ func defaultInvoiceHTMLTemplate() string {
     flex-shrink: 0;
   }
   .bottom-wrap {
-    margin-top: auto;
+    margin-top: auto !important;
     padding-top: 6px;
     width: 100%;
     break-inside: avoid;
@@ -2033,20 +2153,32 @@ func defaultInvoiceHTMLTemplate() string {
   @media print {
     @page {
       size: A4 portrait;
-      margin: 6mm 8mm;
+      margin: 4mm 5mm;
     }
     html, body {
       background: #fff !important;
-      height: 100%;
-      min-height: 0 !important;
+      height: 100% !important;
+      min-height: 100% !important;
       margin: 0 !important;
       padding: 0 !important;
     }
     body {
       width: 100% !important;
       max-width: 100% !important;
-      min-height: 268mm !important;
+      min-height: 282mm !important;
       height: auto !important;
+      padding: 2mm 4mm !important;
+      margin: 0 auto !important;
+      box-sizing: border-box !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+    }
+    .invoice-container {
+      width: 100% !important;
+      min-height: 278mm !important;
+      height: auto !important;
+      flex: 1 !important;
       padding: 0 !important;
       margin: 0 !important;
       box-sizing: border-box !important;
@@ -2055,12 +2187,12 @@ func defaultInvoiceHTMLTemplate() string {
       justify-content: space-between !important;
     }
     .top-wrap {
-      flex-shrink: 0;
+      flex-shrink: 0 !important;
     }
     .bottom-wrap {
-      margin-top: auto;
-      break-inside: avoid;
-      page-break-inside: avoid;
+      margin-top: auto !important;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
     }
     table {
       page-break-inside: auto;
@@ -2149,7 +2281,7 @@ func defaultVoucherHTMLTemplate() string {
     font-size: 11.5px;
     color: #1e293b;
     background: #fff;
-    min-height: 268mm;
+    min-height: 278mm;
     width: 210mm;
     max-width: 100%;
     margin: 0 auto;
@@ -2161,7 +2293,7 @@ func defaultVoucherHTMLTemplate() string {
   }
   .top-wrap { flex-shrink: 0; }
   .bottom-wrap {
-    margin-top: auto;
+    margin-top: auto !important;
     padding-top: 6px;
     width: 100%;
     break-inside: avoid;
@@ -2183,9 +2315,9 @@ func defaultVoucherHTMLTemplate() string {
   .sig-line { width: 40%; border-top: 1px solid #64748b; text-align: center; padding-top: 4px; font-size: 10px; color: #64748b; }
   @media print {
     @page { size: A4 portrait; margin: 6mm 8mm; }
-    html, body { background: #fff !important; height: 100%; min-height: 0 !important; margin: 0 !important; padding: 0 !important; }
-    body { width: 100% !important; max-width: 100% !important; min-height: 268mm !important; height: auto !important; padding: 0 !important; margin: 0 !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
-    .bottom-wrap { margin-top: auto; break-inside: avoid; page-break-inside: avoid; }
+    html, body { background: #fff !important; height: 100%; min-height: 100% !important; margin: 0 !important; padding: 0 !important; }
+    body { width: 100% !important; max-width: 100% !important; min-height: 278mm !important; height: auto !important; padding: 0 !important; margin: 0 !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
+    .bottom-wrap { margin-top: auto !important; break-inside: avoid; page-break-inside: avoid; }
   }
 </style>
 </head>
@@ -2316,30 +2448,63 @@ func CombineHTMLDocuments(docs []string) string {
 	if len(docs) == 1 {
 		return docs[0]
 	}
-	var sb strings.Builder
-	sb.WriteString(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+
+	var allStyles strings.Builder
+	var allBodies strings.Builder
+	styleRegex := regexp.MustCompile(`(?is)<style\b[^>]*>(.*?)</style>`)
+	bodyRegex := regexp.MustCompile(`(?is)<body\b[^>]*>(.*?)</body>`)
+
+	seenStyles := make(map[string]bool)
+
+	for _, doc := range docs {
+		// Extract and deduplicate styles
+		styleMatches := styleRegex.FindAllStringSubmatch(doc, -1)
+		for _, sm := range styleMatches {
+			if len(sm) > 1 {
+				trimmed := strings.TrimSpace(sm[1])
+				h := fmt.Sprintf("%x", sha256.Sum256([]byte(trimmed)))
+				if !seenStyles[h] {
+					seenStyles[h] = true
+					allStyles.WriteString(trimmed)
+					allStyles.WriteString("\n")
+				}
+			}
+		}
+
+		// Extract body content
+		bMatch := bodyRegex.FindStringSubmatch(doc)
+		content := ""
+		if len(bMatch) > 1 {
+			content = strings.TrimSpace(bMatch[1])
+		} else {
+			content = doc
+		}
+
+		allBodies.WriteString(fmt.Sprintf(`<div class="batch-doc-item">%s</div>`, content))
+	}
+
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>فواتير الدفعة المجمعة</title>
 <style>
-@page { size: A4 portrait; margin: 5mm 6mm; }
+@page { size: A4 portrait; margin: 4mm 5mm; }
 @media print {
-  body { margin: 0; padding: 0; background: #fff !important; }
-  .batch-page-wrap { margin: 0; padding: 0; }
-  .batch-page-break { page-break-after: always; break-after: page; height: 0; line-height: 0; margin: 0; padding: 0; }
+  html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+  .batch-doc-item { margin: 0 !important; padding: 0 !important; page-break-after: always !important; break-after: page !important; }
+  .batch-doc-item:last-child { page-break-after: auto !important; break-after: auto !important; }
 }
 @media screen {
   body { background: #334155; padding: 20px 0; }
-  .batch-page-wrap { margin-bottom: 25px; }
-  .batch-page-break { height: 25px; }
+  .batch-doc-item { margin-bottom: 25px; }
 }
-</style></head><body style="margin:0;padding:0;">`)
+%s
+</style>
+</head>
+<body style="margin:0;padding:0;">
+%s
+</body>
+</html>`, allStyles.String(), allBodies.String())
+}
 
-	for i, doc := range docs {
-		sb.WriteString(`<div class="batch-page-wrap">`)
-		sb.WriteString(doc)
-		sb.WriteString(`</div>`)
-		if i < len(docs)-1 {
-			sb.WriteString(`<div class="batch-page-break"></div>`)
-		}
-	}
-	sb.WriteString(`</body></html>`)
-	return sb.String()
-}

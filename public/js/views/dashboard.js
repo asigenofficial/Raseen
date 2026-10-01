@@ -21,11 +21,17 @@ function stat(iconContent, cls, value, label, sub) {
 function barChart(monthly) {
   const max = Math.max(1, ...monthly.map((m) => m.total));
   return html`<div class="bar-chart" style="margin-top:.8rem">
-    ${raw(monthly.map((m) => `
-      <div class="bar" style="height:${Math.round((m.total / max) * 100)}%">
-        <div class="tip">${money(m.total)} ر.س</div>
+    ${raw(monthly.map((m) => {
+      const pct = Math.max(4, Math.round((m.total / max) * 100));
+      return `
+      <div class="bar">
+        <div class="bar-track">
+          <div class="tip">${money(m.total)} ر.س</div>
+          <div class="bar-fill" style="height:${pct}%"></div>
+        </div>
         <span>${esc(m.month.slice(5))}/${esc(m.month.slice(2, 4))}</span>
-      </div>`))}
+      </div>`;
+    }))}
   </div>`;
 }
 
@@ -105,7 +111,7 @@ export async function render(view) {
     <div class="grid grid-2 mt">
       <div class="card pad0">
         <div class="card-head"><h3>أعلى العملاء</h3></div>
-        <div class="table-wrap">
+        <div class="table-wrap dashboard-table-wrap">
           <table class="tbl">
             <thead><tr><th>العميل</th><th class="text-end">فواتير</th><th class="text-end">الإجمالي <span class="cur-sym">${sarSvg({ size: 12 })}</span></th><th class="text-end">المتبقي <span class="cur-sym">${sarSvg({ size: 12 })}</span></th></tr></thead>
             <tbody>
@@ -122,7 +128,7 @@ export async function render(view) {
 
       <div class="card pad0">
         <div class="card-head"><h3>أكثر الأصناف مبيعاً</h3></div>
-        <div class="table-wrap">
+        <div class="table-wrap dashboard-table-wrap">
           <table class="tbl">
             <thead><tr><th>الصنف</th><th class="text-end">الكمية</th><th class="text-end">الإجمالي</th></tr></thead>
             <tbody>
@@ -143,7 +149,7 @@ export async function render(view) {
         <div class="spacer"></div>
         <a class="btn btn-sm" href="#/issuers">إدارة الشركات</a>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap dashboard-table-wrap">
         <table class="tbl">
           <thead><tr><th>الشركة</th><th>الكود</th><th class="text-end">فواتير</th><th class="text-end">الإجمالي</th><th class="text-end">المتبقي</th></tr></thead>
           <tbody>
@@ -165,7 +171,7 @@ export async function render(view) {
         <div class="spacer"></div>
         <a class="btn btn-sm" href="#/invoices">كل الفواتير</a>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap dashboard-table-wrap">
         <table class="tbl">
           <thead><tr><th>الرقم</th><th>التاريخ</th><th>العميل</th><th>الشركة</th><th class="text-end">الإجمالي</th><th>الحالة</th></tr></thead>
           <tbody>

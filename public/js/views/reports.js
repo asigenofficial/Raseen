@@ -5,7 +5,7 @@ import { api, qs } from '../core/api.js';
 import { store, loadClients, currencyLabel } from '../core/store.js';
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, monthStart, today,
-  $, delegate, exportCsv, exportExcel, printDoc, icon, downloadPdfFromHtml, toastErr,
+  $, delegate, exportCsv, exportExcel, printDoc, icon, downloadPdfFromHtml, toastErr, toastOk, confirmDialog,
   amount, modal,
 } from '../core/util.js';
 import { sarSvg } from '../core/icons.js';
@@ -244,7 +244,7 @@ export async function render(view, ctx) {
         <div class="stat"><div style="min-width:0"><div class="stat-val num">${amount(d.totals.discount, 'SAR', { size: 16 })}</div><div class="stat-lab">الخصومات</div></div></div>
       </div>
       <div class="card pad0 mt">
-        <div class="table-wrap"><table class="tbl">
+        <div class="table-wrap reports-table-wrap"><table class="tbl">
           <thead><tr><th>${esc(GROUPS.find((g) => g[0] === state.group_by)[1])}</th><th class="text-end">عدد الفواتير</th>
             ${d.items.some((i) => i.quantity !== undefined) ? '<th class="text-end">الكمية</th>' : ''}
             <th class="text-end">قبل الضريبة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
@@ -279,7 +279,7 @@ export async function render(view, ctx) {
         <div class="stat"><div style="min-width:0"><div class="stat-val num">${amount(d.totals.total, 'SAR', { size: 16 })}</div><div class="stat-lab">الإجمالي بالضريبة</div></div></div>
       </div>
       <div class="card pad0 mt">
-        <div class="table-wrap"><table class="tbl">
+        <div class="table-wrap reports-table-wrap"><table class="tbl">
           <thead><tr><th>الشركة المصدرة</th><th>الرقم الضريبي</th><th class="text-end">عدد الفواتير</th>
             <th class="text-end">الوعاء الخاضع <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
             <th class="text-end">الضريبة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
@@ -306,7 +306,7 @@ export async function render(view, ctx) {
         <div class="stat"><div><div class="stat-val num">${amount(d.totals.allocated, 'SAR', { size: 16 })}</div><div class="stat-lab">المخصص للفواتير</div></div></div>
         <div class="stat"><div><div class="stat-val num">${amount(d.totals.unallocated, 'SAR', { size: 16 })}</div><div class="stat-lab">غير مخصص</div></div></div>
       </div>
-      <div class="card pad0 mt"><div class="table-wrap"><table class="tbl">
+      <div class="card pad0 mt"><div class="table-wrap reports-table-wrap"><table class="tbl">
         <thead><tr><th>البيان</th><th class="text-end">السندات</th>
           <th class="text-end">المبلغ <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
           <th class="text-end">المخصص <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
@@ -325,7 +325,7 @@ export async function render(view, ctx) {
         <div class="stat"><div><div class="stat-val num">${amount(d.totals.profit, 'SAR', { size: 16 })}</div><div class="stat-lab">الربح الإجمالي</div></div></div>
         <div class="stat"><div><div class="stat-val num">${num(d.totals.margin)}%</div><div class="stat-lab">هامش الربح</div></div></div>
       </div>
-      <div class="card pad0 mt"><div class="table-wrap"><table class="tbl">
+      <div class="card pad0 mt"><div class="table-wrap reports-table-wrap"><table class="tbl">
         <thead><tr><th>البيان</th><th class="text-end">الفواتير</th><th class="text-end">الكمية</th>
           <th class="text-end">المبيعات <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
           <th class="text-end">التكلفة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
@@ -345,7 +345,7 @@ export async function render(view, ctx) {
         <div class="stat"><div style="min-width:0"><div class="stat-val num">${amount(d.totals.b90_plus, 'SAR', { size: 16 })}</div><div class="stat-lab">أكثر من 90 يوم</div></div></div>
       </div>
       <div class="card pad0 mt">
-        <div class="table-wrap"><table class="tbl">
+        <div class="table-wrap reports-table-wrap"><table class="tbl">
           <thead><tr><th>العميل</th><th>الكود</th>
             <th class="text-end">1-30 <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
             <th class="text-end">31-60 <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
@@ -378,7 +378,7 @@ export async function render(view, ctx) {
         <div class="stat"><div style="min-width:0"><div class="stat-val num">${num(d.items.length)}</div><div class="stat-lab">عميل معروض</div></div></div>
       </div>
       <div class="card pad0 mt">
-        <div class="table-wrap"><table class="tbl">
+        <div class="table-wrap reports-table-wrap"><table class="tbl">
           <thead><tr><th>العميل</th><th>الكود</th><th>الجوال</th><th class="text-end">مدين <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
             <th class="text-end">دائن <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th class="text-end">الرصيد <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th class="text-end">حد الائتمان <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th></th></tr></thead>
           <tbody>${d.items.map((r) => `<tr class="${r.over_limit ? 'row-warn' : ''}">
@@ -399,7 +399,7 @@ export async function render(view, ctx) {
   const batchesBody = () => {
     const items = state.data.items || state.data;
     return `<div class="card pad0">
-      <div class="table-wrap"><table class="tbl">
+      <div class="table-wrap reports-table-wrap"><table class="tbl">
         <thead><tr><th>التاريخ</th><th>الشركة</th><th>العميل</th><th class="text-end">عدد الفواتير</th>
           <th class="text-end">الإجمالي <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th>المستخدم</th><th>معايير التوليد</th><th></th></tr></thead>
         <tbody>${items.length ? items.map((b) => `<tr>
@@ -410,7 +410,12 @@ export async function render(view, ctx) {
           <td class="text-end num"><b>${amount(b.total_amount)}</b></td>
           <td class="tiny">${esc(b.created_by)}</td>
           <td class="tiny muted">${esc(batchParams(b))}</td>
-          <td class="actions"><a class="btn btn-sm" href="#/invoices?batch_id=${esc(b.id)}">عرض الفواتير</a></td>
+          <td class="actions" style="display:flex;gap:4px;justify-content:flex-end;align-items:center;">
+            <a class="btn btn-sm" href="#/invoices?batch_id=${esc(b.id)}">عرض الفواتير</a>
+            <button class="btn btn-sm btn-ghost text-danger" data-delete-batch="${esc(b.id)}" data-count="${esc(b.invoice_count)}" type="button" title="حذف الدفعة والتراجع عنها">
+              ${raw(icon.trash({ size: 14 }))}
+            </button>
+          </td>
         </tr>`).join('') : '<tr><td colspan="8" class="text-center muted" style="padding:2rem">لا توجد دفعات توليد محفوظة</td></tr>'}</tbody>
       </table></div>
     </div>`;
@@ -492,7 +497,7 @@ export async function render(view, ctx) {
         <div class="page-actions">
           <button class="btn btn-info" id="btn-preview-report-doc" type="button" style="display:inline-flex; align-items:center; gap:5px; font-weight:700; background:rgba(6,182,212,0.16); border:1px solid rgba(6,182,212,0.38); color:#38bdf8;" title="عرض ومعاينة التقرير كصورة ومستند A4 رسمي">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-            عرض التقرير (صورة) 👁️
+            عرض التقرير (صورة)
           </button>
           <button class="btn btn-primary" id="btn-pdf-report" type="button">
             ${raw(icon.pdf({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}
@@ -564,6 +569,27 @@ export async function render(view, ctx) {
       else if (k === 'year') { state.from = `${new Date().getFullYear()}-01-01`; state.to = today(); }
       else { state.from = ''; state.to = ''; }
       await reload();
+    });
+
+    delegate(view, 'click', '[data-delete-batch]', async (e, btn) => {
+      const bId = btn.dataset.deleteBatch;
+      const count = btn.dataset.count;
+      const ok = await confirmDialog({
+        title: 'حذف الدفعة بالكامل',
+        message: `تحذير: سيتم حذف كافة فواتير هذه الدفعة (${num(count || 0)} فاتورة) وسندات قبضها وحركاتها من كشف الحساب نهائياً، مع إعادة المسودة إن وجدت. هل ترغب بالحذف؟`,
+        okText: 'نعم، احذف الدفعة',
+        danger: true,
+      });
+      if (!ok) return;
+      btn.disabled = true;
+      try {
+        await api.delete(`/api/bulk/batches/${encodeURIComponent(bId)}`);
+        toastOk('تم حذف الدفعة وكافة ملحقاتها بنجاح');
+        await reload();
+      } catch (err) {
+        toastErr(err.message || 'فشل حذف الدفعة');
+        btn.disabled = false;
+      }
     });
 
     const sar = sarSvg({ size: 14 });

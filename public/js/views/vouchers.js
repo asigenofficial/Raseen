@@ -24,28 +24,28 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
     title: 'سند قبض جديد',
     wide: true,
     body: html`
-      <div class="row">
+      <div class="form-grid-3">
         <div class="field"><label class="req">الشركة المصدرة</label>
           <select name="issuer_id" id="w-issuer">
             ${raw(store.issuers.filter((i) => i.is_active).map((i) => `<option value="${esc(i.id)}" ${i.id === issuerId ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}
           </select></div>
-        <div class="field" style="flex:1.3"><label class="req">العميل</label>
+        <div class="field"><label class="req">العميل</label>
           <select name="client_id" id="w-client">
             <option value="">— اختر العميل —</option>
             ${raw(store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === clientId ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join(''))}
           </select></div>
-        <div class="field" style="max-width:160px"><label>التاريخ</label>
+        <div class="field"><label>التاريخ</label>
           <input type="date" name="voucher_date" value="${today()}" /></div>
       </div>
-      <div class="row mt">
-        <div class="field" style="max-width:190px"><label class="req">المبلغ المستلم (${esc(cur)})</label>
+      <div class="form-grid-4 mt">
+        <div class="field"><label class="req">المبلغ المستلم (${esc(cur)})</label>
           <input type="number" name="total_amount" id="w-amount" value="" step="0.01" min="0.01" /></div>
-        <div class="field" style="max-width:170px"><label>طريقة السداد</label>
+        <div class="field"><label>طريقة السداد</label>
           <select name="payment_type">
             <option value="CASH">نقداً</option><option value="TRANSFER">تحويل بنكي</option>
             <option value="CARD">شبكة / بطاقة</option><option value="CHEQUE">شيك</option>
           </select></div>
-        <div class="field" style="max-width:180px"><label>رقم المرجع / الشيك</label><input type="text" name="reference_no" class="ltr" /></div>
+        <div class="field"><label>رقم المرجع / الشيك</label><input type="text" name="reference_no" class="ltr" /></div>
         <div class="field"><label>ملاحظات</label><input type="text" name="notes" /></div>
       </div>
       <div class="alert alert-info mt tiny" id="w-hint">
@@ -231,15 +231,15 @@ export async function showVoucher(id, onChange) {
     title: `سند قبض ${voucher.voucher_number} ${voucher.status === 'CANCELLED' ? '(ملغى)' : ''}`,
     wide: true,
     body: html`
-      <div style="background:var(--card-bg, #1e293b);border:1px solid var(--border-color, #334155);border-radius:8px;padding:8px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <span style="font-weight:700;font-size:13px;color:var(--primary, #0d9488)">قالب السند:</span>
-          <select id="v-style-select" style="min-width:280px;font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid var(--border-color, #475569);background:var(--card-bg, #0f172a);color:var(--text, #f8fafc);font-weight:700">
+          <span style="font-weight:700;font-size:13px;color:var(--brand)">قالب السند:</span>
+          <select id="v-style-select" style="min-width:280px;font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid var(--line);background:var(--field-bg, var(--card));color:var(--text);font-weight:700">
             ${raw(availableTemplates.length
               ? availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === currentStyle ? 'selected' : ''}>${esc(t.name_ar || t.name)} (${esc(t.badge || 'سند HTML')})</option>`).join('')
               : '<option value="default">قالب سند قبض (سند HTML)</option>')}
           </select>
-          <button class="btn btn-sm" id="btn-adopt-voucher-tpl" type="button" style="font-size:12px;padding:5px 10px;background:rgba(13,148,136,0.15);border:1px solid var(--primary, #0d9488);color:var(--primary, #0d9488);font-weight:700" title="اعتماد هذا القالب كقالب افتراضي لجميع سندات المنشأة">
+          <button class="btn btn-sm" id="btn-adopt-voucher-tpl" type="button" style="font-size:12px;padding:5px 10px;background:var(--brand-light);border:1px solid var(--brand);color:var(--brand);font-weight:700" title="اعتماد هذا القالب كقالب افتراضي لجميع سندات المنشأة">
             اعتماد كقالب افتراضي للمنشأة
           </button>
         </div>
@@ -497,30 +497,45 @@ export async function render(view, ctx) {
 
       <div class="card pad0 mt">
         <div class="table-wrap">
-          <table class="tbl">
-            <thead><tr><th>رقم السند</th><th>التاريخ</th><th>العميل</th><th>الشركة</th><th>طريقة السداد</th>
-              <th>المرجع</th><th class="text-end">المبلغ <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
-              <th class="text-end">الموزّع <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
-              <th class="text-end">غير موزّع <span class="cur-sym">${sarSvg({ size: 12 })}</span></th><th></th></tr></thead>
+          <table class="tbl invoices-tbl vouchers-tbl">
+            <thead><tr>
+              <th style="white-space:nowrap;min-width:125px">رقم السند</th>
+              <th style="white-space:nowrap;min-width:110px">التاريخ</th>
+              <th style="min-width:180px">العميل</th>
+              <th style="min-width:135px">الشركة</th>
+              <th style="white-space:nowrap">طريقة السداد</th>
+              <th style="white-space:nowrap">المرجع</th>
+              <th class="text-end nowrap" style="white-space:nowrap">المبلغ <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
+              <th class="text-end nowrap" style="white-space:nowrap">الموزّع <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
+              <th class="text-end nowrap" style="white-space:nowrap">غير موزّع <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
+              <th class="text-center nowrap" style="min-width:80px;white-space:nowrap">الحالة</th>
+              <th class="text-center nowrap" style="min-width:115px;white-space:nowrap">الإجراءات</th>
+            </tr></thead>
             <tbody>
               ${raw(state.data.items.length ? state.data.items.map((v) => `<tr class="${v.status === 'CANCELLED' ? 'row-off' : ''}">
-                <td class="mono"><a href="javascript:void(0)" data-act="show" data-id="${esc(v.id)}" style="color:var(--primary);text-decoration:underline;cursor:pointer"><b>${esc(v.voucher_number)}</b></a></td>
-                <td class="tiny nowrap">${esc(dateAr(v.voucher_date))}</td>
-                <td>${esc(v.client_name)}<div class="tiny muted mono">${esc(v.client_code)}</div></td>
-                <td class="tiny">${esc(v.issuer_name)}</td>
-                <td class="tiny">${esc(v.payment_label)}</td>
-                <td class="tiny mono">${esc(v.reference_no || '—')}</td>
-                <td class="text-end num"><b>${amount(v.total_amount)}</b></td>
-                <td class="text-end num">${amount(v.allocated_total)}</td>
-                <td class="text-end num">${v.unallocated > 0 ? `<span class="badge amber">${amount(v.unallocated)}</span>` : '—'}</td>
-                <td class="actions">
+                <td class="nowrap" style="white-space:nowrap"><a class="mono invoice-no-link" href="javascript:void(0)" data-act="show" data-id="${esc(v.id)}" style="font-weight:700;white-space:nowrap" title="عرض تفاصيل السند"><b>${esc(v.voucher_number)}</b></a></td>
+                <td class="tiny nowrap" style="white-space:nowrap">${esc(dateAr(v.voucher_date))}</td>
+                <td class="cell-client"><div class="client-name" title="${esc(v.client_name)}">${esc(v.client_name)}</div>${v.client_code ? `<div class="tiny muted mono">${esc(v.client_code)}</div>` : ''}</td>
+                <td class="cell-issuer"><div class="issuer-name" title="${esc(v.issuer_name)}">${esc(v.issuer_name)}</div></td>
+                <td class="tiny nowrap" style="white-space:nowrap">${esc(v.payment_label)}</td>
+                <td class="tiny mono nowrap" style="white-space:nowrap">${esc(v.reference_no || '—')}</td>
+                <td class="text-end num nowrap" style="white-space:nowrap"><b>${amount(v.total_amount)}</b></td>
+                <td class="text-end num nowrap" style="white-space:nowrap">${amount(v.allocated_total)}</td>
+                <td class="text-end num nowrap" style="white-space:nowrap">${v.unallocated > 0 ? `<span class="badge amber" style="white-space:nowrap">${amount(v.unallocated)}</span>` : '—'}</td>
+                <td class="text-center nowrap" style="white-space:nowrap">
                   ${v.status === 'CANCELLED' ? '<span class="badge red">ملغى</span>' : '<span class="badge green">نشط</span>'}
-                  <button class="btn btn-sm" data-act="show" data-id="${esc(v.id)}" type="button">${icon.eye({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}عرض</button>
-                  <button class="btn btn-sm btn-danger" data-act="delete" data-id="${esc(v.id)}" data-num="${esc(v.voucher_number)}" type="button" title="حذف السند نهائياً من قاعدة البيانات">
-                    ${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:2px' })}حذف
-                  </button>
                 </td>
-              </tr>`).join('') : '<tr><td colspan="10" class="text-center muted" style="padding:2rem">لا توجد سندات مطابقة</td></tr>')}
+                <td class="actions">
+                  <div class="row-actions-group">
+                    <button class="btn btn-sm btn-ghost" data-act="show" data-id="${esc(v.id)}" type="button" title="عرض السند" style="padding:.28rem .55rem">
+                      ${icon.eye({ size: 14, style: 'vertical-align:middle' })}<span>عرض</span>
+                    </button>
+                    <button class="btn btn-sm btn-icon btn-danger" data-act="delete" data-id="${esc(v.id)}" data-num="${esc(v.voucher_number)}" type="button" title="حذف السند نهائياً">
+                      ${icon.trash({ size: 13, style: 'vertical-align:middle' })}
+                    </button>
+                  </div>
+                </td>
+              </tr>`).join('') : '<tr><td colspan="11" class="text-center muted" style="padding:2rem">لا توجد سندات مطابقة</td></tr>')}
             </tbody>
           </table>
         </div>

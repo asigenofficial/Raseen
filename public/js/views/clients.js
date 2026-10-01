@@ -289,22 +289,40 @@ export async function render(view) {
       ].filter(Boolean).join(' ');
 
       return `<tr>
-        <td class="mono tiny">${esc(c.client_code)}</td>
-        <td>
-          <b>${esc(c.name)}</b>
+        <td class="mono tiny nowrap" style="white-space:nowrap;font-weight:700">
+          <span class="badge gray mono" style="font-size:11px;padding:2px 6px;letter-spacing:0.3px;white-space:nowrap">${esc(c.client_code)}</span>
+        </td>
+        <td class="cell-client">
+          <div class="client-name" title="${esc(c.name)}">${esc(c.name)}</div>
           ${addrBadges ? `<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:3px;align-items:center">${addrBadges}</div>` : ''}
           ${c.mobile ? `<div class="tiny muted mono" style="margin-top:2px">📞 ${esc(c.mobile)}</div>` : ''}
         </td>
-        <td class="tiny">${c.client_type === 'INDIVIDUAL' ? 'فرد' : 'شركة'}</td>
-        <td class="mono tiny">${esc(c.tax_number || '—')}</td>
-        <td class="text-end num">${amount(c.total_invoiced)}</td>
-        <td class="text-end num">${amount(c.total_paid)}</td>
-        <td class="text-end num" style="font-weight:700;color:${c.balance > 0.004 ? 'var(--danger)' : c.balance < -0.004 ? 'var(--success)' : 'inherit'}">${amount(c.balance)}</td>
+        <td class="tiny text-center nowrap">
+          <span class="badge ${c.client_type === 'INDIVIDUAL' ? 'amber' : 'blue'}" style="font-size:11px;white-space:nowrap">
+            ${c.client_type === 'INDIVIDUAL' ? 'فرد' : 'شركة'}
+          </span>
+        </td>
+        <td class="mono tiny nowrap" style="white-space:nowrap">${esc(c.tax_number || '—')}</td>
+        <td class="text-end num nowrap" style="white-space:nowrap">${amount(c.total_invoiced)}</td>
+        <td class="text-end num nowrap" style="white-space:nowrap">${amount(c.total_paid)}</td>
+        <td class="text-end num nowrap" style="font-weight:700;white-space:nowrap;color:${c.balance > 0.004 ? 'var(--danger)' : c.balance < -0.004 ? 'var(--success)' : 'inherit'}">${amount(c.balance)}</td>
         <td class="actions">
-          <a class="btn btn-sm" href="#/statement/${esc(c.id)}" title="كشف الحساب">${icon.statement({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}كشف</a>
-          <a class="btn btn-sm" href="#/invoice?client_id=${esc(c.id)}" title="فاتورة جديدة">${icon.plus({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}فاتورة</a>
-          ${can('clients.write') ? `<button class="btn btn-sm" data-act="edit" data-id="${esc(c.id)}" type="button" title="تعديل">${icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}تعديل</button>` : ''}
-          ${can('clients.write') ? `<button class="btn btn-sm btn-danger" data-act="del" data-id="${esc(c.id)}" type="button" title="حذف">${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}حذف</button>` : ''}
+          <div class="row-actions-group">
+            <a class="btn btn-sm btn-ghost" href="#/statement/${esc(c.id)}" title="كشف الحساب" style="padding:.28rem .55rem">
+              ${icon.statement({ size: 13, style: 'vertical-align:middle;margin-left:3px' })}<span>كشف</span>
+            </a>
+            <a class="btn btn-sm btn-icon" href="#/invoice?client_id=${esc(c.id)}" title="فاتورة جديدة">
+              ${icon.plus({ size: 13, style: 'vertical-align:middle' })}
+            </a>
+            ${can('clients.write') ? `
+              <button class="btn btn-sm btn-icon" data-act="edit" data-id="${esc(c.id)}" type="button" title="تعديل العميل">
+                ${icon.edit({ size: 13, style: 'vertical-align:middle' })}
+              </button>
+              <button class="btn btn-sm btn-icon btn-danger" data-act="del" data-id="${esc(c.id)}" type="button" title="حذف العميل">
+                ${icon.trash({ size: 13, style: 'vertical-align:middle' })}
+              </button>
+            ` : ''}
+          </div>
         </td>
       </tr>`;
     }).join('');
@@ -369,12 +387,16 @@ export async function render(view) {
 
       <div class="card pad0 mt">
         <div class="table-wrap">
-          <table class="tbl">
+          <table class="tbl clients-tbl">
             <thead><tr>
-              <th>الكود</th><th>العميل</th><th>النوع</th><th>الرقم الضريبي</th>
-              <th class="text-end">المفوتر <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
-              <th class="text-end">المسدد <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
-              <th class="text-end">الرصيد <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th></th>
+              <th class="nowrap" style="min-width:95px;white-space:nowrap">الكود</th>
+              <th style="min-width:200px">العميل</th>
+              <th class="nowrap text-center" style="min-width:75px;white-space:nowrap">النوع</th>
+              <th class="nowrap" style="min-width:130px;white-space:nowrap">الرقم الضريبي</th>
+              <th class="text-end nowrap" style="min-width:110px;white-space:nowrap">المفوتر <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
+              <th class="text-end nowrap" style="min-width:110px;white-space:nowrap">المسدد <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
+              <th class="text-end nowrap" style="min-width:120px;white-space:nowrap">الرصيد <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
+              <th class="text-center nowrap" style="min-width:145px;white-space:nowrap">الإجراءات</th>
             </tr></thead>
             <tbody id="rows">${raw(rowsHtml())}</tbody>
           </table>

@@ -1555,6 +1555,15 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		return nil, fmt.Errorf("failed to update ledger: %w", err)
 	}
 
+	if inv.BatchID != nil && *inv.BatchID != "" {
+		_, _ = tx.Exec(`
+			UPDATE invoice_batches 
+			SET total_amount = (SELECT COALESCE(SUM(grand_total), 0) FROM invoices WHERE batch_id = ?),
+			    invoice_count = (SELECT COUNT(*) FROM invoices WHERE batch_id = ?)
+			WHERE id = ?
+		`, *inv.BatchID, *inv.BatchID, *inv.BatchID)
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}

@@ -811,11 +811,11 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
 
     const footerHtml = isLastPage ? `
     ${isCustomTemplate ? (printCfg.footer_text ? `
-    <footer class="foot" style="border-top:1px solid #cbd5e1;margin-top:auto;padding-top:2.5mm;text-align:center;color:#64748b;font-size:7.5pt">
+    <footer class="foot" style="border-top:1px solid #cbd5e1;margin-top:2.5mm;padding-top:2.5mm;text-align:center;color:#64748b;font-size:7.5pt">
       <div>${esc(printCfg.footer_text)}</div>
       <div style="text-align:end; font-weight:700; margin-top:2px;">OBS | ${totalPages} - ${totalPages}</div>
-    </footer>` : `<footer class="foot" style="margin-top:auto;"><div style="display:flex;justify-content:space-between;align-items:center;color:#64748b;font-size:7.5pt;"><span>${esc(sellerAddr)}</span><span class="mono" style="font-weight:700;">OBS | ${totalPages} - ${totalPages}</span></div></footer>`) : `
-    <footer class="foot" style="margin-top:auto;">
+    </footer>` : `<footer class="foot" style="margin-top:2.5mm;"><div style="display:flex;justify-content:space-between;align-items:center;color:#64748b;font-size:7.5pt;"><span>${esc(sellerAddr)}</span><span class="mono" style="font-weight:700;">OBS | ${totalPages} - ${totalPages}</span></div></footer>`) : `
+    <footer class="foot" style="margin-top:2.5mm;">
       <div>${esc(issuer.footer_notes || 'شكراً لتعاملكم معنا')}</div>
       ${showSignatures ? `<div class="sig" style="display:flex;justify-content:space-between;align-items:center;margin:3mm 0;">
         <div>توقيع المستلم: ................................</div>
@@ -858,13 +858,17 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
       body { background: #47556914; padding: 16px 0; }
       .page { margin: 0 auto 16px auto; box-shadow: 0 4px 18px rgba(0,0,0,0.12); border-radius: 4px; }
     }
-    @page { size: A4 portrait; margin: 6mm 8mm; }
+    @page { size: A4 portrait; margin: 4mm 5mm; }
     @media print {
       body { background: #fff; padding: 0; }
-      .page { margin: 0 !important; box-shadow: none !important; border-radius: 0 !important; page-break-after: always !important; break-after: page !important; min-height: 268mm !important; }
+      .page { margin: 0 !important; box-shadow: none !important; border-radius: 0 !important; page-break-after: always !important; break-after: page !important; min-height: 280mm !important; height: auto !important; padding: 4mm 6mm !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
       .page:last-child { page-break-after: auto !important; break-after: auto !important; }
+      .parties { margin: 2mm 0 !important; }
+      .bottom { margin-top: auto !important; break-inside: avoid !important; page-break-inside: avoid !important; }
+      .foot { margin-top: 2.5mm !important; padding-top: 1.5mm !important; }
+      .foot.multipage-foot { margin-top: auto !important; }
     }
-    .page { width: 210mm; min-height: 268mm; padding: 6mm 10mm; position: relative; box-sizing: border-box; background: ${printCfg.light_color && printCfg.light_color !== '#ffffff' ? printCfg.light_color : '#ffffff'}; ${isCustomTemplate ? `border: 1.5px solid ${brandColor}88;` : ''} display: flex; flex-direction: column; justify-content: space-between; }
+    .page { width: 210mm; min-height: 280mm; padding: 5mm 8mm; position: relative; box-sizing: border-box; background: ${printCfg.light_color && printCfg.light_color !== '#ffffff' ? printCfg.light_color : '#ffffff'}; ${isCustomTemplate ? `border: 1.5px solid ${brandColor}88;` : ''} display: flex; flex-direction: column; justify-content: space-between; }
     .watermark { position: absolute; inset: 0; display: grid; place-items: center; font-size: 90pt; color: rgba(220,38,38,.13); font-weight: 800; transform: rotate(-20deg); pointer-events: none; z-index: 0; }
     .head { display: flex; gap: 8mm; justify-content: space-between; border-bottom: 2px solid ${brandColor}; padding-bottom: 4mm; }
     .head.head-center { align-items: center; }
@@ -885,32 +889,33 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
     table.meta { font-size: 8pt; border-collapse: collapse; width: 100%; }
     table.meta td { border: 1px solid #cbd5e1; padding: 1mm 2mm; }
     table.meta td:first-child { background: #f1f5f9; color: #475569; white-space: nowrap; }
-    .parties { display: flex; gap: 4mm; margin: 4mm 0; }
+    .parties { display: flex; gap: 4mm; margin: 3mm 0; }
     .party { flex: 1; border: 1px solid #cbd5e1; border-radius: 2mm; overflow: hidden; }
-    .party-h { background: ${isLightColor(brandLight) ? brandLight : '#f8fafc'}; padding: 1.4mm 2mm; font-size: 8.5pt; font-weight: 800; border-bottom: 1.5px solid ${brandColor}44; color: ${brandDark}; }
-    table.kv { font-size: 8.4pt; border-collapse: collapse; width: 100%; }
-    table.kv td { padding: 1mm 2mm; border-bottom: 1px solid #eef2f7; }
+    .party-h { background: ${isLightColor(brandLight) ? brandLight : '#f8fafc'}; padding: 1.2mm 2mm; font-size: 8.3pt; font-weight: 800; border-bottom: 1.5px solid ${brandColor}44; color: ${brandDark}; }
+    table.kv { font-size: 8.2pt; border-collapse: collapse; width: 100%; }
+    table.kv td { padding: 0.8mm 2mm; border-bottom: 1px solid #eef2f7; }
     table.kv td:first-child { color: #64748b; width: 26mm; }
-    table.items { font-size: 8.4pt; margin-top: 2mm; border-collapse: collapse; width: 100%; }
+    table.items { font-size: 8.2pt; margin-top: 2mm; border-collapse: collapse; width: 100%; }
     table.items thead tr { break-inside: avoid; page-break-inside: avoid; }
-    table.items th { background: ${headerFill}; color: ${thTextColor}; padding: 1.8mm 1.2mm; font-size: 8pt; font-weight: 800; border: 1px solid ${thBorderColor}; white-space: pre-line; line-height: 1.25; }
-    table.items td { border: 1px solid #cbd5e1; padding: 1.3mm 1mm; vertical-align: top; }
+    table.items th { background: ${headerFill}; color: ${thTextColor}; padding: 1.5mm 1mm; font-size: 7.8pt; font-weight: 800; border: 1px solid ${thBorderColor}; white-space: pre-line; line-height: 1.25; }
+    table.items td { border: 1px solid #cbd5e1; padding: 1.1mm 1mm; vertical-align: top; }
     table.items tr { break-inside: avoid; page-break-inside: avoid; }
     table.items.striped tbody tr:nth-child(even) { background: #f8fafc; }
     .c { text-align: center; } .e { text-align: end; } .s { text-align: start; }
-    .bottom { display: flex; gap: 4mm; margin-top: 4mm; align-items: flex-start; break-inside: avoid; page-break-inside: avoid; }
+    .bottom { display: flex; gap: 4mm; margin-top: auto; align-items: flex-start; break-inside: avoid; page-break-inside: avoid; }
     .left-col { flex: 1; }
     .right-col { width: 84mm; }
     .qr { text-align: center; }
-    .qr svg { width: 30mm; height: 30mm; }
-    .notes { margin-top: 3mm; }
-    .note { font-size: 8pt; border-inline-start: 2px solid ${brandColor}; padding-inline-start: 2mm; margin-bottom: 1.5mm; }
-    table.totals { font-size: 9pt; border-collapse: collapse; width: 100%; }
-    table.totals td { padding: 1.3mm 2mm; border-bottom: 1px solid #e2e8f0; }
-    table.totals tr.grand td { background: ${brandColor}; color: ${isLightColor(brandColor) ? '#1e293b' : '#ffffff'}; font-size: 11pt; font-weight: 800; border: 0; }
+    .qr svg { width: 26mm; height: 26mm; }
+    .notes { margin-top: 2mm; }
+    .note { font-size: 7.8pt; border-inline-start: 2px solid ${brandColor}; padding-inline-start: 2mm; margin-bottom: 1.2mm; }
+    table.totals { font-size: 8.5pt; border-collapse: collapse; width: 100%; }
+    table.totals td { padding: 1.1mm 2mm; border-bottom: 1px solid #e2e8f0; }
+    table.totals tr.grand td { background: ${brandColor}; color: ${isLightColor(brandColor) ? '#1e293b' : '#ffffff'}; font-size: 10pt; font-weight: 800; border: 0; }
     table.totals tr.rem td { font-weight: 700; color: #b91c1c; }
-    .words { margin-top: 2mm; font-size: 8.4pt; background: #f1f5f9; padding: 1.6mm 2mm; border-radius: 1.5mm; }
-    .foot { margin-top: 5mm; border-top: 1px solid #cbd5e1; padding-top: 2.5mm; font-size: 8.4pt; }
+    .words { margin-top: 1.5mm; font-size: 8pt; background: #f1f5f9; padding: 1.4mm 2mm; border-radius: 1.5mm; }
+    .foot { margin-top: 2.5mm; border-top: 1px solid #cbd5e1; padding-top: 2mm; font-size: 8pt; }
+    .foot.multipage-foot { margin-top: auto; }
     .cur-badge { display: inline-flex; align-items: center; justify-content: center; padding: 1.5px 6px; border-radius: 3.5px; background: #f1f5f9; color: #334155; font-size: 7.5pt; font-weight: 700; border: 1px solid #e2e8f0; vertical-align: middle; line-height: 1; }
     .cur-badge svg { vertical-align: middle; }
     .cur-sym { display: inline-flex; align-items: center; justify-content: center; font-size: 7.5pt; color: #64748b; margin-inline-end: 4px; font-weight: 600; vertical-align: middle; }

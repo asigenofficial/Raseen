@@ -2,6 +2,7 @@ package services
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -832,6 +833,224 @@ func (s *BulkService) CommitBatch(req CommitBatchRequest, username string) (map[
 	}
 	result:=map[string]any{"batch_id":batchID,"count":len(ids),"total_amount":models.ToMajor(total),"vouchers_count":vouchers,"invoice_ids":ids}
 	if _,err=tx.Exec("INSERT INTO batch_requests (request_key,request_hash,result_json) VALUES (?,?,?)",key,hash,mustJSON(result));err!=nil{return nil,err}
-	if err=db.AuditTx(tx,username,"BULK_COMMIT","batch",batchID,req.IssuerID,result,"");err!=nil{return nil,err}
-	if err=tx.Commit();err!=nil{return nil,err};return result,nil
+	if err = db.AuditTx(tx, username, "BULK_COMMIT", "batch", batchID, req.IssuerID, result, ""); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
+
+func (s *BulkService) DeleteBatch(batchID, actor, ip string) error {
+	if batchID == "" {
+		return errors.New("معرف الدفعة مطلوب")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var issuerID string
+	var invCount int
+	err = tx.QueryRow("SELECT issuer_id, invoice_count FROM invoice_batches WHERE id = ?", batchID).Scan(&issuerID, &invCount)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("الدفعة غير موجودة")
+		}
+		return err
+	}
+
+	rows, err := tx.Query("SELECT id FROM invoices WHERE batch_id = ?", batchID)
+	if err != nil {
+		return err
+	}
+	var invIDs []string
+	for rows.Next() {
+		var id string
+		if errScan := rows.Scan(&id); errScan == nil {
+			invIDs = append(invIDs, id)
+		}
+	}
+	rows.Close()
+
+	for _, id := range invIDs {
+		vRows, errV := tx.Query("SELECT voucher_id FROM voucher_allocations WHERE invoice_id = ?", id)
+		if errV == nil {
+			var vIDs []string
+			for vRows.Next() {
+				var vid string
+				if errVScan := vRows.Scan(&vid); errVScan == nil {
+					vIDs = append(vIDs, vid)
+				}
+			}
+			vRows.Close()
+
+			for _, vid := range vIDs {
+				_, _ = tx.Exec("DELETE FROM voucher_allocations WHERE voucher_id = ?", vid)
+				_, _ = tx.Exec("DELETE FROM client_ledger WHERE doc_id = ? AND doc_type IN ('RECEIPT', 'PAYMENT')", vid)
+				_, _ = tx.Exec("DELETE FROM receipt_vouchers WHERE id = ?", vid)
+			}
+		}
+
+		_, _ = tx.Exec("DELETE FROM invoice_items WHERE invoice_id = ?", id)
+		_, _ = tx.Exec("DELETE FROM invoice_documents WHERE invoice_id = ?", id)
+		_, _ = tx.Exec("DELETE FROM client_ledger WHERE doc_id = ? AND doc_type IN ('INVOICE', 'INVOICE_CANCEL')", id)
+	}
+
+	if _, err := tx.Exec("DELETE FROM invoices WHERE batch_id = ?", batchID); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec("DELETE FROM invoice_batches WHERE id = ?", batchID); err != nil {
+		return err
+	}
+
+	_, _ = tx.Exec("DELETE FROM batch_requests WHERE result_json LIKE ?", "%"+batchID+"%")
+
+	now := db.NowIso()
+	_, _ = tx.Exec("UPDATE bulk_drafts SET status = 'DRAFT', batch_id = NULL, committed_ids = NULL, updated_at = ? WHERE batch_id = ?", now, batchID)
+
+	if err := db.AuditTx(tx, actor, "BULK_BATCH_DELETE", "batch", batchID, issuerID, map[string]any{
+		"deleted_invoices_count": len(invIDs),
+	}, ip); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *BulkService) GenerateBatchVouchers(batchID string, paymentType, voucherDate, actor, ip string) (map[string]any, error) {
+	if batchID == "" {
+		return nil, errors.New("معرف الدفعة مطلوب")
+	}
+	if paymentType == "" {
+		paymentType = "TRANSFER"
+	}
+	if voucherDate == "" {
+		voucherDate = time.Now().Format("2006-01-02")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var issuerID, clientID string
+	err = tx.QueryRow("SELECT issuer_id, client_id FROM invoice_batches WHERE id = ?", batchID).Scan(&issuerID, &clientID)
+	if err != nil {
+		return nil, errors.New("الدفعة غير موجودة")
+	}
+
+	rows, err := tx.Query(`
+		SELECT id, invoice_number, remaining_amount, grand_total, issue_date
+		FROM invoices
+		WHERE batch_id = ? AND status != 'CANCELLED' AND remaining_amount > 0
+		ORDER BY sequence_no ASC, invoice_number ASC
+	`, batchID)
+	if err != nil {
+		return nil, err
+	}
+
+	type invRow struct {
+		id        string
+		invNo     string
+		remaining int64
+		grand     int64
+		date      string
+	}
+	var invoices []invRow
+	for rows.Next() {
+		var r invRow
+		if errScan := rows.Scan(&r.id, &r.invNo, &r.remaining, &r.grand, &r.date); errScan == nil {
+			invoices = append(invoices, r)
+		}
+	}
+	rows.Close()
+
+	if len(invoices) == 0 {
+		return nil, errors.New("لا توجد فواتير متبقية بدون سداد في هذه الدفعة")
+	}
+
+	nowIso := db.NowIso()
+	var totalVoucherAmount int64
+	vouchersCount := 0
+
+	for _, inv := range invoices {
+		voucherNo, _, errV := s.issuers.NextVoucherNumber(tx, issuerID)
+		if errV != nil {
+			return nil, errV
+		}
+		voucherID := crypto.UUID()
+		allocID := crypto.UUID()
+		ledgerID := crypto.UUID()
+		amount := inv.remaining
+
+		vDate := voucherDate
+		if vDate == "" {
+			vDate = inv.date
+		}
+
+		notes := fmt.Sprintf("سند قبض للدفعة — سداد فاتورة رقم %s", inv.invNo)
+
+		_, err = tx.Exec(`
+			INSERT INTO receipt_vouchers (
+				id, voucher_number, issuer_id, client_id, voucher_date,
+				total_amount, allocated_total, payment_type, reference_no, notes,
+				status, created_by, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
+		`, voucherID, voucherNo, issuerID, clientID, vDate, amount, amount, paymentType, inv.invNo, notes, actor, nowIso, nowIso)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = tx.Exec(`
+			INSERT INTO voucher_allocations (id, voucher_id, invoice_id, allocated_amount, created_at)
+			VALUES (?, ?, ?, ?, ?)
+		`, allocID, voucherID, inv.id, amount, nowIso)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = tx.Exec(`
+			UPDATE invoices
+			SET paid_amount = grand_total, remaining_amount = 0, status = 'PAID', updated_at = ?
+			WHERE id = ?
+		`, nowIso, inv.id)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = tx.Exec(`
+			INSERT INTO client_ledger (
+				id, client_id, issuer_id, doc_type, doc_id, doc_number,
+				transaction_date, debit, credit, description, created_at
+			) VALUES (?, ?, ?, 'RECEIPT', ?, ?, ?, 0, ?, ?, ?)
+		`, ledgerID, clientID, issuerID, voucherID, voucherNo, vDate, amount, notes, nowIso)
+		if err != nil {
+			return nil, err
+		}
+
+		totalVoucherAmount += amount
+		vouchersCount++
+	}
+
+	res := map[string]any{
+		"ok":           true,
+		"count":        vouchersCount,
+		"total_amount": models.ToMajor(totalVoucherAmount),
+		"batch_id":     batchID,
+	}
+
+	_ = db.AuditTx(tx, actor, "BULK_BATCH_GENERATE_VOUCHERS", "batch", batchID, issuerID, res, ip)
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+

@@ -262,11 +262,11 @@ export async function render(view) {
     }
 
     return `
-      <div class="table-wrap mt">
-        <div style="background:rgba(16, 185, 129, 0.08);border:1px solid rgba(16, 185, 129, 0.3);padding:.4rem .8rem;border-radius:var(--radius-sm);margin-bottom:.5rem;display:flex;align-items:center;gap:.6rem">
-          <span style="color:#10b981;font-weight:bold;font-size:.85rem">✓ حصر التوليد اليدوي:</span>
-          <span class="tiny" style="color:var(--text)">سيقتصر توليد فواتير هذه الدفعة <b>فقط وحصراً</b> على الأصناف المحددة أدناه بالأسعار والأرقام والوحدات الموضحة.</span>
-        </div>
+      <div class="mt" style="background:rgba(16, 185, 129, 0.08);border:1px solid rgba(16, 185, 129, 0.3);padding:.4rem .8rem;border-radius:var(--radius-sm);margin-bottom:.5rem;display:flex;align-items:center;gap:.6rem">
+        <span style="color:#10b981;font-weight:bold;font-size:.85rem">✓ حصر التوليد اليدوي:</span>
+        <span class="tiny" style="color:var(--text)">سيقتصر توليد فواتير هذه الدفعة <b>فقط وحصراً</b> على الأصناف المحددة أدناه بالأسعار والأرقام والوحدات الموضحة.</span>
+      </div>
+      <div class="table-wrap bulk-table-wrap">
         <table class="tbl compact" style="background:var(--card)">
           <thead>
             <tr>
@@ -344,7 +344,7 @@ export async function render(view) {
           <button class="btn btn-sm" id="refresh-drafts" type="button">${raw(icon.refresh({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}تحديث القائمة</button>
         </div>
         <p class="muted tiny" style="margin-top:-.3rem">يمكنك فتح أي مسودة محفوظة، متابعة التعديل عليها، إصدار عينة تجريبية، أو اعتمادها.</p>
-        <div class="grid grid-3 mt">
+        <div class="grid grid-3 bulk-drafts-grid mt">
           ${state.drafts.map((d) => `
             <div class="card pad" style="border:1px solid ${d.id === state.current_draft_id ? 'var(--brand)' : 'var(--line)'};background:${d.id === state.current_draft_id ? 'rgba(6, 182, 212, 0.08)' : 'var(--card)'}">
               <div class="row align-center">
@@ -456,7 +456,7 @@ export async function render(view) {
             <span class="tiny muted">انقر «تعديل البنود» لتخصيص أصناف وأسعار أي فاتورة مباشرة أو حذفها.</span>
           </div>
 
-          <div class="invoices-list" style="display:flex;flex-direction:column;gap:.75rem;max-height:800px;overflow-y:auto;padding-right:.3rem">
+          <div class="invoices-list">
             ${p.invoices.map((inv, idx) => `
               <div class="card pad" style="border:1px solid var(--line);background:var(--card)" data-inv-card="${idx}">
                 <div class="row align-center">
@@ -501,7 +501,7 @@ export async function render(view) {
                       <button class="btn btn-sm btn-primary" data-add-item="${idx}" type="button">+ إضافة صنف</button>
                     </div>
 
-                    <div class="table-wrap">
+                    <div class="table-wrap bulk-lines-table-wrap">
                       <table class="tbl compact" style="background:transparent">
                         <thead><tr>
                           <th style="width:30px">#</th><th style="width:100px">رقم الصنف</th><th>الصنف</th><th style="width:75px">الوحدة</th>
@@ -561,69 +561,126 @@ export async function render(view) {
 
       <div class="card mt">
         <div class="card-head" style="padding:0 0 .7rem"><h3>1. الأساسيات</h3></div>
-        <div class="row mt">
-          <div class="field"><label class="req">الشركة المصدرة</label>
-            <select id="issuer_id">${raw(activeIssuers.map((i) => `<option value="${esc(i.id)}" ${i.id === state.issuer_id ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}</select></div>
-          <div class="field"><label class="req">العميل</label>
-            <select id="client_id">${raw(store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join(''))}</select></div>
-          <div class="field" style="max-width:160px"><label class="req">من تاريخ</label><input type="date" id="date_from" value="${state.date_from}" /></div>
-          <div class="field" style="max-width:160px"><label class="req">إلى تاريخ</label><input type="date" id="date_to" value="${state.date_to}" /></div>
+        
+        <!-- الصف 1: أطراف الفاتورة والمدى الزمني -->
+        <div class="form-grid-4 mt">
+          <div class="field">
+            <label class="req">الشركة المصدرة</label>
+            <select id="issuer_id">${raw(activeIssuers.map((i) => `<option value="${esc(i.id)}" ${i.id === state.issuer_id ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}</select>
+          </div>
+          <div class="field">
+            <label class="req">العميل</label>
+            <select id="client_id">${raw(store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join(''))}</select>
+          </div>
+          <div class="field">
+            <label class="req">من تاريخ</label>
+            <input type="date" id="date_from" value="${state.date_from}" />
+          </div>
+          <div class="field">
+            <label class="req">إلى تاريخ</label>
+            <input type="date" id="date_to" value="${state.date_to}" />
+          </div>
         </div>
-        <div class="row mt">
-          <div class="field" style="max-width:180px"><label>عدد الفواتير</label>
+
+        <!-- الصف 2: معايير وأرقام الدفعة والباركود -->
+        <div class="form-grid-4 mt">
+          <div class="field">
+            <label>عدد الفواتير</label>
             <input type="number" id="count" value="${state.count}" min="0" max="5000" />
-            <span class="hint">اتركه 0 ليُحدَّد آلياً من الميزانية</span></div>
-          <div class="field" style="max-width:230px"><label>الميزانية الإجمالية (${esc(cur)})</label>
-            <input type="number" id="target_total" value="${state.target_total}" min="0" step="0.01" ${raw(state.use_target ? '' : 'disabled')} />
-            <label class="check tiny mt"><input type="checkbox" id="use_target" ${raw(state.use_target ? 'checked' : '')} /> مطابقة مبلغ إجمالي محدد بدقة</label></div>
-          <div class="field" style="max-width:160px"><label>نوع الفواتير</label>
-            <select id="invoice_type">
-              <option value="STANDARD" ${raw(state.invoice_type === 'STANDARD' ? 'selected' : '')}>ضريبية</option>
-              <option value="SIMPLIFIED" ${raw(state.invoice_type === 'SIMPLIFIED' ? 'selected' : '')}>مبسطة</option>
-            </select></div>
-          <div class="field" style="min-width:270px;flex:1"><label>مرحلة باركود هيئة الزكاة (QR)</label>
-            <div class="row align-center" style="gap:1rem;margin-top:.25rem;padding:.35rem .75rem;background:rgba(255,255,255,0.03);border:1px solid var(--line);border-radius:var(--radius-sm)">
-              <label class="check" style="margin:0;cursor:pointer">
-                <input type="radio" name="bulk_zatca_phase" value="PHASE1" ${state.zatca_phase === 'PHASE1' ? 'checked' : ''} />
-                <b>المرحلة الأولى</b> <span class="muted tiny">(5 حقول)</span>
-              </label>
-              <label class="check" style="margin:0;cursor:pointer">
-                <input type="radio" name="bulk_zatca_phase" value="PHASE2" ${state.zatca_phase === 'PHASE2' ? 'checked' : ''} />
-                <b>المرحلة الثانية</b> <span class="badge teal tiny" style="margin-right:2px">مشفّر وموقّع</span>
+            <span class="hint">اتركه 0 ليُحدَّد آلياً من الميزانية</span>
+          </div>
+          <div class="field">
+            <div class="field-head-inline">
+              <label>الميزانية الإجمالية (${esc(cur)})</label>
+              <label class="check tiny" style="cursor:pointer;margin:0" title="تفعيل مطابقة إجمالي الميزانية بدقة">
+                <input type="checkbox" id="use_target" ${raw(state.use_target ? 'checked' : '')} style="width:14px;height:14px" />
+                <span style="font-size:.72rem;color:var(--brand);font-weight:600">مطابقة دقيقة</span>
               </label>
             </div>
-            <span class="hint" id="bulk-phase-hint">${state.zatca_phase === 'PHASE2' ? 'باركود مشفر وموقع رقمياً (هاش وتوقيع وسلسلة فواتير)' : 'باركود مشفر بالحقول الخمسة الأساسية'}</span>
+            <input type="number" id="target_total" value="${state.target_total}" min="0" step="0.01" ${raw(state.use_target ? '' : 'disabled')} />
+            <span class="hint">إجمالي مبالغ الفواتير المطلوبة بالريال</span>
           </div>
-          <div class="field" style="max-width:260px"><label>قالب الفاتورة المعتمد للدفعة</label>
+          <div class="field">
+            <label>نوع الفواتير</label>
+            <select id="invoice_type">
+              <option value="STANDARD" ${raw(state.invoice_type === 'STANDARD' ? 'selected' : '')}>فاتورة ضريبية (B2B)</option>
+              <option value="SIMPLIFIED" ${raw(state.invoice_type === 'SIMPLIFIED' ? 'selected' : '')}>فاتورة مبسطة (B2C)</option>
+            </select>
+            <span class="hint">تحديد نوع المعاملة الضريبية</span>
+          </div>
+          <div class="field">
+            <label>مرحلة باركود هيئة الزكاة (QR)</label>
+            <div class="segmented-control">
+              <label class="segmented-option ${state.zatca_phase === 'PHASE1' ? 'is-active' : ''}">
+                <input type="radio" name="bulk_zatca_phase" value="PHASE1" ${state.zatca_phase === 'PHASE1' ? 'checked' : ''} />
+                <span>المرحلة الأولى</span>
+                <span class="muted tiny">(5 حقول)</span>
+              </label>
+              <label class="segmented-option ${state.zatca_phase === 'PHASE2' ? 'is-active' : ''}">
+                <input type="radio" name="bulk_zatca_phase" value="PHASE2" ${state.zatca_phase === 'PHASE2' ? 'checked' : ''} />
+                <span>المرحلة الثانية</span>
+                <span class="badge teal tiny" style="margin-right:2px">مشفّر وموقّع</span>
+              </label>
+            </div>
+            <span class="hint" id="bulk-phase-hint">${state.zatca_phase === 'PHASE2' ? 'باركود مشفر وموقع رقمياً (هاش وتوقيع)' : 'باركود مشفر بالحقول الخمسة الأساسية'}</span>
+          </div>
+        </div>
+
+        <!-- الصف 3: القالب والتسلسل والفوارق والملاحظات -->
+        <div class="form-grid-4 mt">
+          <div class="field">
+            <label>قالب الفاتورة المعتمد للدفعة</label>
             <select id="selected_template">
               ${raw(buildTemplateOptions(state.selected_template))}
-            </select></div>
-          <div class="field" style="max-width:180px"><label>بداية تسلسل الفواتير (اختياري)</label>
+            </select>
+            <span class="hint">قالب وتصميم الطباعة والمعاينة</span>
+          </div>
+          <div class="field">
+            <label>بداية تسلسل الفواتير (اختياري)</label>
             <input type="text" id="start_invoice_number" class="mono" value="${esc(state.start_invoice_number || '')}" placeholder="مثال: INV-0101" />
-            <span class="hint">اتركه فارغاً للاستكمال التلقائي</span></div>
-          <div class="field" style="max-width:215px"><label>فوارق ترقيم الفواتير (فواصل واقعية)</label>
+            <span class="hint">اتركه فارغاً للاستكمال التلقائي</span>
+          </div>
+          <div class="field">
+            <label>فوارق ترقيم الفواتير</label>
             <select id="number_gap_range">
               <option value="2-7" ${state.number_gap_range === '2-7' ? 'selected' : ''}>فارق عشوائي (2 إلى 7 أرقام - موصى به)</option>
               <option value="3-10" ${state.number_gap_range === '3-10' ? 'selected' : ''}>فارق متوسط (3 إلى 10 أرقام)</option>
               <option value="5-15" ${state.number_gap_range === '5-15' ? 'selected' : ''}>فارق متباعد (5 إلى 15 رقماً)</option>
               <option value="1-1" ${state.number_gap_range === '1-1' ? 'selected' : ''}>متسلسل بدقة (+1 بدون فواصل)</option>
             </select>
-            <span class="hint">توليد أرقام غير متتالية كأنها لعملاء متعددين</span></div>
-          <div class="field"><label>ملاحظة عامة على كل فواتير الدفعة</label>
-            <input type="text" id="notes" value="${esc(state.notes)}" /></div>
+            <span class="hint">توليد أرقام غير متتالية كأنها لعملاء متعددين</span>
+          </div>
+          <div class="field">
+            <label>ملاحظة عامة على كل فواتير الدفعة</label>
+            <input type="text" id="notes" value="${esc(state.notes)}" placeholder="ملاحظة إضافية تظهر بالفواتير..." />
+            <span class="hint">تُدرج في تذييل كافة فواتير الدفعة</span>
+          </div>
         </div>
-        <div class="row mt" style="background:rgba(255,255,255,0.03);padding:.6rem 1rem;border-radius:var(--radius-sm);border:1px solid var(--line);align-items:center">
-          <label class="check"><input type="checkbox" id="issue_vouchers" ${raw(state.issue_vouchers ? 'checked' : '')} /> <b>إصدار سندات قبض تلقائياً مع الفواتير</b> (ترحيل وتخصيص آلي)</label>
-          <div style="width:1.5rem"></div>
-          <label class="check"><input type="checkbox" id="auto_save_draft" ${raw(state.auto_save_draft ? 'checked' : '')} /> حفظ المعاينة كمسودة تلقائياً بعد التوليد</label>
+
+        <!-- الصف 4: شريط خيارات الإجراءات الآلية والمسودات -->
+        <div class="bulk-options-bar mt">
+          <label class="check-pill">
+            <input type="checkbox" id="issue_vouchers" ${raw(state.issue_vouchers ? 'checked' : '')} />
+            <div class="check-pill-content">
+              <b>إصدار سندات قبض تلقائياً مع الفواتير</b>
+              <span class="muted tiny">ترحيل السندات وتخصيصها آلياً لكل فاتورة في حساب العميل</span>
+            </div>
+          </label>
+          <label class="check-pill">
+            <input type="checkbox" id="auto_save_draft" ${raw(state.auto_save_draft ? 'checked' : '')} />
+            <div class="check-pill-content">
+              <b>حفظ المعاينة كمسودة تلقائياً بعد التوليد</b>
+              <span class="muted tiny">إمكانية استرجاع أو معاينة أو تعديل الدفعة في أي وقت</span>
+            </div>
+          </label>
         </div>
       </div>
 
-      <div class="card">
+      <div class="card mt">
         <div class="card-head" style="padding:0 0 .7rem">
           <div>
             <h3 style="margin:0">2. الأصناف وتحديد الأسعار وتوزيع المنتجات على الفواتير</h3>
-            <p class="tiny muted" style="margin:.2rem 0 0">حدد الأصناف وأسعارها المعتمدة للدفعة وطريقة توزيعها، أو اتركها لاستخدام الكتالوج العام تلقائياً.</p>
+            <p class="tiny muted" style="margin:.25rem 0 0">حدد الأصناف وأسعارها المعتمدة للدفعة وطريقة توزيعها، أو اتركها لاستخدام الكتالوج العام تلقائياً.</p>
           </div>
           <div class="spacer"></div>
           <span class="badge ${state.custom_items.length ? 'blue' : 'gray'}" id="custom-items-count-badge">
@@ -632,43 +689,41 @@ export async function render(view) {
         </div>
 
         <!-- شريط إضافة وتحديد أسعار الأصناف للدفعة -->
-        <div class="row align-center mt-sm" style="gap:.6rem;flex-wrap:wrap;background:rgba(255,255,255,0.03);padding:.8rem;border-radius:var(--radius-sm);border:1px solid var(--line)">
-          <div class="field" style="flex:2;min-width:200px;margin:0">
-            <label class="tiny">اختر من الدليل (تعبئة سريعة)</label>
-            <select id="quick-catalog-item-select">
-              <option value="">-- اختر صنفاً من الدليل أو اكتب بياناته مباشرة --</option>
-              ${raw(store.items.map((it) => `<option value="${esc(it.id)}" data-code="${esc(it.item_code || '')}" data-price="${it.sale_price}" data-unit="${esc(it.unit || 'حبة')}" data-name="${esc(it.name_ar)}">${esc(it.item_code ? `[${it.item_code}] ` : '')}${esc(it.name_ar)} (سعر: ${money(it.sale_price)} ${esc(cur)})</option>`).join(''))}
-            </select>
+        <div class="bulk-items-bar mt">
+          <div class="bulk-items-inputs">
+            <div class="field" style="flex:2.2;min-width:210px">
+              <label class="tiny">اختر من الدليل (تعبئة سريعة)</label>
+              <select id="quick-catalog-item-select">
+                <option value="">-- اختر صنفاً من الدليل أو اكتب بياناته مباشرة --</option>
+                ${raw(store.items.map((it) => `<option value="${esc(it.id)}" data-code="${esc(it.item_code || '')}" data-price="${it.sale_price}" data-unit="${esc(it.unit || 'حبة')}" data-name="${esc(it.name_ar)}">${esc(it.item_code ? `[${it.item_code}] ` : '')}${esc(it.name_ar)} (سعر: ${money(it.sale_price)} ${esc(cur)})</option>`).join(''))}
+              </select>
+            </div>
+            <div class="field" style="flex:0.9;min-width:110px">
+              <label class="tiny">رقم الصنف</label>
+              <input type="text" id="quick-catalog-item-code" class="mono" placeholder="رقم الصنف" />
+            </div>
+            <div class="field" style="flex:2;min-width:180px">
+              <label class="tiny req">اسم الصنف أو الخدمة</label>
+              <input type="text" id="quick-catalog-item-name" placeholder="اسم الصنف بالعربية" />
+            </div>
+            <div class="field" style="flex:0.7;min-width:85px">
+              <label class="tiny">الوحدة</label>
+              <input type="text" id="quick-catalog-item-unit" placeholder="حبة" value="حبة" />
+            </div>
+            <div class="field" style="flex:1.1;min-width:115px">
+              <label class="tiny req">السعر المحدد (${esc(cur)})</label>
+              <input type="number" step="any" min="0" id="quick-catalog-item-price" placeholder="سعر الوحدة" />
+            </div>
           </div>
-          <div class="field" style="width:115px;margin:0">
-            <label class="tiny">رقم الصنف</label>
-            <input type="text" id="quick-catalog-item-code" class="mono" placeholder="رقم الصنف" />
-          </div>
-          <div class="field" style="flex:2;min-width:180px;margin:0">
-            <label class="tiny req">اسم الصنف أو الخدمة</label>
-            <input type="text" id="quick-catalog-item-name" placeholder="اسم الصنف بالعربية" />
-          </div>
-          <div class="field" style="width:90px;margin:0">
-            <label class="tiny">الوحدة</label>
-            <input type="text" id="quick-catalog-item-unit" placeholder="حبة" value="حبة" />
-          </div>
-          <div class="field" style="width:120px;margin:0">
-            <label class="tiny req">السعر المحدد (${esc(cur)})</label>
-            <input type="number" step="any" min="0" id="quick-catalog-item-price" placeholder="سعر الوحدة" />
-          </div>
-          <div style="align-self:flex-end">
-            <button class="btn btn-primary" id="btn-add-item-to-batch" type="button" style="font-weight:600;font-size:.85rem;height:38px">
-              ${raw(icon.plus({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}+ إضافة للدفعة
+          <div class="bulk-items-actions mt-sm">
+            <button class="btn btn-primary" id="btn-add-item-to-batch" type="button" style="height:38px">
+              ${raw(icon.plus({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}إضافة للدفعة
             </button>
-          </div>
-          <div style="align-self:flex-end">
-            <button class="btn" id="btn-add-custom-adhoc" type="button" style="font-size:.85rem;height:38px" title="إضافة صنف مخصص حر مباشرة للدفعة">
-              ${raw(icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}+ صنف مخصص حر
+            <button class="btn" id="btn-add-custom-adhoc" type="button" style="height:38px" title="إضافة صنف مخصص حر مباشرة للدفعة">
+              ${raw(icon.edit({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}صنف مخصص حر
             </button>
-          </div>
-          <div style="align-self:flex-end">
-            <button class="btn" id="btn-import-all-catalog" type="button" style="font-size:.85rem;height:38px">
-              ${raw(icon.package({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}إدراج كل الأصناف (${store.items.length})
+            <button class="btn" id="btn-import-all-catalog" type="button" style="height:38px">
+              ${raw(icon.package({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}إدراج كل الأصناف (${store.items.length})
             </button>
           </div>
         </div>
@@ -694,59 +749,106 @@ export async function render(view) {
         </div>
 
         <!-- خيارات طريقة توزيع المنتجات على الفواتير -->
-        <div class="row mt align-center" style="background:rgba(255,255,255,0.02);padding:.7rem 1rem;border-radius:var(--radius-sm);border:1px solid var(--line);gap:1.5rem;flex-wrap:wrap">
-          <div>
-            <b>طريقة توزيع المنتجات على الفواتير:</b>
-          </div>
-          <label class="check" style="margin:0;cursor:pointer">
+        <div class="distribution-cards mt">
+          <label class="distribution-card">
             <input type="radio" name="distribution_mode" value="SEQUENTIAL" ${state.distribution_mode === 'SEQUENTIAL' ? 'checked' : ''} />
-            <b>توزيع متسلسل</b> (إدراج الأصناف في الفواتير بنفس الترتيب الموضح بالجدول أعلاه)
+            <div>
+              <b>توزيع متسلسل</b>
+              <div class="muted tiny">إدراج الأصناف في الفواتير بنفس الترتيب الموضح بالجدول</div>
+            </div>
           </label>
-          <label class="check" style="margin:0;cursor:pointer">
+          <label class="distribution-card">
             <input type="radio" name="distribution_mode" value="BALANCED" ${state.distribution_mode === 'BALANCED' ? 'checked' : ''} />
-            <b>توزيع متوازن</b> (ضمان توزيع كافة الأصناف المختارة بالتساوي على الفواتير)
+            <div>
+              <b>توزيع متوازن</b>
+              <div class="muted tiny">ضمان توزيع كافة الأصناف المختارة بالتساوي على الفواتير</div>
+            </div>
           </label>
-          <label class="check" style="margin:0;cursor:pointer">
+          <label class="distribution-card">
             <input type="radio" name="distribution_mode" value="RANDOM" ${state.distribution_mode === 'RANDOM' ? 'checked' : ''} />
-            <b>توزيع عشوائي</b> (اختيار عشوائي حر)
+            <div>
+              <b>توزيع عشوائي</b>
+              <div class="muted tiny">اختيار وتوليد عشوائي يحاكي المشتريات الواقعية</div>
+            </div>
           </label>
         </div>
       </div>
 
-      <div class="card">
+      <div class="card mt">
         <div class="card-head" style="padding:0 0 .7rem"><h3>3. ضوابط التنوع والواقعية</h3></div>
-        <div class="row mt">
-          <div class="field" style="max-width:150px"><label>أقل عدد أصناف</label><input type="number" id="min_items" value="${state.min_items}" min="1" max="100" /></div>
-          <div class="field" style="max-width:150px"><label>أكثر عدد أصناف</label><input type="number" id="max_items" value="${state.max_items}" min="1" max="100" /></div>
-          <div class="field" style="max-width:150px"><label>أقل كمية</label><input type="number" id="min_qty" value="${state.min_qty}" min="0.01" step="0.01" /></div>
-          <div class="field" style="max-width:150px"><label>أكثر كمية</label><input type="number" id="max_qty" value="${state.max_qty}" min="0.01" step="0.01" /></div>
-          <div class="field" style="max-width:200px"><label>تفاوت السعر ±%</label>
-            <input type="number" id="price_jitter_percent" value="${state.price_jitter_percent}" min="0" max="50" step="0.5" />
-            <span class="hint">لتفادي تكرار نفس السعر في كل فاتورة</span></div>
-        </div>
-        <div class="row mt">
-          <div class="field" style="max-width:190px"><label>أقل قيمة للفاتورة</label><input type="number" id="min_invoice_total" value="${state.min_invoice_total}" min="0" step="0.01" placeholder="بدون حد" /></div>
-          <div class="field" style="max-width:190px"><label>أعلى قيمة للفاتورة</label><input type="number" id="max_invoice_total" value="${state.max_invoice_total}" min="0" step="0.01" placeholder="بدون حد" /></div>
-          <div class="field" style="max-width:150px"><label>بداية العمل</label><input type="time" id="work_start" value="${state.work_start}" /></div>
-          <div class="field" style="max-width:150px"><label>نهاية العمل</label><input type="time" id="work_end" value="${state.work_end}" /></div>
-          <div class="field" style="max-width:210px"><label>مفتاح التوليد (Seed)</label>
-            <input type="number" id="seed" value="${state.seed}" min="0" placeholder="عشوائي" />
-            <span class="hint">نفس المفتاح يعطي نفس الدفعة بالضبط</span></div>
-        </div>
-        <div class="row mt">
+        
+        <div class="form-grid-5 mt">
           <div class="field">
-            <label>الخصومات</label>
-            <label class="check"><input type="checkbox" id="discount_enabled" ${raw(state.discount_enabled ? 'checked' : '')} /> تطبيق خصومات عشوائية على بعض البنود</label>
-            <div class="row mt" ${raw(state.discount_enabled ? '' : 'style="opacity:.5"')}>
-              <div class="field" style="max-width:120px"><label class="tiny">من %</label><input type="number" id="discount_min_percent" value="${state.discount_min_percent}" min="0" max="90" step="0.5" /></div>
-              <div class="field" style="max-width:120px"><label class="tiny">إلى %</label><input type="number" id="discount_max_percent" value="${state.discount_max_percent}" min="0" max="90" step="0.5" /></div>
-              <div class="field" style="max-width:150px"><label class="tiny">احتمال الخصم (0-1)</label><input type="number" id="discount_probability" value="${state.discount_probability}" min="0" max="1" step="0.05" /></div>
-            </div>
+            <label>أقل عدد أصناف</label>
+            <input type="number" id="min_items" value="${state.min_items}" min="1" max="100" />
+            <span class="hint">الحد الأدنى بالبند</span>
           </div>
           <div class="field">
-            <label>خيارات أخرى</label>
-            <label class="check"><input type="checkbox" id="allow_fraction_qty" ${raw(state.allow_fraction_qty ? 'checked' : '')} /> السماح بكميات كسرية (0.5 / 2.25)</label>
-            <label class="check"><input type="checkbox" id="skip_weekend" ${raw(state.skip_weekend ? 'checked' : '')} /> تجاوز الجمعة والسبت</label>
+            <label>أكثر عدد أصناف</label>
+            <input type="number" id="max_items" value="${state.max_items}" min="1" max="100" />
+            <span class="hint">الحد الأقصى بالبند</span>
+          </div>
+          <div class="field">
+            <label>أقل كمية</label>
+            <input type="number" id="min_qty" value="${state.min_qty}" min="0.01" step="0.01" />
+            <span class="hint">أدنى كمية للصنف</span>
+          </div>
+          <div class="field">
+            <label>أكثر كمية</label>
+            <input type="number" id="max_qty" value="${state.max_qty}" min="0.01" step="0.01" />
+            <span class="hint">أعلى كمية للصنف</span>
+          </div>
+          <div class="field">
+            <label>تفاوت السعر ±%</label>
+            <input type="number" id="price_jitter_percent" value="${state.price_jitter_percent}" min="0" max="50" step="0.5" />
+            <span class="hint">لتفادي تكرار السعر بدقة</span>
+          </div>
+        </div>
+
+        <div class="form-grid-5 mt">
+          <div class="field">
+            <label>أقل قيمة للفاتورة</label>
+            <input type="number" id="min_invoice_total" value="${state.min_invoice_total}" min="0" step="0.01" placeholder="بدون حد" />
+            <span class="hint">قيمة إجمالية دنيا</span>
+          </div>
+          <div class="field">
+            <label>أعلى قيمة للفاتورة</label>
+            <input type="number" id="max_invoice_total" value="${state.max_invoice_total}" min="0" step="0.01" placeholder="بدون حد" />
+            <span class="hint">قيمة إجمالية عليا</span>
+          </div>
+          <div class="field">
+            <label>بداية وقت العمل</label>
+            <input type="time" id="work_start" value="${state.work_start}" />
+            <span class="hint">توقيت صدور أول فاتورة</span>
+          </div>
+          <div class="field">
+            <label>نهاية وقت العمل</label>
+            <input type="time" id="work_end" value="${state.work_end}" />
+            <span class="hint">توقيت صدور آخر فاتورة</span>
+          </div>
+          <div class="field">
+            <label>مفتاح التوليد (Seed)</label>
+            <input type="number" id="seed" value="${state.seed}" min="0" placeholder="عشوائي" />
+            <span class="hint">نفس المفتاح يكرر نفس الأرقام</span>
+          </div>
+        </div>
+
+        <div class="form-grid-2 mt">
+          <div class="field" style="background:rgba(255,255,255,0.02);padding:.8rem 1rem;border-radius:var(--radius-sm);border:1px solid var(--line)">
+            <label>الخصومات</label>
+            <label class="check"><input type="checkbox" id="discount_enabled" ${raw(state.discount_enabled ? 'checked' : '')} /> تطبيق خصومات عشوائية على بعض البنود</label>
+            <div class="form-grid-3 mt" ${raw(state.discount_enabled ? '' : 'style="opacity:.5"')}>
+              <div class="field"><label class="tiny">من %</label><input type="number" id="discount_min_percent" value="${state.discount_min_percent}" min="0" max="90" step="0.5" /></div>
+              <div class="field"><label class="tiny">إلى %</label><input type="number" id="discount_max_percent" value="${state.discount_max_percent}" min="0" max="90" step="0.5" /></div>
+              <div class="field"><label class="tiny">احتمال الخصم (0-1)</label><input type="number" id="discount_probability" value="${state.discount_probability}" min="0" max="1" step="0.05" /></div>
+            </div>
+          </div>
+          <div class="field" style="background:rgba(255,255,255,0.02);padding:.8rem 1rem;border-radius:var(--radius-sm);border:1px solid var(--line)">
+            <label>خيارات أيام العمل والدفع</label>
+            <div class="flex" style="gap:1rem;margin-bottom:.5rem">
+              <label class="check"><input type="checkbox" id="allow_fraction_qty" ${raw(state.allow_fraction_qty ? 'checked' : '')} /> كميات كسرية (0.5 / 2.25)</label>
+              <label class="check"><input type="checkbox" id="skip_weekend" ${raw(state.skip_weekend ? 'checked' : '')} /> تجاوز عطلة نهاية الأسبوع</label>
+            </div>
             <label class="small mt" style="font-weight:600">طرق الدفع المستخدمة</label>
             <div class="chips">
               ${raw(Object.entries(PAY_LABELS).map(([k, v]) => `<span class="chip ${state.payment_methods.includes(k) ? 'on' : ''}" data-pay="${esc(k)}">${esc(v)}</span>`).join(''))}
@@ -1112,13 +1214,23 @@ export async function render(view) {
 
     // تغيير نمط التوزيع
     delegate(view, 'change', 'input[name="distribution_mode"]', (e, radio) => {
-      if (radio.checked) state.distribution_mode = radio.value;
+      if (radio.checked) {
+        state.distribution_mode = radio.value;
+        view.querySelectorAll('.distribution-card').forEach((card) => {
+          const r = card.querySelector('input[type="radio"]');
+          if (r) card.classList.toggle('is-active', r.checked);
+        });
+      }
     });
 
     // تغيير مرحلة باركود الزكاة
     delegate(view, 'change', 'input[name="bulk_zatca_phase"]', (e, radio) => {
       if (radio.checked) {
         state.zatca_phase = radio.value;
+        view.querySelectorAll('.segmented-option').forEach((opt) => {
+          const r = opt.querySelector('input[type="radio"]');
+          if (r) opt.classList.toggle('is-active', r.checked);
+        });
         const hint = $('#bulk-phase-hint', view);
         if (hint) {
           hint.textContent = state.zatca_phase === 'PHASE2'
@@ -1347,15 +1459,15 @@ export async function render(view) {
       body: html`
         <div class="bulk-preview-modal-content" style="display:flex;flex-direction:column;gap:.75rem">
           <!-- شريط التحكم العلوي: اختيار القالب والتنقل بين الفواتير والإجراءات -->
-          <div class="card" style="padding:.65rem .85rem;margin:0;background:var(--card-bg, #0f172a);border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem">
+          <div class="card" style="padding:.65rem .85rem;margin:0;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem">
             <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
-              <span style="font-weight:700;font-size:13px;color:var(--brand, #0d9488);white-space:nowrap">
+              <span style="font-weight:700;font-size:13px;color:var(--brand);white-space:nowrap">
                 قالب الفاتورة:
               </span>
-              <select id="modal-bulk-tpl-picker" class="input input-sm" style="min-width:280px;max-width:440px;font-size:13px;padding:5px 10px;border-radius:6px;border:1px solid var(--line-strong);background:var(--bg, #090d16);color:var(--text, #f8fafc);font-weight:700;cursor:pointer">
+              <select id="modal-bulk-tpl-picker" class="input input-sm" style="min-width:280px;max-width:440px;font-size:13px;padding:5px 10px;border-radius:6px;border:1px solid var(--line);background:var(--field-bg, var(--card));color:var(--text);font-weight:700;cursor:pointer">
                 ${raw(buildTemplateOptions(currentStyle))}
               </select>
-              <button class="btn btn-sm" id="modal-btn-adopt-tpl" type="button" style="font-size:12px;padding:5px 10px;background:rgba(13,148,136,0.15);border:1px solid var(--brand, #0d9488);color:var(--brand, #0d9488);font-weight:700;white-space:nowrap;border-radius:6px" title="اعتماد هذا القالب للدفعة الحالية">
+              <button class="btn btn-sm" id="modal-btn-adopt-tpl" type="button" style="font-size:12px;padding:5px 10px;background:var(--brand-light);border:1px solid var(--brand);color:var(--brand);font-weight:700;white-space:nowrap;border-radius:6px" title="اعتماد هذا القالب للدفعة الحالية">
                 ${raw(icon.checkCircle({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}اعتماد هذا القالب للدفعة
               </button>
             </div>
@@ -1456,7 +1568,7 @@ export async function render(view) {
               client_id: state.client_id,
               style: currentStyle,
               invoice: {
-                invoice_number: inv.invoice_number || `${issuer.invoice_prefix || 'INV'}-${String(currentIdx + 1).padStart(4, '0')}`,
+                invoice_number: inv.invoice_number || `${(issuer.invoice_prefix || 'INV').replace(/[-\s]+$/, '').trim() || 'INV'}-${String(currentIdx + 1).padStart(4, '0')}`,
                 issue_date: inv.issue_date,
                 issue_time: inv.issue_time || '10:00:00',
                 invoice_type: inv.invoice_type || state.invoice_type || 'STANDARD',
@@ -1492,7 +1604,7 @@ export async function render(view) {
         invoice_type: inv.invoice_type || state.invoice_type || 'STANDARD',
         zatca_phase: invPhase,
         signature_mode: invPhase === 'PHASE2' ? 'LOCAL' : 'NONE',
-        invoice_number: inv.invoice_number || `${issuer.invoice_prefix || 'INV'}-${String(currentIdx + 1).padStart(4, '0')}`,
+        invoice_number: inv.invoice_number || `${(issuer.invoice_prefix || 'INV').replace(/[-\s]+$/, '').trim() || 'INV'}-${String(currentIdx + 1).padStart(4, '0')}`,
         seller_name: issuer.name_ar,
         seller_tax_number: issuer.tax_number,
         buyer_name: client.name,
@@ -1782,7 +1894,7 @@ export async function render(view) {
         vouchersCount: res.vouchers_count || 0,
         totalAmount: res.total_amount,
         cur,
-        style: state.invoice_template || 'default',
+        style: state.selected_template || state.invoice_template || 'default',
       });
     } catch (err) {
       if (btn) {
@@ -1793,7 +1905,10 @@ export async function render(view) {
     }
   }
 
-  function showBatchSuccessModal({ batchId, count, vouchersCount, totalAmount, cur, style }) {
+  function showBatchSuccessModal({ batchId, count, vouchersCount: initialVouchersCount, totalAmount, cur, style }) {
+    let currentVouchersCount = initialVouchersCount || 0;
+    let activeStyle = style || 'default';
+
     const m = modal({
       title: 'تم اعتماد وحفظ الدفعة بنجاح',
       wide: true,
@@ -1805,52 +1920,66 @@ export async function render(view) {
               <h3 style="margin:0 0 .3rem 0;color:var(--text, #fff);font-size:1.15rem;">تم إصدار وحفظ ${num(count)} فاتورة رسمية بنجاح</h3>
               <p style="margin:0;font-size:.88rem;color:var(--muted);line-height:1.5;">
                 إجمالي الدفعة: <b class="num" style="color:var(--text);font-size:1rem;">${money(totalAmount)} ${cur}</b>
-                ${raw(vouchersCount > 0 ? ` — تم إصدار <b style="color:var(--primary, #0d9488)">${num(vouchersCount)}</b> سند قبض آلياً.` : '')}
+                <span id="modal-batch-vouchers-label">${raw(currentVouchersCount > 0 ? ` — تم إصدار <b style="color:var(--primary, #0d9488)">${num(currentVouchersCount)}</b> سند قبض آلياً.` : '')}</span>
                 <br><span class="tiny mono" style="opacity:.8">معرّف الدفعة: ${esc(batchId)}</span>
               </p>
             </div>
           </div>
 
-          <div style="font-size:.92rem;font-weight:700;color:var(--text);margin-top:.4rem;">إجراءات الطباعة والتحميل الفورية للدفعة:</div>
+          <div style="display:flex;align-items:center;gap:.7rem;background:rgba(255,255,255,0.03);padding:.7rem 1rem;border-radius:8px;border:1px solid var(--border-color, #334155);flex-wrap:wrap;">
+            <label for="modal-batch-tpl-select" style="font-size:.9rem;font-weight:700;white-space:nowrap;margin:0;color:var(--text);">قالب طباعة فواتير الدفعة:</label>
+            <select id="modal-batch-tpl-select" class="input" style="flex:1;min-width:220px;padding:.4rem .6rem;font-size:.88rem;">
+              ${raw(buildTemplateOptions(activeStyle))}
+            </select>
+          </div>
+
+          <div style="font-size:.92rem;font-weight:700;color:var(--text);margin-top:.2rem;">إجراءات الطباعة والتحميل الفورية للدفعة:</div>
 
           <div class="grid grid-3" style="gap:.8rem;">
-            <div class="card" style="padding:1rem;display:flex;flex-direction:column;justify-content:space-between;border:1px solid var(--border-color, #334155);background:var(--card-bg, #1e293b);">
+            <div class="card" style="padding:1rem;display:flex;flex-direction:column;justify-content:space-between;border:1px solid var(--line);background:var(--card);">
               <div>
                 <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
                   <span style="color:var(--primary, #0d9488);">${raw(icon.printer({ size: 20 }))}</span>
                   <b style="font-size:.95rem;">طباعة فواتير الدفعة (A4)</b>
                 </div>
-                <p class="tiny muted" style="margin:0 0 1rem 0;line-height:1.4;">إرسال كافة فواتير الدفعة (${num(count)} فاتورة) إلى أمر طباعة موحد مع فواصل صفحات نظيفة لكل فاتورة.</p>
+                <p class="tiny muted" style="margin:0 0 1rem 0;line-height:1.4;">إرسال كافة فواتير الدفعة (${num(count)} فاتورة) بالقالب المختار إلى أمر طباعة موحد نظيف.</p>
               </div>
               <button class="btn btn-primary" id="btn-modal-print-batch" type="button" style="width:100%;justify-content:center;">
                 ${raw(icon.printer({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }))} طباعة كافة الفواتير
               </button>
             </div>
 
-            <div class="card" style="padding:1rem;display:flex;flex-direction:column;justify-content:space-between;border:1px solid var(--border-color, #334155);background:var(--card-bg, #1e293b);">
+            <div class="card" style="padding:1rem;display:flex;flex-direction:column;justify-content:space-between;border:1px solid var(--line);background:var(--card);">
               <div>
                 <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
                   <span style="color:var(--primary, #0d9488);">${raw(icon.pdf({ size: 20 }))}</span>
                   <b style="font-size:.95rem;">تحميل ملف PDF مجمّع</b>
                 </div>
-                <p class="tiny muted" style="margin:0 0 1rem 0;line-height:1.4;">توليد وتنزيل ملف PDF واحد متكامل يضم جميع الفواتير مرتبة ومجهزة للأرشفة أو الإرسال.</p>
+                <p class="tiny muted" style="margin:0 0 1rem 0;line-height:1.4;">توليد وتنزيل ملف PDF واحد متكامل يضم جميع الفواتير مرتبة بالقالب المختار.</p>
               </div>
-              <a class="btn btn-outline" id="btn-modal-dl-pdf" href="/api/bulk/batches/${esc(batchId)}/pdf?style=${esc(style)}" target="_blank" download="batch_${esc(batchId.slice(0, 8))}.pdf" style="width:100%;justify-content:center;">
+              <a class="btn btn-outline" id="btn-modal-dl-pdf" href="/api/bulk/batches/${esc(batchId)}/pdf?style=${esc(activeStyle)}" target="_blank" download="batch_${esc(batchId.slice(0, 8))}.pdf" style="width:100%;justify-content:center;">
                 ${raw(icon.pdf({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }))} تنزيل PDF مجمّع
               </a>
             </div>
 
-            <div class="card" style="padding:1rem;display:flex;flex-direction:column;justify-content:space-between;border:1px solid var(--border-color, #334155);background:var(--card-bg, #1e293b);${vouchersCount > 0 ? '' : 'opacity:.5;'}">
+            <div class="card" style="padding:1rem;display:flex;flex-direction:column;justify-content:space-between;border:1px solid var(--line);background:var(--card);">
               <div>
                 <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
                   <span style="color:var(--primary, #0d9488);">${raw(icon.receipt({ size: 20 }))}</span>
-                  <b style="font-size:.95rem;">طباعة سندات القبض</b>
+                  <b style="font-size:.95rem;">سندات القبض</b>
                 </div>
-                <p class="tiny muted" style="margin:0 0 1rem 0;line-height:1.4;">${vouchersCount > 0 ? `طباعة ${num(vouchersCount)} سند قبض تم توليدها وتخصيصها للفواتير دفعة واحدة.` : 'لم يتم تحديد إصدار سندات قبض لهذه الدفعة.'}</p>
+                <p class="tiny muted" id="modal-voucher-desc" style="margin:0 0 1rem 0;line-height:1.4;">
+                  ${raw(currentVouchersCount > 0 ? `طباعة ${num(currentVouchersCount)} سند قبض تم تخصيصها للفواتير.` : 'لم يتم إصدار سندات قبض تلقائياً مع الدفعة.')}
+                </p>
               </div>
-              <button class="btn btn-outline" id="btn-modal-print-vouchers" type="button" style="width:100%;justify-content:center;" ${vouchersCount > 0 ? '' : 'disabled'}>
-                ${raw(icon.receipt({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }))} طباعة السندات (${num(vouchersCount)})
-              </button>
+              <div>
+                <button class="btn btn-primary" id="btn-modal-generate-vouchers" type="button" style="width:100%;justify-content:center;${currentVouchersCount > 0 ? 'display:none;' : ''}">
+                  ${raw(icon.receipt({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }))} إصدار سندات قبض الآن
+                </button>
+                <button class="btn btn-outline" id="btn-modal-print-vouchers" type="button" style="width:100%;justify-content:center;${currentVouchersCount > 0 ? '' : 'display:none;'}">
+                  ${raw(icon.receipt({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }))} طباعة السندات (${num(currentVouchersCount)})
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1865,13 +1994,24 @@ export async function render(view) {
       `,
     });
 
+    const tplSelect = $('#modal-batch-tpl-select', m.body);
+    if (tplSelect) {
+      tplSelect.addEventListener('change', () => {
+        activeStyle = tplSelect.value;
+        const dlBtn = $('#btn-modal-dl-pdf', m.body);
+        if (dlBtn) {
+          dlBtn.href = `/api/bulk/batches/${encodeURIComponent(batchId)}/pdf?style=${encodeURIComponent(activeStyle)}`;
+        }
+      });
+    }
+
     const printBatchBtn = $('#btn-modal-print-batch', m.body);
     if (printBatchBtn) {
       printBatchBtn.addEventListener('click', async () => {
         printBatchBtn.disabled = true;
         printBatchBtn.textContent = 'جارٍ تجهيز الطباعة…';
         try {
-          const res = await fetch(`/api/bulk/batches/${encodeURIComponent(batchId)}/render-html?style=${encodeURIComponent(style)}`);
+          const res = await fetch(`/api/bulk/batches/${encodeURIComponent(batchId)}/render-html?style=${encodeURIComponent(activeStyle)}`);
           if (!res.ok) throw new Error('تعذر جلب فواتير الدفعة');
           const docHtml = await res.text();
           printDoc(docHtml);
@@ -1884,9 +2024,44 @@ export async function render(view) {
       });
     }
 
+    const genVouchersBtn = $('#btn-modal-generate-vouchers', m.body);
     const printVouchersBtn = $('#btn-modal-print-vouchers', m.body);
-    if (printVouchersBtn && vouchersCount > 0) {
+
+    if (genVouchersBtn) {
+      genVouchersBtn.addEventListener('click', async () => {
+        const ok = await confirmDialog({
+          title: 'إصدار سندات قبض للدفعة بالكامل',
+          message: `هل ترغب في إنشاء سندات قبض لكافة فواتير الدفعة (${count} فاتورة) وتغيير حالتها إلى مدفوعة آلياً؟`,
+          okText: 'إصدار السندات الآن',
+        });
+        if (!ok) return;
+        genVouchersBtn.disabled = true;
+        genVouchersBtn.textContent = 'جارٍ إصدار السندات…';
+        try {
+          const vRes = await api.post(`/api/bulk/batches/${encodeURIComponent(batchId)}/generate-vouchers`, { payment_type: 'TRANSFER' });
+          currentVouchersCount = vRes.vouchers_count || count;
+          toastOk(`تم إصدار ${num(currentVouchersCount)} سند قبض بنجاح`);
+          genVouchersBtn.style.display = 'none';
+          if (printVouchersBtn) {
+            printVouchersBtn.style.display = 'inline-flex';
+            printVouchersBtn.disabled = false;
+            printVouchersBtn.innerHTML = `${icon.receipt({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })} طباعة السندات (${num(currentVouchersCount)})`;
+          }
+          const desc = $('#modal-voucher-desc', m.body);
+          if (desc) desc.textContent = `تم إصدار وتخصيص ${num(currentVouchersCount)} سند قبض للفواتير بنجاح.`;
+          const vLbl = $('#modal-batch-vouchers-label', m.body);
+          if (vLbl) vLbl.innerHTML = ` — تم إصدار <b style="color:var(--primary, #0d9488)">${num(currentVouchersCount)}</b> سند قبض آلياً.`;
+        } catch (err) {
+          toastErr(err.message || 'فشل إصدار السندات');
+          genVouchersBtn.disabled = false;
+          genVouchersBtn.textContent = 'إصدار سندات قبض الآن';
+        }
+      });
+    }
+
+    if (printVouchersBtn) {
       printVouchersBtn.addEventListener('click', async () => {
+        if (!currentVouchersCount) return;
         printVouchersBtn.disabled = true;
         printVouchersBtn.textContent = 'جارٍ تجهيز السندات…';
         try {
@@ -1916,7 +2091,7 @@ export async function render(view) {
           toastErr(err.message || 'فشلت طباعة سندات القبض');
         } finally {
           printVouchersBtn.disabled = false;
-          printVouchersBtn.innerHTML = `${icon.receipt({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })} طباعة السندات (${num(vouchersCount)})`;
+          printVouchersBtn.innerHTML = `${icon.receipt({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })} طباعة السندات (${num(currentVouchersCount)})`;
         }
       });
     }

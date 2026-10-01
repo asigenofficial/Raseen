@@ -253,7 +253,7 @@ export async function render(view, ctx) {
               <select id="issuer">
                 ${raw(activeIssuers.map((i) => `<option value="${esc(i.id)}" ${i.id === state.issuer_id ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}
               </select>
-              <span class="hint">الرقم التسلسلي القادم: <b class="mono" style="color:var(--primary)">${esc(iss.invoice_prefix)}-${String(iss.invoice_next_no).padStart(iss.invoice_pad, '0')}</b></span>
+              <span class="hint">الرقم التسلسلي القادم: <b class="mono" style="color:var(--primary)">${esc((iss.invoice_prefix || 'INV').replace(/[-\s]+$/, '').trim() || 'INV')}-${String(iss.invoice_next_no).padStart(iss.invoice_pad, '0')}</b></span>
             </div>
             <div class="inv-field-pair mt">
               <div class="field">
