@@ -70,6 +70,9 @@ var defaultTemplates = []TemplateCatalogItem{}
 // and registers them in the excel_templates catalog table without overwriting
 // custom template names or IDs.
 func (s *TemplateService) SyncDiskTemplates() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
 	dirs := []struct {
 		relPath  string
 		category string
@@ -503,16 +506,17 @@ func (s *TemplateService) GetFilePath(id string) (string, error) {
 
 	cleanId := strings.TrimSuffix(id, ".html")
 
-	// 1. Direct query by id, name_ar, or file_path in DB
 	var filePath string
-	err := s.db.QueryRow(`
-		SELECT file_path FROM excel_templates 
-		WHERE id = ? OR name_ar = ? OR file_path LIKE ? OR file_path LIKE ?
-		LIMIT 1
-	`, id, cleanId, "%"+id+"%", "%"+cleanId+"%").Scan(&filePath)
-	if err == nil && filePath != "" {
-		if _, errStat := os.Stat(filePath); errStat == nil {
-			return filePath, nil
+	if s.db != nil {
+		err := s.db.QueryRow(`
+			SELECT file_path FROM excel_templates 
+			WHERE id = ? OR name_ar = ? OR file_path LIKE ? OR file_path LIKE ?
+			LIMIT 1
+		`, id, cleanId, "%"+id+"%", "%"+cleanId+"%").Scan(&filePath)
+		if err == nil && filePath != "" {
+			if _, errStat := os.Stat(filePath); errStat == nil {
+				return filePath, nil
+			}
 		}
 	}
 
@@ -539,15 +543,17 @@ func (s *TemplateService) GetFilePath(id string) (string, error) {
 	}
 
 	// 3. Resync from disk and retry DB
-	_ = s.SyncDiskTemplates()
-	err = s.db.QueryRow(`
-		SELECT file_path FROM excel_templates 
-		WHERE id = ? OR name_ar = ? OR file_path LIKE ? OR file_path LIKE ?
-		LIMIT 1
-	`, id, cleanId, "%"+id+"%", "%"+cleanId+"%").Scan(&filePath)
-	if err == nil && filePath != "" {
-		if _, errStat := os.Stat(filePath); errStat == nil {
-			return filePath, nil
+	if s.db != nil {
+		_ = s.SyncDiskTemplates()
+		err := s.db.QueryRow(`
+			SELECT file_path FROM excel_templates 
+			WHERE id = ? OR name_ar = ? OR file_path LIKE ? OR file_path LIKE ?
+			LIMIT 1
+		`, id, cleanId, "%"+id+"%", "%"+cleanId+"%").Scan(&filePath)
+		if err == nil && filePath != "" {
+			if _, errStat := os.Stat(filePath); errStat == nil {
+				return filePath, nil
+			}
 		}
 	}
 
@@ -1226,19 +1232,19 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
     background: #fff !important;
     margin: 0 !important;
     padding: 0 !important;
-    height: auto !important;
-    min-height: 0 !important;
+    height: 100% !important;
+    min-height: 100% !important;
     width: 100% !important;
     font-size: 9.5px !important;
     line-height: 1.35 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  .invoice-container, .invoice-frame, .page {
+  .invoice-container, .invoice-frame, .page, [data-invoice-page] {
     width: 100% !important;
     max-width: 100% !important;
-    min-height: 0 !important;
-    height: auto !important;
+    min-height: 285mm !important;
+    box-sizing: border-box !important;
     margin: 0 auto !important;
     padding: 3mm 5mm !important;
     display: flex !important;
@@ -1249,7 +1255,6 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
     break-after: auto !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    box-sizing: border-box !important;
     position: relative !important;
   }
   .invoice-container:after {
@@ -1260,7 +1265,7 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
     position: static !important;
     margin: 0 !important;
     padding: 0 !important;
-    flex-shrink: 1 !important;
+    flex: 0 0 auto !important;
   }
   .header, .masthead {
     padding-bottom: 4px !important;
@@ -1315,10 +1320,12 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
     font-size: 8.5px !important;
   }
   .bottom-content-wrap, .bottom {
-    margin-top: 4px !important;
-    padding-top: 2px !important;
-    display: block !important;
-    position: static !important;
+    margin-top: auto !important;
+    padding-top: 4px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-end !important;
+    flex: 1 0 auto !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
@@ -1375,10 +1382,16 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
     font-size: 8px !important;
     line-height: 1.35 !important;
   }
-  .footer-zone, footer.foot {
-    margin-top: 3px !important;
-    padding-top: 2px !important;
-    font-size: 7.5px !important;
+  .footer-zone, .footer, footer.foot, footer.footer-zone, footer.footer {
+    margin-top: auto !important;
+    padding-top: 4px !important;
+    font-size: 8px !important;
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
   .corner-art, .luxury-art {
     max-width: 45mm !important;
@@ -1817,18 +1830,19 @@ func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string
   }
 }
 @media print {
-  body { background: #fff !important; padding: 0 !important; margin: 0 !important; }
+  body { background: #fff !important; padding: 0 !important; margin: 0 !important; height: 100% !important; }
   .invoice-container, .invoice-frame, [data-invoice-page] {
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 auto !important;
     padding: 2mm 4mm !important;
-    display: block !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
     box-shadow: none !important;
     page-break-after: always !important;
     break-after: page !important;
-    min-height: 0 !important;
-    height: auto !important;
+    min-height: 285mm !important;
     box-sizing: border-box !important;
     position: relative !important;
   }
@@ -1839,11 +1853,24 @@ func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string
   .invoice-container:after {
     display: none !important;
   }
-  .bottom-content-wrap {
-    margin-top: 8px !important;
-    padding-top: 0 !important;
-    display: block !important;
-    position: static !important;
+  .bottom-content-wrap, .bottom {
+    margin-top: auto !important;
+    padding-top: 4px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-end !important;
+    flex: 1 0 auto !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  .footer-zone, .footer, footer.foot, footer.footer-zone, footer.footer {
+    margin-top: auto !important;
+    padding-top: 4px !important;
+    font-size: 7.5px !important;
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }

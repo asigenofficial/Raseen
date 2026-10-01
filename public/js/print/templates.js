@@ -861,11 +861,11 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
     @page { size: A4 portrait; margin: 4mm 5mm; }
     @media print {
       body { background: #fff; padding: 0; }
-      .page { margin: 0 !important; box-shadow: none !important; border-radius: 0 !important; page-break-after: always !important; break-after: page !important; min-height: 280mm !important; height: auto !important; padding: 4mm 6mm !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
+      .page { margin: 0 !important; box-shadow: none !important; border-radius: 0 !important; page-break-after: always !important; break-after: page !important; min-height: 285mm !important; height: auto !important; padding: 4mm 6mm !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
       .page:last-child { page-break-after: auto !important; break-after: auto !important; }
       .parties { margin: 2mm 0 !important; }
       .bottom { margin-top: auto !important; break-inside: avoid !important; page-break-inside: avoid !important; }
-      .foot { margin-top: 2.5mm !important; padding-top: 1.5mm !important; }
+      .foot { margin-top: auto !important; padding-top: 2.5mm !important; }
       .foot.multipage-foot { margin-top: auto !important; }
     }
     .page { width: 210mm; min-height: 280mm; padding: 5mm 8mm; position: relative; box-sizing: border-box; background: ${printCfg.light_color && printCfg.light_color !== '#ffffff' ? printCfg.light_color : '#ffffff'}; ${isCustomTemplate ? `border: 1.5px solid ${brandColor}88;` : ''} display: flex; flex-direction: column; justify-content: space-between; }
