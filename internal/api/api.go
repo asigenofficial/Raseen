@@ -37,6 +37,7 @@ type Server struct {
 	reports   *services.ReportService
 	bulk      *services.BulkService
 	templates *services.TemplateService
+	sync      *services.SyncHub
 	masterKey []byte
 	publicFS  fs.FS
 }
@@ -56,6 +57,7 @@ func NewServer(
 	reportSvc := services.NewReportService(database)
 	bulkSvc := services.NewBulkService(database, invoiceSvc, voucherSvc, issuerSvc, clientSvc, itemSvc)
 	templateSvc := services.NewTemplateService(database, cfg.DataDir)
+	syncSvc := services.NewSyncHub(database)
 
 	return &Server{
 		cfg:       cfg,
@@ -69,6 +71,7 @@ func NewServer(
 		reports:   reportSvc,
 		bulk:      bulkSvc,
 		templates: templateSvc,
+		sync:      syncSvc,
 		masterKey: masterKey,
 		publicFS:  publicFS,
 	}
@@ -94,15 +97,29 @@ func (s *Server) err(w http.ResponseWriter, status int, msg string) {
 	})
 }
 
+func (s *Server) getSessionToken(r *http.Request) string {
+	if c, err := r.Cookie("zs_session"); err == nil && c.Value != "" {
+		return c.Value
+	}
+	authHeader := r.Header.Get("Authorization")
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		return strings.TrimPrefix(authHeader, "Bearer ")
+	}
+	if q := r.URL.Query().Get("token"); q != "" {
+		return q
+	}
+	return ""
+}
+
 func (s *Server) getSessionUser(r *http.Request) *models.User {
 	if user, ok := r.Context().Value(sessionUserKey{}).(*models.User); ok {
 		return user
 	}
-	c, err := r.Cookie("zs_session")
-	if err != nil || c.Value == "" {
+	tok := s.getSessionToken(r)
+	if tok == "" {
 		return nil
 	}
-	u, err := s.auth.ValidateSession(c.Value)
+	u, err := s.auth.ValidateSession(tok)
 	if err != nil {
 		return nil
 	}
@@ -370,6 +387,208 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
+	// ---------------------------------------------------- المزامنة اللحظية وإدارة الجلسات النشطة (SSE & Admin Sync Control)
+	// تيار الأحداث المباشر SSE للمتصفحات النشطة
+	mux.HandleFunc("GET /api/sync/events", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil {
+			s.err(w, 401, "غير مصرح - يرجى تسجيل الدخول")
+			return
+		}
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			s.err(w, 500, "التدفق المباشر غير مدعوم في هذا الخادم")
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache, no-transform")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+
+		tok := s.getSessionToken(r)
+		ip := s.clientIP(r)
+		ua := r.UserAgent()
+
+		subID, ch, cancel := s.sync.Subscribe(tok, u.ID, u.Username, u.FullName, u.Role, ip, ua)
+		defer cancel()
+
+		initData, _ := json.Marshal(map[string]any{
+			"status":       "connected",
+			"sub_id":       subID,
+			"active_count": s.sync.ActiveCount(),
+			"user":         u.Username,
+			"role":         u.Role,
+		})
+		fmt.Fprintf(w, "event: connected\ndata: %s\n\n", initData)
+		flusher.Flush()
+
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-ticker.C:
+				fmt.Fprintf(w, ": keepalive\n\n")
+				flusher.Flush()
+			case ev, ok := <-ch:
+				if !ok {
+					return
+				}
+				data, err := json.Marshal(ev)
+				if err == nil {
+					fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, data)
+					flusher.Flush()
+				}
+			}
+		}
+	})
+
+	// نبض الاتصال الدوري وتحديث الشاشة الحالية
+	mux.HandleFunc("POST /api/sync/heartbeat", func(w http.ResponseWriter, r *http.Request) {
+		tok := s.getSessionToken(r)
+		var body struct {
+			CurrentView string `json:"current_view"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+
+		count := s.sync.Heartbeat(tok, body.CurrentView)
+		s.json(w, 200, map[string]any{
+			"active_count": count,
+		})
+	})
+
+	// عرض الجلسات النشطة لجميع المستخدمين المتصلين حالياً (للأدمن)
+	mux.HandleFunc("GET /api/admin/sync/sessions", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil || u.Role != "ADMIN" {
+			s.err(w, 403, "لوحة التحكم بالجلسات والمزامنة محصورة بمدير النظام")
+			return
+		}
+		tok := s.getSessionToken(r)
+		sessions := s.sync.GetActiveSessions(tok)
+		s.json(w, 200, map[string]any{
+			"sessions":     sessions,
+			"active_count": s.sync.ActiveCount(),
+		})
+	})
+
+	// إجبار مزامنة فورية شاملة لكافة الأجهزة والمستخدمين
+	mux.HandleFunc("POST /api/admin/sync/force", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil || u.Role != "ADMIN" {
+			s.err(w, 403, "إجبار المزامنة محصور بمدير النظام")
+			return
+		}
+		s.sync.ForceGlobalSync(u.Username, u.FullName)
+		s.db.Audit(u.Username, "FORCE_SYNC", "system", "", "إجبار مزامنة فورية لكافة المتصلين", nil, s.clientIP(r))
+		s.json(w, 200, map[string]any{
+			"message": "تم إرسال أمر المزامنة الفورية لكافة الأجهزة المتصلة بنجاح",
+		})
+	})
+
+	// بث تنبيه أو رسالة فورية لكافة المستخدمين أو مستخدم محدد
+	mux.HandleFunc("POST /api/admin/sync/broadcast", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil || u.Role != "ADMIN" {
+			s.err(w, 403, "بث الرسائل الفورية محصور بمدير النظام")
+			return
+		}
+		var req struct {
+			Message    string `json:"message"`
+			Level      string `json:"level"`       // "info", "warning", "error"
+			TargetUser string `json:"target_user"` // empty = everyone
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Message) == "" {
+			s.err(w, 400, "نص الرسالة مطلوب")
+			return
+		}
+		if req.Level == "" {
+			req.Level = "info"
+		}
+
+		if req.TargetUser != "" {
+			s.sync.BroadcastToUser(req.TargetUser, services.SyncEvent{
+				Type:      "broadcast:alert",
+				Entity:    "system",
+				Action:    "alert",
+				Actor:     u.Username,
+				ActorName: u.FullName,
+				Data: map[string]any{
+					"message": req.Message,
+					"level":   req.Level,
+				},
+			})
+		} else {
+			s.sync.BroadcastAlert(req.Message, req.Level, u.Username, u.FullName)
+		}
+
+		s.db.Audit(u.Username, "BROADCAST_ALERT", "system", "", req.Message, nil, s.clientIP(r))
+		s.json(w, 200, map[string]any{
+			"message": "تم بث الرسالة بنجاح",
+		})
+	})
+
+	// إنهاء/طرد جلسة مستخدم محدد
+	mux.HandleFunc("POST /api/admin/sync/revoke", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil || u.Role != "ADMIN" {
+			s.err(w, 403, "إنهاء الجلسات محصور بمدير النظام")
+			return
+		}
+		var req struct {
+			SessionToken string `json:"session_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.SessionToken == "" {
+			s.err(w, 400, "رمز الجلسة مطلوب")
+			return
+		}
+
+		if err := s.sync.RevokeSession(req.SessionToken); err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+
+		s.db.Audit(u.Username, "REVOKE_SESSION", "session", req.SessionToken, "إنهاء جلسة مستخدم عن بُعد", nil, s.clientIP(r))
+		s.json(w, 200, map[string]any{
+			"message": "تم إنهاء الجلسة وقطع اتصال المستخدم فوراً",
+		})
+	})
+
+	// إنهاء كافة الجلسات الأخرى بضغطة واحدة (طرد الجميع باستثناء المدير الحالي)
+	mux.HandleFunc("POST /api/admin/sync/revoke-others", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil || u.Role != "ADMIN" {
+			s.err(w, 403, "إنهاء الجلسات محصور بمدير النظام")
+			return
+		}
+		tok := s.getSessionToken(r)
+		count, err := s.sync.RevokeAllOtherSessions(tok)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.db.Audit(u.Username, "REVOKE_ALL_SESSIONS", "session", "", fmt.Sprintf("إنهاء %d جلسة نشطة أخرى", count), nil, s.clientIP(r))
+		s.json(w, 200, map[string]any{
+			"revoked_count": count,
+			"message":       fmt.Sprintf("تم إنهاء %d جلسة بنجاح، أنت الآن الوحيد المتصل بالنظام", count),
+		})
+	})
+
+	// سجل أحداث المزامنة اللحظية
+	mux.HandleFunc("GET /api/admin/sync/history", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil || u.Role != "ADMIN" {
+			s.err(w, 403, "سجل المزامنة محصور بمدير النظام")
+			return
+		}
+		history := s.sync.GetHistory(50)
+		s.json(w, 200, history)
+	})
+
 	// ---------------------------------------------------- الشركات المصدرة
 	mux.HandleFunc("GET /api/issuers", func(w http.ResponseWriter, r *http.Request) {
 		activeOnly := r.URL.Query().Get("active_only") == "1" || r.URL.Query().Get("active_only") == "true"
@@ -495,6 +714,35 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
+	// تقدم تسلسل سند القبض بعدد خطوات محددة (لإنشاء فجوات في ترقيم السندات)
+	mux.HandleFunc("POST /api/issuers/{id}/advance-voucher-seq", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil {
+			s.err(w, 401, "غير مصرح")
+			return
+		}
+		id := r.PathValue("id")
+		var body struct {
+			Steps int `json:"steps"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Steps < 1 || body.Steps > 50 {
+			s.err(w, 400, "عدد الخطوات يجب أن يكون بين 1 و50")
+			return
+		}
+		var nextNo int64
+		err := s.db.QueryRow("SELECT voucher_next_no FROM issuers WHERE id = ?", id).Scan(&nextNo)
+		if err != nil {
+			s.err(w, 404, "المنشأة غير موجودة")
+			return
+		}
+		_, err = s.db.Exec("UPDATE issuers SET voucher_next_no = voucher_next_no + ? WHERE id = ?", body.Steps, id)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, map[string]any{"ok": true, "skipped": body.Steps, "next_no": nextNo + int64(body.Steps)})
+	})
+
 	mux.HandleFunc("POST /api/issuers/{id}/generate-key", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		kp, err := s.issuers.GenerateKeys(id, s.masterKey)
@@ -585,6 +833,13 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "client:updated",
+			Entity:    "client",
+			Action:    "create",
+			Actor:     u.Username,
+			ActorName: u.FullName,
+		})
 		s.json(w, 200, c)
 	})
 
@@ -604,6 +859,13 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "client:updated",
+			Entity:    "client",
+			Action:    "update",
+			Actor:     u.Username,
+			ActorName: u.FullName,
+		})
 		s.json(w, 200, c)
 	})
 
@@ -618,6 +880,13 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "client:updated",
+			Entity:    "client",
+			Action:    "delete",
+			Actor:     u.Username,
+			ActorName: u.FullName,
+		})
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
@@ -759,6 +1028,7 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	mux.HandleFunc("POST /api/items", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
 		var itm models.Item
 		if err := json.NewDecoder(r.Body).Decode(&itm); err != nil {
 			s.err(w, 400, "بيانات غير صالحة")
@@ -768,10 +1038,24 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		actor := "system"
+		actorName := "النظام"
+		if u != nil {
+			actor = u.Username
+			actorName = u.FullName
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "item:updated",
+			Entity:    "item",
+			Action:    "create",
+			Actor:     actor,
+			ActorName: actorName,
+		})
 		s.json(w, 200, itm)
 	})
 
 	mux.HandleFunc("PUT /api/items/{id}", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
 		id := r.PathValue("id")
 		var itm models.Item
 		if err := json.NewDecoder(r.Body).Decode(&itm); err != nil {
@@ -782,15 +1066,42 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		actor := "system"
+		actorName := "النظام"
+		if u != nil {
+			actor = u.Username
+			actorName = u.FullName
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "item:updated",
+			Entity:    "item",
+			Action:    "update",
+			Actor:     actor,
+			ActorName: actorName,
+		})
 		s.json(w, 200, itm)
 	})
 
 	mux.HandleFunc("DELETE /api/items/{id}", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
 		id := r.PathValue("id")
 		if err := s.items.DeleteItem(id); err != nil {
 			s.err(w, 400, err.Error())
 			return
 		}
+		actor := "system"
+		actorName := "النظام"
+		if u != nil {
+			actor = u.Username
+			actorName = u.FullName
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "item:updated",
+			Entity:    "item",
+			Action:    "delete",
+			Actor:     actor,
+			ActorName: actorName,
+		})
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
@@ -920,6 +1231,26 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		actorName := actor
+		actorRole := ""
+		if u != nil {
+			actorName = u.FullName
+			actorRole = u.Role
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "invoice:created",
+			Entity:    "invoice",
+			Action:    "create",
+			Actor:     actor,
+			ActorName: actorName,
+			ActorRole: actorRole,
+			Data: map[string]any{
+				"id":             inv.ID,
+				"invoice_number": inv.InvoiceNumber,
+				"grand_total":    inv.GrandTotalMajor,
+				"client_name":    inv.ClientName,
+			},
+		})
 		s.json(w, 200, inv)
 	})
 
@@ -940,6 +1271,22 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		actorName := actor
+		if u != nil {
+			actorName = u.FullName
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "invoice:updated",
+			Entity:    "invoice",
+			Action:    "update",
+			Actor:     actor,
+			ActorName: actorName,
+			Data: map[string]any{
+				"id":             inv.ID,
+				"invoice_number": inv.InvoiceNumber,
+				"grand_total":    inv.GrandTotalMajor,
+			},
+		})
 		s.json(w, 200, inv)
 	})
 
@@ -954,6 +1301,20 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		actorName := actor
+		if u != nil {
+			actorName = u.FullName
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "invoice:cancelled",
+			Entity:    "invoice",
+			Action:    "cancel",
+			Actor:     actor,
+			ActorName: actorName,
+			Data: map[string]any{
+				"id": id,
+			},
+		})
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
@@ -968,6 +1329,20 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		actorName := actor
+		if u != nil {
+			actorName = u.FullName
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "invoice:deleted",
+			Entity:    "invoice",
+			Action:    "delete",
+			Actor:     actor,
+			ActorName: actorName,
+			Data: map[string]any{
+				"id": id,
+			},
+		})
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
@@ -1538,6 +1913,24 @@ func (s *Server) Handler() http.Handler {
 			}
 		}
 
+		if importedCount > 0 {
+			actorName := username
+			if u != nil {
+				actorName = u.FullName
+			}
+			s.sync.Broadcast(services.SyncEvent{
+				Type:      "invoice:imported",
+				Entity:    "invoice",
+				Action:    "import",
+				Actor:     username,
+				ActorName: actorName,
+				Data: map[string]any{
+					"count": importedCount,
+					"total": importedTotal,
+				},
+			})
+		}
+
 		s.json(w, 200, map[string]any{
 			"success":        true,
 			"imported_count": importedCount,
@@ -1723,6 +2116,22 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		actorName := actor
+		if u != nil {
+			actorName = u.FullName
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "voucher:created",
+			Entity:    "voucher",
+			Action:    "create",
+			Actor:     actor,
+			ActorName: actorName,
+			Data: map[string]any{
+				"id":             v.ID,
+				"voucher_number": v.VoucherNumber,
+				"total_amount":   v.TotalAmount,
+			},
+		})
 		s.json(w, 200, v)
 	})
 
@@ -1773,6 +2182,24 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		actorName := actor
+		if u != nil {
+			actorName = u.FullName
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "voucher:created",
+			Entity:    "voucher",
+			Action:    "create",
+			Actor:     actor,
+			ActorName: actorName,
+			Data: map[string]any{
+				"id":             v.ID,
+				"voucher_number": v.VoucherNumber,
+				"total_amount":   v.TotalAmount,
+				"invoice_id":     inv.ID,
+				"invoice_number": inv.InvoiceNumber,
+			},
+		})
 		s.json(w, 200, v)
 	})
 
@@ -1787,6 +2214,20 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		actorName := actor
+		if u != nil {
+			actorName = u.FullName
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "voucher:deleted",
+			Entity:    "voucher",
+			Action:    "delete",
+			Actor:     actor,
+			ActorName: actorName,
+			Data: map[string]any{
+				"id": id,
+			},
+		})
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
@@ -1801,6 +2242,20 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		actorName := actor
+		if u != nil {
+			actorName = u.FullName
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "voucher:deleted",
+			Entity:    "voucher",
+			Action:    "delete",
+			Actor:     actor,
+			ActorName: actorName,
+			Data: map[string]any{
+				"id": id,
+			},
+		})
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
@@ -2059,6 +2514,21 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		actorName := username
+		if u != nil {
+			actorName = u.FullName
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "invoice:bulk_created",
+			Entity:    "invoice",
+			Action:    "create",
+			Actor:     username,
+			ActorName: actorName,
+			Data: map[string]any{
+				"batch_id": res["batch_id"],
+				"count":    res["success_count"],
+			},
+		})
 		s.json(w, 200, res)
 	})
 
