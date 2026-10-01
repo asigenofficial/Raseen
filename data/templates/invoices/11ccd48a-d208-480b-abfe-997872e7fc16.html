@@ -708,22 +708,46 @@
 .seller-en .company-line { direction: ltr !important; text-align: left !important; justify-content: flex-start !important; display: flex !important; align-items: center !important; }
 .seller-en .icon { margin-right: 4px !important; margin-left: 0 !important; margin-inline-start: 0 !important; margin-inline-end: 4px !important; flex-shrink: 0 !important; }
 
-/* ── تحسين ملاءمة الصفحة الواحدة A4 حتى 15 بنداً ── */
-.items-table-container { margin-bottom: 6px !important; }
-.items-main-table th { padding: 4.5px 3px !important; font-size: 9.5px !important; }
-.items-main-table td { padding: 3.5px 3px !important; font-size: 9px !important; line-height: 1.35 !important; }
-.invoice-metadata { margin-top: 6px !important; margin-bottom: 8px !important; gap: 8px !important; }
-.meta-box-content { padding: 4px 8px !important; font-size: 10px !important; }
-.meta-box-header { padding: 4px 8px !important; font-size: 10px !important; }
-.header { padding-bottom: 8px !important; gap: 10px !important; }
-.logo-shell { max-height: 60px !important; margin-bottom: 4px !important; }
-.logo-shell img, .logo-shell svg { max-height: 60px !important; }
-.qr-box { width: 95px !important; height: 95px !important; min-width: 95px !important; min-height: 95px !important; }
-.notes-pane { min-height: 75px !important; }
-.totals-row { padding: 2.5px 6px !important; font-size: 9.5px !important; }
-.totals-row.grand-total { font-size: 11px !important; padding: 4px 6px !important; }
-.summary-section { gap: 8px !important; margin-bottom: 6px !important; }
+
+/* ── تثبيت القسم السفلي دائماً في قاع الصفحة ورقة A4 ── */
+.items-table-container { margin-bottom: 4px !important; }
+.items-main-table th { padding: 4px 3px !important; font-size: 9.5px !important; }
+.items-main-table td { padding: 3px 3px !important; font-size: 9px !important; line-height: 1.3 !important; }
+.invoice-metadata { margin-top: 5px !important; margin-bottom: 6px !important; gap: 8px !important; }
+.meta-box-content { padding: 3.5px 8px !important; font-size: 9.5px !important; }
+.meta-box-header { padding: 3.5px 8px !important; font-size: 9.5px !important; }
+.header { padding-bottom: 6px !important; gap: 10px !important; }
+.logo-shell { max-height: 55px !important; margin-bottom: 3px !important; }
+.logo-shell img, .logo-shell svg { max-height: 55px !important; }
+.qr-box { width: 92px !important; height: 92px !important; min-width: 92px !important; min-height: 92px !important; }
+.notes-pane { min-height: 72px !important; }
+.totals-row { padding: 2px 6px !important; font-size: 9.5px !important; }
+.totals-row.grand-total { font-size: 11px !important; padding: 3.5px 6px !important; }
+.summary-section { gap: 8px !important; margin-bottom: 4px !important; }
 .footer-zone { padding-top: 4px !important; margin-top: 4px !important; }
+
+.invoice-container {
+  width: 210mm !important;
+  max-width: 210mm !important;
+  min-height: 295mm !important;
+  height: 295mm !important;
+  margin: 0 auto !important;
+  padding: 6mm 8mm !important;
+  box-sizing: border-box !important;
+  border: 1.5px solid var(--primary) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+.top-content-wrap {
+  flex: 0 1 auto !important;
+}
+.bottom-content-wrap {
+  margin-top: auto !important;
+  flex-shrink: 0 !important;
+}
 
 @media print {
   @page { size: A4 portrait; margin: 0; }
@@ -731,39 +755,37 @@
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
-    height: auto !important;
+    height: 297mm !important;
+    max-height: 297mm !important;
+    overflow: hidden !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
   .invoice-container {
     width: 210mm !important;
     max-width: 210mm !important;
-    min-height: 0 !important;
-    height: auto !important;
+    height: 295.5mm !important;
+    min-height: 295.5mm !important;
+    max-height: 295.5mm !important;
     margin: 0 auto !important;
     padding: 6mm 8mm !important;
     box-sizing: border-box !important;
     border: 1.5px solid var(--primary) !important;
     display: flex !important;
     flex-direction: column !important;
-    justify-content: flex-start !important;
-    page-break-inside: auto !important;
-    break-inside: auto !important;
+    justify-content: space-between !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    overflow: hidden !important;
   }
   .top-content-wrap {
-    page-break-inside: auto !important;
-    break-inside: auto !important;
+    flex: 0 1 auto !important;
   }
   .bottom-content-wrap {
-    margin-top: 6px !important;
-    padding-top: 0 !important;
+    margin-top: auto !important;
+    flex-shrink: 0 !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-  }
-  .summary-section {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-    margin-bottom: 4px !important;
   }
 }
 
