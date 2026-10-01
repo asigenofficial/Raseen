@@ -23,7 +23,8 @@ raseen.exe
 Thumbs.db
 *.zip
 
-# Tests & Agents
+# Tests, Agents & PDFs
 tests/
 .agents/
 *.pdf
+

@@ -9,7 +9,7 @@ function createSvg(content, { size = 18, cls = '', style = '', stroke = 2 } = {}
   return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" class="ico ${cls}" style="${inlineStyle}">${content}</svg>`;
 }
 
-export const icon = {
+const rawIcons = {
   // --- وثائق المحاسبة والفوترة ---
   invoice: (opt) => createSvg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" x2="16" y1="13" y2="13"/><line x1="8" x2="13" y1="17" y2="17"/>', opt),
   invoicePlus: (opt) => createSvg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" x2="12" y1="12" y2="18"/><line x1="9" x2="15" y1="15" y2="15"/>', opt),
@@ -81,6 +81,11 @@ export const icon = {
   userPlus: (opt) => createSvg('<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" x2="20" y1="8" y2="14"/><line x1="23" x2="17" y1="11" y2="11"/>', opt),
   calendar: (opt) => createSvg('<rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>', opt),
   whatsapp: (opt) => createSvg('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>', opt),
+  bell: (opt) => createSvg('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>', opt),
+  pencil: (opt) => createSvg('<path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>', opt),
+  phone: (opt) => createSvg('<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><line x1="12" x2="12.01" y1="18" y2="18"/>', opt),
+  laptop: (opt) => createSvg('<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>', opt),
+  desktop: (opt) => createSvg('<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>', opt),
   sar: (opt) => sarSvg(opt),
   riyal: (opt) => sarSvg(opt),
 
@@ -88,6 +93,14 @@ export const icon = {
   sun: (opt) => createSvg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>', opt),
   moon: (opt) => createSvg('<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>', opt),
 };
+
+// حاوية أمان عبر Proxy لضمان عدم تعطل أي واجهة في حال استدعاء أي أيقونة غير معرّفة مستقبلاً
+export const icon = new Proxy(rawIcons, {
+  get(target, prop) {
+    if (prop in target) return target[prop];
+    return (opt) => createSvg('<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>', opt);
+  },
+});
 
 /**
  * الرمز والشعار الرسمي الجديد للريال السعودي (ساما - أمر ملكي 2025 - يونيكود U+20C1)
