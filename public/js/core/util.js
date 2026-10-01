@@ -407,8 +407,33 @@ export function printDoc(docHtml) {
   const doc = frame.contentWindow.document;
 
   const printFixStyle = `<style>
+    @page { size: A4 portrait; margin: 0 !important; }
+    .invoice-container, .invoice-frame, .page, [data-invoice-page] {
+      width: 210mm !important;
+      max-width: 210mm !important;
+      min-height: 295mm !important;
+      height: 295mm !important;
+      max-height: 295.5mm !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+      box-sizing: border-box !important;
+      margin: 0 auto !important;
+      position: relative !important;
+      overflow: hidden !important;
+    }
+    .top-content-wrap {
+      flex: 0 0 auto !important;
+      display: block !important;
+    }
+    .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
+      margin-top: auto !important;
+      flex-shrink: 0 !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
     @media print {
-      @page { size: A4 portrait; margin: 0; }
+      @page { size: A4 portrait; margin: 0 !important; }
       html, body {
         height: 297mm !important;
         max-height: 297mm !important;
@@ -416,7 +441,9 @@ export function printDoc(docHtml) {
         padding: 0 !important;
         overflow: hidden !important;
       }
-      .invoice-container {
+      .invoice-container, .invoice-frame, .page, [data-invoice-page] {
+        width: 210mm !important;
+        max-width: 210mm !important;
         height: 295.5mm !important;
         min-height: 295.5mm !important;
         max-height: 295.5mm !important;
@@ -424,11 +451,13 @@ export function printDoc(docHtml) {
         flex-direction: column !important;
         justify-content: space-between !important;
         box-sizing: border-box !important;
+        margin: 0 auto !important;
+        overflow: hidden !important;
       }
       .top-content-wrap {
-        flex: 0 1 auto !important;
+        flex: 0 0 auto !important;
       }
-      .bottom-content-wrap {
+      .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
         margin-top: auto !important;
         flex-shrink: 0 !important;
         page-break-inside: avoid !important;
@@ -1383,6 +1412,71 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
   const lines = invoice?.lines || (Array.isArray(invoice?.items) ? invoice.items : []);
   if (lines.length > 15) {
     result = paginateInvoiceHtmlJS(result, { ...invoice, lines }, 15);
+  } else {
+    const singleAnchorStyle = `<style>
+      @page { size: A4 portrait; margin: 0 !important; }
+      .invoice-container, .invoice-frame, .page, [data-invoice-page] {
+        width: 210mm !important;
+        max-width: 210mm !important;
+        min-height: 295mm !important;
+        height: 295mm !important;
+        max-height: 295.5mm !important;
+        box-sizing: border-box !important;
+        margin: 0 auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        position: relative !important;
+        overflow: hidden !important;
+      }
+      .top-content-wrap {
+        flex: 0 0 auto !important;
+        display: block !important;
+      }
+      .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
+        margin-top: auto !important;
+        flex-shrink: 0 !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      @media print {
+        @page { size: A4 portrait; margin: 0 !important; }
+        html, body {
+          height: 297mm !important;
+          max-height: 297mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+          background: #fff !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        .invoice-container, .invoice-frame, .page, [data-invoice-page] {
+          width: 210mm !important;
+          max-width: 210mm !important;
+          min-height: 295mm !important;
+          height: 295mm !important;
+          max-height: 295.5mm !important;
+          box-sizing: border-box !important;
+          margin: 0 auto !important;
+          overflow: hidden !important;
+          display: flex !important;
+          flex-direction: column !important;
+          justify-content: space-between !important;
+        }
+        .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
+          margin-top: auto !important;
+          flex-shrink: 0 !important;
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+        }
+      }
+    </style>`;
+    if (/<\/head>/i.test(result)) {
+      result = result.replace(/<\/head>/i, singleAnchorStyle + '\n</head>');
+    } else {
+      result = singleAnchorStyle + '\n' + result;
+    }
   }
 
   result = result

@@ -1226,14 +1226,40 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 	} else {
 		singlePagePrintCss := `
 <style>
-@page { size: A4 portrait; margin: 4mm 5mm; }
+@page { size: A4 portrait; margin: 0 !important; }
+.invoice-container, .invoice-frame, .page, [data-invoice-page] {
+  width: 210mm !important;
+  max-width: 210mm !important;
+  min-height: 295mm !important;
+  height: 295mm !important;
+  max-height: 295.5mm !important;
+  box-sizing: border-box !important;
+  margin: 0 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+.top-content-wrap {
+  flex: 0 0 auto !important;
+  display: block !important;
+}
+.bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
+  margin-top: auto !important;
+  flex-shrink: 0 !important;
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+}
 @media print {
+  @page { size: A4 portrait; margin: 0 !important; }
   html, body {
     background: #fff !important;
     margin: 0 !important;
     padding: 0 !important;
-    height: 100% !important;
-    min-height: 100% !important;
+    height: 297mm !important;
+    max-height: 297mm !important;
+    overflow: hidden !important;
     width: 100% !important;
     font-size: 9.5px !important;
     line-height: 1.35 !important;
@@ -1241,9 +1267,11 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
     print-color-adjust: exact !important;
   }
   .invoice-container, .invoice-frame, .page, [data-invoice-page] {
-    width: 100% !important;
-    max-width: 100% !important;
-    min-height: 285mm !important;
+    width: 210mm !important;
+    max-width: 210mm !important;
+    min-height: 295mm !important;
+    height: 295mm !important;
+    max-height: 295.5mm !important;
     box-sizing: border-box !important;
     margin: 0 auto !important;
     padding: 3mm 5mm !important;
@@ -1256,9 +1284,7 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
     page-break-inside: avoid !important;
     break-inside: avoid !important;
     position: relative !important;
-  }
-  .invoice-container:after {
-    display: none !important;
+    overflow: hidden !important;
   }
   .top-content-wrap {
     display: block !important;
@@ -1328,13 +1354,10 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
     padding: 2.5px 2px !important;
     font-size: 8.5px !important;
   }
-  .bottom-content-wrap, .bottom {
+  .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
     margin-top: auto !important;
     padding-top: 4px !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: flex-end !important;
-    flex: 1 0 auto !important;
+    flex-shrink: 0 !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
