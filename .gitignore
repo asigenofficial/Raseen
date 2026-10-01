@@ -27,4 +27,5 @@ Thumbs.db
 tests/
 .agents/
 *.pdf
+.gocache/
 

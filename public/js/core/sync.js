@@ -98,7 +98,7 @@ export async function sendHeartbeat(currentView) {
     const viewName = currentView || router.currentView() || 'dashboard';
     const res = await api.post('/api/sync/heartbeat', { current_view: viewName }, { silent: true });
     if (res && typeof res.active_count === 'number') {
-      updateSyncBadge(res.active_count, true);
+      updateSyncBadge(res.active_count, es?.readyState === EventSource.OPEN);
     }
   } catch {
     // فشل النبض - قد يكون الاتصال انقطع مؤقتاً

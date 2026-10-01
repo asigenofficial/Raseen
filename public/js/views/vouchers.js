@@ -27,14 +27,14 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
     title: mode === 'install' ? '📅 إنشاء سندات قبض دفعية (أقساط)' : (mode === 'batch' ? '⚡ إنشاء سند لكل فاتورة' : 'سند قبض جديد'),
     wide: true,
     body: html`
-      <div id="w-mode-bar" style="display:flex;background:var(--card-sub, #f1f5f9);padding:4px;border-radius:10px;gap:6px;margin-bottom:16px;border:1px solid var(--line)">
-        <button type="button" id="btn-mode-single" class="btn btn-sm" style="flex:1;font-weight:700;border-radius:7px;transition:all .15s ease" title="سند قبض واحد عادي بمبلغ محدد">
+      <div id="w-mode-bar">
+        <button type="button" id="btn-mode-single" class="btn btn-sm" title="سند قبض واحد عادي بمبلغ محدد">
           📄 سند عادي موحد
         </button>
-        <button type="button" id="btn-mode-install" class="btn btn-sm" style="flex:1;font-weight:700;border-radius:7px;transition:all .15s ease" title="توليد سندات دفعية مجدولة على أقساط وتواريخ مستقبلية">
-          📅 سندات دفعية (أقساط)
+        <button type="button" id="btn-mode-install" class="btn btn-sm" title="توليد سندات دفعية مجدولة على أقساط وتواريخ مستقبلية">
+          📅 السندات الدفعية (أقساط)
         </button>
-        <button type="button" id="btn-mode-batch" class="btn btn-sm" style="flex:1;font-weight:700;border-radius:7px;transition:all .15s ease" title="إنشاء سند منفصل لكل فاتورة مفتوحة">
+        <button type="button" id="btn-mode-batch" class="btn btn-sm" title="إنشاء سند منفصل لكل فاتورة مفتوحة">
           ⚡ سند منفصل لكل فاتورة
         </button>
       </div>
@@ -134,9 +134,8 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
 
   // ── أدوات مساعدة ─────────────────────────────────────────────────────────
   const setActiveBtn = (btnEl, active) => {
-    btnEl.style.background = active ? 'var(--brand)' : '';
-    btnEl.style.color      = active ? '#fff' : '';
-    btnEl.style.border     = active ? '1px solid var(--brand)' : '';
+    if (!btnEl) return;
+    btnEl.classList.toggle('active', !!active);
   };
 
   // ── تحديث معاينة الدفعات ────────────────────────────────────────────────
@@ -177,21 +176,9 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
 
   // ── تبديل الوضع (موحد / دفعي / منفصل) ──────────────────────────────────
   const updateModeTabs = (curMode) => {
-    const singleBtn = $('#btn-mode-single', m.body);
-    const installBtn = $('#btn-mode-install', m.body);
-    const batchBtn = $('#btn-mode-batch', m.body);
-    if (singleBtn) {
-      singleBtn.style.background = curMode === 'single' ? 'var(--brand)' : '';
-      singleBtn.style.color = curMode === 'single' ? '#fff' : '';
-    }
-    if (installBtn) {
-      installBtn.style.background = curMode === 'install' ? 'var(--brand)' : '';
-      installBtn.style.color = curMode === 'install' ? '#fff' : '';
-    }
-    if (batchBtn) {
-      batchBtn.style.background = curMode === 'batch' ? 'var(--brand)' : '';
-      batchBtn.style.color = curMode === 'batch' ? '#fff' : '';
-    }
+    setActiveBtn($('#btn-mode-single', m.body), curMode === 'single');
+    setActiveBtn($('#btn-mode-install', m.body), curMode === 'install');
+    setActiveBtn($('#btn-mode-batch', m.body), curMode === 'batch');
   };
 
   const resetAllModes = () => {

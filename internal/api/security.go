@@ -17,6 +17,14 @@ func routePermission(pattern string) string {
 	if !ok || !strings.HasPrefix(path, "/api/") { return "!deny" }
 	path = strings.TrimPrefix(path, "/api/")
 	if path == "auth/me" || path == "auth/logout" || path == "auth/password" { return "" }
+	if path == "sync/events" && method == "GET" || path == "sync/heartbeat" && method == "POST" { return "" }
+	if strings.HasPrefix(path, "admin/sync/") {
+		switch path {
+		case "admin/sync/sessions", "admin/sync/history": if method == "GET" { return "users.manage" }
+		case "admin/sync/force", "admin/sync/broadcast", "admin/sync/revoke", "admin/sync/revoke-others": if method == "POST" { return "users.manage" }
+		}
+		return "!deny"
+	}
 	resource, tail, _ := strings.Cut(path, "/")
 	switch resource {
 	case "users", "roles": return "users.manage"

@@ -13,6 +13,7 @@ html[data-theme="light"] {
   --field-bg: #fff; --field-focus-bg: #fff;
   --bg-alt: #f8fafb;
   --card-bg: #ffffff;
+  --card-sub: #f1f5f9;
   --border-color: var(--line);
 
   --text: #243648; --text-heading: #172b3a; --muted: #526575; --dim: #64748b;
@@ -782,6 +783,29 @@ html[data-theme="light"] .distribution-card:has(input:checked) {
   background: #e0f2fe;
   border-color: var(--brand);
 }
+
+html[data-theme="light"] #w-mode-bar {
+  background: #eef2f6;
+  border-color: #cbd5e1;
+}
+
+html[data-theme="light"] #w-mode-bar .btn:not(.active) {
+  background: transparent !important;
+  color: #475569 !important;
+  border-color: transparent !important;
+}
+
+html[data-theme="light"] #w-mode-bar .btn:hover:not(.active) {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] #w-mode-bar .btn.active {
+  background: var(--brand) !important;
+  color: #ffffff !important;
+  border-color: var(--brand) !important;
+}
+
 
 
 
