@@ -22,3 +22,8 @@ raseen.exe
 .DS_Store
 Thumbs.db
 *.zip
+
+# Tests & Agents
+tests/
+.agents/
+*.pdf

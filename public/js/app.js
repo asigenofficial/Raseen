@@ -9,6 +9,7 @@ import {
 } from './core/store.js';
 import { html, raw, esc, initials, toastOk, toastErr, modal, formValues, $, delegate, icon } from './core/util.js';
 import * as theme from './core/theme.js';
+import { startSync, stopSync, openSyncStatusModal, sendHeartbeat } from './core/sync.js';
 
 // تهيئة الثيم فوراً عند تحميل الملف (قبل أي رسم)
 theme.init();
@@ -156,6 +157,11 @@ function renderShell() {
             <select id="issuer-select">${raw(issuerOptions())}</select>
           </div>
           <div class="spacer"></div>
+          <button class="sync-badge online" id="sync-badge" type="button" aria-label="حالة المزامنة والاتصال" title="المزامنة اللحظية نشطة">
+            <span class="sync-dot"></span>
+            <span class="sync-label">متزامن</span>
+            <span class="sync-count" id="sync-count">1</span>
+          </button>
           <button class="theme-toggle" id="theme-toggle" type="button" aria-label="تبديل الثيم" title="تبديل الثيم الداكن / الفاتح">
             ${raw(theme.current() === 'dark' ? icon.moon({ size: 17 }) : icon.sun({ size: 17 }))}
           </button>
@@ -225,6 +231,9 @@ function renderShell() {
   });
   $('#user-chip').addEventListener('click', openUserMenu);
 
+  // شارة المزامنة اللحظية
+  $('#sync-badge')?.addEventListener('click', openSyncStatusModal);
+
   // زر تبديل الثيم
   $('#theme-toggle').addEventListener('click', () => {
     theme.toggle();
@@ -265,6 +274,7 @@ function openUserMenu() {
              <button class="btn btn-danger" id="logout-btn" type="button">تسجيل الخروج</button>`,
   });
   m.el.querySelector('#logout-btn').addEventListener('click', async () => {
+    stopSync();
     await api.post('/api/auth/logout', {}, { silent: true });
     store.user = null;
     m.close();
@@ -386,6 +396,7 @@ function registerRoutes() {
 
         window.scrollTo({ top: 0, behavior: 'instant' });
         finishRouteProgress();
+        sendHeartbeat(name);
         return cleanup;
       } catch (err) {
         if (seq !== navSeq) return undefined;
@@ -439,6 +450,7 @@ async function boot() {
   }
   router.start();
   preloadViews();
+  startSync();
 
   const viewEl = document.getElementById('view');
   if (viewEl && window.MutationObserver) {
@@ -505,6 +517,7 @@ function initTableScrolls(root = document) {
 }
 
 setUnauthorizedHandler(() => {
+  stopSync();
   if (store.user) {
     store.user = null;
     renderLogin('انتهت الجلسة، يرجى تسجيل الدخول من جديد');

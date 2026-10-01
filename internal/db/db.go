@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -24,7 +25,8 @@ var SchemaSQL string
 
 type DB struct {
 	*sql.DB
-	cfg *config.Config
+	cfg     *config.Config
+	writeMu sync.Mutex
 }
 
 type BackupResult struct {
@@ -39,13 +41,13 @@ func Open(cfg *config.Config) (*DB, error) {
 		return nil, fmt.Errorf("failed to create data dir: %w", err)
 	}
 
-	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)", cfg.DbFile)
+	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-64000)&_pragma=temp_store(MEMORY)", cfg.DbFile)
 	sqldb, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open sqlite: %w", err)
 	}
 
-	sqldb.SetMaxOpenConns(1) // SQLite single-writer WAL safety
+	sqldb.SetMaxOpenConns(1) // SQLite serialized WAL safety
 
 	database := &DB{DB: sqldb, cfg: cfg}
 	if err := database.initSchema(); err != nil {
@@ -61,9 +63,30 @@ func Open(cfg *config.Config) (*DB, error) {
 	return database, nil
 }
 
+func (d *DB) WithWriteLock(fn func() error) error {
+	d.writeMu.Lock()
+	defer d.writeMu.Unlock()
+	return fn()
+}
+
+func (d *DB) WriteLock() {
+	d.writeMu.Lock()
+}
+
+func (d *DB) WriteUnlock() {
+	d.writeMu.Unlock()
+}
+
 func (d *DB) initSchema() error {
 	_, err := d.Exec(SchemaSQL)
-	return err
+	if err != nil {
+		return err
+	}
+	// Migrate sessions columns if missing
+	_, _ = d.Exec("ALTER TABLE sessions ADD COLUMN user_agent TEXT DEFAULT ''")
+	_, _ = d.Exec("ALTER TABLE sessions ADD COLUMN current_view TEXT DEFAULT ''")
+	_, _ = d.Exec("ALTER TABLE sessions ADD COLUMN last_active_at TEXT DEFAULT ''")
+	return nil
 }
 
 func (d *DB) bootstrap() error {
