@@ -23,7 +23,6 @@ const NAV = [
   { name: 'invoices', label: 'الفواتير', icon: icon.invoice(), perm: 'invoices.view' },
   { name: 'bulk', label: 'التوليد الدفعي', icon: icon.bulk(), perm: 'bulk.generate' },
   { name: 'vouchers', label: 'سندات القبض', icon: icon.receipt(), perm: 'vouchers.view' },
-  { name: 'vouchers-install', label: 'السندات الدفعية (أقساط)', icon: icon.calendar(), perm: 'vouchers.create' },
   { name: 'statement', label: 'كشف حساب عميل', icon: icon.statement(), perm: 'ledger.view' },
   { group: 'البيانات الأساسية' },
   { name: 'issuers', label: 'الشركات المصدرة', icon: icon.building(), perm: 'issuers.view' },

@@ -1010,7 +1010,7 @@ export async function render(view, ctx) {
               ${icon.plus({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}سند قبض جديد
             </button>
             <button class="btn btn-secondary" id="new-v-install" type="button" style="background:#0284c7;color:#fff;border-color:#0284c7;font-weight:700" title="إنشاء وتوليد دفعات سندات قبض مجدولة على أقساط وتواريخ مستقبلية">
-              ${raw(icon.calendar({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}سندات دفعية (أقساط)
+              ${raw(icon.calendar({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}السندات الدفعية (أقساط)
             </button>
             <button class="btn" id="new-v-batch" type="button" style="border:1.5px solid var(--line-strong);font-weight:700" title="إنشاء سند قبض منفصل لكل فاتورة غير مسددة">
               ⚡ سندات لكل فاتورة
