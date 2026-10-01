@@ -22,7 +22,3 @@ raseen.exe
 .DS_Store
 Thumbs.db
 *.zip
-
-# Agent files
-.agents/
-.agents
