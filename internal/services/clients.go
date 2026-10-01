@@ -212,7 +212,9 @@ func (s *ClientService) CreateClient(c *models.Client) error {
 	// Insert opening balance entry in ledger if > 0
 	if c.OpeningBalance != 0 {
 		debit, credit := c.OpeningBalance, int64(0)
-		if debit < 0 { credit, debit = -debit,0 }
+		if debit < 0 {
+			credit, debit = -debit, 0
+		}
 		_, err = tx.Exec(`
 			INSERT INTO client_ledger (id, client_id, issuer_id, doc_type, doc_id, doc_number, transaction_date, debit, credit, description, created_at)
 			VALUES (?, ?, NULL, 'OPENING_BALANCE', NULL, 'OPENING', ?, ?, ?, 'رصيد افتتاحي', ?)
@@ -343,10 +345,10 @@ type StatementResult struct {
 		TaxNumber string `json:"tax_number"`
 		Currency  string `json:"currency"`
 	} `json:"issuer"`
-	Scope                     string `json:"scope"`
-	PeriodFrom                string `json:"period_from"`
-	PeriodTo                  string `json:"period_to"`
-	Period                    struct {
+	Scope      string `json:"scope"`
+	PeriodFrom string `json:"period_from"`
+	PeriodTo   string `json:"period_to"`
+	Period     struct {
 		From string `json:"from"`
 		To   string `json:"to"`
 	} `json:"period"`
@@ -441,14 +443,21 @@ func (s *ClientService) Statement(p StatementParams) (*StatementResult, error) {
 
 	queryRows := `
 		SELECT l.id, l.doc_type, l.doc_id, l.doc_number, l.issuer_id, COALESCE(s.name_ar, '—'),
-		       l.transaction_date, l.debit, l.credit, l.description
+		       l.transaction_date, l.debit, l.credit, l.description,
+		       CASE WHEN l.doc_type = 'RECEIPT' THEN COALESCE((
+		         SELECT GROUP_CONCAT(invoice_number, '، ') FROM (
+		           SELECT DISTINCT i.invoice_number FROM voucher_allocations a
+		           JOIN invoices i ON i.id = a.invoice_id
+		           WHERE a.voucher_id = l.doc_id ORDER BY i.issue_date, i.invoice_number
+		         )
+		       ), '') ELSE '' END
 		FROM client_ledger l
 		LEFT JOIN issuers s ON s.id = l.issuer_id
 		WHERE l.client_id = ?
 		  AND (? = '' OR l.issuer_id = ?)
 		  AND (? = '' OR l.transaction_date >= ?)
 		  AND (? = '' OR l.transaction_date <= ?)
-		ORDER BY l.transaction_date ASC, l.created_at ASC
+		ORDER BY l.transaction_date ASC, l.created_at ASC, l.id ASC
 	`
 	rows, err := s.db.Query(queryRows, p.ClientID, p.IssuerID, p.IssuerID, p.FromDate, p.FromDate, p.ToDate, p.ToDate)
 	if err != nil {
@@ -462,11 +471,21 @@ func (s *ClientService) Statement(p StatementParams) (*StatementResult, error) {
 	for rows.Next() {
 		var entry StatementEntry
 		var debitMinor, creditMinor int64
+		var allocatedInvoices string
 
 		if err := rows.Scan(
 			&entry.ID, &entry.DocType, &entry.DocID, &entry.DocNumber, &entry.IssuerID, &entry.IssuerName,
-			&entry.TransactionDate, &debitMinor, &creditMinor, &entry.Description,
+			&entry.TransactionDate, &debitMinor, &creditMinor, &entry.Description, &allocatedInvoices,
 		); err == nil {
+			switch entry.DocType {
+			case "INVOICE":
+				entry.Description = "فاتورة بيع رقم " + entry.DocNumber
+			case "RECEIPT":
+				entry.Description = "سداد فاتورة رقم " + allocatedInvoices
+				if allocatedInvoices == "" {
+					entry.Description = "سند قبض رقم " + entry.DocNumber + " (دفعة غير مخصصة لفاتورة)"
+				}
+			}
 			runningBalance += debitMinor - creditMinor
 			totalDebitMinor += debitMinor
 			totalCreditMinor += creditMinor
@@ -715,7 +734,9 @@ func (s *ClientService) BatchImportClients(clients []ImportClientInput) (*Import
 		}
 
 		balMinor := models.ToMinor(c.OpeningBalance)
-		if !validAmount(c.OpeningBalance) && !validAmount(-c.OpeningBalance) { return nil,errors.New("رصيد افتتاحي غير صالح") }
+		if !validAmount(c.OpeningBalance) && !validAmount(-c.OpeningBalance) {
+			return nil, errors.New("رصيد افتتاحي غير صالح")
+		}
 
 		if existingID != "" {
 			_, err := stmtUpdateClient.Exec(
@@ -753,9 +774,13 @@ func (s *ClientService) BatchImportClients(clients []ImportClientInput) (*Import
 			} else {
 				res.Created++
 				if balMinor != 0 {
-					debit, credit := balMinor,int64(0)
-					if debit < 0 { credit,debit = -debit,0 }
-					if _, err := tx.Exec("INSERT INTO client_ledger (id,client_id,doc_type,doc_number,transaction_date,debit,credit,description,created_at) VALUES (?,?,'OPENING_BALANCE','OPENING',?,?,?,'رصيد افتتاحي مستورد',?)",crypto.UUID(),newID,db.TodayIso(),debit,credit,now); err != nil { return nil,err }
+					debit, credit := balMinor, int64(0)
+					if debit < 0 {
+						credit, debit = -debit, 0
+					}
+					if _, err := tx.Exec("INSERT INTO client_ledger (id,client_id,doc_type,doc_number,transaction_date,debit,credit,description,created_at) VALUES (?,?,'OPENING_BALANCE','OPENING',?,?,?,'رصيد افتتاحي مستورد',?)", crypto.UUID(), newID, db.TodayIso(), debit, credit, now); err != nil {
+						return nil, err
+					}
 				}
 			}
 		}
@@ -766,4 +791,3 @@ func (s *ClientService) BatchImportClients(clients []ImportClientInput) (*Import
 	}
 	return res, nil
 }
-

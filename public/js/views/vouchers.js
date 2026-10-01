@@ -705,7 +705,7 @@ export async function showVoucher(id, onChange) {
         <div class="flex gap-xs">
           <button class="btn btn-primary" data-print type="button">${icon.printer({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}طباعة السند</button>
           <button class="btn" data-pdf type="button">${icon.pdf({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}تحميل PDF</button>
-          ${voucher.status !== 'CANCELLED' ? html`<button class="btn" data-edit type="button" style="background:var(--brand-light);border-color:var(--brand);color:var(--brand)">${icon.pencil ? icon.pencil({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }) : '✏️ '}تعديل</button>` : ''}
+          ${voucher.status !== 'CANCELLED' && can('vouchers.edit') ? html`<button class="btn" data-edit type="button" style="background:var(--brand-light);border-color:var(--brand);color:var(--brand)">${icon.pencil ? icon.pencil({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }) : '✏️ '}تعديل</button>` : ''}
           <button class="btn btn-danger" data-delete type="button">${icon.trash({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}حذف نهائي</button>
         </div>
         <button class="btn" data-close type="button">إغلاق</button>
@@ -1096,7 +1096,7 @@ export async function render(view, ctx) {
                     <button class="btn btn-sm btn-ghost" data-act="show" data-id="${esc(v.id)}" type="button" title="عرض السند" style="padding:.28rem .5rem">
                       ${icon.eye({ size: 14, style: 'vertical-align:middle' })}<span>عرض</span>
                     </button>
-                    ${v.status !== 'CANCELLED' ? `
+                    ${v.status !== 'CANCELLED' && can('vouchers.edit') ? `
                       <button class="btn btn-sm btn-ghost" data-act="edit" data-id="${esc(v.id)}" type="button" title="تعديل السند" style="padding:.28rem .5rem;color:var(--brand);font-weight:600">
                         ${icon.pencil ? icon.pencil({ size: 13, style: 'vertical-align:middle' }) : '✏️ '}<span>تعديل</span>
                       </button>
@@ -1104,9 +1104,9 @@ export async function render(view, ctx) {
                     <button class="btn btn-sm btn-icon btn-ghost" data-act="pdf" data-id="${esc(v.id)}" type="button" title="تحميل ملف PDF مباشرة" style="color:var(--info, #0284c7);padding:.28rem .45rem">
                       ${icon.pdf({ size: 14, style: 'vertical-align:middle' })}
                     </button>
-                    <button class="btn btn-sm btn-icon btn-danger" data-act="delete" data-id="${esc(v.id)}" data-num="${esc(v.voucher_number)}" type="button" title="حذف السند نهائياً" style="padding:.28rem .45rem">
+                    ${can('vouchers.delete') ? `<button class="btn btn-sm btn-icon btn-danger" data-act="delete" data-id="${esc(v.id)}" data-num="${esc(v.voucher_number)}" type="button" title="حذف السند نهائياً" style="padding:.28rem .45rem">
                       ${icon.trash({ size: 13, style: 'vertical-align:middle' })}
-                    </button>
+                    </button>` : ''}
                   </div>
                 </td>
               </tr>`).join('') : '<tr><td colspan="11" class="text-center muted" style="padding:2rem">لا توجد سندات مطابقة</td></tr>')}

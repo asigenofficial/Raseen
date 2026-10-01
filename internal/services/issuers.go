@@ -6,6 +6,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"raseen/internal/crypto"
@@ -257,10 +258,37 @@ func (s *IssuerService) NextVoucherNumber(tx *sql.Tx, issuerID string) (number s
 	if err := row.Scan(&prefix, &nextNo); err != nil {
 		return "", 0, err
 	}
+	// Keep the counter above all existing serials, even if settings were manually lowered.
+	rows, err := tx.Query("SELECT voucher_number FROM receipt_vouchers WHERE issuer_id = ?", issuerID)
+	if err != nil {
+		return "", 0, err
+	}
+	serialPrefix := strings.TrimRight(strings.TrimSpace(prefix), "-")
+	if serialPrefix != "" {
+		serialPrefix += "-"
+	}
+	for rows.Next() {
+		var existing string
+		if err = rows.Scan(&existing); err != nil {
+			rows.Close()
+			return "", 0, err
+		}
+		if !strings.HasPrefix(existing, serialPrefix) {
+			continue
+		}
+		if n, parseErr := strconv.ParseInt(strings.TrimPrefix(existing, serialPrefix), 10, 64); parseErr == nil && n >= nextNo {
+			nextNo = n + 1
+		}
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return "", 0, err
+	}
+	rows.Close()
 
 	_, err = tx.Exec(`
-		UPDATE issuers SET voucher_next_no = voucher_next_no + 1 WHERE id = ?
-	`, issuerID)
+		UPDATE issuers SET voucher_next_no = ? WHERE id = ?
+	`, nextNo+1, issuerID)
 	if err != nil {
 		return "", 0, err
 	}

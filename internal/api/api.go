@@ -2289,7 +2289,7 @@ func (s *Server) Handler() http.Handler {
 			ActorName: u.FullName,
 			Data:      map[string]any{"id": id},
 		})
-		s.json(w, 200, map[string]any{"data": updated, "ok": true})
+		s.json(w, 200, updated)
 	})
 
 	mux.HandleFunc("GET /api/vouchers/template", func(w http.ResponseWriter, r *http.Request) {
@@ -2703,6 +2703,10 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type: "invoice:deleted", Entity: "invoice", Action: "delete",
+			Actor: username, Data: map[string]any{"batch_id": id},
+		})
 		s.json(w, 200, map[string]any{"ok": true, "message": "تم حذف الدفعة وجميع فواتيرها وسنداتها بنجاح"})
 	})
 

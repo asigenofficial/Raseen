@@ -201,6 +201,7 @@ export function startSync() {
     };
 
     es.addEventListener('voucher:created', handleVoucherEvent);
+    es.addEventListener('voucher:updated', handleVoucherEvent);
     es.addEventListener('voucher:deleted', handleVoucherEvent);
 
     // استقبال أحداث العملاء والأصناف

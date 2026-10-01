@@ -969,10 +969,21 @@ func (s *InvoiceService) DeleteInvoice(id, actor, ip string) error {
 	defer tx.Rollback()
 
 	_, _ = tx.Exec("DELETE FROM invoice_items WHERE invoice_id = ?", id)
+	if _, err = tx.Exec("DELETE FROM invoice_documents WHERE invoice_id = ?", id); err != nil {
+		return err
+	}
 	_, _ = tx.Exec("DELETE FROM client_ledger WHERE doc_id = ? AND doc_type IN ('INVOICE', 'INVOICE_CANCEL')", id)
 	_, err = tx.Exec("DELETE FROM invoices WHERE id = ?", id)
 	if err != nil {
 		return err
+	}
+	if inv.BatchID != nil && *inv.BatchID != "" {
+		if _, err = tx.Exec(`UPDATE invoice_batches SET
+			invoice_count = (SELECT COUNT(*) FROM invoices WHERE batch_id = ?),
+			total_amount = (SELECT COALESCE(SUM(grand_total), 0) FROM invoices WHERE batch_id = ?)
+			WHERE id = ?`, *inv.BatchID, *inv.BatchID, *inv.BatchID); err != nil {
+			return err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

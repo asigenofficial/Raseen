@@ -9,7 +9,7 @@ const onSync = (cb) => (typeof store.onSync === 'function' ? store.onSync(cb) : 
 import {
   html, raw, esc, money, num, dateAr, statusBadge, monthStart, today, toastOk,
   $, delegate, debounce, exportCsv, exportExcel, parseSpreadsheetText, printDoc, modal, toastErr, formValues,
-  confirmDialog, icon, downloadPdfFromHtml, amount, sarSvg,
+  confirmDialog, icon, downloadPdfFromHtml, downloadPdfFromUrl, amount, sarSvg,
 } from '../core/util.js';
 import { invoiceA4, voucherPrint, INVOICE_TEMPLATES } from '../print/templates.js';
 
@@ -129,7 +129,7 @@ export async function render(view, ctx) {
       <td class="nowrap" style="white-space:nowrap">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap">
           <a class="mono invoice-no-link" href="#/invoice-view/${esc(i.id)}" style="font-weight:700;white-space:nowrap" title="عرض تفاصيل الفاتورة"><b>${esc(i.invoice_number)}</b></a>
-          ${i.batch_id ? '<span class="badge blue tiny" style="white-space:nowrap">دفعة</span>' : ''}
+          ${i.batch_id ? `<a class="badge blue tiny" href="#/invoices?batch_id=${encodeURIComponent(i.batch_id)}" style="white-space:nowrap" title="عرض فواتير الدفعة وخيارات حذفها">دفعة</a>` : ''}
           <span class="badge ${i.zatca_phase === 'PHASE2' ? 'teal' : 'gray'} tiny" style="white-space:nowrap" title="${i.zatca_phase === 'PHASE2' ? 'المرحلة 2' : 'المرحلة 1'}">${i.zatca_phase === 'PHASE2' ? 'م2' : 'م1'}</span>
         </div>
       </td>
@@ -171,9 +171,9 @@ export async function render(view, ctx) {
           <button class="btn btn-sm btn-icon" data-act="pay" data-id="${esc(i.id)}" type="button" title="إصدار سند قبض" style="color:var(--brand);border-color:var(--brand)">
             ${icon.receipt({ size: 13, style: 'vertical-align:middle' })}
           </button>` : ''}
-          <button class="btn btn-sm btn-icon btn-danger" data-act="del" data-id="${esc(i.id)}" data-no="${esc(i.invoice_number)}" type="button" title="حذف الفاتورة">
+          ${can('invoices.delete') ? `<button class="btn btn-sm btn-icon btn-danger" data-act="del" data-id="${esc(i.id)}" data-no="${esc(i.invoice_number)}" type="button" title="حذف الفاتورة">
             ${icon.trash({ size: 13, style: 'vertical-align:middle' })}
-          </button>
+          </button>` : ''}
         </div>
       </td>
     </tr>`).join('');
@@ -269,7 +269,7 @@ export async function render(view, ctx) {
             <a class="btn btn-sm btn-outline" id="btn-batch-dl-pdf" href="/api/bulk/batches/${esc(state.batch_id)}/pdf?style=${esc(state.batch_style || 'default')}" target="_blank" download="batch_${esc(state.batch_id.slice(0, 8))}.pdf" title="تحميل ملف PDF مجمّع لجميع فواتير الدفعة بالقالب المختار">${raw(icon.pdf({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}تحميل PDF مجمّع</a>
             <button class="btn btn-sm btn-outline" id="btn-batch-gen-vouchers" type="button" title="توليد وإصدار سندات قبض لكافة فواتير الدفعة غير المسددة">${raw(icon.receipt({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}إصدار سندات الدفعة</button>
             <button class="btn btn-sm btn-outline" id="btn-batch-print-vouchers" type="button" title="طباعة كافة سندات القبض الصادرة لهذه الدفعة">${raw(icon.receipt({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}طباعة السندات</button>
-            <button class="btn btn-sm btn-danger" id="btn-batch-delete" type="button" title="حذف الدفعة بالكامل والتراجع عنها">${raw(icon.trash({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}حذف الدفعة</button>
+            ${raw(can('invoices.delete') ? `<button class="btn btn-sm btn-danger" id="btn-batch-delete" type="button" title="حذف الدفعة بالكامل والتراجع عنها">${icon.trash({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}حذف الدفعة</button>` : '')}
           </div>
         </div>` : '')}
       </div>
@@ -344,6 +344,12 @@ export async function render(view, ctx) {
       { footer: ['الإجمالي', '', '', '', '', '', '', '', money(t.tax), money(t.grand_total), money(t.paid), money(t.remaining), ''] }));
 
     const bTplSelect = $('#batch-template-select', view);
+    const batchPdfBtn = $('#btn-batch-dl-pdf', view);
+    batchPdfBtn?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try { await downloadPdfFromUrl(batchPdfBtn.href, `دفعة_${state.batch_id.slice(0, 8)}.pdf`); }
+      catch (err) { if (err?.name !== 'AbortError') toastErr(err.message || 'تعذر حفظ ملف الدفعة'); }
+    });
     if (bTplSelect && state.batch_id) {
       bTplSelect.addEventListener('change', () => {
         state.batch_style = bTplSelect.value;

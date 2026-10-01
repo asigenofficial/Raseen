@@ -2752,7 +2752,8 @@ export function statementPrint({ statement, issuer, client }) {
       <td>${esc(e.description || '')}</td>
       <td class="e num">${e.debit ? money(e.debit) : ''}</td>
       <td class="e num">${e.credit ? money(e.credit) : ''}</td>
-      <td class="e num"><b>${money(e.balance_after)}</b></td>
+      <td class="e num"><b>${e.balance_after > 0 ? money(e.balance_after) : '0.00'}</b></td>
+      <td class="e num"><b>${e.balance_after < 0 ? money(-e.balance_after) : '0.00'}</b></td>
     </tr>`).join('');
 
   const html = `<div class="page">
@@ -2778,18 +2779,19 @@ export function statementPrint({ statement, issuer, client }) {
       <thead><tr>
         <th class="c" style="width:22px">#</th><th style="width:62px">التاريخ</th><th style="width:60px">النوع</th>
         <th style="width:70px">المستند</th><th style="width:70px">الشركة</th><th>البيان</th>
-        <th class="e" style="width:70px">مدين</th><th class="e" style="width:70px">دائن</th><th class="e" style="width:76px">الرصيد</th>
+        <th class="e" style="width:70px">مدين</th><th class="e" style="width:70px">دائن</th><th class="e" style="width:76px">رصيد مدين</th><th class="e" style="width:76px">رصيد دائن</th>
       </tr></thead>
       <tbody>
         <tr class="open"><td colspan="6">الرصيد الافتتاحي في ${esc(periodFrom)}</td>
-          <td colspan="2"></td><td class="e num"><b>${money(statement.opening_balance_period)}</b></td></tr>
+          <td colspan="2"></td><td class="e num"><b>${money(Math.max(0, statement.opening_balance_period))}</b></td><td class="e num"><b>${money(Math.max(0, -statement.opening_balance_period))}</b></td></tr>
         ${rows}
       </tbody>
       <tfoot><tr>
         <td colspan="6" class="e">الإجماليات</td>
         <td class="e num">${money(statement.totals.debit)}</td>
         <td class="e num">${money(statement.totals.credit)}</td>
-        <td class="e num">${money(statement.totals.closing_balance)}</td>
+        <td class="e num">${money(Math.max(0, statement.totals.closing_balance))}</td>
+        <td class="e num">${money(Math.max(0, -statement.totals.closing_balance))}</td>
       </tr></tfoot>
     </table>
 

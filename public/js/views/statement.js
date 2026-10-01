@@ -124,7 +124,8 @@ export async function render(view, ctx) {
               <th style="min-width:190px">البيان</th>
               <th class="text-end nowrap" style="min-width:105px;white-space:nowrap">مدين <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
               <th class="text-end nowrap" style="min-width:105px;white-space:nowrap">دائن <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
-              <th class="text-end nowrap" style="min-width:115px;white-space:nowrap">الرصيد <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
+              <th class="text-end nowrap" style="min-width:105px;white-space:nowrap">رصيد مدين</th>
+              <th class="text-end nowrap" style="min-width:105px;white-space:nowrap">رصيد دائن</th>
             </tr></thead>
             <tbody>
               <tr class="row-open">
@@ -136,7 +137,8 @@ export async function render(view, ctx) {
                 <td><b>الرصيد الافتتاحي ${d.period.from ? `(حتى ${dateAr(d.period.from)})` : ''}</b></td>
                 <td class="text-end num nowrap">${d.opening_balance_period > 0 ? amount(d.opening_balance_period) : ''}</td>
                 <td class="text-end num nowrap">${d.opening_balance_period < 0 ? amount(Math.abs(d.opening_balance_period)) : ''}</td>
-                <td class="text-end num nowrap"><b>${amount(d.opening_balance_period)}</b></td>
+                <td class="text-end num nowrap"><b>${amount(Math.max(0, d.opening_balance_period))}</b></td>
+                <td class="text-end num nowrap"><b>${amount(Math.max(0, -d.opening_balance_period))}</b></td>
               </tr>
               ${raw(d.entries.map((e, i) => `<tr>
                 <td class="tiny text-center muted">${i + 1}</td>
@@ -153,15 +155,17 @@ export async function render(view, ctx) {
                 <td class="cell-desc"><div style="line-height:1.4;word-break:normal">${esc(e.description || '—')}</div></td>
                 <td class="text-end num nowrap">${e.debit ? amount(e.debit) : ''}</td>
                 <td class="text-end num nowrap">${e.credit ? amount(e.credit) : ''}</td>
-                <td class="text-end num nowrap" style="font-weight:700;color:${e.balance_after > 0.004 ? 'var(--danger)' : e.balance_after < -0.004 ? 'var(--success)' : 'inherit'}">${amount(e.balance_after)}</td>
+                <td class="text-end num nowrap" style="font-weight:700;color:var(--danger)">${amount(Math.max(0, e.balance_after))}</td>
+                <td class="text-end num nowrap" style="font-weight:700;color:var(--success)">${amount(Math.max(0, -e.balance_after))}</td>
               </tr>`).join(''))}
-              ${raw(d.entries.length ? '' : '<tr><td colspan="9" class="text-center muted" style="padding:2rem">لا توجد حركات في هذه الفترة</td></tr>')}
+              ${raw(d.entries.length ? '' : '<tr><td colspan="10" class="text-center muted" style="padding:2rem">لا توجد حركات في هذه الفترة</td></tr>')}
             </tbody>
             <tfoot><tr>
               <td colspan="6" class="text-end"><b>الإجماليات</b></td>
               <td class="text-end num nowrap"><b>${amount(t.debit)}</b></td>
               <td class="text-end num nowrap"><b>${amount(t.credit)}</b></td>
-              <td class="text-end num nowrap" style="color:${balColor}"><b>${amount(t.closing_balance)}</b></td>
+              <td class="text-end num nowrap" style="color:${balColor}"><b>${amount(Math.max(0, t.closing_balance))}</b></td>
+              <td class="text-end num nowrap" style="color:${balColor}"><b>${amount(Math.max(0, -t.closing_balance))}</b></td>
             </tr></tfoot>
           </table>
         </div>

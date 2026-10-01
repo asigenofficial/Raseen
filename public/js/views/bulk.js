@@ -8,7 +8,7 @@ import * as router from '../core/router.js';
 import {
   html, raw, esc, money, num, timeToMinutes, toNum, today,
   toastOk, toastErr, $, delegate, confirmDialog, promptDialog, exportCsv, exportExcel,
-  modal, printDoc, icon, generateNextItemCode,
+  modal, printDoc, icon, generateNextItemCode, downloadPdfFromUrl,
 } from '../core/util.js';
 import { invoiceA4, invoiceThermal, bulkPreviewReport, INVOICE_TEMPLATES, voucherPrint } from '../print/templates.js';
 
@@ -2030,6 +2030,12 @@ export async function render(view) {
 
     const genVouchersBtn = $('#btn-modal-generate-vouchers', m.body);
     const printVouchersBtn = $('#btn-modal-print-vouchers', m.body);
+    const batchPdfBtn = $('#btn-modal-dl-pdf', m.body);
+    batchPdfBtn?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try { await downloadPdfFromUrl(batchPdfBtn.href, `دفعة_${batchId.slice(0, 8)}.pdf`); }
+      catch (err) { if (err?.name !== 'AbortError') toastErr(err.message || 'تعذر حفظ ملف الدفعة'); }
+    });
 
     if (genVouchersBtn) {
       genVouchersBtn.addEventListener('click', async () => {

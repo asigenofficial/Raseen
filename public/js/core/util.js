@@ -639,6 +639,7 @@ export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
       raw += '.pdf';
     }
     const safeName = raw.replace(/[\/\\?%*:|"<>]/g, '_').replace(/\s+/g, '_');
+    const saveHandle = await choosePdfDestination(safeName);
     const res = await fetch('/api/pdf/render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -659,7 +660,37 @@ export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
       fileObj = blob;
     }
 
-    const url = URL.createObjectURL(fileObj);
+    await savePdfFile(fileObj, safeName, saveHandle);
+    toastOk('تم حفظ ملف PDF بنجاح 📄');
+    return blob;
+  } catch (err) {
+    if (err?.name === 'AbortError') return null;
+    console.warn('PDF download fallback to print:', err);
+    printDoc(docHtml);
+    toastOk('تم فتح حوار الطباعة / الحفظ كملف PDF');
+    return null;
+  }
+}
+
+/** يفتح اختيار مكان الحفظ في المتصفحات الداعمة، وينزّل الملف بالطريقة المعتادة فيما عداها. */
+export async function choosePdfDestination(filename) {
+  if (window.showSaveFilePicker) {
+    return window.showSaveFilePicker({
+      suggestedName: filename,
+      types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }],
+    });
+  }
+  return null;
+}
+
+export async function savePdfFile(fileObj, filename, handle = null) {
+  if (handle) {
+    const writer = await handle.createWritable();
+    try { await writer.write(fileObj); await writer.close(); }
+    catch (err) { await writer.abort().catch(() => {}); throw err; }
+    return;
+  }
+  const url = URL.createObjectURL(fileObj);
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
@@ -672,14 +703,14 @@ export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
         URL.revokeObjectURL(url);
       } catch { }
     }, 60000);
-    toastOk('تم تحميل ملف PDF بنجاح 📄');
-    return blob;
-  } catch (err) {
-    console.warn('PDF download fallback to print:', err);
-    printDoc(docHtml);
-    toastOk('تم فتح حوار الطباعة / الحفظ كملف PDF');
-    return null;
-  }
+  return;
+}
+
+export async function downloadPdfFromUrl(url, filename) {
+  const saveHandle = await choosePdfDestination(filename);
+  const res = await fetch(url, { credentials: 'same-origin' });
+  if (!res.ok) throw new Error('تعذر تجهيز ملف PDF');
+  await savePdfFile(await res.blob(), filename, saveHandle);
 }
 
 

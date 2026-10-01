@@ -15,6 +15,9 @@ func TestSyncRoutePermissions(t *testing.T) {
 		{"POST /api/sync/events", "!deny"},
 		{"GET /api/admin/sync/force", "!deny"},
 		{"GET /api/admin/sync/unknown", "!deny"},
+		{"PATCH /api/vouchers/{id}", "vouchers.edit"},
+		{"DELETE /api/bulk/batches/{id}", "invoices.delete"},
+		{"POST /api/bulk/batches/{id}/generate-vouchers", "vouchers.create"},
 	}
 	for _, tt := range tests {
 		if got := routePermission(tt.pattern); got != tt.want {
