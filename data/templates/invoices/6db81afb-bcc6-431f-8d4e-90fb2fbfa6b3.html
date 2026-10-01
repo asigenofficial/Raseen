@@ -1129,6 +1129,75 @@
   }
 }
 
+
+/* ── English Seller Info Left Alignment ── */
+.seller-en-info,
+.seller-en,
+.seller.seller-en,
+.seller-block.en,
+td.seller-en {
+  direction: ltr !important;
+  text-align: left !important;
+  justify-items: flex-start !important;
+  align-items: flex-start !important;
+  unicode-bidi: isolate !important;
+}
+
+.seller-en-info .company-name-en,
+.seller-en .company-name-en,
+.seller-en .company-name,
+.seller-block.en .seller-name-en,
+.seller-en-info h2,
+.seller-en h2,
+.seller-block.en h2 {
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: isolate !important;
+}
+
+.seller-en-info .header-info-line,
+.seller-en .header-info-line,
+.seller-en .company-line,
+.seller-block.en .seller-row,
+.seller-en p,
+.seller.seller-en p {
+  direction: ltr !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 5px !important;
+  unicode-bidi: isolate !important;
+}
+
+.seller-en-info .header-info-line svg,
+.seller-en-info .header-info-line .icon-svg,
+.seller-en .header-info-line svg,
+.seller-en .company-line svg,
+.seller-en .company-line .icon,
+.seller-block.en .seller-row svg,
+.seller-en p svg,
+.seller.seller-en p svg,
+.seller-en p .icon,
+.seller.seller-en p .icon {
+  order: -1 !important;
+  margin-right: 5px !important;
+  margin-left: 0 !important;
+  margin-inline-start: 0 !important;
+  margin-inline-end: 5px !important;
+  flex-shrink: 0 !important;
+}
+
+.seller-en-info .header-info-line span,
+.seller-en .company-line span,
+.seller-block.en .seller-row span,
+.seller-en p span {
+  text-align: left !important;
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+}
+
 </style>
 </head>
 
@@ -1244,10 +1313,10 @@
               <div class="gold-caption" spellcheck="false" style="outline: none;">وثيقة مالية رسمية</div>
             </section>
 
-            <section class="seller-block en">
+            <section class="seller-block en" dir="ltr" lang="en">
               <div class="seller-name-en" spellcheck="false" style="outline: none;">{{seller_name_en}}</div>
 
-              <div class="seller-row" spellcheck="false" style="outline: none;">
+              <div class="seller-row" dir="ltr" spellcheck="false" style="outline: none;">
                 <svg viewBox="0 0 24 24" fill="none">
                   <path d="M4 10.5L12 4l8 6.5V20H4V10.5Z" stroke-width="1.7"></path>
                   <path d="M9 20v-6h6v6" stroke-width="1.7"></path>
@@ -1255,7 +1324,7 @@
                 <span spellcheck="false" style="outline: none;">{{seller_address_en}}</span>
               </div>
 
-              <div class="seller-row" spellcheck="false" style="outline: none;">
+              <div class="seller-row" dir="ltr" spellcheck="false" style="outline: none;">
                 <svg viewBox="0 0 24 24" fill="none">
                   <path d="M12 21s7-5.1 7-12a7 7 0 1 0-14 0c0 6.9 7 12 7 12Z" stroke-width="1.7"></path>
                   <circle cx="12" cy="9" r="2.5" stroke-width="1.7"></circle>
@@ -1263,7 +1332,7 @@
                 <span spellcheck="false" style="outline: none;">{{seller_city}} - {{seller_country}}</span>
               </div>
 
-              <div class="seller-row" spellcheck="false" style="outline: none;">
+              <div class="seller-row" dir="ltr" spellcheck="false" style="outline: none;">
                 <svg viewBox="0 0 24 24" fill="none">
                   <rect x="4" y="5" width="16" height="14" rx="2" stroke-width="1.7"></rect>
                   <path d="M8 9h8M8 13h5" stroke-width="1.7"></path>
@@ -1272,7 +1341,7 @@
                     style="outline: none;">{{seller_tax}}</b></span>
               </div>
 
-              <div class="seller-row" spellcheck="false" style="outline: none;">
+              <div class="seller-row" dir="ltr" spellcheck="false" style="outline: none;">
                 <svg viewBox="0 0 24 24" fill="none">
                   <path d="M5 20V7h14v13M8 7V4h8v3M8 11h2M14 11h2M8 15h2M14 15h2" stroke-width="1.7"></path>
                 </svg>
