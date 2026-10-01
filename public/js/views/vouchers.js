@@ -467,6 +467,7 @@ export async function showVoucher(id, onChange) {
         <div class="flex gap-xs">
           <button class="btn btn-primary" data-print type="button">${icon.printer({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}طباعة السند</button>
           <button class="btn" data-pdf type="button">${icon.pdf({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}تحميل PDF</button>
+          ${voucher.status !== 'CANCELLED' ? html`<button class="btn" data-edit type="button" style="background:var(--brand-light);border-color:var(--brand);color:var(--brand)">${icon.pencil ? icon.pencil({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }) : '✏️ '}تعديل</button>` : ''}
           <button class="btn btn-danger" data-delete type="button">${icon.trash({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}حذف نهائي</button>
         </div>
         <button class="btn" data-close type="button">إغلاق</button>
@@ -563,6 +564,83 @@ export async function showVoucher(id, onChange) {
       } catch (err) {
         toastErr(err.message || 'فشل حذف السند');
       }
+    });
+  }
+
+  // ── زر التعديل ────────────────────────────────────────────────────────────
+  const editBtn = m.el.querySelector('[data-edit]');
+  if (editBtn) {
+    editBtn.addEventListener('click', () => {
+      const paymentOptions = [
+        { v: 'CASH',     l: 'نقداً' },
+        { v: 'TRANSFER', l: 'تحويل بنكي' },
+        { v: 'CHEQUE',   l: 'شيك' },
+        { v: 'CARD',     l: 'شبكة' },
+      ];
+
+      const em = modal({
+        title: `تعديل سند ${voucher.voucher_number}`,
+        body: html`
+          <div class="form-grid" style="gap:14px">
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
+              تاريخ السند
+              <input id="ev-date" type="date" class="input" value="${voucher.voucher_date}" style="font-size:14px">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
+              طريقة الدفع
+              <select id="ev-pay" class="input" style="font-size:14px">
+                ${raw(paymentOptions.map((o) => `<option value="${o.v}" ${voucher.payment_type === o.v ? 'selected' : ''}>${o.l}</option>`).join(''))}
+              </select>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
+              رقم المرجع / الشيك
+              <input id="ev-ref" type="text" class="input" value="${esc(voucher.reference_no || '')}" placeholder="اختياري" style="font-size:14px">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
+              الملاحظات
+              <input id="ev-notes" type="text" class="input" value="${esc(voucher.notes || '')}" placeholder="اختياري" style="font-size:14px">
+            </label>
+          </div>
+        `,
+        footer: html`
+          <div class="flex gap" style="justify-content:flex-end;width:100%">
+            <button class="btn" data-close type="button">إلغاء</button>
+            <button class="btn btn-primary" id="ev-save" type="button">💾 حفظ التعديلات</button>
+          </div>
+        `,
+      });
+
+      em.el.querySelector('#ev-save').addEventListener('click', async (e) => {
+        const newDate  = em.el.querySelector('#ev-date').value;
+        const newPay   = em.el.querySelector('#ev-pay').value;
+        const newRef   = em.el.querySelector('#ev-ref').value.trim();
+        const newNotes = em.el.querySelector('#ev-notes').value.trim();
+
+        if (!newDate) return toastErr('حدد تاريخ السند');
+
+        e.target.disabled = true;
+        try {
+          const updated = await api.patch(`/api/vouchers/${id}`, {
+            voucher_date: newDate,
+            payment_type: newPay,
+            reference_no: newRef,
+            notes: newNotes,
+          });
+          toastOk(`تم تعديل سند ${updated.voucher_number} بنجاح ✓`);
+          em.close();
+          // تحديث بيانات السند وإعادة رسم المعاينة
+          Object.assign(voucher, updated);
+          currentHtml = await renderDoc(currentStyle);
+          if (iframe) iframe.srcdoc = currentHtml;
+          // تحديث العنوان
+          m.el.querySelector('.modal-title, h2, [class*="title"]')?.childNodes[0] &&
+            (m.el.querySelector('.modal-title, h2, [class*="title"]').textContent = `سند قبض ${updated.voucher_number}`);
+          if (onChange) onChange(updated);
+        } catch (err) {
+          toastErr(err.message || 'فشل حفظ التعديلات');
+          e.target.disabled = false;
+        }
+      });
     });
   }
 }

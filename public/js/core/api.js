@@ -65,6 +65,7 @@ export const api = {
   get: (path, opts) => request('GET', path, null, opts),
   post: (path, body, opts) => request('POST', path, body, opts),
   put: (path, body, opts) => request('PUT', path, body, opts),
+  patch: (path, body, opts) => request('PATCH', path, body, opts),
   del: (path, opts) => request('DELETE', path, null, opts),
   delete: (path, opts) => request('DELETE', path, null, opts),
   text: (path) => request('GET', path, null, { rawText: true }),
