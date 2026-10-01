@@ -1267,10 +1267,19 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
     padding: 0 !important;
     flex: 0 0 auto !important;
   }
-  .header, .masthead {
+  .header, .masthead, .receipt-header, .head {
+    direction: rtl !important;
     padding-bottom: 4px !important;
     margin-bottom: 6px !important;
     gap: 8px !important;
+  }
+  .seller-en, .head-en, .brand-side-info-en, .header-col-left, .comp-name-en, .lux-head-en, .saqr-brand-en {
+    direction: ltr !important;
+    text-align: left !important;
+  }
+  .seller-ar, .head-ar, .brand-side-info, .header-col-right, .comp-name-ar, .lux-head-ar, .saqr-brand-ar {
+    direction: rtl !important;
+    text-align: right !important;
   }
   .logo-shell {
     height: 48px !important;

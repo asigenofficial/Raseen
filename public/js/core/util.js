@@ -531,7 +531,11 @@ export { icon } from './icons.js';
 export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
   try {
     toastOk('جارٍ تجهيز ملف PDF...');
-    const safeName = String(filename || 'document.pdf').endsWith('.pdf') ? String(filename) : `${filename}.pdf`;
+    let raw = String(filename || 'document.pdf').trim();
+    if (!raw.toLowerCase().endsWith('.pdf')) {
+      raw += '.pdf';
+    }
+    const safeName = raw.replace(/[\/\\?%*:|"<>]/g, '_').replace(/\s+/g, '_');
     const res = await fetch('/api/pdf/render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

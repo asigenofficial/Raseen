@@ -11,6 +11,7 @@ import (
 	"math"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -1640,9 +1641,10 @@ func (s *Server) Handler() http.Handler {
 		if invNum == "" {
 			invNum = id
 		}
-		filename := fmt.Sprintf("invoice_%s.pdf", invNum)
+		filename := fmt.Sprintf("فاتورة_%s.pdf", invNum)
+		encodedFilename := url.PathEscape(filename)
 		w.Header().Set("Content-Type", "application/pdf")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"invoice_%s.pdf\"; filename*=UTF-8''%s", invNum, encodedFilename))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(pdfBytes)
 	})
@@ -1665,8 +1667,9 @@ func (s *Server) Handler() http.Handler {
 		if filename == "" {
 			filename = "document.pdf"
 		}
+		encodedFilename := url.PathEscape(filename)
 		w.Header().Set("Content-Type", "application/pdf")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"document.pdf\"; filename*=UTF-8''%s", encodedFilename))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(pdfBytes)
 	})

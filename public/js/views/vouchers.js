@@ -758,7 +758,10 @@ export async function showVoucher(id, onChange) {
     pdfBtn.addEventListener('click', async (e) => {
       e.target.disabled = true;
       try {
-        await downloadPdfFromHtml(currentHtml, `سند-قبض-${voucher.voucher_number}.pdf`);
+        const clientNameClean = (voucher.client_name || client?.name || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
+        const vNum = voucher.voucher_number || 'سند';
+        const pdfFileName = clientNameClean ? `سند_قبض_${vNum}_${clientNameClean}.pdf` : `سند_قبض_${vNum}.pdf`;
+        await downloadPdfFromHtml(currentHtml, pdfFileName);
       } catch (err) {
         toastErr(err.message || 'تعذر تحميل ملف PDF');
       } finally {

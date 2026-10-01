@@ -66,8 +66,11 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
-body, table, th, td, div, span, p, strong, b, h1, h2, h3, h4, h5, h6 {
-  font-family: 'Cairo', 'Noto Sans Arabic', 'Amiri', 'KacstOne', 'DejaVu Sans', 'Segoe UI', Tahoma, Arial, sans-serif !important;
+html, body {
+  font-family: 'Cairo', 'Noto Sans Arabic', 'Amiri', 'KacstOne', 'DejaVu Sans', 'Segoe UI', Tahoma, Arial, sans-serif;
+}
+.mono, .monospace, pre, code {
+  font-family: 'Courier New', Courier, monospace !important;
 }
 </style>`
 
@@ -85,18 +88,20 @@ body, table, th, td, div, span, p, strong, b, h1, h2, h3, h4, h5, h6 {
 	defer os.Remove(inPath)
 	defer os.Remove(outPath)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 
 	args := []string{
 		"--headless=new",
 		"--disable-gpu",
 		"--no-pdf-header-footer",
+		"--prefer-css-page-size",
 		"--disable-extensions",
 		"--disable-sync",
 		"--allow-file-access-from-files",
 		"--disable-web-security",
 		"--run-all-compositor-stages-before-draw",
+		"--virtual-time-budget=1500",
 		fmt.Sprintf("--print-to-pdf=%s", outPath),
 		inPath,
 	}

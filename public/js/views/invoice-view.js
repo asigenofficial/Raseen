@@ -132,9 +132,9 @@ export async function downloadInvoicePdf({ invoice, issuer, client, printSetting
 
     if (blob) {
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `فاتورة_${invoice.invoice_number || invoice.id}.pdf`;
+      const clientClean = (client?.name || invoice.buyer_name || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
+      const invNum = (invoice.invoice_number || invoice.id || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
+      a.download = clientClean ? `فاتورة_${invNum}_${clientClean}.pdf` : `فاتورة_${invNum}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();

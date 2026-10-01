@@ -704,14 +704,15 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
     const currentLinesHtml = renderRowsForSlice(chunkLines, chunkStart);
 
     const headerHtml = isFirstPage ? `
-    <header class="head" style="background:${isLightColor(brandLight) ? brandLight : '#f8fafc'}; border:1.5px solid ${brandColor}44; border-radius:6px; padding:10px 16px; margin-bottom:12px; display:grid; grid-template-columns:minmax(0,1.1fr) auto minmax(0,1.1fr); gap:8px 14px; align-items:center; position:relative;">
-      <!-- Left Column: English Info -->
-      <div class="brand-side-info-en" style="text-align:left; direction:ltr;">
-        ${sellerNameEn ? `<div style="font-size:12.5pt; font-weight:800; color:${brandDark}; font-family:'Segoe UI', Arial, sans-serif; line-height:1.25; margin-bottom:4px;">${esc(sellerNameEn)}</div>` : ''}
-        <table style="font-size:8.5pt; border-collapse:collapse; text-align:left; line-height:1.4;">
-          ${sellerTax ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:65px;">Vat No.</td><td style="padding:1.5px 0; color:#0f172a; font-weight:600;"><span class="ltr">${esc(sellerTax)}</span></td></tr>` : ''}
-          ${sellerCr ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:65px;">CR.</td><td style="padding:1.5px 0; color:#0f172a; font-weight:600;"><span class="ltr">${esc(sellerCr)}</span></td></tr>` : ''}
-          ${issuer.phone ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:65px;">Phone.</td><td style="padding:1.5px 0; color:#0f172a; font-weight:600;"><span class="ltr">${esc(issuer.phone)}</span></td></tr>` : ''}
+    <header class="head" style="background:${isLightColor(brandLight) ? brandLight : '#f8fafc'}; border:1.5px solid ${brandColor}44; border-radius:6px; padding:10px 16px; margin-bottom:12px; display:grid; grid-template-columns:minmax(0,1.1fr) auto minmax(0,1.1fr); gap:8px 14px; align-items:center; position:relative; direction:rtl;">
+      <!-- Right Column: Arabic Info (1st in RTL Grid) -->
+      <div class="brand-side-info" style="text-align:right; direction:rtl;">
+        <div style="font-size:13.5pt; font-weight:800; color:${brandDark}; line-height:1.25; margin-bottom:3px;">${esc(sellerName)}</div>
+        ${sellerAddr ? `<div style="font-size:8pt; color:#334155; margin-bottom:4px; line-height:1.3;">${esc(sellerAddr)}</div>` : ''}
+        <table style="font-size:8.5pt; border-collapse:collapse; margin-inline-start:auto; line-height:1.4; direction:rtl;">
+          ${sellerTax ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:85px; text-align:right;">الرقم الضريبي:</td><td style="padding:1.5px 4px; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr mono">${esc(sellerTax)}</span></td></tr>` : ''}
+          ${sellerCr ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:85px; text-align:right;">السجل التجاري:</td><td style="padding:1.5px 4px; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr mono">${esc(sellerCr)}</span></td></tr>` : ''}
+          ${issuer.phone ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:85px; text-align:right;">رقم الجوال:</td><td style="padding:1.5px 4px; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr mono">${esc(issuer.phone)}</span></td></tr>` : ''}
         </table>
       </div>
 
@@ -725,21 +726,20 @@ export function invoiceA4({ invoice, issuer, client, copies = 1, printSettings =
         </div>
       </div>
 
-      <!-- Right Column: Arabic Info -->
-      <div class="brand-side-info" style="text-align:right; direction:rtl;">
-        <div style="font-size:13.5pt; font-weight:800; color:${brandDark}; line-height:1.25; margin-bottom:3px;">${esc(sellerName)}</div>
-        ${sellerAddr ? `<div style="font-size:8pt; color:#334155; margin-bottom:4px; line-height:1.3;">${esc(sellerAddr)}</div>` : ''}
-        <table style="font-size:8.5pt; border-collapse:collapse; margin-inline-start:auto; line-height:1.4; direction:rtl;">
-          ${sellerTax ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:85px; text-align:right;">الرقم الضريبي:</td><td style="padding:1.5px 4px; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr mono">${esc(sellerTax)}</span></td></tr>` : ''}
-          ${sellerCr ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:85px; text-align:right;">السجل التجاري:</td><td style="padding:1.5px 4px; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr mono">${esc(sellerCr)}</span></td></tr>` : ''}
-          ${issuer.phone ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:85px; text-align:right;">رقم الجوال:</td><td style="padding:1.5px 4px; text-align:left; color:#0f172a; font-weight:600;"><span class="ltr mono">${esc(issuer.phone)}</span></td></tr>` : ''}
+      <!-- Left Column: English Info (3rd in RTL Grid) -->
+      <div class="brand-side-info-en" style="text-align:left; direction:ltr;">
+        ${sellerNameEn ? `<div style="font-size:12.5pt; font-weight:800; color:${brandDark}; font-family:'Segoe UI', Arial, sans-serif; line-height:1.25; margin-bottom:4px;">${esc(sellerNameEn)}</div>` : ''}
+        <table style="font-size:8.5pt; border-collapse:collapse; text-align:left; line-height:1.4;">
+          ${sellerTax ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:65px;">Vat No.</td><td style="padding:1.5px 0; color:#0f172a; font-weight:600;"><span class="ltr">${esc(sellerTax)}</span></td></tr>` : ''}
+          ${sellerCr ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:65px;">CR.</td><td style="padding:1.5px 0; color:#0f172a; font-weight:600;"><span class="ltr">${esc(sellerCr)}</span></td></tr>` : ''}
+          ${issuer.phone ? `<tr><td style="padding:1.5px 0; font-weight:700; color:#0f172a; width:65px;">Phone.</td><td style="padding:1.5px 0; color:#0f172a; font-weight:600;"><span class="ltr">${esc(issuer.phone)}</span></td></tr>` : ''}
         </table>
       </div>
     </header>` : `
-    <header class="head head-followup" style="background:${isLightColor(brandLight) ? brandLight : '#f8fafc'}; border:1px solid ${brandColor}44; border-radius:4px; padding:6px 14px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
-      <div style="font-size:11pt; font-weight:800; color:${brandDark};">${esc(sellerName)} <span style="font-size:8.5pt; font-weight:600; color:#64748b;">${esc(sellerNameEn)}</span></div>
+    <header class="head head-followup" style="background:${isLightColor(brandLight) ? brandLight : '#f8fafc'}; border:1px solid ${brandColor}44; border-radius:4px; padding:6px 14px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; direction:rtl;">
+      <div style="font-size:11pt; font-weight:800; color:${brandDark}; text-align:right;">${esc(sellerName)}</div>
       <div style="font-weight:900; font-size:10pt; color:${brandDark}; border:1px solid ${brandColor}; padding:2px 14px; border-radius:3px; background:#fff;">فاتورة ضريبية — متابعة</div>
-      <div style="font-size:8.5pt; text-align:left; direction:ltr;"><span class="mono">${esc(sellerTax ? `VAT: ${sellerTax}` : '')}</span></div>
+      <div style="font-size:8.5pt; text-align:left; direction:ltr;"><span style="font-weight:700;margin-inline-end:6px;">${esc(sellerNameEn)}</span><span class="mono">${esc(sellerTax ? `VAT: ${sellerTax}` : '')}</span></div>
     </header>
     <div class="followup-meta" style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:3px; padding:4px 10px; margin-bottom:6px; font-size:8.5pt;">
       <span>العميل: <b>${esc(buyerName)}</b></span>
@@ -2385,7 +2385,7 @@ export function voucherPrint({ voucher, issuer, client, style = 'voucher_classic
 
     html = `<div class="page classic-slip-page">
       ${voucher.status === 'CANCELLED' ? '<div class="watermark">ملغى</div>' : ''}
-      <header class="head" style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:6px; padding:10px 16px; margin-bottom:12px; display:grid; grid-template-columns:minmax(0,1.1fr) auto minmax(0,1.1fr); gap:8px 14px; align-items:center;">
+      <header class="head" style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:6px; padding:10px 16px; margin-bottom:12px; display:grid; grid-template-columns:minmax(0,1.1fr) auto minmax(0,1.1fr); gap:8px 14px; align-items:center; direction:rtl;">
         <div style="text-align:right; direction:rtl;">
           <div style="font-size:13pt; font-weight:800; color:#0f172a;">${esc(issuer.name_ar)}</div>
           <div style="font-size:8.5pt; color:#0f172a;">الرقم الضريبي: <span class="mono">${esc(issuer.tax_number || '—')}</span></div>
@@ -2488,24 +2488,24 @@ export function voucherPrint({ voucher, issuer, client, style = 'voucher_classic
     // ---------------------- طراز الإصدار الفاخر وتويوتا
     html = `<div class="page lux-page">
       ${voucher.status === 'CANCELLED' ? '<div class="watermark">ملغى</div>' : ''}
-      <header class="lux-head">
-        <div class="lux-head-en">
-          <div class="co-en">${esc(issuer.name_en || 'Luxury Edition Trading Establishment')}</div>
-          <div class="tiny-en">${esc(issuer.district_en || issuer.district || 'Jeddah - Alfisalia District')}</div>
-          <div class="tiny-en">TAX NO. <span class="ltr">${esc(issuer.tax_number || '302284229500003')}</span></div>
-          <div class="tiny-en">CR NO. <span class="ltr">${esc(issuer.commercial_register || '7007285526')}</span></div>
-        </div>
-
-        <div class="lux-title-box">
-          <div class="lux-t1">سند قبض</div>
-          <div class="lux-t2 ltr">Receipt</div>
-        </div>
-
-        <div class="lux-head-ar">
+      <header class="lux-head" style="direction:rtl;">
+        <div class="lux-head-ar" style="text-align:right; direction:rtl;">
           <div class="co-ar">${esc(issuer.name_ar || 'مؤسسة الإصدار الفاخر التجارية')}</div>
           <div class="tiny">${esc(issuer.district ? `${issuer.city || 'جدة'} - حي ${issuer.district}` : addressLine(issuer))}</div>
           <div class="tiny">الرقم الضريبي: <span class="ltr">${esc(issuer.tax_number || '302284229500003')}</span></div>
           <div class="tiny">السجل التجاري: <span class="ltr">${esc(issuer.commercial_register || '7007285526')}</span></div>
+        </div>
+
+        <div class="lux-title-box" style="text-align:center;">
+          <div class="lux-t1">سند قبض</div>
+          <div class="lux-t2 ltr">Receipt</div>
+        </div>
+
+        <div class="lux-head-en" style="text-align:left; direction:ltr;">
+          <div class="co-en">${esc(issuer.name_en || 'Luxury Edition Trading Establishment')}</div>
+          <div class="tiny-en">${esc(issuer.district_en || issuer.district || 'Jeddah - Alfisalia District')}</div>
+          <div class="tiny-en">TAX NO. <span class="ltr">${esc(issuer.tax_number || '302284229500003')}</span></div>
+          <div class="tiny-en">CR NO. <span class="ltr">${esc(issuer.commercial_register || '7007285526')}</span></div>
         </div>
       </header>
 
@@ -2600,7 +2600,7 @@ export function voucherPrint({ voucher, issuer, client, style = 'voucher_classic
     // ---------------------- طراز قسيمة تحصيل وسند قبض (توريدات الصقر)
     html = `<div class="page saqr-page">
       ${voucher.status === 'CANCELLED' ? '<div class="watermark">ملغى</div>' : ''}
-      <header class="saqr-head">
+      <header class="saqr-head" style="direction:rtl;">
         <div class="saqr-brand-ar">
           <div class="co-ar">${esc(issuer.name_ar || 'شركة توريدات الصقر لقطع غيار السيارات')}</div>
           <div class="tiny">${esc(issuer.district ? `${issuer.city || 'جدة'} - حي ${issuer.district}` : addressLine(issuer))}</div>

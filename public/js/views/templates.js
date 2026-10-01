@@ -1223,7 +1223,8 @@ export async function render(view) {
       $('#btn-modal-pdf', m.el)?.addEventListener('click', async (e) => {
         e.currentTarget.disabled = true;
         try {
-          await downloadPdfFromHtml(docHtml, `${tpl?.id || 'invoice'}_preview.pdf`);
+          const tName = (tpl?.name_ar || tpl?.name || tpl?.id || 'الفاتورة').replace(/[\/\\?%*:|"<>]/g, '_').trim();
+          await downloadPdfFromHtml(docHtml, `معاينة_${tName}.pdf`);
         } catch (err) {
           toastErr('فشل تصدير ملف PDF: ' + (err.message || err));
         } finally {
@@ -1355,8 +1356,9 @@ export async function render(view) {
 
     const ifr = $('#fullscreen-voucher-iframe', m.el);
     if (ifr) ifr.srcdoc = docHtml;
+    const vNameClean = (tpl.name_ar || tpl.name || tplId || 'سند').replace(/[\/\\?%*:|"<>]/g, '_').trim();
     $('#btn-modal-print-voucher', m.el)?.addEventListener('click', () => printDoc(docHtml));
-    $('#btn-modal-pdf-voucher', m.el)?.addEventListener('click', () => downloadPdfFromHtml(docHtml, `معاينة-سند-${tplId}.pdf`));
+    $('#btn-modal-pdf-voucher', m.el)?.addEventListener('click', () => downloadPdfFromHtml(docHtml, `معاينة_سند_${vNameClean}.pdf`));
   }
 
   // معاينة بصرية للتقرير كصورة ومستند رسمي A4
