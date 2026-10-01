@@ -799,78 +799,116 @@ export async function showVoucher(id, onChange) {
   const editBtn = m.el.querySelector('[data-edit]');
   if (editBtn) {
     editBtn.addEventListener('click', () => {
-      const paymentOptions = [
-        { v: 'CASH',     l: 'نقداً' },
-        { v: 'TRANSFER', l: 'تحويل بنكي' },
-        { v: 'CHEQUE',   l: 'شيك' },
-        { v: 'CARD',     l: 'شبكة' },
-      ];
-
-      const em = modal({
-        title: `تعديل سند ${voucher.voucher_number}`,
-        body: html`
-          <div class="form-grid" style="gap:14px">
-            <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
-              تاريخ السند
-              <input id="ev-date" type="date" class="input" value="${voucher.voucher_date}" style="font-size:14px">
-            </label>
-            <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
-              طريقة الدفع
-              <select id="ev-pay" class="input" style="font-size:14px">
-                ${raw(paymentOptions.map((o) => `<option value="${o.v}" ${voucher.payment_type === o.v ? 'selected' : ''}>${o.l}</option>`).join(''))}
-              </select>
-            </label>
-            <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
-              رقم المرجع / الشيك
-              <input id="ev-ref" type="text" class="input" value="${esc(voucher.reference_no || '')}" placeholder="اختياري" style="font-size:14px">
-            </label>
-            <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
-              الملاحظات
-              <input id="ev-notes" type="text" class="input" value="${esc(voucher.notes || '')}" placeholder="اختياري" style="font-size:14px">
-            </label>
-          </div>
-        `,
-        footer: html`
-          <div class="flex gap" style="justify-content:flex-end;width:100%">
-            <button class="btn" data-close type="button">إلغاء</button>
-            <button class="btn btn-primary" id="ev-save" type="button">💾 حفظ التعديلات</button>
-          </div>
-        `,
-      });
-
-      em.el.querySelector('#ev-save').addEventListener('click', async (e) => {
-        const newDate  = em.el.querySelector('#ev-date').value;
-        const newPay   = em.el.querySelector('#ev-pay').value;
-        const newRef   = em.el.querySelector('#ev-ref').value.trim();
-        const newNotes = em.el.querySelector('#ev-notes').value.trim();
-
-        if (!newDate) return toastErr('حدد تاريخ السند');
-
-        e.target.disabled = true;
-        try {
-          const updated = await api.patch(`/api/vouchers/${id}`, {
-            voucher_date: newDate,
-            payment_type: newPay,
-            reference_no: newRef,
-            notes: newNotes,
-          });
-          toastOk(`تم تعديل سند ${updated.voucher_number} بنجاح ✓`);
-          em.close();
-          // تحديث بيانات السند وإعادة رسم المعاينة
-          Object.assign(voucher, updated);
-          currentHtml = await renderDoc(currentStyle);
-          if (iframe) iframe.srcdoc = currentHtml;
-          // تحديث العنوان
-          m.el.querySelector('.modal-title, h2, [class*="title"]')?.childNodes[0] &&
-            (m.el.querySelector('.modal-title, h2, [class*="title"]').textContent = `سند قبض ${updated.voucher_number}`);
-          if (onChange) onChange(updated);
-        } catch (err) {
-          toastErr(err.message || 'فشل حفظ التعديلات');
-          e.target.disabled = false;
-        }
+      openEditVoucherModal(voucher, async (updated) => {
+        Object.assign(voucher, updated);
+        currentHtml = await renderDoc(currentStyle);
+        if (iframe) iframe.srcdoc = currentHtml;
+        m.el.querySelector('.modal-title, h2, [class*="title"]')?.childNodes[0] &&
+          (m.el.querySelector('.modal-title, h2, [class*="title"]').textContent = `سند قبض ${updated.voucher_number}`);
+        if (onChange) onChange(updated);
       });
     });
   }
+}
+
+export function openEditVoucherModal(voucher, onDone) {
+  const paymentOptions = [
+    { v: 'CASH',     l: 'نقداً' },
+    { v: 'TRANSFER', l: 'تحويل بنكي' },
+    { v: 'CHEQUE',   l: 'شيك' },
+    { v: 'CARD',     l: 'شبكة' },
+  ];
+
+  const em = modal({
+    title: `تعديل سند ${voucher.voucher_number}`,
+    body: html`
+      <div class="form-grid" style="gap:14px">
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
+          تاريخ السند
+          <input id="ev-date" type="date" class="input" value="${voucher.voucher_date}" style="font-size:14px">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
+          طريقة الدفع
+          <select id="ev-pay" class="input" style="font-size:14px">
+            ${raw(paymentOptions.map((o) => `<option value="${o.v}" ${(voucher.payment_type || voucher.payment_method) === o.v ? 'selected' : ''}>${o.l}</option>`).join(''))}
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
+          رقم المرجع / الشيك
+          <input id="ev-ref" type="text" class="input" value="${esc(voucher.reference_no || '')}" placeholder="اختياري" style="font-size:14px">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
+          الملاحظات
+          <input id="ev-notes" type="text" class="input" value="${esc(voucher.notes || '')}" placeholder="اختياري" style="font-size:14px">
+        </label>
+      </div>
+    `,
+    footer: html`
+      <div class="flex gap" style="justify-content:flex-end;width:100%">
+        <button class="btn" data-close type="button">إلغاء</button>
+        <button class="btn btn-primary" id="ev-save" type="button">💾 حفظ التعديلات</button>
+      </div>
+    `,
+  });
+
+  em.el.querySelector('#ev-save').addEventListener('click', async (e) => {
+    const newDate  = em.el.querySelector('#ev-date').value;
+    const newPay   = em.el.querySelector('#ev-pay').value;
+    const newRef   = em.el.querySelector('#ev-ref').value.trim();
+    const newNotes = em.el.querySelector('#ev-notes').value.trim();
+
+    if (!newDate) return toastErr('حدد تاريخ السند');
+
+    e.target.disabled = true;
+    try {
+      const updated = await api.patch(`/api/vouchers/${voucher.id}`, {
+        voucher_date: newDate,
+        payment_type: newPay,
+        reference_no: newRef,
+        notes: newNotes,
+      });
+      toastOk(`تم تعديل سند ${updated.voucher_number} بنجاح ✓`);
+      em.close();
+      if (onDone) onDone(updated);
+    } catch (err) {
+      toastErr(err.message || 'فشل حفظ التعديلات');
+      e.target.disabled = false;
+    }
+  });
+}
+
+export async function downloadVoucherDirectPdf(voucherId) {
+  toastOk('جارٍ تجهيز ملف PDF للسند...');
+  const voucher = await api.get(`/api/vouchers/${voucherId}`);
+  const [issuer, client, templatesRes] = await Promise.all([
+    api.get(`/api/issuers/${voucher.issuer_id}`).catch(() => store.issuers.find((i) => i.id === voucher.issuer_id) || store.activeIssuer || {}),
+    api.get(`/api/clients/${voucher.client_id}`).catch(() => store.clients.find((c) => c.id === voucher.client_id) || { name: voucher.client_name }),
+    api.get('/api/invoices/templates?type=documents').catch(() => []),
+  ]);
+
+  const availableTemplates = Array.isArray(templatesRes) ? templatesRes : (templatesRes?.data || []);
+  const issuerPrintCfg = (typeof issuer.print_settings === 'string'
+    ? JSON.parse(issuer.print_settings || '{}')
+    : (issuer.print_settings || {})) || {};
+  const currentStyle = issuerPrintCfg.voucher_template_style || (availableTemplates[0]?.id || 'default');
+
+  let rawHtml = '';
+  const targetTpl = availableTemplates.find((t) => t.id === currentStyle) || availableTemplates[0];
+  if (targetTpl) {
+    try {
+      const r = await fetch(`/api/invoices/templates/${encodeURIComponent(targetTpl.id)}/render-html`);
+      if (r.ok) rawHtml = await r.text();
+    } catch {}
+  }
+
+  const docHtml = rawHtml
+    ? fillDynamicTemplateHtml(rawHtml, { issuer, client, voucher })
+    : voucherPrint({ voucher, issuer, client, style: currentStyle });
+
+  const clientNameClean = (voucher.client_name || client?.name || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
+  const vNum = voucher.voucher_number || 'سند';
+  const pdfFileName = clientNameClean ? `سند_قبض_${vNum}_${clientNameClean}.pdf` : `سند_قبض_${vNum}.pdf`;
+  await downloadPdfFromHtml(docHtml, pdfFileName);
 }
 
 export async function render(view, ctx) {
@@ -1014,7 +1052,7 @@ export async function render(view, ctx) {
               <th class="text-end nowrap" style="white-space:nowrap">الموزّع <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
               <th class="text-end nowrap" style="white-space:nowrap">غير موزّع <span class="cur-sym">${sarSvg({ size: 12 })}</span></th>
               <th class="text-center nowrap" style="min-width:80px;white-space:nowrap">الحالة</th>
-              <th class="text-center nowrap" style="min-width:115px;white-space:nowrap">الإجراءات</th>
+              <th class="text-center nowrap" style="min-width:180px;white-space:nowrap">الإجراءات</th>
             </tr></thead>
             <tbody>
               ${raw(state.data.items.length ? state.data.items.map((v) => `<tr class="${v.status === 'CANCELLED' ? 'row-off' : ''}">
@@ -1031,11 +1069,19 @@ export async function render(view, ctx) {
                   ${v.status === 'CANCELLED' ? '<span class="badge red">ملغى</span>' : '<span class="badge green">نشط</span>'}
                 </td>
                 <td class="actions">
-                  <div class="row-actions-group">
-                    <button class="btn btn-sm btn-ghost" data-act="show" data-id="${esc(v.id)}" type="button" title="عرض السند" style="padding:.28rem .55rem">
+                  <div class="row-actions-group" style="display:flex;gap:4px;align-items:center;justify-content:center;">
+                    <button class="btn btn-sm btn-ghost" data-act="show" data-id="${esc(v.id)}" type="button" title="عرض السند" style="padding:.28rem .5rem">
                       ${icon.eye({ size: 14, style: 'vertical-align:middle' })}<span>عرض</span>
                     </button>
-                    <button class="btn btn-sm btn-icon btn-danger" data-act="delete" data-id="${esc(v.id)}" data-num="${esc(v.voucher_number)}" type="button" title="حذف السند نهائياً">
+                    ${v.status !== 'CANCELLED' ? `
+                      <button class="btn btn-sm btn-ghost" data-act="edit" data-id="${esc(v.id)}" type="button" title="تعديل السند" style="padding:.28rem .5rem;color:var(--brand);font-weight:600">
+                        ${icon.pencil ? icon.pencil({ size: 13, style: 'vertical-align:middle' }) : '✏️ '}<span>تعديل</span>
+                      </button>
+                    ` : ''}
+                    <button class="btn btn-sm btn-icon btn-ghost" data-act="pdf" data-id="${esc(v.id)}" type="button" title="تحميل ملف PDF مباشرة" style="color:var(--info, #0284c7);padding:.28rem .45rem">
+                      ${icon.pdf({ size: 14, style: 'vertical-align:middle' })}
+                    </button>
+                    <button class="btn btn-sm btn-icon btn-danger" data-act="delete" data-id="${esc(v.id)}" data-num="${esc(v.voucher_number)}" type="button" title="حذف السند نهائياً" style="padding:.28rem .45rem">
                       ${icon.trash({ size: 13, style: 'vertical-align:middle' })}
                     </button>
                   </div>
@@ -1087,6 +1133,33 @@ export async function render(view, ctx) {
     }
 
     delegate(view, 'click', '[data-act="show"]', async (e, btn) => { await showVoucher(btn.dataset.id, reload); });
+
+    delegate(view, 'click', '[data-act="edit"]', async (e, btn) => {
+      const id = btn.dataset.id;
+      const v = state.data.items.find((item) => item.id === id);
+      if (v) {
+        openEditVoucherModal(v, reload);
+      } else {
+        try {
+          const fetched = await api.get(`/api/vouchers/${id}`);
+          openEditVoucherModal(fetched, reload);
+        } catch (err) {
+          toastErr('تعذر تحميل بيانات السند: ' + (err.message || err));
+        }
+      }
+    });
+
+    delegate(view, 'click', '[data-act="pdf"]', async (e, btn) => {
+      const id = btn.dataset.id;
+      btn.disabled = true;
+      try {
+        await downloadVoucherDirectPdf(id);
+      } catch (err) {
+        toastErr('تعذر تحميل ملف PDF: ' + (err.message || err));
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
     delegate(view, 'click', '[data-act="delete"]', async (e, btn) => {
       const id = btn.dataset.id;
