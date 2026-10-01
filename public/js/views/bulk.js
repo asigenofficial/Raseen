@@ -553,6 +553,10 @@ export async function render(view) {
           <p>توليد عدد كبير من الفواتير المتنوعة لعميل واحد خلال فترة محددة، مع مطابقة دقيقة لميزانية إجمالية وإدارة المسودات.</p>
         </div>
         <div class="page-actions">
+          <a class="btn" href="#/vouchers?mode=install" style="background:var(--brand-light, #f0f9ff);border:1.5px solid var(--brand, #0284c7);color:var(--brand, #0284c7);font-weight:700">
+            ${raw(icon.calendar({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}
+            توليد سندات دفعية (أقساط)
+          </a>
           <button class="btn btn-primary" id="preview" type="button" style="font-weight:bold">${raw(icon.sparkles({ size: 16, style: 'vertical-align:text-bottom;margin-left:5px' }))}توليد معاينة جديدة</button>
         </div>
       </div>

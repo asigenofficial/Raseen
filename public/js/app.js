@@ -23,6 +23,7 @@ const NAV = [
   { name: 'invoices', label: 'الفواتير', icon: icon.invoice(), perm: 'invoices.view' },
   { name: 'bulk', label: 'التوليد الدفعي', icon: icon.bulk(), perm: 'bulk.generate' },
   { name: 'vouchers', label: 'سندات القبض', icon: icon.receipt(), perm: 'vouchers.view' },
+  { name: 'vouchers-install', label: 'السندات الدفعية (أقساط)', icon: icon.calendar(), perm: 'vouchers.create' },
   { name: 'statement', label: 'كشف حساب عميل', icon: icon.statement(), perm: 'ledger.view' },
   { group: 'البيانات الأساسية' },
   { name: 'issuers', label: 'الشركات المصدرة', icon: icon.building(), perm: 'issuers.view' },
@@ -44,6 +45,9 @@ const VIEWS = {
   'invoice-view': () => import('./views/invoice-view.js?v=' + Date.now()),
   bulk: () => import('./views/bulk.js'),
   vouchers: () => import('./views/vouchers.js?v=' + Date.now()),
+  'vouchers-install': () => import('./views/vouchers.js?v=' + Date.now()).then((m) => ({
+    render: (view, ctx) => m.render(view, { ...(ctx || {}), query: { ...((ctx && ctx.query) || {}), mode: 'install' } }),
+  })),
   statement: () => import('./views/statement.js'),
   issuers: () => import('./views/issuers.js?v=' + Date.now()),
   templates: () => import('./views/templates.js?v=' + Date.now()),

@@ -18,15 +18,27 @@ import { voucherPrint, VOUCHER_TEMPLATES } from '../print/templates.js';
 const PAGE = 50;
 
 /** نافذة سند القبض المجمّع أو المنفصل (سند لكل فاتورة) مع تأخير التاريخ وفجوة التسلسل. */
-export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
+export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', onDone }) {
   const cur = currencyLabel();
   let batchMode = false;   // false = سند واحد مجمع, true = سند منفصل لكل فاتورة
   let installMode = false; // true = سندات دفعية (أقساط) على تواريخ مستقبلية
 
   const m = modal({
-    title: 'سند قبض جديد',
+    title: mode === 'install' ? '📅 إنشاء سندات قبض دفعية (أقساط)' : (mode === 'batch' ? '⚡ إنشاء سند لكل فاتورة' : 'سند قبض جديد'),
     wide: true,
     body: html`
+      <div id="w-mode-bar" style="display:flex;background:var(--card-sub, #f1f5f9);padding:4px;border-radius:10px;gap:6px;margin-bottom:16px;border:1px solid var(--line)">
+        <button type="button" id="btn-mode-single" class="btn btn-sm" style="flex:1;font-weight:700;border-radius:7px;transition:all .15s ease" title="سند قبض واحد عادي بمبلغ محدد">
+          📄 سند عادي موحد
+        </button>
+        <button type="button" id="btn-mode-install" class="btn btn-sm" style="flex:1;font-weight:700;border-radius:7px;transition:all .15s ease" title="توليد سندات دفعية مجدولة على أقساط وتواريخ مستقبلية">
+          📅 سندات دفعية (أقساط)
+        </button>
+        <button type="button" id="btn-mode-batch" class="btn btn-sm" style="flex:1;font-weight:700;border-radius:7px;transition:all .15s ease" title="إنشاء سند منفصل لكل فاتورة مفتوحة">
+          ⚡ سند منفصل لكل فاتورة
+        </button>
+      </div>
+
       <div class="form-grid-3">
         <div class="field"><label class="req">الشركة المصدرة</label>
           <select name="issuer_id" id="w-issuer">
@@ -41,20 +53,14 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
           <input type="date" name="voucher_date" id="w-date" value="${today()}" /></div>
       </div>
 
-      <div id="w-mode-bar" class="row mt" style="gap:10px;align-items:center;flex-wrap:wrap">
-        <button type="button" id="btn-toggle-batch" class="btn btn-sm"
-          title="تبديل بين وضع السند الموحد أو سند منفصل لكل فاتورة">⚙ سندات منفصلة</button>
-        <button type="button" id="btn-toggle-install" class="btn btn-sm"
-          title="إنشاء سندات دفعية موزعة على تواريخ مستقبلية">📅 سندات دفعية</button>
-        <div id="w-batch-opts" class="row" style="gap:10px;display:none;align-items:center">
-          <div class="field" style="margin:0;min-width:140px">
-            <label style="font-size:12px;margin-bottom:2px">تأخير التاريخ (أيام)</label>
-            <input type="number" id="w-date-offset" value="2" min="0" max="7" style="width:70px" />
-          </div>
-          <div class="field" style="margin:0;min-width:140px">
-            <label style="font-size:12px;margin-bottom:2px">فجوة التسلسل</label>
-            <input type="number" id="w-seq-gap" value="2" min="0" max="20" style="width:70px" />
-          </div>
+      <div id="w-batch-opts" class="row mt" style="gap:10px;display:none;align-items:center;background:var(--card);padding:8px 12px;border-radius:8px;border:1px solid var(--line)">
+        <div class="field" style="margin:0;min-width:140px">
+          <label style="font-size:12px;margin-bottom:2px">تأخير التاريخ (أيام)</label>
+          <input type="number" id="w-date-offset" value="2" min="0" max="7" style="width:70px" />
+        </div>
+        <div class="field" style="margin:0;min-width:140px">
+          <label style="font-size:12px;margin-bottom:2px">فجوة التسلسل</label>
+          <input type="number" id="w-seq-gap" value="2" min="0" max="20" style="width:70px" />
         </div>
       </div>
 
@@ -169,11 +175,28 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
       </div>`;
   };
 
-  // ── تبديل الوضع (موحد / منفصل) ──────────────────────────────────────────
+  // ── تبديل الوضع (موحد / دفعي / منفصل) ──────────────────────────────────
+  const updateModeTabs = (curMode) => {
+    const singleBtn = $('#btn-mode-single', m.body);
+    const installBtn = $('#btn-mode-install', m.body);
+    const batchBtn = $('#btn-mode-batch', m.body);
+    if (singleBtn) {
+      singleBtn.style.background = curMode === 'single' ? 'var(--brand)' : '';
+      singleBtn.style.color = curMode === 'single' ? '#fff' : '';
+    }
+    if (installBtn) {
+      installBtn.style.background = curMode === 'install' ? 'var(--brand)' : '';
+      installBtn.style.color = curMode === 'install' ? '#fff' : '';
+    }
+    if (batchBtn) {
+      batchBtn.style.background = curMode === 'batch' ? 'var(--brand)' : '';
+      batchBtn.style.color = curMode === 'batch' ? '#fff' : '';
+    }
+  };
+
   const resetAllModes = () => {
     batchMode = false; installMode = false;
-    setActiveBtn($('#btn-toggle-batch', m.body), false);
-    setActiveBtn($('#btn-toggle-install', m.body), false);
+    updateModeTabs('single');
     $('#w-batch-opts', m.body).style.display = 'none';
     $('#w-batch-pay', m.body).style.display = 'none';
     $('#w-install-opts', m.body).style.display = 'none';
@@ -185,10 +208,9 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
   };
 
   const toggleBatch = () => {
-    if (batchMode) { resetAllModes(); if (open.length) renderOpen(); return; }
     resetAllModes();
     batchMode = true;
-    setActiveBtn($('#btn-toggle-batch', m.body), true);
+    updateModeTabs('batch');
     $('#w-batch-opts', m.body).style.display = 'flex';
     $('#w-batch-pay', m.body).style.display = 'grid';
     $('#w-single-opts', m.body).style.display = 'none';
@@ -201,10 +223,9 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
   };
 
   const toggleInstall = () => {
-    if (installMode) { resetAllModes(); if (open.length) renderOpen(); return; }
     resetAllModes();
     installMode = true;
-    setActiveBtn($('#btn-toggle-install', m.body), true);
+    updateModeTabs('install');
     $('#w-install-opts', m.body).style.display = 'block';
     $('#w-single-opts', m.body).style.display = 'none';
     $('#w-date-wrap', m.body).style.opacity = '0.4';
@@ -224,8 +245,13 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
     if (open.length) renderOpen();
   };
 
-  $('#btn-toggle-batch', m.body).addEventListener('click', toggleBatch);
-  $('#btn-toggle-install', m.body).addEventListener('click', toggleInstall);
+  $('#btn-mode-single', m.body)?.addEventListener('click', resetAllModes);
+  $('#btn-mode-install', m.body)?.addEventListener('click', toggleInstall);
+  $('#btn-mode-batch', m.body)?.addEventListener('click', toggleBatch);
+
+  if (mode === 'install') toggleInstall();
+  else if (mode === 'batch') toggleBatch();
+  else resetAllModes();
 
   // ── رسم جدول الفواتير المفتوحة ───────────────────────────────────────────
   const renderOpen = () => {
@@ -979,7 +1005,17 @@ export async function render(view, ctx) {
           <p>سند واحد يمكن أن يسدد فاتورة واحدة أو عدة فواتير، كلياً أو جزئياً.</p>
         </div>
         <div class="page-actions">
-          ${raw(can('vouchers.create') ? `<button class="btn btn-primary" id="new-v" type="button">${icon.plus({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}سند قبض جديد</button>` : '')}
+          ${raw(can('vouchers.create') ? `
+            <button class="btn btn-primary" id="new-v" type="button">
+              ${icon.plus({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}سند قبض جديد
+            </button>
+            <button class="btn btn-secondary" id="new-v-install" type="button" style="background:#0284c7;color:#fff;border-color:#0284c7;font-weight:700" title="إنشاء وتوليد دفعات سندات قبض مجدولة على أقساط وتواريخ مستقبلية">
+              ${raw(icon.calendar({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}سندات دفعية (أقساط)
+            </button>
+            <button class="btn" id="new-v-batch" type="button" style="border:1.5px solid var(--line-strong);font-weight:700" title="إنشاء سند قبض منفصل لكل فاتورة غير مسددة">
+              ⚡ سندات لكل فاتورة
+            </button>
+          ` : '')}
           <button class="btn btn-primary" id="btn-pdf-vouchers" type="button">
             ${raw(icon.pdf({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}
             تحميل قائمة PDF
@@ -1128,8 +1164,40 @@ export async function render(view, ctx) {
       newBtn.addEventListener('click', () => voucherWizard({
         clientId: state.client_id,
         issuerId: state.issuer_id || store.activeIssuerId,
+        mode: 'single',
         onDone: reload,
       }));
+    }
+
+    const newInstallBtn = $('#new-v-install', view);
+    if (newInstallBtn) {
+      newInstallBtn.addEventListener('click', () => voucherWizard({
+        clientId: state.client_id,
+        issuerId: state.issuer_id || store.activeIssuerId,
+        mode: 'install',
+        onDone: reload,
+      }));
+    }
+
+    const newBatchBtn = $('#new-v-batch', view);
+    if (newBatchBtn) {
+      newBatchBtn.addEventListener('click', () => voucherWizard({
+        clientId: state.client_id,
+        issuerId: state.issuer_id || store.activeIssuerId,
+        mode: 'batch',
+        onDone: reload,
+      }));
+    }
+
+    if (q0.mode === 'install' || q0.action === 'install') {
+      setTimeout(() => {
+        voucherWizard({
+          clientId: state.client_id,
+          issuerId: state.issuer_id || store.activeIssuerId,
+          mode: 'install',
+          onDone: reload,
+        });
+      }, 50);
     }
 
     delegate(view, 'click', '[data-act="show"]', async (e, btn) => { await showVoucher(btn.dataset.id, reload); });
