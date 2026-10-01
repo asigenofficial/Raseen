@@ -24,18 +24,18 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
   let installMode = false; // true = سندات دفعية (أقساط) على تواريخ مستقبلية
 
   const m = modal({
-    title: mode === 'install' ? '📅 إنشاء سندات قبض دفعية (أقساط)' : (mode === 'batch' ? '⚡ إنشاء سند لكل فاتورة' : 'سند قبض جديد'),
+    title: mode === 'install' ? 'إنشاء سندات قبض دفعية (أقساط)' : (mode === 'batch' ? 'إنشاء سند منفصل لكل فاتورة' : 'سند قبض جديد'),
     wide: true,
     body: html`
       <div id="w-mode-bar">
         <button type="button" id="btn-mode-single" class="btn btn-sm" title="سند قبض واحد عادي بمبلغ محدد">
-          📄 سند عادي موحد
+          سند عادي موحد
         </button>
         <button type="button" id="btn-mode-install" class="btn btn-sm" title="توليد سندات دفعية مجدولة على أقساط وتواريخ مستقبلية">
-          📅 السندات الدفعية (أقساط)
+          السندات الدفعية (أقساط)
         </button>
         <button type="button" id="btn-mode-batch" class="btn btn-sm" title="إنشاء سند منفصل لكل فاتورة مفتوحة">
-          ⚡ سند منفصل لكل فاتورة
+          سند منفصل لكل فاتورة
         </button>
       </div>
 
@@ -87,7 +87,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
       <!-- ── وضع السندات الدفعية ──────────────────────────────────────────── -->
       <div id="w-install-opts" class="mt" style="display:none">
         <div class="alert alert-info tiny" style="margin-bottom:10px">
-          📅 <b>وضع السندات الدفعية</b> — حدد العميل ثم الإجمالي وعدد الدفعات والتواتر.
+          <b>وضع السندات الدفعية</b> — حدد العميل ثم الإجمالي وعدد الدفعات والتواتر.
           يمكنك اختيار فواتير محددة للتوزيع التلقائي (FIFO)، أو تركها بدون تخصيص.
         </div>
         <div class="form-grid-4">
@@ -205,7 +205,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
     $('#w-date-wrap', m.body).title = 'التاريخ يُحسب تلقائياً من تاريخ كل فاتورة + التأخير';
     $('#w-hint', m.body).style.display = 'none';
     m.el.querySelector('[data-fifo]').style.display = 'none';
-    m.el.querySelector('[data-ok]').textContent = '⚡ إنشاء سند لكل فاتورة';
+    m.el.querySelector('[data-ok]').textContent = 'إنشاء سند لكل فاتورة';
     if (open.length) renderOpen();
   };
 
@@ -219,7 +219,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
     $('#w-date-wrap', m.body).title = 'التاريخ يُحدَّد لكل دفعة على حدة';
     $('#w-hint', m.body).style.display = 'none';
     m.el.querySelector('[data-fifo]').style.display = 'none';
-    m.el.querySelector('[data-ok]').textContent = '📅 إنشاء الدفعات';
+    m.el.querySelector('[data-ok]').textContent = 'إنشاء الدفعات';
     // اضبط تاريخ أول دفعة الشهر القادم تلقائياً
     if (!$('#w-inst-start', m.body).value) {
       const nx = new Date(); nx.setUTCMonth(nx.getUTCMonth() + 1); nx.setUTCDate(1);
@@ -476,7 +476,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
     progressBox.innerHTML = `
       <div class="card" style="margin-top:12px;border:2px solid var(--success);padding:14px;border-radius:8px">
         <div style="font-weight:700;color:var(--success);margin-bottom:8px">
-          ✅ تم إنشاء ${created.length} سند بنجاح${errors.length ? ` — ${errors.length} خطأ` : ''}
+          تم إنشاء ${created.length} سند بنجاح${errors.length ? ` — ${errors.length} خطأ` : ''}
         </div>
         <div class="table-wrap" style="max-height:220px;overflow-y:auto">
           <table class="tbl compact" style="font-size:12px">
@@ -495,7 +495,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
             </tr></tfoot>
           </table>
         </div>
-        ${errors.length ? `<div class="alert alert-warn tiny mt">${errors.map((er) => `❌ فاتورة ${er.inv}: ${er.err}`).join('<br>')}</div>` : ''}
+        ${errors.length ? `<div class="alert alert-warn tiny mt">${errors.map((er) => `فاتورة ${er.inv}: ${er.err}`).join('<br>')}</div>` : ''}
       </div>`;
 
     m.el.querySelector('[data-close]').disabled = false;
@@ -600,7 +600,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
     progressBox.innerHTML = `
       <div class="card" style="margin-top:12px;border:2px solid var(--success);padding:14px;border-radius:8px">
         <div style="font-weight:700;color:var(--success);margin-bottom:8px">
-          ✅ تم إنشاء ${created.length} سند دفعي بنجاح${errors.length ? ` — ❌ ${errors.length} خطأ` : ''}
+          تم إنشاء ${created.length} سند دفعي بنجاح${errors.length ? ` — ${errors.length} خطأ` : ''}
         </div>
         <div class="table-wrap" style="max-height:220px;overflow-y:auto">
           <table class="tbl compact" style="font-size:12px">
@@ -615,7 +615,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
         <div style="text-align:left;font-size:13px;font-weight:700;margin-top:8px;color:var(--brand)">
           الإجمالي: ${money(totalCreated)} ${cur}
         </div>
-        ${errors.length ? `<div class="alert alert-warn tiny mt">${errors.map((x) => `❌ ${esc(x.date)}: ${esc(x.err)}`).join('<br>')}</div>` : ''}
+        ${errors.length ? `<div class="alert alert-warn tiny mt">${errors.map((x) => `${esc(x.date)}: ${esc(x.err)}`).join('<br>')}</div>` : ''}
       </div>`;
 
     e.target.disabled = false;
@@ -705,7 +705,7 @@ export async function showVoucher(id, onChange) {
         <div class="flex gap-xs">
           <button class="btn btn-primary" data-print type="button">${icon.printer({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}طباعة السند</button>
           <button class="btn" data-pdf type="button">${icon.pdf({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}تحميل PDF</button>
-          ${voucher.status !== 'CANCELLED' && can('vouchers.edit') ? html`<button class="btn" data-edit type="button" style="background:var(--brand-light);border-color:var(--brand);color:var(--brand)">${icon.pencil ? icon.pencil({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }) : '✏️ '}تعديل</button>` : ''}
+          ${voucher.status !== 'CANCELLED' && can('vouchers.edit') ? html`<button class="btn" data-edit type="button" style="background:var(--brand-light);border-color:var(--brand);color:var(--brand)">${icon.pencil ? icon.pencil({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }) : ''}تعديل</button>` : ''}
           <button class="btn btn-danger" data-delete type="button">${icon.trash({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}حذف نهائي</button>
         </div>
         <button class="btn" data-close type="button">إغلاق</button>
@@ -757,7 +757,7 @@ export async function showVoucher(id, onChange) {
           ...issuer,
           print_settings: issuerPrintCfg,
         });
-        toastOk('تم اعتماد القالب كافتراضي لجميع سندات المنشأة بنجاح ✓');
+        toastOk('تم اعتماد القالب كافتراضي لجميع سندات المنشأة بنجاح');
       } catch (err) {
         toastErr('فشل اعتماد القالب: ' + err.message);
       } finally {
@@ -859,7 +859,7 @@ export function openEditVoucherModal(voucher, onDone) {
     footer: html`
       <div class="flex gap" style="justify-content:flex-end;width:100%">
         <button class="btn" data-close type="button">إلغاء</button>
-        <button class="btn btn-primary" id="ev-save" type="button">💾 حفظ التعديلات</button>
+        <button class="btn btn-primary" id="ev-save" type="button">حفظ التعديلات</button>
       </div>
     `,
   });
@@ -880,7 +880,7 @@ export function openEditVoucherModal(voucher, onDone) {
         reference_no: newRef,
         notes: newNotes,
       });
-      toastOk(`تم تعديل سند ${updated.voucher_number} بنجاح ✓`);
+      toastOk(`تم تعديل سند ${updated.voucher_number} بنجاح`);
       em.close();
       if (onDone) onDone(updated);
     } catch (err) {
@@ -1000,7 +1000,7 @@ export async function render(view, ctx) {
               ${raw(icon.calendar({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}السندات الدفعية (أقساط)
             </button>
             <button class="btn" id="new-v-batch" type="button" style="border:1.5px solid var(--line-strong);font-weight:700" title="إنشاء سند قبض منفصل لكل فاتورة غير مسددة">
-              ⚡ سندات لكل فاتورة
+              سندات لكل فاتورة
             </button>
           ` : '')}
           <button class="btn btn-primary" id="btn-pdf-vouchers" type="button">
@@ -1098,7 +1098,7 @@ export async function render(view, ctx) {
                     </button>
                     ${v.status !== 'CANCELLED' && can('vouchers.edit') ? `
                       <button class="btn btn-sm btn-ghost" data-act="edit" data-id="${esc(v.id)}" type="button" title="تعديل السند" style="padding:.28rem .5rem;color:var(--brand);font-weight:600">
-                        ${icon.pencil ? icon.pencil({ size: 13, style: 'vertical-align:middle' }) : '✏️ '}<span>تعديل</span>
+                        ${icon.pencil ? icon.pencil({ size: 13, style: 'vertical-align:middle' }) : ''}<span>تعديل</span>
                       </button>
                     ` : ''}
                     <button class="btn btn-sm btn-icon btn-ghost" data-act="pdf" data-id="${esc(v.id)}" type="button" title="تحميل ملف PDF مباشرة" style="color:var(--info, #0284c7);padding:.28rem .45rem">
