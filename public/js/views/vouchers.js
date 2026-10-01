@@ -20,7 +20,8 @@ const PAGE = 50;
 /** نافذة سند القبض المجمّع أو المنفصل (سند لكل فاتورة) مع تأخير التاريخ وفجوة التسلسل. */
 export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
   const cur = currencyLabel();
-  let batchMode = false; // false = سند واحد مجمع, true = سند منفصل لكل فاتورة
+  let batchMode = false;   // false = سند واحد مجمع, true = سند منفصل لكل فاتورة
+  let installMode = false; // true = سندات دفعية (أقساط) على تواريخ مستقبلية
 
   const m = modal({
     title: 'سند قبض جديد',
@@ -42,9 +43,9 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
 
       <div id="w-mode-bar" class="row mt" style="gap:10px;align-items:center;flex-wrap:wrap">
         <button type="button" id="btn-toggle-batch" class="btn btn-sm"
-          title="تبديل بين وضع السند الموحد أو سند منفصل لكل فاتورة">
-          ⚙ سندات منفصلة لكل فاتورة
-        </button>
+          title="تبديل بين وضع السند الموحد أو سند منفصل لكل فاتورة">⚙ سندات منفصلة</button>
+        <button type="button" id="btn-toggle-install" class="btn btn-sm"
+          title="إنشاء سندات دفعية موزعة على تواريخ مستقبلية">📅 سندات دفعية</button>
         <div id="w-batch-opts" class="row" style="gap:10px;display:none;align-items:center">
           <div class="field" style="margin:0;min-width:140px">
             <label style="font-size:12px;margin-bottom:2px">تأخير التاريخ (أيام)</label>
@@ -76,6 +77,41 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
           </select></div>
         <div class="field"><label>رقم المرجع / الشيك</label><input type="text" id="w-batch-ref" class="ltr" /></div>
       </div>
+
+      <!-- ── وضع السندات الدفعية ──────────────────────────────────────────── -->
+      <div id="w-install-opts" class="mt" style="display:none">
+        <div class="alert alert-info tiny" style="margin-bottom:10px">
+          📅 <b>وضع السندات الدفعية</b> — حدد العميل ثم الإجمالي وعدد الدفعات والتواتر.
+          يمكنك اختيار فواتير محددة للتوزيع التلقائي (FIFO)، أو تركها بدون تخصيص.
+        </div>
+        <div class="form-grid-4">
+          <div class="field"><label class="req">عدد الدفعات</label>
+            <input type="number" id="w-inst-count" value="3" min="2" max="24" /></div>
+          <div class="field"><label class="req">تاريخ أول دفعة</label>
+            <input type="date" id="w-inst-start" /></div>
+          <div class="field"><label>التواتر</label>
+            <select id="w-inst-freq">
+              <option value="7">أسبوعياً</option>
+              <option value="14">نصف شهرياً</option>
+              <option value="30" selected>شهرياً</option>
+              <option value="60">كل شهرين</option>
+              <option value="90">ربع سنوي</option>
+            </select></div>
+          <div class="field"><label class="req">الإجمالي (${esc(cur)})</label>
+            <input type="number" id="w-inst-total" step="0.01" min="0.01" /></div>
+        </div>
+        <div class="form-grid-2 mt">
+          <div class="field"><label>طريقة الدفع (لكل الدفعات)</label>
+            <select id="w-inst-pay">
+              <option value="CASH">نقداً</option><option value="TRANSFER">تحويل بنكي</option>
+              <option value="CARD">شبكة / بطاقة</option><option value="CHEQUE">شيك</option>
+            </select></div>
+          <div class="field"><label>رقم المرجع / الشيك</label>
+            <input type="text" id="w-inst-ref" class="ltr" /></div>
+        </div>
+        <div id="w-inst-preview"></div>
+      </div>
+
       <div class="alert alert-info mt tiny" id="w-hint">
         اختر العميل لعرض فواتيره غير المسددة. يمكنك التوزيع تلقائياً من الأقدم للأحدث، أو إدخال مبلغ لكل فاتورة يدوياً،
         أو تركها بدون توزيع ليبقى المبلغ رصيداً دائناً للعميل.
@@ -90,36 +126,106 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
   let open = [];
   const alloc = new Map();
 
-  // ── تبديل الوضع (موحد / منفصل) ──────────────────────────────────────────
-  const toggleBatch = () => {
-    batchMode = !batchMode;
-    const btn = $('#btn-toggle-batch', m.body);
-    const batchOpts = $('#w-batch-opts', m.body);
-    const singleOpts = $('#w-single-opts', m.body);
-    const batchPay = $('#w-batch-pay', m.body);
-    const dateWrap = $('#w-date-wrap', m.body);
-    const fifoBtn = m.el.querySelector('[data-fifo]');
-    const okBtn = m.el.querySelector('[data-ok]');
-    if (batchMode) {
-      btn.style.background = 'var(--brand)'; btn.style.color = '#fff'; btn.style.border = '1px solid var(--brand)';
-      batchOpts.style.display = 'flex';
-      singleOpts.style.display = 'none';
-      batchPay.style.display = 'grid';
-      dateWrap.style.opacity = '0.4'; dateWrap.title = 'التاريخ يُحسب تلقائياً من تاريخ كل فاتورة + التأخير';
-      fifoBtn.style.display = 'none';
-      okBtn.textContent = '⚡ إنشاء سند لكل فاتورة';
-    } else {
-      btn.style.background = ''; btn.style.color = ''; btn.style.border = '';
-      batchOpts.style.display = 'none';
-      singleOpts.style.display = 'grid';
-      batchPay.style.display = 'none';
-      dateWrap.style.opacity = ''; dateWrap.title = '';
-      fifoBtn.style.display = '';
-      okBtn.textContent = 'حفظ السند';
+  // ── أدوات مساعدة ─────────────────────────────────────────────────────────
+  const setActiveBtn = (btnEl, active) => {
+    btnEl.style.background = active ? 'var(--brand)' : '';
+    btnEl.style.color      = active ? '#fff' : '';
+    btnEl.style.border     = active ? '1px solid var(--brand)' : '';
+  };
+
+  // ── تحديث معاينة الدفعات ────────────────────────────────────────────────
+  const updateInstallPreview = () => {
+    const count  = parseInt($('#w-inst-count', m.body)?.value, 10) || 0;
+    const start  = $('#w-inst-start', m.body)?.value;
+    const freq   = parseInt($('#w-inst-freq', m.body)?.value, 10) || 30;
+    const total  = toNum($('#w-inst-total', m.body)?.value, 0);
+    const preview = $('#w-inst-preview', m.body);
+    if (!preview) return;
+    if (!start || !total || count < 2) { preview.innerHTML = ''; return; }
+
+    const base = Math.floor((total / count) * 100) / 100;
+    const last = Math.round((total - base * (count - 1)) * 100) / 100;
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const d = new Date(start + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + freq * i);
+      rows.push({ n: i + 1, date: d.toISOString().substring(0, 10), amt: i === count - 1 ? last : base });
     }
+    const totalCalc = rows.reduce((a, r) => a + r.amt, 0);
+    preview.innerHTML = `
+      <div style="margin-top:12px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+        <div style="background:var(--brand-light);padding:8px 14px;font-size:12px;font-weight:700;color:var(--brand);display:flex;justify-content:space-between">
+          <span>📅 جدول الدفعات — ${count} دفعة</span>
+          <span>الإجمالي: ${money(totalCalc)} ${cur}</span>
+        </div>
+        <table class="tbl compact" style="margin:0">
+          <thead><tr><th style="width:36px">#</th><th>تاريخ الدفعة</th><th class="text-end">المبلغ</th></tr></thead>
+          <tbody>${rows.map((r) => `<tr>
+            <td class="muted">${r.n}</td>
+            <td class="mono ltr">${r.date}</td>
+            <td class="text-end num">${money(r.amt)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+  };
+
+  // ── تبديل الوضع (موحد / منفصل) ──────────────────────────────────────────
+  const resetAllModes = () => {
+    batchMode = false; installMode = false;
+    setActiveBtn($('#btn-toggle-batch', m.body), false);
+    setActiveBtn($('#btn-toggle-install', m.body), false);
+    $('#w-batch-opts', m.body).style.display = 'none';
+    $('#w-batch-pay', m.body).style.display = 'none';
+    $('#w-install-opts', m.body).style.display = 'none';
+    $('#w-single-opts', m.body).style.display = 'grid';
+    $('#w-date-wrap', m.body).style.opacity = ''; $('#w-date-wrap', m.body).title = '';
+    $('#w-hint', m.body).style.display = '';
+    m.el.querySelector('[data-fifo]').style.display = '';
+    m.el.querySelector('[data-ok]').textContent = 'حفظ السند';
+  };
+
+  const toggleBatch = () => {
+    if (batchMode) { resetAllModes(); if (open.length) renderOpen(); return; }
+    resetAllModes();
+    batchMode = true;
+    setActiveBtn($('#btn-toggle-batch', m.body), true);
+    $('#w-batch-opts', m.body).style.display = 'flex';
+    $('#w-batch-pay', m.body).style.display = 'grid';
+    $('#w-single-opts', m.body).style.display = 'none';
+    $('#w-date-wrap', m.body).style.opacity = '0.4';
+    $('#w-date-wrap', m.body).title = 'التاريخ يُحسب تلقائياً من تاريخ كل فاتورة + التأخير';
+    $('#w-hint', m.body).style.display = 'none';
+    m.el.querySelector('[data-fifo]').style.display = 'none';
+    m.el.querySelector('[data-ok]').textContent = '⚡ إنشاء سند لكل فاتورة';
     if (open.length) renderOpen();
   };
+
+  const toggleInstall = () => {
+    if (installMode) { resetAllModes(); if (open.length) renderOpen(); return; }
+    resetAllModes();
+    installMode = true;
+    setActiveBtn($('#btn-toggle-install', m.body), true);
+    $('#w-install-opts', m.body).style.display = 'block';
+    $('#w-single-opts', m.body).style.display = 'none';
+    $('#w-date-wrap', m.body).style.opacity = '0.4';
+    $('#w-date-wrap', m.body).title = 'التاريخ يُحدَّد لكل دفعة على حدة';
+    $('#w-hint', m.body).style.display = 'none';
+    m.el.querySelector('[data-fifo]').style.display = 'none';
+    m.el.querySelector('[data-ok]').textContent = '📅 إنشاء الدفعات';
+    // اضبط تاريخ أول دفعة الشهر القادم تلقائياً
+    if (!$('#w-inst-start', m.body).value) {
+      const nx = new Date(); nx.setUTCMonth(nx.getUTCMonth() + 1); nx.setUTCDate(1);
+      $('#w-inst-start', m.body).value = nx.toISOString().substring(0, 10);
+    }
+    ['#w-inst-count','#w-inst-start','#w-inst-freq','#w-inst-total'].forEach((sel) => {
+      $('#' + sel.slice(1), m.body)?.addEventListener('input', updateInstallPreview);
+    });
+    updateInstallPreview();
+    if (open.length) renderOpen();
+  };
+
   $('#btn-toggle-batch', m.body).addEventListener('click', toggleBatch);
+  $('#btn-toggle-install', m.body).addEventListener('click', toggleInstall);
 
   // ── رسم جدول الفواتير المفتوحة ───────────────────────────────────────────
   const renderOpen = () => {
@@ -233,6 +339,7 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
 
   // ── حفظ — وضع السند الموحد ────────────────────────────────────────────────
   m.el.querySelector('[data-ok]').addEventListener('click', async (e) => {
+    if (installMode) { await runInstallmentVouchers(e); return; }
     if (batchMode) { await runBatchVouchers(e); return; }
 
     const values = formValues(m.body);
@@ -351,7 +458,7 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
     syncNotify('vouchers', 'create', {});
     syncNotify('invoices', 'update');
 
-    // ── عرض الملخص النهائي ──────────────────────────────────────────────────
+    // ── عرض ملخص Batch ──────────────────────────────────────────────────────
     const totalCreated = created.reduce((a, v) => a + v.amount, 0);
     progressBox.innerHTML = `
       <div class="card" style="margin-top:12px;border:2px solid var(--success);padding:14px;border-radius:8px">
@@ -384,6 +491,124 @@ export function voucherWizard({ clientId = '', issuerId = '', onDone }) {
     m.el.querySelector('[data-fifo]').style.display = 'none';
 
     if (onDone) onDone(null);
+  };
+
+  // ── إنشاء سندات دفعية (Installment Mode) ──────────────────────────────────
+  const runInstallmentVouchers = async (e) => {
+    const clientSel = $('#w-client', m.body).value;
+    const issuerSel = $('#w-issuer', m.body).value;
+    if (!clientSel || !issuerSel) return toastErr('اختر الشركة والعميل');
+
+    const count   = parseInt($('#w-inst-count', m.body).value, 10);
+    const start   = $('#w-inst-start', m.body).value;
+    const freq    = parseInt($('#w-inst-freq', m.body).value, 10) || 30;
+    const total   = toNum($('#w-inst-total', m.body).value, 0);
+    const payType = $('#w-inst-pay', m.body).value || 'CASH';
+    const refNo   = $('#w-inst-ref', m.body).value || '';
+
+    if (!start)               return toastErr('حدد تاريخ أول دفعة');
+    if (!total || total <= 0) return toastErr('أدخل المبلغ الإجمالي');
+    if (count < 2 || count > 24) return toastErr('عدد الدفعات يجب أن يكون بين 2 و 24');
+
+    const base = Math.floor((total / count) * 100) / 100;
+    const last = Math.round((total - base * (count - 1)) * 100) / 100;
+    const installments = Array.from({ length: count }, (_, i) => {
+      const d = new Date(start + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + freq * i);
+      return { date: d.toISOString().substring(0, 10), amount: i === count - 1 ? last : base };
+    });
+
+    const ok = await confirmDialog({
+      title: `إنشاء ${count} سند قبض دفعي`,
+      message: `الإجمالي: ${money(total)} ${cur}\nأول دفعة: ${installments[0].date}\nآخر دفعة: ${installments[count-1].date}\nطريقة الدفع: ${payType}\n\nهل تريد المتابعة؟`,
+      confirmText: 'نعم، إنشاء الدفعات',
+    });
+    if (!ok) return;
+
+    e.target.disabled = true;
+    m.el.querySelector('[data-fifo]').disabled = true;
+    m.el.querySelector('[data-close]').disabled = true;
+
+    const progressBox = $('#w-batch-progress', m.body);
+    progressBox.style.display = 'block';
+
+    const created = [];
+    const errors  = [];
+
+    // FIFO: توزيع الدفعات على الفواتير المختارة من الأقدم للأحدث
+    const selInvs = open.filter((i) => alloc.has(i.id)).sort((a, b) => a.issue_date.localeCompare(b.issue_date));
+    const remaining = selInvs.map((i) => ({ id: i.id, rem: i.remaining_amount }));
+
+    for (let i = 0; i < installments.length; i++) {
+      const inst = installments[i];
+      progressBox.innerHTML = `
+        <div class="alert alert-info tiny" style="margin-top:10px">
+          <b>جاري الإنشاء…</b> دفعة ${i + 1} / ${count} — تاريخ: ${inst.date}
+          <div style="height:6px;background:#e2e8f0;border-radius:3px;margin-top:6px">
+            <div style="height:100%;background:var(--brand);border-radius:3px;width:${Math.round(((i+1)/count)*100)}%;transition:width .3s"></div>
+          </div>
+        </div>`;
+
+      // FIFO allocation
+      let instRem = inst.amount;
+      const allocations = [];
+      for (const inv of remaining) {
+        if (instRem < 0.005) break;
+        const take = Math.min(inv.rem, Math.round(instRem * 100) / 100);
+        if (take > 0.005) {
+          allocations.push({ invoice_id: inv.id, amount: Math.round(take * 100) / 100 });
+          inv.rem = Math.round((inv.rem - take) * 100) / 100;
+          instRem = Math.round((instRem - take) * 100) / 100;
+        }
+      }
+
+      try {
+        const v = await api.post('/api/vouchers', {
+          issuer_id: issuerSel,
+          client_id: clientSel,
+          voucher_date: inst.date,
+          total_amount: inst.amount,
+          payment_type: payType,
+          reference_no: refNo,
+          notes: `دفعة ${i + 1} من ${count}`,
+          allocations,
+        });
+        created.push({ num: v.voucher_number, date: inst.date, amount: inst.amount });
+      } catch (err) {
+        errors.push({ date: inst.date, err: err.message || 'خطأ' });
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+
+    syncNotify('vouchers', 'create', {});
+    syncNotify('invoices', 'update');
+
+    const totalCreated = created.reduce((a, v) => a + v.amount, 0);
+    progressBox.innerHTML = `
+      <div class="card" style="margin-top:12px;border:2px solid var(--success);padding:14px;border-radius:8px">
+        <div style="font-weight:700;color:var(--success);margin-bottom:8px">
+          ✅ تم إنشاء ${created.length} سند دفعي بنجاح${errors.length ? ` — ❌ ${errors.length} خطأ` : ''}
+        </div>
+        <div class="table-wrap" style="max-height:220px;overflow-y:auto">
+          <table class="tbl compact" style="font-size:12px">
+            <thead><tr><th>رقم السند</th><th>تاريخ الدفعة</th><th class="text-end">المبلغ</th></tr></thead>
+            <tbody>${created.map((v) => `<tr>
+              <td class="mono ltr">${esc(v.num)}</td>
+              <td class="tiny ltr">${esc(v.date)}</td>
+              <td class="text-end num">${money(v.amount)}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+        <div style="text-align:left;font-size:13px;font-weight:700;margin-top:8px;color:var(--brand)">
+          الإجمالي: ${money(totalCreated)} ${cur}
+        </div>
+        ${errors.length ? `<div class="alert alert-warn tiny mt">${errors.map((x) => `❌ ${esc(x.date)}: ${esc(x.err)}`).join('<br>')}</div>` : ''}
+      </div>`;
+
+    e.target.disabled = false;
+    m.el.querySelector('[data-fifo]').disabled = false;
+    m.el.querySelector('[data-close]').disabled = false;
+    if (onDone) onDone(created[0]);
   };
 
   if (clientId) loadOpen();
