@@ -37,6 +37,13 @@ type CreateVoucherInput struct {
 	Allocations    []VoucherAllocationInput `json:"allocations"`
 }
 
+type UpdateVoucherInput struct {
+	VoucherDate string `json:"voucher_date"`
+	PaymentType string `json:"payment_type"`
+	ReferenceNo string `json:"reference_no"`
+	Notes       string `json:"notes"`
+}
+
 type VoucherView struct {
 	ID             string                  `json:"id"`
 	VoucherNumber  string                  `json:"voucher_number"`
@@ -586,6 +593,54 @@ func (s *VoucherService) CancelVoucher(id, actor, ip string) error {
 	}, ip)
 
 	return nil
+}
+
+// UpdateVoucher يعدّل الحقول غير المالية للسند (التاريخ، طريقة السداد، المرجع، الملاحظات)
+func (s *VoucherService) UpdateVoucher(id string, input UpdateVoucherInput, actor, ip string) (*VoucherView, error) {
+	v, err := s.GetVoucher(id)
+	if err != nil {
+		return nil, errors.New("سند القبض غير موجود")
+	}
+	if v.Status == "CANCELLED" {
+		return nil, errors.New("لا يمكن تعديل سند ملغى")
+	}
+
+	// تطبيق القيم أو الإبقاء على الحالية
+	newDate := input.VoucherDate
+	if newDate == "" {
+		newDate = v.VoucherDate
+	}
+	if _, err2 := time.Parse("2006-01-02", newDate); err2 != nil {
+		return nil, errors.New("تاريخ السند غير صالح")
+	}
+	newPayment := input.PaymentType
+	if newPayment == "" {
+		newPayment = v.PaymentType
+	}
+	if _, ok := paymentLabels[newPayment]; !ok {
+		return nil, errors.New("طريقة السداد غير صالحة")
+	}
+
+	now := db.NowIso()
+	_, err = s.db.Exec(`
+		UPDATE receipt_vouchers
+		SET voucher_date = ?, payment_type = ?, reference_no = ?, notes = ?, updated_at = ?
+		WHERE id = ?`,
+		newDate, newPayment, input.ReferenceNo, input.Notes, now, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// تحديث قيد كشف الحساب (تاريخ المستند)
+	_, _ = s.db.Exec(`UPDATE client_ledger SET doc_date = ? WHERE doc_id = ? AND doc_type = 'RECEIPT'`, newDate, id)
+
+	s.db.Audit(actor, "VOUCHER_UPDATE", "voucher", id, v.IssuerID, map[string]any{
+		"voucher_number": v.VoucherNumber,
+		"payment_type":  newPayment,
+		"voucher_date":  newDate,
+	}, ip)
+
+	return s.GetVoucher(id)
 }
 
 func (s *VoucherService) DeleteVoucher(id, actor, ip string) error {

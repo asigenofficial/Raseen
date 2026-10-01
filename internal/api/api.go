@@ -2259,6 +2259,36 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
+	// تعديل السند (التاريخ، طريقة السداد، المرجع، الملاحظات)
+	mux.HandleFunc("PATCH /api/vouchers/{id}", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil {
+			s.err(w, 401, "غير مصرح")
+			return
+		}
+		actor := u.Username
+		id := r.PathValue("id")
+		var input services.UpdateVoucherInput
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		updated, err := s.vouchers.UpdateVoucher(id, input, actor, s.clientIP(r))
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "voucher:updated",
+			Entity:    "voucher",
+			Action:    "update",
+			Actor:     actor,
+			ActorName: u.FullName,
+			Data:      map[string]any{"id": id},
+		})
+		s.json(w, 200, map[string]any{"data": updated, "ok": true})
+	})
+
 	mux.HandleFunc("GET /api/vouchers/template", func(w http.ResponseWriter, r *http.Request) {
 		b, err := excel.GenerateVoucherTemplateExcel()
 		if err != nil {
