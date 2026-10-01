@@ -36,6 +36,7 @@ func routePermission(pattern string) string {
 	if resource == "clients" && strings.HasSuffix(tail,"statement") { return "ledger.view" }
 	if strings.HasPrefix(tail,"templates") { if method == "GET" { return "invoices.view" }; return "templates.write" }
 	if strings.HasSuffix(tail,"cancel") { return resource+".cancel" }
+	if strings.HasSuffix(tail,"pdf") { return resource+".view" }
 	if method == "GET" || method == "HEAD" { return resource+".view" }
 	if method == "POST" { return resource+".create" }
 	if method == "PUT" { return resource+".edit" }

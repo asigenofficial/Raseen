@@ -83,11 +83,15 @@ export function formatSaudiPhone(phone) {
   return clean;
 }
 
-export async function fetchInvoicePdfBlob(invoiceId, docHtml) {
+export async function fetchInvoicePdfBlob(invoiceId, docHtml, style = '') {
   try {
-    const res = await fetch(`/api/invoices/${invoiceId}/pdf`, {
+    let endpoint = `/api/invoices/${encodeURIComponent(invoiceId)}/pdf`;
+    if (style) endpoint += `?style=${encodeURIComponent(style)}`;
+
+    const res = await fetch(endpoint, {
       method: docHtml ? 'POST' : 'GET',
-      headers: { 'Content-Type': 'application/json', origin: window.location.origin },
+      credentials: 'same-origin',
+      headers: docHtml ? { 'Content-Type': 'application/json' } : {},
       ...(docHtml ? { body: JSON.stringify({ html: docHtml }) } : {}),
     });
     if (res.ok) return await res.blob();
@@ -105,7 +109,9 @@ export async function getInvoiceDocHtml({ invoice, issuer, client, printSettings
   const isBuiltin = ['corporate_multipage', 'standard', 'modern', 'classic', 'compact', 'detailed_address'].includes(tplId);
   if (tplId && !isBuiltin) {
     try {
-      const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/render-html?style=${encodeURIComponent(tplId)}&_t=${Date.now()}`);
+      const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/render-html?style=${encodeURIComponent(tplId)}&_t=${Date.now()}`, {
+        credentials: 'same-origin',
+      });
       if (res.ok) {
         const text = await res.text();
         if (text && text.length > 500) return text;
@@ -118,20 +124,33 @@ export async function getInvoiceDocHtml({ invoice, issuer, client, printSettings
 }
 
 export async function downloadInvoicePdf({ invoice, issuer, client, printSettings = null, docHtml = null }) {
-  const finalHtml = docHtml || await getInvoiceDocHtml({ invoice, issuer, client, printSettings });
+  const cfg = printSettings || (typeof issuer?.print_settings === 'string'
+    ? JSON.parse(issuer.print_settings || '{}')
+    : (issuer?.print_settings || {})) || {};
+  const tplId = cfg.template_style || '';
+
+  const finalHtml = docHtml || await getInvoiceDocHtml({ invoice, issuer, client, printSettings: cfg });
   try {
     invoice.lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
     invoice.items = invoice.lines;
     toastOk('جارٍ تجهيز ملف PDF الفاتورة...');
+
     let blob = null;
     try {
-      blob = await fetchInvoicePdfBlob(invoice.id, finalHtml);
+      blob = await fetchInvoicePdfBlob(invoice.id, finalHtml, tplId);
     } catch (e) {
-      console.warn('PDF direct generation failed:', e);
+      console.warn('PDF direct generation with HTML failed, trying direct GET:', e);
+      try {
+        blob = await fetchInvoicePdfBlob(invoice.id, null, tplId);
+      } catch (e2) {
+        console.warn('Direct GET PDF failed:', e2);
+      }
     }
 
     if (blob) {
       const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
       const clientClean = (client?.name || invoice.buyer_name || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
       const invNum = (invoice.invoice_number || invoice.id || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
       a.download = clientClean ? `فاتورة_${invNum}_${clientClean}.pdf` : `فاتورة_${invNum}.pdf`;
@@ -143,7 +162,7 @@ export async function downloadInvoicePdf({ invoice, issuer, client, printSetting
       return blob;
     }
 
-    // Fallback: open print dialog to save as PDF
+    // Fallback: open print dialog to save as PDF only if server PDF generation failed completely
     printDoc(finalHtml);
     toastOk('تم فتح حوار الطباعة / الحفظ كملف PDF');
     return null;

@@ -397,7 +397,7 @@ export function parseSpreadsheetText(content, filename = '') {
  * @param {string} docHtml مستند HTML كامل بأنماطه الخاصة
  */
 export function printDoc(docHtml) {
-  const holder = document.getElementById('print-root');
+  const holder = document.getElementById('print-root') || document.body;
   const frame = document.createElement('iframe');
   frame.setAttribute('title', 'طباعة');
   frame.style.width = '260mm';
@@ -405,8 +405,82 @@ export function printDoc(docHtml) {
   frame.style.border = '0';
   holder.appendChild(frame);
   const doc = frame.contentWindow.document;
+
+  const printFixStyle = `<style>
+    @media print {
+      @page { size: A4 portrait; margin: 0; }
+      html, body {
+        height: 297mm !important;
+        max-height: 297mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+      }
+      .invoice-container {
+        height: 295.5mm !important;
+        min-height: 295.5mm !important;
+        max-height: 295.5mm !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        box-sizing: border-box !important;
+      }
+      .top-content-wrap {
+        flex: 0 1 auto !important;
+      }
+      .bottom-content-wrap {
+        margin-top: auto !important;
+        flex-shrink: 0 !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+    }
+    .seller-en-info, .seller-en, .seller.seller-en, .seller-block.en, td.seller-en {
+      direction: ltr !important;
+      text-align: left !important;
+      justify-items: flex-start !important;
+      align-items: flex-start !important;
+      unicode-bidi: isolate !important;
+    }
+    .seller-en-info .company-name-en, .seller-en .company-name-en, .seller-en .company-name, .seller-block.en .seller-name-en, .seller-en-info h2, .seller-en h2, .seller-block.en h2 {
+      direction: ltr !important;
+      text-align: left !important;
+      unicode-bidi: isolate !important;
+    }
+    .seller-en-info .header-info-line, .seller-en .header-info-line, .seller-en .company-line, .seller-block.en .seller-row, .seller-en p, .seller.seller-en p {
+      direction: ltr !important;
+      text-align: left !important;
+      justify-content: flex-start !important;
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: center !important;
+      gap: 5px !important;
+      unicode-bidi: isolate !important;
+    }
+    .seller-en-info .header-info-line svg, .seller-en-info .header-info-line .icon-svg, .seller-en .header-info-line svg, .seller-en .company-line svg, .seller-en .company-line .icon, .seller-block.en .seller-row svg, .seller-en p svg, .seller.seller-en p svg, .seller-en p .icon, .seller.seller-en p .icon {
+      order: -1 !important;
+      margin-right: 5px !important;
+      margin-left: 0 !important;
+      margin-inline-start: 0 !important;
+      margin-inline-end: 5px !important;
+      flex-shrink: 0 !important;
+    }
+    .seller-en-info .header-info-line span, .seller-en .company-line span, .seller-block.en .seller-row span, .seller-en p span {
+      text-align: left !important;
+      direction: ltr !important;
+      unicode-bidi: isolate !important;
+    }
+  </style>`;
+
+  let finalHtml = docHtml || '';
+  if (finalHtml.includes('</head>')) {
+    finalHtml = finalHtml.replace('</head>', printFixStyle + '\n</head>');
+  } else {
+    finalHtml = printFixStyle + '\n' + finalHtml;
+  }
+
   doc.open();
-  doc.write(docHtml);
+  doc.write(finalHtml);
   doc.close();
   const go = () => {
     try {
