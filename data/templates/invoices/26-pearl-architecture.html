@@ -112,6 +112,10 @@
 .items-main-table tbody tr:nth-child(even) td{background-color:#fafbfc}
 .qr-box{background:#ffffff!important}
 
+
+.seller-en{direction:ltr!important;text-align:left!important}
+.seller-en p{direction:ltr!important;text-align:left!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:4px!important}
+.seller-en .icon{margin-inline-end:4px!important;margin-inline-start:0!important;margin-right:4px!important;margin-left:0!important;flex-shrink:0!important}
 </style>
 </head>
 <body>
@@ -160,7 +164,7 @@
       </div>
       <div class="seller seller-en" lang="en" dir="ltr">
         <h2>{{seller_name_en}}</h2>
-        <p>{{seller_address_en}}</p>
+        <p><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg>{{seller_address_en}}</p>
         <p><svg class="icon" aria-hidden="true"><use href="#i-tax"/></svg>VAT: <bdi>{{seller_tax}}</bdi></p>
         <p><svg class="icon" aria-hidden="true"><use href="#i-cr"/></svg>CR: <bdi>{{seller_cr}}</bdi></p>
       </div>

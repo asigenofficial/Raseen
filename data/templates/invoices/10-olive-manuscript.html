@@ -58,6 +58,10 @@ dl.card-body{margin:0}
 .items-main-table tbody tr:nth-child(even) td{background-color:#fafbfc}
 .qr-box{background:#ffffff!important}
 
+
+.seller-en{direction:ltr!important;text-align:left!important}
+.seller-en p{direction:ltr!important;text-align:left!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:4px!important}
+.seller-en .icon{margin-inline-end:4px!important;margin-inline-start:0!important;margin-right:4px!important;margin-left:0!important;flex-shrink:0!important}
 </style>
 </head>
 <body>
@@ -93,7 +97,7 @@ dl.card-body{margin:0}
       </div>
       <div class="seller seller-en" lang="en" dir="ltr">
         <h2>{{seller_name_en}}</h2>
-        <p>{{seller_address_en}}</p>
+        <p><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2"/></svg>{{seller_address_en}}</p>
         <p><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="m9 15 6-6M9 9h.01M15 15h.01"/></svg>VAT: <bdi>{{seller_tax}}</bdi></p>
         <p><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="1"/><path d="M8 5V3h8v2M8 9h8M8 13h8M8 17h5"/></svg>CR: <bdi>{{seller_cr}}</bdi></p>
       </div>
