@@ -7,7 +7,7 @@ import * as router from '../core/router.js';
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, qrSvg, printDoc, toastOk, toastErr,
   $, modal, formValues, confirmDialog, copyText, download, statusBadge, today, icon,
-  amount, sarSvg, shareDocument, choosePdfDestination, savePdfFile,
+  amount, sarSvg, shareDocument, choosePdfDestination, savePdfFile, clientPdfFilename,
 } from '../core/util.js';
 import { tafqeet } from '../print/templates.js';
 
@@ -88,7 +88,6 @@ function receiptModal(invoice, onDone) {
           </select></div>
       </div>
       <div class="row mt">
-        <div class="field"><label>رقم السند (اختياري)</label><input type="text" name="voucher_number" class="ltr" placeholder="تلقائي..." title="اتركه فارغاً للترقيم التلقائي أو أدخل رقماً يدوياً" /></div>
         <div class="field"><label>التاريخ</label><input type="date" name="voucher_date" value="${today()}" /></div>
         <div class="field"><label>رقم المرجع / الشيك</label><input type="text" name="reference_no" class="ltr" /></div>
       </div>
@@ -157,7 +156,7 @@ export async function getInvoiceDocHtml({ invoice, issuer, client, printSettings
 
 export async function downloadInvoicePdf({ invoice, issuer, client, printSettings = null, docHtml = null }) {
   const invNum = (invoice.invoice_number || invoice.id || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
-  const filename = `فاتورة_${invNum}.pdf`;
+  const filename = clientPdfFilename('فاتورة', client?.name || invoice.client_name || invoice.buyer_name, invNum);
   try {
     const saveHandle = await choosePdfDestination(filename, `invoice:${invoice.id}`);
     toastOk('جارٍ تجهيز نسخة PDF المحفوظة...');
@@ -176,7 +175,7 @@ export async function downloadInvoicePdf({ invoice, issuer, client, printSetting
 
 export async function shareInvoicePdfFile({ invoice, issuer, client, text, printSettings = null, docHtml = null }) {
   const invNum = (invoice.invoice_number || invoice.id || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
-  const filename = `فاتورة_${invNum}.pdf`;
+  const filename = clientPdfFilename('فاتورة', client?.name || invoice.client_name || invoice.buyer_name, invNum);
   let files = null;
   let pdfBlob = null;
   try {
@@ -489,8 +488,8 @@ export async function render(view, ctx) {
               <dt>بصمة الفاتورة السابقة (PIH)</dt><dd class="mono tiny" style="word-break:break-all;overflow-wrap:anywhere;display:block;max-width:100%">${invoice.previous_invoice_hash}</dd>
               <dt>وضع التوقيع</dt><dd>
                 ${raw(invoice.signature_mode === 'PRODUCTION' ? '<span class="badge green">شهادة إنتاج</span>'
-          : invoice.signature_mode === 'LOCAL' ? '<span class="badge amber">توقيع محلي (بدون شهادة معتمدة)</span>'
-            : '<span class="badge gray">المرحلة الأولى — بدون توقيع</span>')}</dd>
+        : invoice.signature_mode === 'LOCAL' ? '<span class="badge amber">توقيع محلي (بدون شهادة معتمدة)</span>'
+          : '<span class="badge gray">المرحلة الأولى — بدون توقيع</span>')}</dd>
               <dt>حمولة QR (Base64)</dt><dd class="mono tiny" style="word-break:break-all;overflow-wrap:anywhere;display:block;max-width:100%;max-height:80px;overflow-y:auto;background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:6px;border:1px solid var(--line);line-height:1.4">${invoice.qr_payload}</dd>
             </dl>
             <div class="flex mt">
@@ -563,7 +562,7 @@ export async function render(view, ctx) {
         badge.className = `badge ${pdf.status === 'READY' ? 'green' : pdf.status === 'FAILED' ? 'red' : 'gray'}`;
         if (pdf.error) badge.title = pdf.error;
         if (pdf.status === 'PENDING' && attempt < 5) setTimeout(() => refreshPdfStatus(attempt + 1), 3000);
-      } catch {}
+      } catch { }
     };
     refreshPdfStatus();
 

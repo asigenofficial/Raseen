@@ -5,7 +5,7 @@ import { api, qs } from '../core/api.js';
 import { store, loadClients, currencyLabel } from '../core/store.js';
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, monthStart, today,
-  $, delegate, exportCsv, exportExcel, printDoc, icon, downloadPdfFromHtml, toastErr, toastOk, confirmDialog,
+  $, delegate, exportCsv, exportExcel, printDoc, icon, downloadPdfFromHtml, clientPdfFilename, toastErr, toastOk, confirmDialog,
   amount, modal, loadStoredTemplate, fillStoredTemplate,
 } from '../core/util.js';
 import { sarSvg } from '../core/icons.js';
@@ -501,6 +501,7 @@ export async function render(view, ctx) {
     };
 
     const spec = exportSpec();
+    const reportPdfName = () => clientPdfFilename(spec.name, store.clients.find((c) => c.id === state.client_id)?.name || '');
     const getReportDocHtml = async () => {
       const subtitle = `${issuerLabel()}${showPeriod ? ` — ${periodLabel()}` : ''}`;
       const issuer = state.issuer_id ? await api.get(`/api/issuers/${encodeURIComponent(state.issuer_id)}`) : store.activeIssuer;
@@ -527,7 +528,7 @@ export async function render(view, ctx) {
       e.target.disabled = true;
       try {
         const docHtml = await getReportDocHtml();
-        await downloadPdfFromHtml(docHtml, `${spec.name}.pdf`);
+        await downloadPdfFromHtml(docHtml, reportPdfName());
       } catch (err) {
         toastErr(err.message || 'تعذر استخراج ملف PDF للتقرير');
       } finally {
@@ -616,7 +617,7 @@ export async function render(view, ctx) {
       $('#btn-modal-pdf-doc', m.el)?.addEventListener('click', async (e) => {
         e.currentTarget.disabled = true;
         try {
-          await downloadPdfFromHtml(docHtml, `${spec.name}.pdf`);
+          await downloadPdfFromHtml(docHtml, reportPdfName());
         } catch (err) {
           toastErr('فشل تحميل ملف PDF: ' + err.message);
         } finally {

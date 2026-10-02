@@ -61,7 +61,7 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 	inPath := filepath.Join(tmpDir, fmt.Sprintf("raseen_%d.html", time.Now().UnixNano()))
 	outPath := filepath.Join(tmpDir, fmt.Sprintf("raseen_%d.pdf", time.Now().UnixNano()))
 
-	// Preserve the page size and layout declared by the selected HTML template.
+	// Keep template margins, but make every downloaded PDF use A4 paper.
 	fontInjection := `<meta charset="utf-8">`
 
 	if strings.Contains(htmlContent, "<head>") {
@@ -70,6 +70,12 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 		htmlContent = strings.Replace(htmlContent, "<HEAD>", "<HEAD>\n"+fontInjection, 1)
 	} else {
 		htmlContent = fontInjection + "\n" + htmlContent
+	}
+	a4Style := `<style>@page { size: A4 portrait !important; }</style>`
+	if headEnd := strings.LastIndex(strings.ToLower(htmlContent), "</head>"); headEnd >= 0 {
+		htmlContent = htmlContent[:headEnd] + a4Style + "\n" + htmlContent[headEnd:]
+	} else {
+		htmlContent = a4Style + "\n" + htmlContent
 	}
 
 	if err := os.WriteFile(inPath, []byte(htmlContent), 0644); err != nil {

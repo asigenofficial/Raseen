@@ -625,6 +625,11 @@ export function debounce(fn, wait = 250) {
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+export function clientPdfFilename(type, clientName = '', reference = '') {
+  const clean = (value) => String(value || '').replace(/[\/\\?%*:|"<>\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim();
+  return [type, clientName, reference].map(clean).filter(Boolean).join('_') + '.pdf';
+}
+
 export { icon } from './icons.js';
 
 /**

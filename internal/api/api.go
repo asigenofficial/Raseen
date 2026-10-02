@@ -2233,12 +2233,11 @@ func (s *Server) Handler() http.Handler {
 			actor = u.Username
 		}
 		var req struct {
-			InvoiceID     string  `json:"invoice_id"`
-			VoucherNumber string  `json:"voucher_number"`
-			Amount        float64 `json:"amount"`
-			PaymentType   string  `json:"payment_type"`
-			VoucherDate   string  `json:"voucher_date"`
-			Notes         string  `json:"notes"`
+			InvoiceID   string  `json:"invoice_id"`
+			Amount      float64 `json:"amount"`
+			PaymentType string  `json:"payment_type"`
+			VoucherDate string  `json:"voucher_date"`
+			Notes       string  `json:"notes"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			s.err(w, 400, "بيانات غير صالحة")
@@ -2260,13 +2259,12 @@ func (s *Server) Handler() http.Handler {
 		}
 
 		v, err := s.vouchers.CreateVoucher(services.CreateVoucherInput{
-			VoucherNumber: strings.TrimSpace(req.VoucherNumber),
-			IssuerID:      inv.IssuerID,
-			ClientID:      inv.ClientID,
-			VoucherDate:   vDate,
-			TotalAmount:   req.Amount,
-			PaymentType:   req.PaymentType,
-			Notes:         notes,
+			IssuerID:    inv.IssuerID,
+			ClientID:    inv.ClientID,
+			VoucherDate: vDate,
+			TotalAmount: req.Amount,
+			PaymentType: req.PaymentType,
+			Notes:       notes,
 			Allocations: []services.VoucherAllocationInput{
 				{InvoiceID: inv.ID, Amount: req.Amount},
 			},
@@ -2387,7 +2385,7 @@ func (s *Server) Handler() http.Handler {
 			Action:    "update",
 			Actor:     actor,
 			ActorName: u.FullName,
-			Data:      map[string]any{"id": id},
+			Data:      map[string]any{"id": id, "voucher_number": updated.VoucherNumber},
 		})
 		s.json(w, 200, updated)
 	})

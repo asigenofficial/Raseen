@@ -5,7 +5,7 @@ import { api, qs } from '../core/api.js';
 import { store, loadClients, can, currencyLabel } from '../core/store.js';
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, monthStart, today, toastOk, toastErr,
-  $, delegate, exportCsv, exportExcel, printDoc, icon, downloadPdfFromHtml,
+  $, delegate, exportCsv, exportExcel, printDoc, icon, downloadPdfFromHtml, clientPdfFilename,
   amount, sarSvg, loadStoredTemplate, fillStoredTemplate,
 } from '../core/util.js';
 
@@ -311,7 +311,7 @@ export async function render(view, ctx) {
       try {
         const issuer = await getIssuerForDoc();
         const docHtml = await renderStatementFromStoredTemplate(d, issuer, d.client);
-        await downloadPdfFromHtml(docHtml, `${fileName}.pdf`);
+        await downloadPdfFromHtml(docHtml, clientPdfFilename('كشف حساب', d.client.name, d.client.code || ''));
       } catch (err) {
         toastErr(err.message || 'تعذر تحميل ملف PDF');
       } finally {

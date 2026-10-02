@@ -27,16 +27,15 @@ type VoucherAllocationInput struct {
 }
 
 type CreateVoucherInput struct {
-	VoucherNumber string                   `json:"voucher_number"`
-	IssuerID      string                   `json:"issuer_id"`
-	ClientID      string                   `json:"client_id"`
-	VoucherDate   string                   `json:"voucher_date"`
-	TotalAmount   float64                  `json:"total_amount"`
-	PaymentType   string                   `json:"payment_type"`
-	ReferenceNo   string                   `json:"reference_no"`
-	Notes         string                   `json:"notes"`
-	AutoAllocate  bool                     `json:"auto_allocate"`
-	Allocations   []VoucherAllocationInput `json:"allocations"`
+	IssuerID     string                   `json:"issuer_id"`
+	ClientID     string                   `json:"client_id"`
+	VoucherDate  string                   `json:"voucher_date"`
+	TotalAmount  float64                  `json:"total_amount"`
+	PaymentType  string                   `json:"payment_type"`
+	ReferenceNo  string                   `json:"reference_no"`
+	Notes        string                   `json:"notes"`
+	AutoAllocate bool                     `json:"auto_allocate"`
+	Allocations  []VoucherAllocationInput `json:"allocations"`
 }
 
 type UpdateVoucherInput struct {
@@ -120,22 +119,9 @@ func (s *VoucherService) CreateVoucher(input CreateVoucherInput, actor, ip strin
 	}
 	defer tx.Rollback()
 
-	var voucherNumber string
-	manualNumber := strings.TrimSpace(input.VoucherNumber)
-	if manualNumber != "" {
-		var existingID string
-		errCheck := tx.QueryRow("SELECT id FROM receipt_vouchers WHERE issuer_id = ? AND voucher_number = ?", input.IssuerID, manualNumber).Scan(&existingID)
-		if errCheck == nil && existingID != "" {
-			return nil, fmt.Errorf("رقم السند '%s' مستخدم مسبقاً لهذه المنشأة", manualNumber)
-		}
-		voucherNumber = manualNumber
-		s.issuers.SyncVoucherNextNoAfterManual(tx, input.IssuerID, manualNumber)
-	} else {
-		var errV error
-		voucherNumber, _, errV = s.issuers.NextVoucherNumber(tx, input.IssuerID)
-		if errV != nil {
-			return nil, errV
-		}
+	voucherNumber, _, err := s.issuers.NextVoucherNumber(tx, input.IssuerID)
+	if err != nil {
+		return nil, err
 	}
 
 	voucherID := crypto.UUID()
@@ -635,7 +621,7 @@ func (s *VoucherService) CancelVoucher(id, actor, ip string) error {
 	return nil
 }
 
-// UpdateVoucher يعدّل الحقول غير المالية للسند (التاريخ، طريقة السداد، المرجع، الملاحظات)
+// UpdateVoucher يعدّل حقول السند (رقم السند، التاريخ، طريقة السداد، المرجع، الملاحظات)
 func (s *VoucherService) UpdateVoucher(id string, input UpdateVoucherInput, actor, ip string) (*VoucherView, error) {
 	v, err := s.GetVoucher(id)
 	if err != nil {
@@ -643,6 +629,19 @@ func (s *VoucherService) UpdateVoucher(id string, input UpdateVoucherInput, acto
 	}
 	if v.Status == "CANCELLED" {
 		return nil, errors.New("لا يمكن تعديل سند ملغى")
+	}
+
+	// التحقق من رقم السند
+	newNumber := strings.TrimSpace(input.VoucherNumber)
+	if newNumber == "" {
+		newNumber = v.VoucherNumber
+	}
+	if newNumber != v.VoucherNumber {
+		var exists int
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM receipt_vouchers WHERE issuer_id = ? AND voucher_number = ? AND id != ?`, v.IssuerID, newNumber, id).Scan(&exists)
+		if exists > 0 {
+			return nil, errors.New("رقم السند مستخدم بالفعل لدى هذه المنشأة")
+		}
 	}
 
 	// تطبيق القيم أو الإبقاء على الحالية
@@ -661,18 +660,6 @@ func (s *VoucherService) UpdateVoucher(id string, input UpdateVoucherInput, acto
 		return nil, errors.New("طريقة السداد غير صالحة")
 	}
 
-	newNumber := strings.TrimSpace(input.VoucherNumber)
-	if newNumber == "" {
-		newNumber = v.VoucherNumber
-	}
-	if newNumber != v.VoucherNumber {
-		var existingID string
-		errCheck := s.db.QueryRow("SELECT id FROM receipt_vouchers WHERE issuer_id = ? AND voucher_number = ? AND id != ?", v.IssuerID, newNumber, id).Scan(&existingID)
-		if errCheck == nil && existingID != "" {
-			return nil, fmt.Errorf("رقم السند '%s' مستخدم مسبقاً لهذه المنشأة", newNumber)
-		}
-	}
-
 	now := db.NowIso()
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -688,12 +675,9 @@ func (s *VoucherService) UpdateVoucher(id string, input UpdateVoucherInput, acto
 		return nil, err
 	}
 
-	if newNumber != v.VoucherNumber {
-		s.issuers.SyncVoucherNextNoAfterManual(tx, v.IssuerID, newNumber)
-	}
-
-	// تحديث قيد كشف الحساب (رقم وتاريخ المستند)
-	if _, err = tx.Exec(`UPDATE client_ledger SET doc_number = ?, transaction_date = ? WHERE doc_id = ? AND doc_type = 'RECEIPT'`, newNumber, newDate, id); err != nil {
+	// تحديث قيد كشف الحساب (تاريخ المستند ورقم السند والبيان)
+	ledgerDesc := fmt.Sprintf("سند قبض رقم %s", newNumber)
+	if _, err = tx.Exec(`UPDATE client_ledger SET transaction_date = ?, doc_number = ?, description = ? WHERE doc_id = ? AND doc_type = 'RECEIPT'`, newDate, newNumber, ledgerDesc, id); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -701,9 +685,10 @@ func (s *VoucherService) UpdateVoucher(id string, input UpdateVoucherInput, acto
 	}
 
 	s.db.Audit(actor, "VOUCHER_UPDATE", "voucher", id, v.IssuerID, map[string]any{
-		"voucher_number": v.VoucherNumber,
-		"payment_type":   newPayment,
-		"voucher_date":   newDate,
+		"old_voucher_number": v.VoucherNumber,
+		"voucher_number":     newNumber,
+		"payment_type":       newPayment,
+		"voucher_date":       newDate,
 	}, ip)
 
 	return s.GetVoucher(id)

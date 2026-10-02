@@ -9,7 +9,7 @@ const onSync = (cb) => (typeof store.onSync === 'function' ? store.onSync(cb) : 
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, today, monthStart, toastOk, toastErr,
   $, $$, delegate, debounce, modal, formValues, confirmDialog, exportCsv, exportExcel, printDoc, toNum,
-  icon, downloadPdfFromHtml, downloadPdfFromUrl, amount, sarSvg, shareDocument, renderStoredVoucher,
+  icon, downloadPdfFromHtml, downloadPdfFromUrl, amount, sarSvg, shareDocument, renderStoredVoucher, clientPdfFilename,
   loadStoredTemplate, fillStoredTemplate,
 } from '../core/util.js';
 import * as _coreUtil from '../core/util.js';
@@ -39,7 +39,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
         </button>
       </div>
 
-      <div class="form-grid-4">
+      <div class="form-grid-3">
         <div class="field"><label class="req">الشركة المصدرة</label>
           <select name="issuer_id" id="w-issuer">
             ${raw(store.issuers.filter((i) => i.is_active).map((i) => `<option value="${esc(i.id)}" ${i.id === issuerId ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}
@@ -49,8 +49,6 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
             <option value="">— اختر العميل —</option>
             ${raw(store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === clientId ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join(''))}
           </select></div>
-        <div class="field"><label>رقم السند (اختياري)</label>
-          <input type="text" name="voucher_number" id="w-number" class="ltr" placeholder="تلقائي..." title="اتركه فارغاً للترقيم التلقائي أو أدخل رقماً يدوياً" /></div>
         <div class="field" id="w-date-wrap"><label>التاريخ</label>
           <input type="date" name="voucher_date" id="w-date" value="${today()}" /></div>
       </div>
@@ -377,7 +375,6 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
     e.target.disabled = true;
     try {
       const voucher = await api.post('/api/vouchers', {
-        voucher_number: values.voucher_number ? values.voucher_number.trim() : undefined,
         issuer_id: values.issuer_id,
         client_id: values.client_id,
         voucher_date: values.voucher_date,
@@ -727,7 +724,7 @@ export async function showVoucher(id, onChange) {
       badge.className = `badge ${pdf.status === 'READY' ? 'green' : pdf.status === 'FAILED' ? 'red' : 'gray'}`;
       if (pdf.error) badge.title = pdf.error;
       if (pdf.status === 'PENDING' && attempt < 5) setTimeout(() => refreshVoucherPdfStatus(attempt + 1), 3000);
-    } catch {}
+    } catch { }
   };
   refreshVoucherPdfStatus();
 
@@ -790,7 +787,7 @@ export async function showVoucher(id, onChange) {
       e.target.disabled = true;
       try {
         const vNum = voucher.voucher_number || 'سند';
-        const pdfFileName = `سند_قبض_${vNum}.pdf`;
+        const pdfFileName = clientPdfFilename('سند قبض', voucher.client_name || client?.name, vNum);
         await downloadPdfFromUrl(`/api/vouchers/${encodeURIComponent(voucher.id)}/pdf`, pdfFileName);
       } catch (err) {
         toastErr(err.message || 'تعذر تحميل ملف PDF');
@@ -872,7 +869,7 @@ export function openEditVoucherModal(voucher, onDone) {
       <div class="form-grid" style="gap:14px">
         <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
           رقم السند
-          <input id="ev-number" type="text" class="input ltr" value="${esc(voucher.voucher_number || '')}" placeholder="رقم السند" style="font-size:14px;font-weight:700">
+          <input id="ev-number" type="text" class="input mono" dir="ltr" value="${esc(voucher.voucher_number || '')}" placeholder="مثال: RV-00020" style="font-size:14px;font-weight:700">
         </label>
         <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
           تاريخ السند
@@ -903,18 +900,19 @@ export function openEditVoucherModal(voucher, onDone) {
   });
 
   em.el.querySelector('#ev-save').addEventListener('click', async (e) => {
-    const newNumber = em.el.querySelector('#ev-number')?.value.trim();
+    const newNumber = em.el.querySelector('#ev-number').value.trim();
     const newDate = em.el.querySelector('#ev-date').value;
     const newPay = em.el.querySelector('#ev-pay').value;
     const newRef = em.el.querySelector('#ev-ref').value.trim();
     const newNotes = em.el.querySelector('#ev-notes').value.trim();
 
+    if (!newNumber) return toastErr('يرجى إدخال رقم السند');
     if (!newDate) return toastErr('حدد تاريخ السند');
 
     e.target.disabled = true;
     try {
       const updated = await api.patch(`/api/vouchers/${voucher.id}`, {
-        voucher_number: newNumber || undefined,
+        voucher_number: newNumber,
         voucher_date: newDate,
         payment_type: newPay,
         reference_no: newRef,
@@ -965,8 +963,8 @@ async function getVoucherRenderedData(voucherId) {
 
 export async function downloadVoucherDirectPdf(voucherId) {
   toastOk('جارٍ تجهيز ملف PDF للسند...');
-  const { voucher } = await getVoucherRenderedData(voucherId);
-  await downloadPdfFromUrl(`/api/vouchers/${encodeURIComponent(voucher.id)}/pdf`, `سند_قبض_${voucher.voucher_number || 'سند'}.pdf`);
+  const { voucher, client } = await getVoucherRenderedData(voucherId);
+  await downloadPdfFromUrl(`/api/vouchers/${encodeURIComponent(voucher.id)}/pdf`, clientPdfFilename('سند قبض', voucher.client_name || client?.name, voucher.voucher_number || 'سند'));
 }
 
 export async function shareVoucherPdfFile({ voucher, issuer, client, docHtml, pdfFileName }) {

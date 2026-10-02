@@ -808,7 +808,11 @@ func (s *TemplateService) RenderTemplateHTML(id string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("تعذر قراءة القالب: %w", err)
 	}
-	return injectLtrIconsStyle(string(data)), nil
+	html := injectLtrIconsStyle(string(data))
+	if filepath.Base(filepath.Dir(filePath)) == "invoices" {
+		html = normalizeInvoiceMeasurements(html)
+	}
+	return html, nil
 }
 
 func (s *TemplateService) FirstTemplateID(category string) (string, error) {
@@ -864,7 +868,45 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 		return "", fmt.Errorf("تعذر قراءة قالب الفاتورة: %w", err)
 	}
 
-	return s.substituteInvoiceTags(string(data), inv), nil
+	return normalizeInvoiceMeasurements(s.substituteInvoiceTags(string(data), inv)), nil
+}
+
+// Apply the reference invoice's element sizes at render time, leaving each
+// template's colors, structure, source file, and page decorations intact.
+func normalizeInvoiceMeasurements(html string) string {
+	const marker = "data-invoice-measurements"
+	if strings.Contains(html, marker) {
+		return html
+	}
+	const style = `<style data-invoice-measurements>
+@media print { @page { size: A4 portrait; } }
+body { font-size: 11px; }
+.seller h2, .seller-ar .company-name, .seller-info .seller-title { font-size: 14.5px; }
+.seller-en h2, .seller-en .company-name { font-size: 13px; }
+.title-pill, .tax-invoice-badge { font-size: 12px; }
+.logo-shell { height: 75px; max-width: 140px; }
+.logo-shell img, .logo-shell svg,
+.logo-slot img, .logo-slot svg,
+.logo-placeholder img, .logo-placeholder svg,
+.seller-logo-box img, .seller-logo-box svg,
+img[class*="logo"], svg[class*="logo"] {
+  max-width: 140px !important; max-height: 75px !important;
+  width: auto; height: auto; object-fit: contain;
+}
+.qr-box, .qr-box-wrap { width: 130px; min-width: 130px; min-height: 130px; }
+svg.zatca-qr-svg, .qr-frame img, .qr-frame svg,
+.qr-box img, .qr-box svg, .qr-frame-box img, .qr-frame-box svg {
+  width: 120px !important; height: 120px !important; max-width: 120px !important; max-height: 120px !important;
+}
+svg.sar-sym-svg, svg.sar-sym { width: .92em !important; height: .92em !important; }
+.items-main-table, .items-table, .items-table-wrapper table,
+.totals-table, .totals-box-table { font-size: 10.5px; }
+.footer-zone, .invoice-footer { font-size: 9.5px; }
+</style>`
+	if end := strings.LastIndex(strings.ToLower(html), "</head>"); end >= 0 {
+		return html[:end] + style + html[end:]
+	}
+	return style + html
 }
 
 // GenerateQRSVG generates an ultra-sharp, high-resolution vector SVG representation of the ZATCA QR code.
