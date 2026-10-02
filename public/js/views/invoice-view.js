@@ -11,6 +11,50 @@ import {
 } from '../core/util.js';
 import { tafqeet } from '../print/templates.js';
 
+function enforceLtrHeaderIcons(html) {
+  if (!html) return html;
+  const ltrIconsStyle = `<style>
+    .seller-en-info, .seller-en, .seller.seller-en, .seller-block.en, td.seller-en {
+      direction: ltr !important;
+      text-align: left !important;
+      justify-items: flex-start !important;
+      align-items: flex-start !important;
+      unicode-bidi: isolate !important;
+    }
+    .seller-en-info .company-name-en, .seller-en .company-name-en, .seller-en .company-name, .seller-block.en .seller-name-en, .seller-en-info h2, .seller-en h2, .seller-block.en h2 {
+      direction: ltr !important;
+      text-align: left !important;
+      unicode-bidi: isolate !important;
+    }
+    .seller-en-info .header-info-line, .seller-en .header-info-line, .seller-en .company-line, .seller-block.en .seller-row, .seller-en p, .seller.seller-en p {
+      direction: ltr !important;
+      text-align: left !important;
+      justify-content: flex-start !important;
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: center !important;
+      gap: 6px !important;
+      unicode-bidi: isolate !important;
+    }
+    .seller-en-info .header-info-line svg, .seller-en-info .header-info-line .icon-svg, .seller-en .header-info-line svg, .seller-en .company-line svg, .seller-en .company-line .icon, .seller-block.en .seller-row svg, .seller-en p svg, .seller.seller-en p svg, .seller-en p .icon, .seller.seller-en p .icon {
+      order: 1 !important;
+      margin-right: 6px !important;
+      margin-left: 0 !important;
+      flex-shrink: 0 !important;
+    }
+    .seller-en-info .header-info-line span, .seller-en .company-line span, .seller-block.en .seller-row span, .seller-en p span {
+      order: 2 !important;
+      text-align: left !important;
+      direction: ltr !important;
+      unicode-bidi: isolate !important;
+    }
+  </style>`;
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, ltrIconsStyle + '\n</head>');
+  }
+  return ltrIconsStyle + '\n' + html;
+}
+
 async function loadContext(invoiceId) {
   const invoice = await api.get(`/api/invoices/${invoiceId}`);
   const lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
@@ -106,7 +150,8 @@ export async function getInvoiceDocHtml({ invoice, issuer, client, printSettings
   if (!style) throw new Error('لا يوجد قالب فاتورة HTML محفوظ في data');
   const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/render-html?style=${encodeURIComponent(style)}`, { credentials: 'same-origin' });
   if (!res.ok) throw new Error('تعذر قراءة قالب الفاتورة المحفوظ');
-  return res.text();
+  const text = await res.text();
+  return enforceLtrHeaderIcons(text);
 }
 
 export async function downloadInvoicePdf({ invoice, issuer, client, printSettings = null, docHtml = null }) {
@@ -585,6 +630,7 @@ export async function render(view, ctx) {
           if (res.ok) {
             let filledHtml = await res.text();
             if (filledHtml && filledHtml.length > 500 && iframe) {
+              filledHtml = enforceLtrHeaderIcons(filledHtml);
               currentInvoiceDocHtml = filledHtml;
               iframe.srcdoc = filledHtml;
               return;

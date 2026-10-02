@@ -28,6 +28,50 @@ var (
 	moneySarRegex2 = regexp.MustCompile(`(?:ر\.س|ر\.\s*س|﷼|SAR)\s*([0-9]+(?:\.[0-9]+)?)`)
 )
 
+const ltrIconsStyleTag = `<style>
+.seller-en-info, .seller-en, .seller.seller-en, .seller-block.en, td.seller-en {
+  direction: ltr !important;
+  text-align: left !important;
+  justify-items: flex-start !important;
+  align-items: flex-start !important;
+  unicode-bidi: isolate !important;
+}
+.seller-en-info .company-name-en, .seller-en .company-name-en, .seller-en .company-name, .seller-block.en .seller-name-en, .seller-en-info h2, .seller-en h2, .seller-block.en h2 {
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: isolate !important;
+}
+.seller-en-info .header-info-line, .seller-en .header-info-line, .seller-en .company-line, .seller-block.en .seller-row, .seller-en p, .seller.seller-en p {
+  direction: ltr !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+  unicode-bidi: isolate !important;
+}
+.seller-en-info .header-info-line svg, .seller-en-info .header-info-line .icon-svg, .seller-en .header-info-line svg, .seller-en .company-line svg, .seller-en .company-line .icon, .seller-block.en .seller-row svg, .seller-en p svg, .seller.seller-en p svg, .seller-en p .icon, .seller.seller-en p .icon {
+  order: 1 !important;
+  margin-right: 6px !important;
+  margin-left: 0 !important;
+  flex-shrink: 0 !important;
+}
+.seller-en-info .header-info-line span, .seller-en .company-line span, .seller-block.en .seller-row span, .seller-en p span {
+  order: 2 !important;
+  text-align: left !important;
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+}
+</style>`
+
+func injectLtrIconsStyle(h string) string {
+	if strings.Contains(h, "</head>") {
+		return strings.Replace(h, "</head>", ltrIconsStyleTag+"\n</head>", 1)
+	}
+	return ltrIconsStyleTag + "\n" + h
+}
+
 type TemplateService struct {
 	db           *db.DB
 	dataDir      string
@@ -764,7 +808,7 @@ func (s *TemplateService) RenderTemplateHTML(id string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("تعذر قراءة القالب: %w", err)
 	}
-	return string(data), nil
+	return injectLtrIconsStyle(string(data)), nil
 }
 
 func (s *TemplateService) FirstTemplateID(category string) (string, error) {
@@ -1449,7 +1493,7 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 	result = dupFaqatRegex.ReplaceAllString(result, "فقط")
 	result = strings.ReplaceAll(result, "فقط مبلغ وقدره فقط", "فقط مبلغ وقدره")
 
-	return result
+	return injectLtrIconsStyle(result)
 }
 
 type colType int
