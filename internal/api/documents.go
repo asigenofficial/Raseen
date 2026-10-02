@@ -349,5 +349,27 @@ func (s *Server) renderVoucherHTML(id, style string) (string, error) {
 		logo = `<img style="max-width:130px;max-height:80px" src="` + html.EscapeString(*issuer.LogoData) + `">`
 	}
 	tpl = strings.ReplaceAll(tpl, "{{logo}}", logo)
+	tpl = injectVoucherPrintStyle(tpl)
 	return tpl, nil
+}
+
+func injectVoucherPrintStyle(template string) string {
+	style := `<style>
+@media print {
+  html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; }
+  body { padding: 0 !important; }
+  .receipt-card, .receipt-container, .receipt-page, .receipt, .page, .top-wrap {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}
+</style>`
+	if headEnd := strings.LastIndex(strings.ToLower(template), "</head>"); headEnd >= 0 {
+		return template[:headEnd] + style + "\n" + template[headEnd:]
+	}
+	return style + "\n" + template
 }

@@ -3866,8 +3866,12 @@ tr.row-open>td {
 
 /* ------------------------------------------------------------------ الرمز الرسمي للريال السعودي */
 .sar-sym-svg {
+  width: .72em;
+  height: .82em;
+  max-width: .72em;
+  max-height: .82em;
   display: inline-block;
-  vertical-align: -0.15em;
+  vertical-align: -0.08em;
   fill: currentColor;
   flex-shrink: 0;
   transition: transform 0.15s ease;
@@ -3903,9 +3907,9 @@ tr.row-open>td {
 }
 
 .stat-val .sar-sym-svg {
-  width: 1.1em;
-  height: 1.1em;
-  vertical-align: -0.12em;
+  width: .72em;
+  height: .82em;
+  vertical-align: -.08em;
 }
 
 .tbl th .cur-sym,
@@ -3921,9 +3925,9 @@ tr.row-open>td {
 }
 
 .totals-box .line.grand .sar-sym-svg {
-  width: 1.15em;
-  height: 1.15em;
-  vertical-align: -0.12em;
+  width: .72em;
+  height: .82em;
+  vertical-align: -.08em;
 }
 
 /* ==========================================================================

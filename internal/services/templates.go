@@ -65,11 +65,30 @@ const ltrIconsStyleTag = `<style>
 }
 </style>`
 
+const sarSymbolSizeStyleTag = `<style data-sar-symbol-size>
+svg.sar-sym-svg, svg.sar-sym, .sar-sym svg, .currency-symbol svg {
+  width: .72em !important;
+  height: .82em !important;
+  max-width: .72em !important;
+  max-height: .82em !important;
+  object-fit: contain;
+  vertical-align: -.08em;
+  flex: 0 0 auto;
+}
+</style>`
+
 func injectLtrIconsStyle(h string) string {
 	if strings.Contains(h, "</head>") {
 		return strings.Replace(h, "</head>", ltrIconsStyleTag+"\n</head>", 1)
 	}
 	return ltrIconsStyleTag + "\n" + h
+}
+
+func injectTemplateStyle(h, style string) string {
+	if headEnd := strings.LastIndex(strings.ToLower(h), "</head>"); headEnd >= 0 {
+		return h[:headEnd] + style + "\n" + h[headEnd:]
+	}
+	return style + "\n" + h
 }
 
 type TemplateService struct {
@@ -809,6 +828,7 @@ func (s *TemplateService) RenderTemplateHTML(id string) (string, error) {
 		return "", fmt.Errorf("تعذر قراءة القالب: %w", err)
 	}
 	html := injectLtrIconsStyle(string(data))
+	html = injectTemplateStyle(html, sarSymbolSizeStyleTag)
 	if filepath.Base(filepath.Dir(filePath)) == "invoices" {
 		html = normalizeInvoiceMeasurements(html)
 	}
@@ -898,7 +918,11 @@ svg.zatca-qr-svg, .qr-frame img, .qr-frame svg,
 .qr-box img, .qr-box svg, .qr-frame-box img, .qr-frame-box svg {
   width: 120px !important; height: 120px !important; max-width: 120px !important; max-height: 120px !important;
 }
-svg.sar-sym-svg, svg.sar-sym { width: .92em !important; height: .92em !important; }
+svg.sar-sym-svg, svg.sar-sym, .sar-sym svg, .currency-symbol svg {
+  width: .72em !important; height: .82em !important;
+  max-width: .72em !important; max-height: .82em !important;
+  object-fit: contain; vertical-align: -.08em; flex: 0 0 auto;
+}
 .items-main-table, .items-table, .items-table-wrapper table,
 .totals-table, .totals-box-table { font-size: 10.5px; }
 .footer-zone, .invoice-footer { font-size: 9.5px; }
