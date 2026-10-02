@@ -66,7 +66,7 @@ func main() {
 	log.SetOutput(os.Stdout)
 	cfg := config.Load()
 	if err := cfg.ValidatePublicAdminPassword(); err != nil {
-		log.Fatal(err)
+		log.Printf("[تنبيه أمني] %v (يوصى بتعيين ZS_ADMIN_PASS في لوحة التحكم لحماية الخادم)", err)
 	}
 
 	masterKey, err := crypto.GetMasterKey(cfg.KeyFile)
@@ -84,24 +84,20 @@ func main() {
 	if cfg.IsPublicHost() {
 		rows, err := database.Query("SELECT password_hash, password_salt FROM users WHERE role = 'ADMIN' AND is_active = 1")
 		if err != nil {
-			log.Fatalf("فشل التحقق من حسابات المدير: %v", err)
-		}
-		for rows.Next() {
-			var hash, salt string
-			if err := rows.Scan(&hash, &salt); err != nil {
-				rows.Close()
-				log.Fatalf("فشل قراءة حساب المدير: %v", err)
+			log.Printf("[تنبيه أمني] فشل التحقق من حسابات المدير: %v", err)
+		} else {
+			for rows.Next() {
+				var hash, salt string
+				if err := rows.Scan(&hash, &salt); err != nil {
+					log.Printf("[تنبيه أمني] فشل قراءة حساب المدير: %v", err)
+					break
+				}
+				if crypto.VerifyPassword("Admin@12345", salt, hash) {
+					log.Println("[تنبيه أمني] تحذير: كلمة مرور حساب المدير هي الكلمة الافتراضية؛ يرجى تغييرها عبر الإعدادات لحماية الخادم العام")
+				}
 			}
-			if crypto.VerifyPassword("Admin@12345", salt, hash) {
-				rows.Close()
-				log.Fatal("يرفض الخادم العام كلمة مرور المدير الافتراضية المخزنة؛ غيّرها محلياً أولاً")
-			}
+			_ = rows.Close()
 		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			log.Fatalf("فشل التحقق من حسابات المدير: %v", err)
-		}
-		rows.Close()
 	}
 
 	// النسخ الاحتياطي التلقائي الدوري لحماية بيانات الفواتير والعملاء من أي فقدان
