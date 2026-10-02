@@ -1112,7 +1112,7 @@ export async function render(view) {
 
     if (tpl && tpl.id) {
       iframe.srcdoc = getTemplateLoadingHtml(`جارٍ تحميل قالب: ${tpl.name_ar || tpl.name}`);
-      fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html`)
+      fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html?_t=${Date.now()}`)
         .then((r) => r.ok ? r.text() : null)
         .then((realHtml) => {
           if (realHtml && iframe) {
@@ -1225,7 +1225,7 @@ export async function render(view) {
       const fIframe = $('#fullscreen-iframe', m.el);
       if (tpl && tpl.id) {
         if (fIframe) fIframe.srcdoc = getTemplateLoadingHtml(`جارٍ تحميل ومعاينة قالب: ${tpl.name_ar || tpl.name}`);
-        fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html`, { credentials: 'same-origin' })
+        fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html?_t=${Date.now()}`, { credentials: 'same-origin' })
           .then((r) => r.ok ? r.text() : null)
           .then((realHtml) => {
             if (realHtml && fIframe) {
