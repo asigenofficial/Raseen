@@ -150,6 +150,8 @@ func (s *Server) startPDFWorker() {
 	go func() {
 		// Re-queue any previously failed PDFs on startup so they re-render cleanly
 		_, _ = s.db.Exec("UPDATE document_pdfs SET status='PENDING' WHERE status='FAILED'")
+		// Invalidate existing cached invoice PDFs on startup so historical invoices pick up latest template fixes
+		_, _ = s.db.Exec("UPDATE document_pdfs SET status='PENDING', pdf=NULL, rendered_revision=0 WHERE kind='invoice'")
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 		for {
