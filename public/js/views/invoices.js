@@ -713,12 +713,14 @@ export async function render(view, ctx) {
           btn.disabled = false;
         }
       } else if (btn.dataset.act === 'share') {
-        const invoice = state.data.items.find((item) => item.id === id);
-        await shareDocument({
-          title: `فاتورة ${invoice?.invoice_number || ''}`,
-          text: `فاتورة رقم ${invoice?.invoice_number || ''} من ${invoice?.issuer_name || ''}`,
-          url: `${location.origin}${location.pathname}#/invoice-view/${encodeURIComponent(id)}`,
-        });
+        btn.disabled = true;
+        try {
+          const invoice = state.data.items.find((item) => item.id === id) || { id };
+          const { shareInvoicePdfFile } = await import('./invoice-view.js');
+          await shareInvoicePdfFile({ invoice });
+        } finally {
+          btn.disabled = false;
+        }
       } else if (btn.dataset.act === 'print' || btn.dataset.act === 'thermal') {
         btn.disabled = true;
         try {

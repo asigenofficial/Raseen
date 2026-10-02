@@ -128,6 +128,13 @@ func (s *Server) pdfStatus(w http.ResponseWriter, kind, id string) {
 		s.err(w, 500, err.Error())
 		return
 	}
+	if status == "FAILED" {
+		// Automatically recover from temporary failures by transitioning back to PENDING and waking worker
+		_, _ = s.db.Exec(`UPDATE document_pdfs SET status='PENDING',error='',updated_at=?
+			WHERE kind=? AND document_id=?`, db.NowIso(), kind, id)
+		s.wakePDFWorker()
+		status = "PENDING"
+	}
 	s.json(w, 200, map[string]any{"status": status, "error": renderErr,
 		"revision": revision, "rendered_revision": rendered})
 }
@@ -141,6 +148,8 @@ func (s *Server) wakePDFWorker() {
 
 func (s *Server) startPDFWorker() {
 	go func() {
+		// Re-queue any previously failed PDFs on startup so they re-render cleanly
+		_, _ = s.db.Exec("UPDATE document_pdfs SET status='PENDING' WHERE status='FAILED'")
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 		for {

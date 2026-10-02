@@ -129,10 +129,29 @@ export async function downloadInvoicePdf({ invoice, issuer, client, printSetting
 }
 
 export async function shareInvoicePdfFile({ invoice, issuer, client, text, printSettings = null, docHtml = null }) {
+  const invNum = (invoice.invoice_number || invoice.id || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
+  const filename = `فاتورة_${invNum}.pdf`;
+  let files = null;
+  let pdfBlob = null;
+  try {
+    toastOk('جارٍ تجهيز ملف PDF للمشاركة...');
+    const cfg = printSettings || (typeof issuer?.print_settings === 'string'
+      ? JSON.parse(issuer.print_settings || '{}') : (issuer?.print_settings || {})) || {};
+    pdfBlob = await fetchInvoicePdfBlob(invoice.id, null, cfg.template_style || '');
+    if (pdfBlob) {
+      const file = new File([pdfBlob], filename, { type: 'application/pdf' });
+      files = [file];
+    }
+  } catch (err) {
+    console.warn('تعذر تجهيز ملف PDF للمشاركة:', err);
+  }
+
   return shareDocument({
     title: `فاتورة ${invoice.invoice_number}`,
     text: text || `فاتورة ضريبية رقم ${invoice.invoice_number} من ${issuer?.name_ar || ''}`,
     url: `${location.origin}${location.pathname}#/invoice-view/${encodeURIComponent(invoice.id)}`,
+    files,
+    onDownloadFile: pdfBlob ? () => savePdfFile(pdfBlob, filename) : null,
   });
 }
 

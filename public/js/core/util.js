@@ -748,33 +748,56 @@ export async function renderStoredVoucher(voucher, issuer, client, style = '') {
   return fillDynamicTemplateHtml(template, { voucher, issuer, client });
 }
 
-/** افتح قائمة مشاركة النظام أثناء نقرة المستخدم؛ قد تضيع صلاحية فتحها بعد طلبات الشبكة. */
-export async function shareDocument({ title, text, url }) {
+/** افتح قائمة مشاركة النظام أو مشاركة ملفات المستند كـ PDF */
+export async function shareDocument({ title, text, url, files = null, onDownloadFile = null }) {
   if (navigator.share) {
     try {
-      await navigator.share({ title, text, url });
+      const shareData = { title, text };
+      if (files && Array.isArray(files) && files.length > 0 && navigator.canShare && navigator.canShare({ files })) {
+        shareData.files = files;
+      } else if (url) {
+        shareData.url = url;
+      }
+      await navigator.share(shareData);
       return true;
     } catch (err) {
       if (err?.name === 'AbortError') return false;
       console.warn('Native share unavailable:', err);
     }
   }
-  const message = `${text}\n${url}`;
+  const message = url ? `${text}\n${url}` : text;
   const m = modal({
     title: `مشاركة ${title}`,
     slim: true,
     body: html`<div style="display:grid;gap:.65rem">
+      ${files && files.length > 0 ? html`<button class="btn btn-primary" data-dl-share-file type="button" style="background:#0d9488;border-color:#0d9488;color:#fff;font-weight:700">تحميل ملف PDF للمشاركة 📄</button>` : ''}
       <a class="btn" target="_blank" rel="noopener noreferrer" href="https://wa.me/?text=${encodeURIComponent(message)}">واتساب</a>
-      <a class="btn" target="_blank" rel="noopener noreferrer" href="https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}">تيليجرام</a>
+      <a class="btn" target="_blank" rel="noopener noreferrer" href="https://t.me/share/url?url=${encodeURIComponent(url || '')}&text=${encodeURIComponent(text)}">تيليجرام</a>
       <a class="btn" href="mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(message)}">البريد الإلكتروني</a>
-      <button class="btn" data-copy-share type="button">نسخ الرابط</button>
-      <p class="tiny muted" style="margin:0">يلزم تسجيل الدخول إلى النظام لفتح الرابط.</p>
+      ${url ? html`<button class="btn" data-copy-share type="button">نسخ الرابط</button>` : ''}
     </div>`,
   });
-  m.el.querySelector('[data-copy-share]')?.addEventListener('click', async () => {
-    await copyText(url);
-    toastOk('تم نسخ رابط المستند');
-  });
+  if (files && files.length > 0) {
+    m.el.querySelector('[data-dl-share-file]')?.addEventListener('click', async () => {
+      if (onDownloadFile) {
+        await onDownloadFile();
+      } else {
+        const file = files[0];
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(file);
+        a.download = file.name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      }
+      toastOk('تم بدء تحميل الملف');
+    });
+  }
+  if (url) {
+    m.el.querySelector('[data-copy-share]')?.addEventListener('click', async () => {
+      await copyText(url);
+      toastOk('تم نسخ رابط المستند');
+    });
+  }
   return false;
 }
 
