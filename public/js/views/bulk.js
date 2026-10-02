@@ -8,9 +8,8 @@ import * as router from '../core/router.js';
 import {
   html, raw, esc, money, num, timeToMinutes, toNum, today,
   toastOk, toastErr, $, delegate, confirmDialog, promptDialog, exportCsv, exportExcel,
-  modal, printDoc, icon, generateNextItemCode, downloadPdfFromUrl,
+  modal, printDoc, icon, generateNextItemCode, downloadPdfFromUrl, renderStoredVoucher, loadStoredTemplate, fillStoredTemplate,
 } from '../core/util.js';
-import { invoiceA4, invoiceThermal, bulkPreviewReport, INVOICE_TEMPLATES, voucherPrint } from '../print/templates.js';
 
 const PAY_LABELS = { CASH: 'نقداً', CARD: 'شبكة', TRANSFER: 'تحويل', CREDIT: 'آجل' };
 
@@ -150,11 +149,7 @@ export async function render(view) {
       <optgroup label="قوالب الفواتير المعتمدة والمخصصة (${availableTemplates.length} قالب)">
         ${availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedId ? 'selected' : ''}>${esc(t.name_ar || t.name || t.id)} (${esc(t.badge || 'فاتورة HTML')})</option>`).join('')}
       </optgroup>` : '';
-    const builtinGroup = `
-      <optgroup label="القوالب الرسمية القياسية (A4)">
-        ${INVOICE_TEMPLATES.map((t) => `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
-      </optgroup>`;
-    return excelGroup + builtinGroup;
+    return excelGroup;
   };
 
   const cur = currencyLabel();
@@ -516,7 +511,7 @@ export async function render(view) {
                               <td><input type="text" style="padding:.2rem;font-size:.8rem;width:95px" class="line-input mono" data-inv="${idx}" data-line="${lIdx}" data-lfield="item_code" value="${esc(l.item_code || '')}" placeholder="رقم الصنف" /></td>
                               <td><b>${esc(l.item_name)}</b></td>
                               <td><input type="text" style="padding:.2rem;font-size:.8rem;width:70px" class="line-input" data-inv="${idx}" data-line="${lIdx}" data-lfield="unit" value="${esc(l.unit || 'حبة')}" /></td>
-                              <td><input type="number" step="any" min="0.01" style="padding:.2rem;font-size:.8rem;text-align:right" class="line-input" data-inv="${idx}" data-line="${lIdx}" data-lfield="quantity" value="${l.quantity}" /></td>
+                              <td><input type="number" step="1" min="1" style="padding:.2rem;font-size:.8rem;text-align:right" class="line-input" data-inv="${idx}" data-line="${lIdx}" data-lfield="quantity" value="${l.quantity}" /></td>
                               <td><input type="number" step="any" min="0" style="padding:.2rem;font-size:.8rem;text-align:right" class="line-input" data-inv="${idx}" data-line="${lIdx}" data-lfield="unit_price" value="${l.unit_price}" /></td>
                               <td><input type="number" step="any" min="0" style="padding:.2rem;font-size:.8rem;text-align:right" class="line-input" data-inv="${idx}" data-line="${lIdx}" data-lfield="discount" value="${l.discount || 0}" /></td>
                               <td class="text-center tiny">${num(l.tax_rate || 15)}%</td>
@@ -563,7 +558,7 @@ export async function render(view) {
 
       <div id="drafts-area">${raw(draftsSectionHtml())}</div>
 
-      <div class="card mt">
+      <div class="card mt bulk-form-card">
         <div class="card-head" style="padding:0 0 .7rem"><h3>1. الأساسيات</h3></div>
         
         <!-- الصف 1: أطراف الفاتورة والمدى الزمني -->
@@ -704,11 +699,11 @@ export async function render(view) {
             </div>
             <div class="field" style="flex:0.9;min-width:110px">
               <label class="tiny">رقم الصنف</label>
-              <input type="text" id="quick-catalog-item-code" class="mono" placeholder="رقم الصنف" />
+              <input type="text" id="quick-catalog-item-code" class="mono" placeholder="رقم الصنف" autocomplete="off" />
             </div>
             <div class="field" style="flex:2;min-width:180px">
               <label class="tiny req">اسم الصنف أو الخدمة</label>
-              <input type="text" id="quick-catalog-item-name" placeholder="اسم الصنف بالعربية" />
+              <input type="text" id="quick-catalog-item-name" placeholder="ابحث بالاسم أو الباركود..." autocomplete="off" />
             </div>
             <div class="field" style="flex:0.7;min-width:85px">
               <label class="tiny">الوحدة</label>
@@ -778,7 +773,7 @@ export async function render(view) {
         </div>
       </div>
 
-      <div class="card mt">
+      <div class="card mt bulk-form-card">
         <div class="card-head" style="padding:0 0 .7rem"><h3>3. ضوابط التنوع والواقعية</h3></div>
         
         <div class="form-grid-5 mt">
@@ -837,17 +832,17 @@ export async function render(view) {
           </div>
         </div>
 
-        <div class="form-grid-2 mt">
-          <div class="field" style="background:rgba(255,255,255,0.02);padding:.8rem 1rem;border-radius:var(--radius-sm);border:1px solid var(--line)">
+        <div class="form-grid-2 mt bulk-options-grid">
+          <div class="bulk-option-card">
             <label>الخصومات</label>
             <label class="check"><input type="checkbox" id="discount_enabled" ${raw(state.discount_enabled ? 'checked' : '')} /> تطبيق خصومات عشوائية على بعض البنود</label>
-            <div class="form-grid-3 mt" ${raw(state.discount_enabled ? '' : 'style="opacity:.5"')}>
-              <div class="field"><label class="tiny">من %</label><input type="number" id="discount_min_percent" value="${state.discount_min_percent}" min="0" max="90" step="0.5" /></div>
-              <div class="field"><label class="tiny">إلى %</label><input type="number" id="discount_max_percent" value="${state.discount_max_percent}" min="0" max="90" step="0.5" /></div>
-              <div class="field"><label class="tiny">احتمال الخصم (0-1)</label><input type="number" id="discount_probability" value="${state.discount_probability}" min="0" max="1" step="0.05" /></div>
+            <div class="bulk-discount-fields mt" ${raw(state.discount_enabled ? '' : 'data-disabled="true"')}>
+              <div class="field"><label for="discount_min_percent">أدنى خصم (%)</label><input type="number" id="discount_min_percent" value="${state.discount_min_percent}" min="0" max="90" step="0.5" inputmode="decimal" ${raw(state.discount_enabled ? '' : 'disabled')} /></div>
+              <div class="field"><label for="discount_max_percent">أقصى خصم (%)</label><input type="number" id="discount_max_percent" value="${state.discount_max_percent}" min="0" max="90" step="0.5" inputmode="decimal" ${raw(state.discount_enabled ? '' : 'disabled')} /></div>
+              <div class="field"><label for="discount_probability">احتمال الخصم (%)</label><input type="number" id="discount_probability" value="${Math.round(Number(state.discount_probability || 0) * 100)}" min="0" max="100" step="5" inputmode="numeric" aria-describedby="discount_probability_hint" ${raw(state.discount_enabled ? '' : 'disabled')} /><span class="hint" id="discount_probability_hint">مثال: 30 يعني احتمال 30٪</span></div>
             </div>
           </div>
-          <div class="field" style="background:rgba(255,255,255,0.02);padding:.8rem 1rem;border-radius:var(--radius-sm);border:1px solid var(--line)">
+          <div class="bulk-option-card">
             <label>خيارات أيام العمل والدفع</label>
             <div class="flex" style="gap:1rem;margin-bottom:.5rem">
               <label class="check"><input type="checkbox" id="allow_fraction_qty" ${raw(state.allow_fraction_qty ? 'checked' : '')} /> كميات كسرية (0.5 / 2.25)</label>
@@ -868,7 +863,12 @@ export async function render(view) {
 
   const bindNumeric = (ids) => ids.forEach((id) => {
     const el = $(`#${id}`, view);
-    if (el) el.addEventListener('input', (e) => { state[id] = e.target.value; });
+    if (el) el.addEventListener('input', (e) => {
+      const value = e.target.value;
+      state[id] = id === 'discount_probability' && value !== ''
+        ? Math.max(0, Math.min(100, Number(value))) / 100
+        : value;
+    });
   });
 
   function bind() {
@@ -929,7 +929,12 @@ export async function render(view) {
     }
 
     const discCheck = $('#discount_enabled', view);
-    if (discCheck) discCheck.addEventListener('change', (e) => { state.discount_enabled = e.target.checked; });
+    if (discCheck) discCheck.addEventListener('change', (e) => {
+      state.discount_enabled = e.target.checked;
+      const fields = $('.bulk-discount-fields', view);
+      if (fields) fields.toggleAttribute('data-disabled', !e.target.checked);
+      fields?.querySelectorAll('input').forEach((input) => { input.disabled = !e.target.checked; });
+    });
     const fracCheck = $('#allow_fraction_qty', view);
     if (fracCheck) fracCheck.addEventListener('change', (e) => { state.allow_fraction_qty = e.target.checked; });
     const skipCheck = $('#skip_weekend', view);
@@ -951,6 +956,245 @@ export async function render(view) {
       }
     };
 
+    let activeFloatingInput = null;
+    let activePopoverIdx = -1;
+
+    const getOrCreatePopover = () => {
+      let box = document.getElementById('global-item-search-popover');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'global-item-search-popover';
+        box.className = 'global-item-search-popover hidden';
+        document.body.appendChild(box);
+      }
+      return box;
+    };
+
+    const closePopover = () => {
+      const box = document.getElementById('global-item-search-popover');
+      if (box) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+      }
+      activeFloatingInput = null;
+      activePopoverIdx = -1;
+    };
+
+    const positionPopover = (input, box) => {
+      if (!input || !document.body.contains(input)) {
+        closePopover();
+        return;
+      }
+      const rect = input.getBoundingClientRect();
+      const width = Math.min(Math.max(rect.width, 380), window.innerWidth - 24);
+
+      let left = rect.right - width;
+      if (left < 12) left = 12;
+      if (left + width > window.innerWidth - 12) {
+        left = window.innerWidth - width - 12;
+      }
+
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const popoverHeight = Math.min(360, box.offsetHeight || 300);
+
+      let top;
+      if (spaceBelow < 220 && spaceAbove > spaceBelow) {
+        top = Math.max(10, rect.top - popoverHeight - 6);
+      } else {
+        top = rect.bottom + 6;
+      }
+
+      box.style.left = `${Math.round(left)}px`;
+      box.style.top = `${Math.round(top)}px`;
+      box.style.width = `${Math.round(width)}px`;
+    };
+
+    const selectCatalogItem = (item) => {
+      if (!item) return;
+      const select = $('#quick-catalog-item-select', view);
+      const codeInput = $('#quick-catalog-item-code', view);
+      const nameInput = $('#quick-catalog-item-name', view);
+      const unitInput = $('#quick-catalog-item-unit', view);
+      const priceInput = $('#quick-catalog-item-price', view);
+
+      if (codeInput) codeInput.value = item.item_code || '';
+      if (nameInput) nameInput.value = item.name_ar || '';
+      if (unitInput) unitInput.value = item.unit || 'حبة';
+      if (priceInput && item.sale_price !== undefined) priceInput.value = item.sale_price;
+      if (select) select.value = item.id || '';
+
+      closePopover();
+      if (priceInput) {
+        priceInput.focus();
+        priceInput.select();
+      }
+    };
+
+    const showItemSuggestions = (input) => {
+      activeFloatingInput = input;
+      const box = getOrCreatePopover();
+      const q = input.value.trim().toLowerCase();
+      if (!q) {
+        closePopover();
+        return;
+      }
+
+      const matches = store.items.filter((it) =>
+        (it.name_ar && it.name_ar.toLowerCase().includes(q))
+        || (it.name_en && it.name_en.toLowerCase().includes(q))
+        || (it.item_code && it.item_code.toLowerCase().includes(q))
+        || (it.barcode && it.barcode.toLowerCase().includes(q))
+      ).slice(0, 10);
+
+      if (!matches.length) {
+        box.innerHTML = `
+          <div class="popover-empty">
+            <span>لا يوجد صنف مطابق لـ "<b>${esc(input.value)}</b>" في الدليل</span>
+            <small class="muted">يمكنك المتابعة وإضافته كصنف حر جديد</small>
+          </div>
+        `;
+        box.classList.remove('hidden');
+        positionPopover(input, box);
+        activePopoverIdx = -1;
+        return;
+      }
+
+      activePopoverIdx = 0;
+      box.innerHTML = `
+        <div class="popover-head">
+          <span class="popover-title">الأصناف المطابقة (${matches.length})</span>
+          <span class="popover-hint">↑↓ للتنقل · Enter للاختيار</span>
+        </div>
+        <div class="popover-list">
+          ${matches.map((it, idx) => `
+            <div class="popover-item ${idx === 0 ? 'sel' : ''}" data-id="${esc(it.id)}" data-idx="${idx}">
+              <div class="popover-item-main">
+                <div class="popover-item-name">${esc(it.name_ar)}</div>
+                ${it.name_en ? `<div class="popover-item-sub">${esc(it.name_en)}</div>` : ''}
+              </div>
+              <div class="popover-item-meta">
+                <div class="popover-item-badges">
+                  <span class="badge mono gray tiny">${esc(it.item_code || 'بدون كود')}</span>
+                  ${it.barcode ? `<span class="badge mono blue tiny">${esc(it.barcode)}</span>` : ''}
+                </div>
+                <div class="popover-item-price">
+                  <strong>${money(it.sale_price)}</strong> <small class="muted">${esc(cur)} / ${esc(it.unit || 'حبة')}</small>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+      box.classList.remove('hidden');
+      positionPopover(input, box);
+
+      box.querySelectorAll('.popover-item').forEach((el) => {
+        el.addEventListener('mousedown', (ev) => {
+          ev.preventDefault();
+          const item = store.items.find((x) => x.id === el.dataset.id);
+          if (item) selectCatalogItem(item);
+        });
+        el.addEventListener('mouseenter', () => {
+          box.querySelectorAll('.popover-item').forEach((x) => x.classList.remove('sel'));
+          el.classList.add('sel');
+          activePopoverIdx = Number(el.dataset.idx);
+        });
+      });
+    };
+
+    // ربط البحث اللحظي عند الكتابة أو اللصق في اسم الصنف أو رمزه
+    delegate(view, 'input', '#quick-catalog-item-name, #quick-catalog-item-code', (e, input) => {
+      showItemSuggestions(input);
+    });
+
+    delegate(view, 'focus', '#quick-catalog-item-name, #quick-catalog-item-code', (e, input) => {
+      if (input.value.trim().length > 0) showItemSuggestions(input);
+    });
+
+    // التنقل بالأسهم واختيار الصنف بـ Enter والإلغاء بـ Escape
+    delegate(view, 'keydown', '#quick-catalog-item-name, #quick-catalog-item-code', (e, input) => {
+      const box = document.getElementById('global-item-search-popover');
+      const isPopoverOpen = box && !box.classList.contains('hidden');
+
+      if (isPopoverOpen) {
+        const items = [...box.querySelectorAll('.popover-item')];
+        if (items.length) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activePopoverIdx = (activePopoverIdx + 1) % items.length;
+            items.forEach((it, i) => it.classList.toggle('sel', i === activePopoverIdx));
+            items[activePopoverIdx]?.scrollIntoView({ block: 'nearest' });
+            return;
+          }
+          if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activePopoverIdx = (activePopoverIdx - 1 + items.length) % items.length;
+            items.forEach((it, i) => it.classList.toggle('sel', i === activePopoverIdx));
+            items[activePopoverIdx]?.scrollIntoView({ block: 'nearest' });
+            return;
+          }
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const sel = items[activePopoverIdx >= 0 ? activePopoverIdx : 0];
+            if (sel) {
+              const item = store.items.find((x) => x.id === sel.dataset.id);
+              if (item) {
+                selectCatalogItem(item);
+                return;
+              }
+            }
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            closePopover();
+            return;
+          }
+        }
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        closePopover();
+        const priceInput = $('#quick-catalog-item-price', view);
+        if (priceInput) {
+          priceInput.focus();
+          priceInput.select();
+        }
+      }
+    });
+
+    // الضغط على Enter في حقل السعر يضيف الصنف للدفعة مباشرة
+    delegate(view, 'keydown', '#quick-catalog-item-price', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        $('#btn-add-item-to-batch', view)?.click();
+      }
+    });
+
+    const onBulkWindowReposition = () => {
+      if (activeFloatingInput && document.body.contains(activeFloatingInput)) {
+        const box = document.getElementById('global-item-search-popover');
+        if (box && !box.classList.contains('hidden')) {
+          positionPopover(activeFloatingInput, box);
+        }
+      } else {
+        closePopover();
+      }
+    };
+
+    const onBulkGlobalClick = (e) => {
+      const box = document.getElementById('global-item-search-popover');
+      if (!box || box.classList.contains('hidden')) return;
+      if (box.contains(e.target) || (activeFloatingInput && activeFloatingInput.contains(e.target))) return;
+      closePopover();
+    };
+
+    window.addEventListener('scroll', onBulkWindowReposition, { passive: true });
+    window.addEventListener('resize', onBulkWindowReposition, { passive: true });
+    document.addEventListener('mousedown', onBulkGlobalClick);
+
     // تغيير اختيار الصنف السريع لملء رقم الصنف واسمه وسعره ووحدته التلقائية
     delegate(view, 'change', '#quick-catalog-item-select', (e, sel) => {
       const opt = sel.selectedOptions[0];
@@ -968,6 +1212,7 @@ export async function render(view) {
 
     // إضافة أو تحديث صنف للدفعة (سواءً من القائمة أو كتابة يدوية مباشرة)
     delegate(view, 'click', '#btn-add-item-to-batch', () => {
+      closePopover();
       const select = $('#quick-catalog-item-select', view);
       const codeInput = $('#quick-catalog-item-code', view);
       const nameInput = $('#quick-catalog-item-name', view);
@@ -1560,10 +1805,7 @@ export async function render(view) {
       const issuer = store.issuers.find((i) => i.id === state.issuer_id) || { name_ar: 'الشركة المصدرة', currency: 'SAR' };
       const client = store.clients.find((c) => c.id === state.client_id) || { name: 'العميل' };
 
-      const isBuiltin = ['corporate_multipage', 'standard', 'modern', 'classic', 'compact', 'detailed_address'].includes(currentStyle);
-
       try {
-        if (!isBuiltin) {
           const res = await fetch('/api/invoices/preview-render-html', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1598,33 +1840,10 @@ export async function render(view) {
               return;
             }
           }
-        }
-      } catch { /* fallback to client rendering */ }
+      } catch { /* the selected data template may be unavailable */ }
 
-      // Fallback: Client-side rendering via invoiceA4
-      const invPhase = inv.zatca_phase || state.zatca_phase || 'PHASE1';
-      const fullSample = {
-        ...inv,
-        invoice_type: inv.invoice_type || state.invoice_type || 'STANDARD',
-        zatca_phase: invPhase,
-        signature_mode: invPhase === 'PHASE2' ? 'LOCAL' : 'NONE',
-        invoice_number: inv.invoice_number || `${(issuer.invoice_prefix || 'INV').replace(/[-\s]+$/, '').trim() || 'INV'}-${String(currentIdx + 1).padStart(4, '0')}`,
-        seller_name: issuer.name_ar,
-        seller_tax_number: issuer.tax_number,
-        buyer_name: client.name,
-        buyer_tax_number: client.tax_number,
-        qr_payload: inv.qr_payload || (invPhase === 'PHASE2'
-          ? buildZatcaTlv(issuer.name_ar, issuer.tax_number, (inv.issue_date || '2026-09-30') + 'T' + (inv.issue_time || '10:00:00') + 'Z', inv.grand_total, inv.tax_amount, { isPhase2: true })
-          : 'AQVTYW1wbGUSCjMxMDAwMDAwMDMTAzEwMBQEMjMwMA=='),
-      };
-      currentHtml = invoiceA4({
-        invoice: fullSample,
-        issuer,
-        client,
-        printSettings: { template_style: currentStyle },
-        autoPrint: false,
-      });
-      iframe.srcdoc = currentHtml;
+      currentHtml = '';
+      iframe.srcdoc = '<p dir="rtl">تعذر تحميل قالب المعاينة من data. تحقق من ملف القالب المختار.</p>';
     }
 
     const syncNav = () => {
@@ -1726,21 +1945,23 @@ export async function render(view) {
     syncNav();
   }
 
-  const printBulkPreview = () => {
+  const printBulkPreview = async () => {
     if (!state.preview || !state.preview.invoices || !state.preview.invoices.length) {
       toastErr('لا توجد فواتير مُولَّدة للطباعة');
       return;
     }
     const issuer = store.issuers.find((i) => i.id === state.issuer_id) || { name_ar: 'الشركة المصدرة', currency: 'SAR' };
     const client = store.clients.find((c) => c.id === state.client_id) || { name: 'العميل' };
-    printDoc(bulkPreviewReport({
-      issuer,
-      client,
-      invoices: state.preview.invoices,
-      summary: state.preview.summary,
-      options: state.preview.options || payload(),
-      title: state.preview.title || `معاينة دفعة فواتير — ${issuer.name_ar}`,
-    }));
+    try {
+      const template = await loadStoredTemplate('reports');
+      const rows = state.preview.invoices.map((inv) => `<tr><td>${esc(inv.invoice_number || '')}</td><td>${esc(client.name || '')}</td><td>${esc(money(inv.grand_total || 0))}</td></tr>`).join('');
+      printDoc(fillStoredTemplate(template, {
+        title: state.preview.title || 'معاينة دفعة فواتير', subtitle: issuer.name_ar || '',
+        issuer_name: issuer.name_ar || '', generated_at: new Date().toLocaleString('ar-SA'), page_size: 'A4 portrait',
+        stats_html: '', headers_html: '<th>رقم الفاتورة</th><th>العميل</th><th>الإجمالي</th>',
+        rows_html: rows, footer_html: '',
+      }, ['stats_html', 'headers_html', 'rows_html', 'footer_html']));
+    } catch (err) { toastErr(err.message || 'تعذر تحميل قالب التقرير'); }
   };
 
   const saveDraft = async () => {
@@ -2084,7 +2305,7 @@ export async function render(view) {
           for (const v of vouchers) {
             const issuer = store.issuers.find((i) => i.id === v.issuer_id) || store.activeIssuer || {};
             const client = store.clients.find((c) => c.id === v.client_id) || { id: v.client_id, name_ar: v.client_name };
-            docs.push(voucherPrint({ voucher: v, issuer, client }));
+            docs.push(await renderStoredVoucher(v, issuer, client));
           }
           const combined = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>سندات القبض</title>
           <style>

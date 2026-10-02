@@ -673,12 +673,24 @@ export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
 }
 
 /** يفتح اختيار مكان الحفظ في المتصفحات الداعمة، وينزّل الملف بالطريقة المعتادة فيما عداها. */
-export async function choosePdfDestination(filename) {
+const pdfDestinations = new Map();
+
+export async function choosePdfDestination(filename, documentKey = '') {
+  const previous = documentKey && pdfDestinations.get(documentKey);
+  if (previous) {
+    try {
+      if (await previous.queryPermission({ mode: 'readwrite' }) === 'granted' ||
+          await previous.requestPermission({ mode: 'readwrite' }) === 'granted') return previous;
+    } catch { /* let the user choose a new destination */ }
+    pdfDestinations.delete(documentKey);
+  }
   if (window.showSaveFilePicker) {
-    return window.showSaveFilePicker({
+    const handle = await window.showSaveFilePicker({
       suggestedName: filename,
       types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }],
     });
+    if (documentKey) pdfDestinations.set(documentKey, handle);
+    return handle;
   }
   return null;
 }
@@ -694,7 +706,7 @@ export async function savePdfFile(fileObj, filename, handle = null) {
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
-    a.download = safeName;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
@@ -707,10 +719,63 @@ export async function savePdfFile(fileObj, filename, handle = null) {
 }
 
 export async function downloadPdfFromUrl(url, filename) {
-  const saveHandle = await choosePdfDestination(filename);
+  const saveHandle = await choosePdfDestination(filename, url);
   const res = await fetch(url, { credentials: 'same-origin' });
   if (!res.ok) throw new Error('تعذر تجهيز ملف PDF');
   await savePdfFile(await res.blob(), filename, saveHandle);
+}
+
+/** Read a selected HTML template from data/templates via the database catalog. */
+export async function loadStoredTemplate(category, selectedId = '') {
+  const listRes = await fetch(`/api/invoices/templates?type=${encodeURIComponent(category)}`, { credentials: 'same-origin' });
+  if (!listRes.ok) throw new Error('تعذر قراءة قوالب الطباعة');
+  const payload = await listRes.json();
+  const templates = Array.isArray(payload?.data) ? payload.data : (Array.isArray(payload) ? payload : []);
+  const selected = templates.find((tpl) => tpl.id === selectedId) || templates[0];
+  if (!selected) throw new Error('لا يوجد قالب HTML محفوظ لهذه الفئة');
+  const response = await fetch(`/api/invoices/templates/${encodeURIComponent(selected.id)}/render-html`, { credentials: 'same-origin' });
+  if (!response.ok) throw new Error('تعذر قراءة ملف القالب المختار');
+  return response.text();
+}
+
+export function fillStoredTemplate(template, values, rawFields = []) {
+  return String(template).replace(/{{\s*([a-zA-Z0-9_]+)\s*}}/g, (_, key) =>
+    rawFields.includes(key) ? String(values[key] ?? '') : esc(String(values[key] ?? '')));
+}
+
+export async function renderStoredVoucher(voucher, issuer, client, style = '') {
+  const template = await loadStoredTemplate('documents', style);
+  return fillDynamicTemplateHtml(template, { voucher, issuer, client });
+}
+
+/** افتح قائمة مشاركة النظام أثناء نقرة المستخدم؛ قد تضيع صلاحية فتحها بعد طلبات الشبكة. */
+export async function shareDocument({ title, text, url }) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text, url });
+      return true;
+    } catch (err) {
+      if (err?.name === 'AbortError') return false;
+      console.warn('Native share unavailable:', err);
+    }
+  }
+  const message = `${text}\n${url}`;
+  const m = modal({
+    title: `مشاركة ${title}`,
+    slim: true,
+    body: html`<div style="display:grid;gap:.65rem">
+      <a class="btn" target="_blank" rel="noopener noreferrer" href="https://wa.me/?text=${encodeURIComponent(message)}">واتساب</a>
+      <a class="btn" target="_blank" rel="noopener noreferrer" href="https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}">تيليجرام</a>
+      <a class="btn" href="mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(message)}">البريد الإلكتروني</a>
+      <button class="btn" data-copy-share type="button">نسخ الرابط</button>
+      <p class="tiny muted" style="margin:0">يلزم تسجيل الدخول إلى النظام لفتح الرابط.</p>
+    </div>`,
+  });
+  m.el.querySelector('[data-copy-share]')?.addEventListener('click', async () => {
+    await copyText(url);
+    toastOk('تم نسخ رابط المستند');
+  });
+  return false;
 }
 
 

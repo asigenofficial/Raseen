@@ -6,7 +6,7 @@ import { store, loadClients, currencyLabel } from '../core/store.js';
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, monthStart, today,
   $, delegate, exportCsv, exportExcel, printDoc, icon, downloadPdfFromHtml, toastErr, toastOk, confirmDialog,
-  amount, modal,
+  amount, modal, loadStoredTemplate, fillStoredTemplate,
 } from '../core/util.js';
 import { sarSvg } from '../core/icons.js';
 
@@ -25,176 +25,18 @@ const GROUPS = [
   ['issuer', 'حسب الشركة'], ['item', 'حسب الصنف'], ['category', 'حسب المجموعة'],
 ];
 
-function buildReportHtml({ title, subtitle, headers, rows, footer, issuerName, stats = [] }) {
-  const isLandscape = headers.length > 5;
-  const pageOrientation = isLandscape ? 'A4 landscape' : 'A4 portrait';
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('ar-SA');
-  const timeStr = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
-
-  const statCardsHtml = stats && stats.length ? `
-    <div style="display:flex;gap:12px;margin-bottom:6mm;flex-wrap:wrap;">
-      ${stats.map((st) => `
-        <div style="flex:1;min-width:130px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;padding:3mm 4mm;text-align:center;">
-          <div style="font-size:8pt;color:#64748b;margin-bottom:1mm;">${esc(st.label)}</div>
-          <div style="font-size:11pt;font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums;direction:ltr;display:flex;align-items:center;justify-content:center;gap:4px;">${st.html || esc(st.val)}</div>
-        </div>
-      `).join('')}
-    </div>
-  ` : '';
-
-  return `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="utf-8">
-  <title>${esc(title)}</title>
-  <style>
-    @page {
-      size: ${pageOrientation};
-      margin: 12mm 10mm;
-      @bottom-center {
-        content: "صفحة " counter(page) " من " counter(pages);
-        font-family: "Segoe UI", Tahoma, Arial, sans-serif;
-        font-size: 8pt;
-        color: #94a3b8;
-      }
-    }
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
-      padding: 0;
-      font-family: "Segoe UI", Tahoma, "Cairo", Arial, sans-serif;
-      color: #0f172a;
-      background: #fff;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    .report-wrap {
-      width: 100%;
-      margin: 0 auto;
-    }
-    .report-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      border-bottom: 2.5px solid #0d9488;
-      padding-bottom: 4mm;
-      margin-bottom: 5mm;
-    }
-    .rep-titles h1 {
-      margin: 0 0 1.5mm;
-      font-size: 16pt;
-      color: #0f766e;
-      font-weight: 800;
-    }
-    .rep-titles p {
-      margin: 0;
-      font-size: 9.5pt;
-      color: #475569;
-    }
-    .rep-meta {
-      text-align: left;
-      direction: ltr;
-      font-size: 8pt;
-      color: #64748b;
-      line-height: 1.5;
-    }
-    .rep-meta b { color: #0f172a; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 8.5pt;
-      margin-top: 2mm;
-    }
-    th {
-      background: #0d9488;
-      color: #ffffff;
-      border: 1px solid #0f766e;
-      padding: 2.8mm 2mm;
-      font-weight: 700;
-      text-align: right;
-    }
-    th.e { text-align: left; }
-    td {
-      border: 1px solid #e2e8f0;
-      padding: 2mm 2mm;
-      color: #1e293b;
-    }
-    tbody tr:nth-child(even) td {
-      background: #f8fafc;
-    }
-    tfoot td {
-      background: #f1f5f9;
-      font-weight: 700;
-      border-top: 2px solid #0d9488;
-      border-bottom: 2px solid #0d9488;
-      color: #0f172a;
-    }
-    .e {
-      text-align: left;
-      font-variant-numeric: tabular-nums;
-      direction: ltr;
-    }
-    .report-footer {
-      margin-top: 8mm;
-      padding-top: 3mm;
-      border-top: 1px solid #e2e8f0;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 8pt;
-      color: #64748b;
-    }
-  </style>
-</head>
-<body>
-  <div class="report-wrap">
-    <div class="report-header">
-      <div class="rep-titles">
-        <h1>${esc(title)}</h1>
-        <p>${esc(subtitle)}</p>
-      </div>
-      <div class="rep-meta">
-        <div><b>Raseen Accounting System</b></div>
-        <div>تاريخ التقرير: <span>${dateStr} - ${timeStr}</span></div>
-        ${issuerName ? `<div>المنشأة: <span style="direction:rtl">${esc(issuerName)}</span></div>` : ''}
-      </div>
-    </div>
-
-    ${statCardsHtml}
-
-    <table>
-      <thead>
-        <tr>${headers.map((h, i) => `<th class="${i > 0 ? 'e' : ''}">${esc(h)}</th>`).join('')}</tr>
-      </thead>
-      <tbody>
-        ${rows.length ? rows.map((r) => `
-          <tr>${r.map((c, i) => `<td class="${i > 0 ? 'e' : ''}">${esc(c)}</td>`).join('')}</tr>
-        `).join('') : `
-          <tr><td colspan="${headers.length}" style="text-align:center;padding:6mm;color:#64748b">لا توجد بيانات مسجلة في هذا التقرير</td></tr>
-        `}
-      </tbody>
-      ${footer ? `
-        <tfoot>
-          <tr>${footer.map((c, i) => `<td class="${i > 0 ? 'e' : ''}">${esc(c)}</td>`).join('')}</tr>
-        </tfoot>
-      ` : ''}
-    </table>
-
-    <div class="report-footer">
-      <span>مستند محاسبي رسمي صادر من نظام رصين للفوترة والمحاسبة — تقرير PDF معتمد</span>
-      <span style="direction:ltr">A4 Document</span>
-    </div>
-  </div>
-</body>
-</html>`;
+async function buildReportHtml({ title, subtitle, headers, rows, footer, issuerName, stats = [], templateId = '' }) {
+  const template = await loadStoredTemplate('reports', templateId);
+  const cells = (values, tag) => values.map((value) => `<${tag}>${esc(String(value ?? ''))}</${tag}>`).join('');
+  return fillStoredTemplate(template, {
+    title, subtitle, issuer_name: issuerName || '', page_size: headers.length > 5 ? 'A4 landscape' : 'A4 portrait',
+    generated_at: new Date().toLocaleString('ar-SA'),
+    stats_html: stats.map((stat) => `<div class="box">${esc(stat.label)}<b>${stat.html || esc(String(stat.val ?? ''))}</b></div>`).join(''),
+    headers_html: cells(headers, 'th'),
+    rows_html: rows.length ? rows.map((row) => `<tr>${cells(row, 'td')}</tr>`).join('') : `<tr><td colspan="${headers.length}">لا توجد بيانات مسجلة في هذا التقرير</td></tr>`,
+    footer_html: footer ? `<tr>${cells(footer, 'td')}</tr>` : '',
+  }, ['stats_html', 'headers_html', 'rows_html', 'footer_html']);
 }
-
-function printTable(title, subtitle, headers, rows, footer, stats = [], issuerName = '') {
-  const doc = buildReportHtml({ title, subtitle, headers, rows, footer, stats, issuerName });
-  printDoc(doc);
-}
-
 export async function render(view, ctx) {
   await loadClients();
   const cur = currencyLabel();
@@ -207,6 +49,7 @@ export async function render(view, ctx) {
     group_by: ((ctx.params && ctx.params[0]) === 'collections' ? 'day' : 'month'),
     as_of: today(),
     only_debtors: false,
+    search_q: '',
     data: null,
   };
 
@@ -542,6 +385,8 @@ export async function render(view, ctx) {
               <button class="btn btn-sm" data-quick="year" type="button">${raw(icon.calendar({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}هذه السنة</button>
               <button class="btn btn-sm" data-quick="all" type="button">كل الفترات</button>
             </div></div>` : '')}
+          <div class="field" style="flex:1.2;min-width:200px"><label for="rep-search">بحث سريع في التقرير</label>
+            <input type="search" id="rep-search" value="${esc(state.search_q || '')}" placeholder="ابحث في نتائج التقرير (اسم العميل، الكود، البيان…)…" autocomplete="off" /></div>
         </div>
       </div>
 
@@ -554,6 +399,22 @@ export async function render(view, ctx) {
           : state.tab === 'balances' ? balancesBody()
             : batchesBody(),
   )}</div>`;
+
+    const repSearch = $('#rep-search', view);
+    if (repSearch) {
+      const applyReportFilter = (val) => {
+        state.search_q = val;
+        const q = (val || '').toLowerCase().trim();
+        const rows = $$('#report-body table tbody tr', view);
+        rows.forEach((tr) => {
+          if (tr.querySelector('td[colspan]')) return;
+          const text = tr.textContent.toLowerCase();
+          tr.style.display = (!q || text.includes(q)) ? '' : 'none';
+        });
+      };
+      repSearch.addEventListener('input', (e) => applyReportFilter(e.target.value));
+      if (state.search_q) applyReportFilter(state.search_q);
+    }
 
     const reload = async () => { await load(); draw(); };
     $('#issuer_id', view).addEventListener('change', async (e) => { state.issuer_id = e.target.value; await reload(); });
@@ -640,8 +501,11 @@ export async function render(view, ctx) {
     };
 
     const spec = exportSpec();
-    const getReportDocHtml = () => {
+    const getReportDocHtml = async () => {
       const subtitle = `${issuerLabel()}${showPeriod ? ` — ${periodLabel()}` : ''}`;
+      const issuer = state.issuer_id ? await api.get(`/api/issuers/${encodeURIComponent(state.issuer_id)}`) : store.activeIssuer;
+      let settings = issuer?.print_settings || {};
+      if (typeof settings === 'string') { try { settings = JSON.parse(settings); } catch { settings = {}; } }
       return buildReportHtml({
         title: spec.title,
         subtitle,
@@ -650,6 +514,7 @@ export async function render(view, ctx) {
         footer: spec.footer && spec.footer.map((c, i) => (i > 0 && typeof c === 'number' ? money(c) : c)),
         issuerName: issuerLabel(),
         stats: reportStats(),
+        templateId: settings.report_template_style || '',
       });
     };
 
@@ -661,7 +526,7 @@ export async function render(view, ctx) {
     $('#btn-pdf-report', view).addEventListener('click', async (e) => {
       e.target.disabled = true;
       try {
-        const docHtml = getReportDocHtml();
+        const docHtml = await getReportDocHtml();
         await downloadPdfFromHtml(docHtml, `${spec.name}.pdf`);
       } catch (err) {
         toastErr(err.message || 'تعذر استخراج ملف PDF للتقرير');
@@ -670,13 +535,15 @@ export async function render(view, ctx) {
       }
     });
 
-    $('#print', view).addEventListener('click', () => {
-      const docHtml = getReportDocHtml();
-      printDoc(docHtml);
+    $('#print', view).addEventListener('click', async () => {
+      try { printDoc(await getReportDocHtml()); }
+      catch (err) { toastErr(err.message || 'تعذر تحميل قالب التقرير'); }
     });
 
-    $('#btn-preview-report-doc', view)?.addEventListener('click', () => {
-      const docHtml = getReportDocHtml();
+    $('#btn-preview-report-doc', view)?.addEventListener('click', async () => {
+      let docHtml;
+      try { docHtml = await getReportDocHtml(); }
+      catch (err) { toastErr(err.message || 'تعذر تحميل قالب التقرير'); return; }
       let currentZoom = 80;
       const m = modal({
         title: `معاينة بصرية للتقرير: ${spec.title}`,

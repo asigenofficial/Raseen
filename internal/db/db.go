@@ -175,12 +175,22 @@ func (d *DB) CreateBackup() (*BackupResult, error) {
 	// VACUUM INTO includes committed WAL contents in a consistent snapshot.
 	_, err := d.Exec("VACUUM INTO ?", filepath.ToSlash(destPath))
 	if err != nil {
-		return nil, fmt.Errorf("consistent backup failed: %w",err)
+		return nil, fmt.Errorf("consistent backup failed: %w", err)
 	}
 
 	stat, err := os.Stat(destPath)
 	if err != nil {
 		return nil, err
+	}
+	keyBytes, err := os.ReadFile(d.cfg.KeyFile)
+	if err != nil {
+		_ = os.Remove(destPath)
+		return nil, fmt.Errorf("failed to read backup encryption key: %w", err)
+	}
+	keyPath := strings.TrimSuffix(destPath, ".db") + ".key"
+	if err := os.WriteFile(keyPath, keyBytes, 0600); err != nil {
+		_ = os.Remove(destPath)
+		return nil, fmt.Errorf("failed to back up encryption key: %w", err)
 	}
 
 	// Keep latest 50 backups to prevent disk overflow while ensuring safety
@@ -215,6 +225,7 @@ func pruneOldBackups(dir string, keepCount int) {
 	toDelete := len(backupFiles) - keepCount
 	for i := 0; i < toDelete; i++ {
 		_ = os.Remove(filepath.Join(dir, backupFiles[i]))
+		_ = os.Remove(filepath.Join(dir, strings.TrimSuffix(backupFiles[i], ".db")+".key"))
 	}
 }
 
@@ -254,10 +265,37 @@ func (d *DB) RestoreFrom(sourcePath string) (*BackupResult, error) {
 	}
 	var tableCount int
 	_ = testDb.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('users', 'invoices', 'issuers', 'settings')").Scan(&tableCount)
-	testDb.Close()
-	if tableCount == 0 {
-		return nil, fmt.Errorf("ملف قاعدة البيانات لا يحتوي على جداول رسين المعتمدة")
+	if tableCount != 4 {
+		testDb.Close()
+		return nil, fmt.Errorf("ملف قاعدة البيانات لا يحتوي على جميع جداول رسين الأساسية")
 	}
+	if d.cfg.IsPublicHost() {
+		rows, err := testDb.Query("SELECT password_hash, password_salt FROM users WHERE role = 'ADMIN' AND is_active = 1")
+		if err != nil {
+			testDb.Close()
+			return nil, fmt.Errorf("تعذر التحقق من حسابات المدير المستوردة: %w", err)
+		}
+		for rows.Next() {
+			var hash, salt string
+			if err := rows.Scan(&hash, &salt); err != nil {
+				rows.Close()
+				testDb.Close()
+				return nil, fmt.Errorf("تعذر قراءة حساب المدير المستورد: %w", err)
+			}
+			if crypto.VerifyPassword("Admin@12345", salt, hash) {
+				rows.Close()
+				testDb.Close()
+				return nil, fmt.Errorf("قاعدة البيانات المستوردة تحتوي كلمة مرور المدير الافتراضية")
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			testDb.Close()
+			return nil, fmt.Errorf("تعذر التحقق من حسابات المدير المستوردة: %w", err)
+		}
+		rows.Close()
+	}
+	testDb.Close()
 
 	// 1. أخذ نسخة احتياطية وقائية فورية من قاعدة البيانات الحالية لضمان عدم ضياع أي بيانات
 	preBackup, err := d.CreateBackup()
@@ -288,11 +326,28 @@ func (d *DB) RestoreFrom(sourcePath string) (*BackupResult, error) {
 		return nil, fmt.Errorf("فشل إعادة فتح قاعدة البيانات بعد الاستيراد: %w", err)
 	}
 
-	// 6. تشغيل المخطط والتجهيزات لضمان توافق أي جداول جديدة
-	_ = d.initSchema()
-	_ = d.bootstrap()
+	// 6. تشغيل المخطط والتجهيزات، والتراجع إذا تعذر استخدام البيانات المستوردة.
+	if err := d.initSchema(); err != nil {
+		return nil, d.rollbackFailedRestore(preBackup, err)
+	}
+	if err := d.bootstrap(); err != nil {
+		return nil, d.rollbackFailedRestore(preBackup, err)
+	}
 
 	return preBackup, nil
+}
+
+func (d *DB) rollbackFailedRestore(backup *BackupResult, cause error) error {
+	_ = d.DB.Close()
+	_ = os.Remove(d.cfg.DbFile + "-wal")
+	_ = os.Remove(d.cfg.DbFile + "-shm")
+	if err := copyFile(backup.Path, d.cfg.DbFile); err != nil {
+		return fmt.Errorf("فشل تجهيز البيانات المستوردة: %v؛ وفشل إرجاع النسخة الوقائية: %w", cause, err)
+	}
+	if err := d.reopen(); err != nil {
+		return fmt.Errorf("فشل تجهيز البيانات المستوردة: %v؛ وفشل فتح النسخة الوقائية: %w", cause, err)
+	}
+	return fmt.Errorf("فشل تجهيز البيانات المستوردة، وأُعيدت النسخة الوقائية: %w", cause)
 }
 
 func (d *DB) reopen() error {
@@ -330,10 +385,14 @@ func copyFile(src, dst string) error {
 }
 
 func (d *DB) Audit(userName, action, entityType, entityId, issuerId string, details any, ip string) {
-	if err := AuditTx(d,userName,action,entityType,entityId,issuerId,details,ip); err != nil { log.Printf("audit write failed (%s): %v",action,err) }
+	if err := AuditTx(d, userName, action, entityType, entityId, issuerId, details, ip); err != nil {
+		log.Printf("audit write failed (%s): %v", action, err)
+	}
 }
 
-func AuditTx(q interface { Exec(string,...any) (sql.Result,error) }, userName, action, entityType, entityId, issuerId string, details any, ip string) error {
+func AuditTx(q interface {
+	Exec(string, ...any) (sql.Result, error)
+}, userName, action, entityType, entityId, issuerId string, details any, ip string) error {
 	var detailsJson string
 	if details == nil {
 		detailsJson = "{}"

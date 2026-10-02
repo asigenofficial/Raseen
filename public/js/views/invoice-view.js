@@ -7,9 +7,9 @@ import * as router from '../core/router.js';
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, qrSvg, printDoc, toastOk, toastErr,
   $, modal, formValues, confirmDialog, copyText, download, statusBadge, today, icon,
-  amount, sarSvg,
+  amount, sarSvg, shareDocument, choosePdfDestination, savePdfFile,
 } from '../core/util.js';
-import { invoiceA4, tafqeet, INVOICE_TEMPLATES } from '../print/templates.js';
+import { tafqeet } from '../print/templates.js';
 
 async function loadContext(invoiceId) {
   const invoice = await api.get(`/api/invoices/${invoiceId}`);
@@ -64,7 +64,7 @@ function receiptModal(invoice, onDone) {
       m.close();
       onDone();
       try {
-        const { showVoucher } = await import('./vouchers.js?v=' + Date.now());
+        const { showVoucher } = await import('./vouchers.js');
         showVoucher(voucher.id, onDone);
       } catch (err) {
         console.error('فشل عرض السند:', err);
@@ -88,12 +88,7 @@ export async function fetchInvoicePdfBlob(invoiceId, docHtml, style = '') {
     let endpoint = `/api/invoices/${encodeURIComponent(invoiceId)}/pdf`;
     if (style) endpoint += `?style=${encodeURIComponent(style)}`;
 
-    const res = await fetch(endpoint, {
-      method: docHtml ? 'POST' : 'GET',
-      credentials: 'same-origin',
-      headers: docHtml ? { 'Content-Type': 'application/json' } : {},
-      ...(docHtml ? { body: JSON.stringify({ html: docHtml }) } : {}),
-    });
+    const res = await fetch(endpoint, { credentials: 'same-origin' });
     if (res.ok) return await res.blob();
   } catch (e) {
     console.warn('PDF server endpoint unreachable:', e);
@@ -105,128 +100,40 @@ export async function getInvoiceDocHtml({ invoice, issuer, client, printSettings
   const cfg = printSettings || (typeof issuer?.print_settings === 'string'
     ? JSON.parse(issuer.print_settings || '{}')
     : (issuer?.print_settings || {})) || {};
-  const tplId = cfg.template_style;
-  const isBuiltin = ['corporate_multipage', 'standard', 'modern', 'classic', 'compact', 'detailed_address'].includes(tplId);
-  if (tplId && !isBuiltin) {
-    try {
-      const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/render-html?style=${encodeURIComponent(tplId)}&_t=${Date.now()}`, {
-        credentials: 'same-origin',
-      });
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.length > 500) return text;
-      }
-    } catch (e) {
-      console.warn('Failed to fetch custom template HTML:', e);
-    }
-  }
-  return invoiceA4({ invoice, issuer, client, printSettings: cfg, autoPrint: false });
+  const catalog = await api.get('/api/invoices/templates?type=invoices');
+  const choices = Array.isArray(catalog) ? catalog : (catalog?.data || []);
+  const style = choices.some((tpl) => tpl.id === cfg.template_style) ? cfg.template_style : choices[0]?.id;
+  if (!style) throw new Error('لا يوجد قالب فاتورة HTML محفوظ في data');
+  const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/render-html?style=${encodeURIComponent(style)}`, { credentials: 'same-origin' });
+  if (!res.ok) throw new Error('تعذر قراءة قالب الفاتورة المحفوظ');
+  return res.text();
 }
 
 export async function downloadInvoicePdf({ invoice, issuer, client, printSettings = null, docHtml = null }) {
-  const cfg = printSettings || (typeof issuer?.print_settings === 'string'
-    ? JSON.parse(issuer.print_settings || '{}')
-    : (issuer?.print_settings || {})) || {};
-  const tplId = cfg.template_style || '';
-
-  const finalHtml = docHtml || await getInvoiceDocHtml({ invoice, issuer, client, printSettings: cfg });
+  const invNum = (invoice.invoice_number || invoice.id || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
+  const filename = `فاتورة_${invNum}.pdf`;
   try {
-    invoice.lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
-    invoice.items = invoice.lines;
-    toastOk('جارٍ تجهيز ملف PDF الفاتورة...');
-
-    let blob = null;
-    try {
-      blob = await fetchInvoicePdfBlob(invoice.id, finalHtml, tplId);
-    } catch (e) {
-      console.warn('PDF direct generation with HTML failed, trying direct GET:', e);
-      try {
-        blob = await fetchInvoicePdfBlob(invoice.id, null, tplId);
-      } catch (e2) {
-        console.warn('Direct GET PDF failed:', e2);
-      }
-    }
-
-    if (blob) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const clientClean = (client?.name || invoice.buyer_name || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
-      const invNum = (invoice.invoice_number || invoice.id || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
-      a.download = clientClean ? `فاتورة_${invNum}_${clientClean}.pdf` : `فاتورة_${invNum}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 6000);
-      toastOk('تم تحميل ملف الفاتورة PDF بنجاح 📄');
-      return blob;
-    }
-
-    // Fallback: open print dialog to save as PDF only if server PDF generation failed completely
-    printDoc(finalHtml);
-    toastOk('تم فتح حوار الطباعة / الحفظ كملف PDF');
-    return null;
+    const saveHandle = await choosePdfDestination(filename, `invoice:${invoice.id}`);
+    toastOk('جارٍ تجهيز نسخة PDF المحفوظة...');
+    const cfg = printSettings || (typeof issuer?.print_settings === 'string'
+      ? JSON.parse(issuer.print_settings || '{}') : (issuer?.print_settings || {})) || {};
+    const blob = await fetchInvoicePdfBlob(invoice.id, null, cfg.template_style || '');
+    await savePdfFile(blob, filename, saveHandle);
+    toastOk('تم حفظ الفاتورة PDF بنجاح');
+    return blob;
   } catch (err) {
-    console.warn('Fallback printDoc error:', err);
-    printDoc(finalHtml);
-    toastOk('تم فتح حوار الطباعة / الحفظ كملف PDF');
+    if (err?.name === 'AbortError') return null;
+    toastErr(err.message || 'تعذر تجهيز PDF؛ تحقق من حالة PDF أعلى الفاتورة');
     return null;
   }
 }
 
 export async function shareInvoicePdfFile({ invoice, issuer, client, text, printSettings = null, docHtml = null }) {
-  const finalHtml = docHtml || await getInvoiceDocHtml({ invoice, issuer, client, printSettings });
-  try {
-    invoice.lines = Array.isArray(invoice.lines) ? invoice.lines : (Array.isArray(invoice.items) ? invoice.items : []);
-    invoice.items = invoice.lines;
-    toastOk('جارٍ تجهيز ملف PDF للمشاركة...');
-    let blob = null;
-    try {
-      blob = await fetchInvoicePdfBlob(invoice.id, finalHtml);
-    } catch { }
-
-    if (blob) {
-      const filename = `فاتورة_${invoice.invoice_number}.pdf`;
-      const file = new File([blob], filename, { type: 'application/pdf' });
-
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: `فاتورة ${invoice.invoice_number} — ${issuer.name_ar || ''}`,
-          text: text || `فاتورة ضريبية رقم ${invoice.invoice_number} من ${issuer.name_ar || ''}`,
-          files: [file],
-        });
-        toastOk('تمت مشاركة ملف الفاتورة PDF بنجاح');
-        return true;
-      } else if (navigator.share) {
-        await navigator.share({
-          title: `فاتورة ${invoice.invoice_number} — ${issuer.name_ar || ''}`,
-          text: text || `فاتورة ضريبية رقم ${invoice.invoice_number} من ${issuer.name_ar || ''}`,
-        });
-        toastOk('تمت مشاركة الفاتورة بنجاح');
-        return true;
-      }
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 6000);
-      toastOk('تم تحميل ملف الفاتورة PDF بنجاح');
-      return true;
-    }
-
-    printDoc(finalHtml);
-    toastOk('تم فتح حوار الطباعة / الحفظ كملف PDF للمشاركة');
-    return true;
-  } catch (err) {
-    if (err.name === 'AbortError') return false;
-    console.warn('Share file fallback:', err);
-    printDoc(finalHtml);
-    return false;
-  }
+  return shareDocument({
+    title: `فاتورة ${invoice.invoice_number}`,
+    text: text || `فاتورة ضريبية رقم ${invoice.invoice_number} من ${issuer?.name_ar || ''}`,
+    url: `${location.origin}${location.pathname}#/invoice-view/${encodeURIComponent(invoice.id)}`,
+  });
 }
 
 export function openDownloadModal({ invoice, issuer, client, printSettings = null, docHtml = null }) {
@@ -283,16 +190,19 @@ export function openDownloadModal({ invoice, issuer, client, printSettings = nul
     await downloadInvoicePdf({ invoice, issuer, client, printSettings, docHtml });
   });
 
-  $('#dl-print-opt', m.el).addEventListener('click', () => {
+  $('#dl-print-opt', m.el).addEventListener('click', async () => {
     m.close();
-    printDoc(docHtml || invoiceA4({ invoice, issuer, client, printSettings }));
+    try { printDoc(docHtml || await getInvoiceDocHtml({ invoice, issuer, client, printSettings })); }
+    catch (err) { toastErr(err.message); }
   });
 
-  $('#dl-html-opt', m.el).addEventListener('click', () => {
+  $('#dl-html-opt', m.el).addEventListener('click', async () => {
     m.close();
-    const doc = docHtml || invoiceA4({ invoice, issuer, client, printSettings });
-    download(`فاتورة_${invoice.invoice_number}.html`, doc, 'text/html;charset=utf-8');
-    toastOk('تم تحميل مستند الفاتورة');
+    try {
+      const doc = docHtml || await getInvoiceDocHtml({ invoice, issuer, client, printSettings });
+      download(`فاتورة_${invoice.invoice_number}.html`, doc, 'text/html;charset=utf-8');
+      toastOk('تم تحميل مستند الفاتورة');
+    } catch (err) { toastErr(err.message); }
   });
 
   $('#dl-xml-opt', m.el).addEventListener('click', async () => {
@@ -343,9 +253,7 @@ export async function render(view, ctx) {
       }
     }
 
-    if (!selectedTplStyle) {
-      selectedTplStyle = issuerPrintCfg.template_style || 'corporate_multipage';
-    }
+    if (!availableTemplates.some((tpl) => tpl.id === selectedTplStyle)) selectedTplStyle = availableTemplates[0]?.id || '';
 
     const getPrintSettings = () => {
       const tpl = availableTemplates.find((t) => t.id === selectedTplStyle);
@@ -380,6 +288,7 @@ export async function render(view, ctx) {
           <p>${issuer.name_ar} — ${client.name} — ${dateAr(invoice.issue_date)} ${invoice.issue_time}</p>
         </div>
         <div class="page-actions">
+          <span id="invoice-pdf-status" class="badge gray" title="حالة نسخة PDF المحفوظة">PDF قيد التجهيز</span>
           <button class="btn btn-primary" id="download-invoice" type="button">
             ${raw(icon.pdf({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}
             تحميل الفاتورة
@@ -388,9 +297,9 @@ export async function render(view, ctx) {
             ${raw(icon.share({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}
             مشاركة
           </button>
-          <button class="btn" id="print-more" type="button" title="خيارات الطباعة الورقية">
+          <button class="btn" id="print-more" type="button" title="طباعة الفاتورة">
             ${raw(icon.printer({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}
-            طباعة ورقية ▾
+            طباعة
           </button>
           ${raw(invoice.status !== 'CANCELLED' && invoice.remaining_amount > 0 && can('vouchers.create')
       ? `<button class="btn btn-primary" id="pay" type="button">${icon.receipt({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}سند قبض</button>` : '')}
@@ -428,9 +337,6 @@ export async function render(view, ctx) {
                     <optgroup label="قوالب الفواتير المعتمدة والمخصصة (${availableTemplates.length} قالب)">
                       ${availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name_ar || t.name || t.id)} (${esc(t.badge || 'فاتورة HTML')})</option>`).join('')}
                     </optgroup>` : ''}
-                    <optgroup label="القوالب الرسمية القياسية (Standard A4)">
-                      ${INVOICE_TEMPLATES.map((t) => `<option value="${t.id}" ${t.id === selectedTplStyle ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
-                    </optgroup>
                   `)}
                 </select>
                 <button class="btn btn-sm" id="btn-adopt-invoice-tpl" type="button" style="font-size:12px;padding:6px 12px;background:var(--brand-light);border:1px solid var(--brand);color:var(--brand);font-weight:700;white-space:nowrap;border-radius:6px;flex-shrink:0" title="اعتماد هذا القالب كقالب افتراضي لجميع فواتير المنشأة">
@@ -583,6 +489,19 @@ export async function render(view, ctx) {
         </div>
       </div>`;
 
+    const refreshPdfStatus = async (attempt = 0) => {
+      const badge = $('#invoice-pdf-status', view);
+      if (!badge) return;
+      try {
+        const pdf = await api.get(`/api/invoices/${encodeURIComponent(invoice.id)}/pdf-status`, { silent: true });
+        badge.textContent = pdf.status === 'READY' ? 'PDF محفوظ' : pdf.status === 'FAILED' ? 'تعذر تجهيز PDF' : 'PDF قيد التجهيز';
+        badge.className = `badge ${pdf.status === 'READY' ? 'green' : pdf.status === 'FAILED' ? 'red' : 'gray'}`;
+        if (pdf.error) badge.title = pdf.error;
+        if (pdf.status === 'PENDING' && attempt < 5) setTimeout(() => refreshPdfStatus(attempt + 1), 3000);
+      } catch {}
+    };
+    refreshPdfStatus();
+
     let currentInvoiceDocHtml = '';
     const tplHtmlCache = new Map();
 
@@ -638,10 +557,7 @@ export async function render(view, ctx) {
       if (!iframe) return;
       const printSettings = getPrintSettings();
       const tplId = selectedTplStyle || printSettings?.template_style;
-      const isBuiltinTpl = ['corporate_multipage', 'standard', 'modern', 'classic', 'compact', 'detailed_address'].includes(tplId);
-      const isExcelTpl = !isBuiltinTpl && tplId;
-
-      if (isExcelTpl) {
+      {
         // إظهار مؤشر تحميل نظيف بدلاً من وميض قالب قديم غير مرغوب
         iframe.srcdoc = getLoadingPreviewHtml('جارٍ تجهيز قالب الفاتورة الحقيقي...');
 
@@ -658,14 +574,8 @@ export async function render(view, ctx) {
         } catch { }
       }
 
-      currentInvoiceDocHtml = invoiceA4({
-        invoice,
-        issuer,
-        client,
-        printSettings: { ...(printSettings || {}), template_style: tplId },
-        autoPrint: false,
-      });
-      iframe.srcdoc = currentInvoiceDocHtml;
+      currentInvoiceDocHtml = '';
+      iframe.srcdoc = getLoadingPreviewHtml('تعذر قراءة قالب الفاتورة المختار من data');
     }
 
     function fitZoom() {
@@ -706,7 +616,7 @@ export async function render(view, ctx) {
           print_settings: issuerPrintCfg,
         });
         issuer.print_settings = issuerPrintCfg;
-        const tplName = tpl?.name_ar || INVOICE_TEMPLATES.find((t) => t.id === selectedTplStyle)?.name || selectedTplStyle;
+        const tplName = tpl?.name_ar || selectedTplStyle;
         toastOk(`تم اعتماد قالب «${tplName}» كقالب افتراضي لجميع فواتير المنشأة بنجاح`);
       } catch (err) {
         toastErr('فشل اعتماد القالب: ' + (err.message || 'حدث خطأ'));
@@ -735,14 +645,10 @@ export async function render(view, ctx) {
     $('#inv-zoom-fit', view)?.addEventListener('click', () => fitZoom());
 
     // فتح المعاينة في شاشة كاملة
-    $('#btn-fullscreen-inv', view)?.addEventListener('click', () => {
-      const docHtml = currentInvoiceDocHtml || invoiceA4({
-        invoice,
-        issuer,
-        client,
-        printSettings: getPrintSettings(),
-        autoPrint: false,
-      });
+    $('#btn-fullscreen-inv', view)?.addEventListener('click', async () => {
+      let docHtml;
+      try { docHtml = currentInvoiceDocHtml || await getInvoiceDocHtml({ invoice, issuer, client, printSettings: getPrintSettings() }); }
+      catch (err) { toastErr(err.message); return; }
       const m = modal({
         title: `معاينة الفاتورة: ${invoice.invoice_number}`,
         wide: true,
@@ -814,26 +720,9 @@ export async function render(view, ctx) {
       }
     });
 
-    $('#print-more', view).addEventListener('click', () => {
-      const pm = modal({
-        title: 'خيارات الطباعة الورقية',
-        slim: true,
-        body: html`
-          <div style="display:flex;flex-direction:column;gap:.5rem">
-            <button class="btn btn-primary" id="pm-a4" type="button">${raw(icon.printer({ size: 16, style: 'vertical-align:text-bottom;margin-left:6px' }))}طباعة A4 قياسي</button>
-            <button class="btn" id="pm-copies" type="button">${raw(icon.copy({ size: 16, style: 'vertical-align:text-bottom;margin-left:6px' }))}طباعة نسختين A4 (أصل + صورة)</button>
-          </div>
-        `,
-        footer: '<button class="btn" data-close type="button">إلغاء</button>',
-      });
-      $('#pm-a4', pm.el).addEventListener('click', () => {
-        pm.close();
-        printDoc(currentInvoiceDocHtml || invoiceA4({ invoice, issuer, client, printSettings: getPrintSettings() }));
-      });
-      $('#pm-copies', pm.el).addEventListener('click', () => {
-        pm.close();
-        printDoc(currentInvoiceDocHtml || invoiceA4({ invoice, issuer, client, copies: 2, printSettings: getPrintSettings() }));
-      });
+    $('#print-more', view).addEventListener('click', async () => {
+      try { printDoc(currentInvoiceDocHtml || await getInvoiceDocHtml({ invoice, issuer, client, printSettings: getPrintSettings() })); }
+      catch (err) { toastErr(err.message); }
     });
 
     $('#view-xml', view).addEventListener('click', async () => {

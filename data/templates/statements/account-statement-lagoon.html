@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>كشف حساب العميل</title>
+<style>
+@page{size:A4 portrait;margin:7mm 7mm 16mm}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+html,body{margin:0;background:#fff;color:#17262b;font-family:Tahoma,Arial,sans-serif}
+body{font-size:10px;padding:0 2mm 12mm}
+.sheet{min-height:270mm;border:1.5px solid #27636a;border-radius:0;padding:4px 7px 9px;position:relative}
+.company-head{border:1.5px solid #27636a;padding:5px 14px 0;margin-bottom:8px;background:linear-gradient(125deg,#fff 0 52%,#f2f8f7 52% 100%);position:relative}
+.company-head:before{content:"";position:absolute;inset:0 0 auto;height:5px;background:linear-gradient(90deg,#65aaa5,#fff 42%,#d5e8e4);pointer-events:none}
+.head-main{min-height:48mm;display:grid;grid-template-columns:1fr 175px 1fr;align-items:center;gap:12px;padding:8px 3px;direction:ltr}
+.company-en{direction:ltr;text-align:left;font-size:14px;font-weight:bold;color:#174653;line-height:1.65}.company-en .address{font-size:10px;font-weight:normal;color:#46616a;margin-top:8px}.company-en .tax,.company-en .cr{font-size:10px;font-weight:normal;margin-top:4px}
+.logo-title{text-align:center;color:#174653}.issuer-logo{display:block;max-width:140px;max-height:76px;width:auto;height:auto;margin:0 auto 5px;object-fit:contain}.logo-placeholder{width:130px;height:62px;margin:0 auto 5px;border:1.5px dashed #79a2a5;border-radius:8px;display:grid;place-items:center;text-align:center;color:#52777b;font-size:12px}.logo-title h1{color:#174653;font-size:19px;margin:3px 0 0;line-height:1.3}.logo-title .en-title{font-size:10px;font-weight:bold;letter-spacing:1.7px}
+.company-ar{direction:rtl;text-align:right;font-size:15px;font-weight:bold;line-height:1.8;color:#174653}.company-ar .tax,.company-ar .cr{font-size:10px;font-weight:normal;margin-top:3px}.company-ar .address{font-size:10px;font-weight:normal;color:#46616a;margin-top:5px}
+.head-contact{min-height:10mm;border-top:1px solid #cfe1df;border-bottom:2px solid #65aaa5;display:flex;justify-content:space-around;align-items:center;gap:12px;color:#174653;font-size:10px;direction:ltr}
+.period{display:flex;justify-content:center;gap:35px;margin:10px 0 8px;font-size:12px;font-weight:bold}.period span{white-space:nowrap}
+.account-meta{display:grid;grid-template-columns:1fr 1.5fr 1fr;align-items:center;min-height:39px;border:1px solid #315b62;padding:5px 10px;font-size:11px;font-weight:bold;background:#f8fcfc}.account-meta>div{text-align:center}.account-meta>div:first-child{text-align:right}.account-meta>div:last-child{text-align:left}
+table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px;margin-top:7px}thead{display:table-header-group}th,td{border:1px solid #183f48;padding:4px 3px;text-align:center;vertical-align:middle}thead th{background:#9ce9e7;color:#15343b;font-weight:bold;font-size:10px}.subhead th{background:#d7f4f1;font-size:9px}.desc{text-align:right;line-height:1.3;overflow-wrap:anywhere}.num{direction:ltr;font-variant-numeric:tabular-nums;white-space:nowrap}.opening-row{background:#eef7f5}.opening-row td{height:24px}
+tbody tr{break-inside:avoid}tfoot{display:table-footer-group}.footer{position:fixed;bottom:3mm;left:9mm;right:9mm;background:#fff;border:1px solid #315b62;padding:5px 8px;text-align:center;font-size:9px}.page-number:after{content:counter(page) " - " counter(pages)}
+@media screen{body{max-width:210mm;margin:auto}.footer{position:static;margin:8px 2mm 0}}
+</style>
+</head>
+<body>
+<main class="sheet">
+  <header class="company-head">
+    <div class="head-main">
+      <div class="company-en"><div>{{issuer_name_en}}</div><div class="address">{{issuer_address_en}}</div><div class="tax">VAT: {{issuer_tax}}</div><div class="cr">CR: {{issuer_cr}}</div></div>
+      <div class="logo-title"><div>{{logo_html}}</div><h1>كشف حساب عميل</h1><div class="en-title">ACCOUNT STATEMENT</div></div>
+      <div class="company-ar"><div>{{issuer_name}}</div><div class="address">{{issuer_address}}</div><div class="tax">الرقم الضريبي: {{issuer_tax}}</div><div class="cr">السجل التجاري: {{issuer_cr}}</div></div>
+    </div>
+    <div class="head-contact"><span>✉ {{issuer_email}}</span><span>☎ {{issuer_phone}}</span><span>{{issuer_city_country}}</span></div>
+  </header>
+  <div class="period"><span>من تاريخ {{period_from}}</span><span>إلى تاريخ {{period_to}}</span></div>
+  <section class="account-meta">
+    <div>رقم الحساب: {{client_code}}</div><div>اسم الحساب: {{client_name}}</div><div>العملة: {{currency_name}}</div>
+  </section>
+  <table aria-label="حركات كشف الحساب">
+    <colgroup><col style="width:4%"><col style="width:9%"><col style="width:9%"><col style="width:8%"><col style="width:26%"><col style="width:10%"><col style="width:10%"><col style="width:12%"><col style="width:12%"></colgroup>
+    <thead>
+      <tr><th rowspan="2">#</th><th rowspan="2">رقم المستند/قيد</th><th rowspan="2">التاريخ</th><th rowspan="2">النوع</th><th rowspan="2">البيان</th><th colspan="2">الحركة</th><th colspan="2">الرصيد</th></tr>
+      <tr class="subhead"><th>مدين</th><th>دائن</th><th>مدين</th><th>دائن</th></tr>
+    </thead>
+    <tbody>{{rows_html}}</tbody>
+  </table>
+</main>
+<footer class="footer">جوال: {{issuer_phone}} &nbsp; ــ &nbsp; {{issuer_address}} <span class="page-number"></span></footer>
+</body>
+</html>

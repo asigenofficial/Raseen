@@ -5,13 +5,13 @@ import { api, qs } from '../core/api.js';
 import { store, loadClients, can, getFilterState, setFilterState, clearFilterState } from '../core/store.js';
 
 const syncNotify = (entity, action, payload) => (typeof store.syncNotify === 'function' ? store.syncNotify(entity, action, payload) : null);
-const onSync = (cb) => (typeof store.onSync === 'function' ? store.onSync(cb) : () => {});
+const onSync = (cb) => (typeof store.onSync === 'function' ? store.onSync(cb) : () => { });
 import {
   html, raw, esc, money, num, dateAr, statusBadge, monthStart, today, toastOk,
   $, delegate, debounce, exportCsv, exportExcel, parseSpreadsheetText, printDoc, modal, toastErr, formValues,
-  confirmDialog, icon, downloadPdfFromHtml, downloadPdfFromUrl, amount, sarSvg,
+  confirmDialog, icon, downloadPdfFromHtml, downloadPdfFromUrl, amount, sarSvg, shareDocument, renderStoredVoucher,
+  loadStoredTemplate, fillStoredTemplate,
 } from '../core/util.js';
-import { invoiceA4, voucherPrint, INVOICE_TEMPLATES } from '../print/templates.js';
 
 const PAGE = 50;
 
@@ -22,13 +22,11 @@ export async function render(view, ctx) {
   try {
     const tplRes = await api.get('/api/invoices/templates?type=invoices');
     availableTemplates = Array.isArray(tplRes) ? tplRes : (tplRes?.data || []);
-  } catch {}
+  } catch { }
 
   const renderTemplateOptions = (selectedId) => {
     const customOpts = availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedId ? 'selected' : ''}>${esc(t.name_ar || t.name || t.id)}</option>`).join('');
-    const builtinOpts = (INVOICE_TEMPLATES || []).map((t) => `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
-    return (customOpts ? `<optgroup label="قوالب مخصصة">${customOpts}</optgroup>` : '') +
-      `<optgroup label="قوالب قياسية">${builtinOpts}</optgroup>`;
+    return customOpts;
   };
 
   const q0 = (ctx && ctx.query) || {};
@@ -112,10 +110,12 @@ export async function render(view, ctx) {
       api.get(`/api/clients/${invoice.client_id}`),
     ]);
     if (kind === 'thermal') {
-      printDoc(invoiceThermal({ invoice, issuer, client }));
+      const res = await fetch(`/api/invoices/${encodeURIComponent(id)}/render-html?style=thermal`);
+      if (!res.ok) throw new Error('قالب الفاتورة الحرارية غير متوفر');
+      printDoc(await res.text());
       return;
     }
-    const { getInvoiceDocHtml } = await import('./invoice-view.js?v=' + Date.now());
+    const { getInvoiceDocHtml } = await import('./invoice-view.js');
     const docHtml = await getInvoiceDocHtml({ invoice, issuer, client });
     printDoc(docHtml);
   };
@@ -337,8 +337,8 @@ export async function render(view, ctx) {
     const headers = ['رقم الفاتورة', 'التاريخ', 'الوقت', 'العميل', 'كود العميل', 'الشركة المصدرة', 'طريقة الدفع',
       'قبل الضريبة', 'الضريبة', 'الإجمالي', 'المسدد', 'المتبقي', 'الحالة'];
     const rows = () => state.data.items.map((i) => [i.invoice_number, i.issue_date, i.issue_time, i.client_name,
-      i.client_code, i.issuer_name, i.payment_label, i.taxable_amount, i.tax_amount, i.grand_total,
-      i.paid_amount, i.remaining_amount, i.status_label]);
+    i.client_code, i.issuer_name, i.payment_label, i.taxable_amount, i.tax_amount, i.grand_total,
+    i.paid_amount, i.remaining_amount, i.status_label]);
     $('#exp-csv', view).addEventListener('click', () => exportCsv('الفواتير', headers, rows()));
     $('#exp-xls', view).addEventListener('click', () => exportExcel('الفواتير', 'قائمة الفواتير', headers, rows(),
       { footer: ['الإجمالي', '', '', '', '', '', '', '', money(t.tax), money(t.grand_total), money(t.paid), money(t.remaining), ''] }));
@@ -443,7 +443,7 @@ export async function render(view, ctx) {
           for (const v of vouchers) {
             const issuer = store.issuers.find((i) => i.id === v.issuer_id) || store.activeIssuer || {};
             const client = store.clients.find((c) => c.id === v.client_id) || { id: v.client_id, name_ar: v.client_name };
-            docs.push(voucherPrint({ voucher: v, issuer, client }));
+            docs.push(await renderStoredVoucher(v, issuer, client));
           }
           const combined = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>سندات القبض</title>
           <style>
@@ -465,62 +465,30 @@ export async function render(view, ctx) {
       });
     }
 
-    const getInvoiceListDocHtml = () => {
-      return `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>تقرير قائمة الفواتير</title>
-        <style>
-          @page { size: A4 landscape; margin: 10mm; }
-          * { box-sizing: border-box; }
-          body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; color: #0f172a; background: #fff; }
-          .header { border-bottom: 2px solid #0d9488; padding-bottom: 4mm; margin-bottom: 4mm; display: flex; justify-content: space-between; align-items: center; }
-          h2 { margin: 0; font-size: 15pt; color: #0f766e; }
-          .sub { color: #64748b; font-size: 8.5pt; }
-          table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-top: 3mm; }
-          th { background: #0d9488; color: #fff; border: 1px solid #0f766e; padding: 2.2mm 1.5mm; font-weight: 700; text-align: right; }
-          th.e { text-align: left; }
-          td { border: 1px solid #cbd5e1; padding: 1.8mm 1.5mm; }
-          tr:nth-child(even) td { background: #f8fafc; }
-          tfoot td { background: #f1f5f9; font-weight: 700; border-top: 2px solid #0d9488; }
-          .e { text-align: left; font-variant-numeric: tabular-nums; direction: ltr; }
-          .footer { margin-top: 5mm; display: flex; justify-content: space-between; font-size: 8pt; color: #64748b; }
-        </style></head><body>
-        <div class="header">
-          <div>
-            <h2>تقرير قائمة الفواتير</h2>
-            <div class="sub">إجمالي النتائج: ${num(state.data.total_count)} فاتورة</div>
-          </div>
-          <div style="font-size:8pt;color:#64748b;text-align:left;direction:ltr">
-            <div><b>Raseen System</b></div>
-            <div>${new Date().toLocaleDateString('ar-SA')}</div>
-          </div>
-        </div>
-        <table>
-          <thead><tr>${headers.map((h, i) => `<th class="${i >= 7 && i <= 11 ? 'e' : ''}">${esc(h)}</th>`).join('')}</tr></thead>
-          <tbody>${state.data.items.map((i) => `<tr>${[
-            i.invoice_number, i.issue_date, i.issue_time, i.client_name,
-            i.client_code, i.issuer_name, i.payment_label, money(i.taxable_amount), money(i.tax_amount), money(i.grand_total),
-            money(i.paid_amount), money(i.remaining_amount), i.status_label
-          ].map((c, idx) => `<td class="${idx >= 7 && idx <= 11 ? 'e' : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
-          <tfoot><tr>
-            <td colspan="7">الإجمالي</td>
-            <td class="e">${money(t.taxable_amount || (t.grand_total - t.tax))}</td>
-            <td class="e">${money(t.tax)}</td>
-            <td class="e">${money(t.grand_total)}</td>
-            <td class="e">${money(t.paid)}</td>
-            <td class="e">${money(t.remaining)}</td>
-            <td></td>
-          </tr></tfoot>
-        </table>
-        <div class="footer">
-          <span>نظام رصين للفوترة والمحاسبة — تقرير رسمي A4 PDF</span>
-          <span style="direction:ltr">Page 1</span>
-        </div>
-        </body></html>`;
+    const getInvoiceListDocHtml = async () => {
+      const issuer = store.issuers.find((item) => item.id === state.issuer_id) || store.activeIssuer || {};
+      let settings = issuer.print_settings || {};
+      if (typeof settings === 'string') { try { settings = JSON.parse(settings); } catch { settings = {}; } }
+      const template = await loadStoredTemplate('reports', settings.report_template_style || '');
+      const rowsHtml = state.data.items.map((i) => [
+        i.invoice_number, i.issue_date, i.issue_time, i.client_name, i.client_code, i.issuer_name, i.payment_label,
+        money(i.taxable_amount), money(i.tax_amount), money(i.grand_total), money(i.paid_amount), money(i.remaining_amount), i.status_label,
+      ].map((cell) => `<td>${esc(cell ?? '')}</td>`).join(''));
+      const t = state.data.totals || {};
+      const footer = ['الإجمالي', '', '', '', '', '', '', money(t.taxable_amount || (t.grand_total - t.tax)), money(t.tax), money(t.grand_total), money(t.paid), money(t.remaining), ''];
+      return fillStoredTemplate(template, {
+        title: 'تقرير قائمة الفواتير', subtitle: `إجمالي النتائج: ${num(state.data.total_count)} فاتورة`,
+        issuer_name: issuer.name_ar || '', generated_at: new Date().toLocaleString('ar-SA'), page_size: 'A4 landscape',
+        stats_html: '', headers_html: headers.map((h) => `<th>${esc(h)}</th>`).join(''),
+        rows_html: rowsHtml.length ? rowsHtml.map((row) => `<tr>${row}</tr>`).join('') : `<tr><td colspan="${headers.length}">لا توجد بيانات مسجلة</td></tr>`,
+        footer_html: `<tr>${footer.map((cell) => `<td>${esc(cell ?? '')}</td>`).join('')}</tr>`,
+      }, ['stats_html', 'headers_html', 'rows_html', 'footer_html']);
     };
 
     $('#btn-pdf-list', view).addEventListener('click', async (e) => {
       e.target.disabled = true;
       try {
-        const docHtml = getInvoiceListDocHtml();
+        const docHtml = await getInvoiceListDocHtml();
         await downloadPdfFromHtml(docHtml, 'قائمة-الفواتير.pdf');
       } catch (err) {
         toastErr(err.message || 'تعذر تحميل ملف PDF');
@@ -529,9 +497,9 @@ export async function render(view, ctx) {
       }
     });
 
-    $('#print-list', view).addEventListener('click', () => {
-      const docHtml = getInvoiceListDocHtml();
-      printDoc(docHtml);
+    $('#print-list', view).addEventListener('click', async () => {
+      try { printDoc(await getInvoiceListDocHtml()); }
+      catch (err) { toastErr(err.message || 'تعذر تحميل قالب التقرير'); }
     });
 
     const openImportModal = async () => {
@@ -739,24 +707,18 @@ export async function render(view, ctx) {
             api.get(`/api/issuers/${invoice.issuer_id}`),
             api.get(`/api/clients/${invoice.client_id}`),
           ]);
-          const { downloadInvoicePdf } = await import('./invoice-view.js?v=' + Date.now());
+          const { downloadInvoicePdf } = await import('./invoice-view.js');
           await downloadInvoicePdf({ invoice, issuer, client });
         } finally {
           btn.disabled = false;
         }
       } else if (btn.dataset.act === 'share') {
-        btn.disabled = true;
-        try {
-          const invoice = await api.get(`/api/invoices/${id}`);
-          const [issuer, client] = await Promise.all([
-            api.get(`/api/issuers/${invoice.issuer_id}`),
-            api.get(`/api/clients/${invoice.client_id}`),
-          ]);
-          const { shareInvoicePdfFile } = await import('./invoice-view.js?v=' + Date.now());
-          await shareInvoicePdfFile({ invoice, issuer, client });
-        } finally {
-          btn.disabled = false;
-        }
+        const invoice = state.data.items.find((item) => item.id === id);
+        await shareDocument({
+          title: `فاتورة ${invoice?.invoice_number || ''}`,
+          text: `فاتورة رقم ${invoice?.invoice_number || ''} من ${invoice?.issuer_name || ''}`,
+          url: `${location.origin}${location.pathname}#/invoice-view/${encodeURIComponent(id)}`,
+        });
       } else if (btn.dataset.act === 'print' || btn.dataset.act === 'thermal') {
         btn.disabled = true;
         try {
@@ -766,9 +728,11 @@ export async function render(view, ctx) {
             api.get(`/api/clients/${invoice.client_id}`),
           ]);
           if (btn.dataset.act === 'thermal') {
-            printDoc(invoiceThermal({ invoice, issuer, client }));
+            const res = await fetch(`/api/invoices/${encodeURIComponent(id)}/render-html?style=thermal`);
+            if (!res.ok) throw new Error('قالب الفاتورة الحرارية غير متوفر');
+            printDoc(await res.text());
           } else {
-            const { getInvoiceDocHtml } = await import('./invoice-view.js?v=' + Date.now());
+            const { getInvoiceDocHtml } = await import('./invoice-view.js');
             const docHtml = await getInvoiceDocHtml({ invoice, issuer, client });
             printDoc(docHtml);
           }
@@ -846,3 +810,4 @@ export async function render(view, ctx) {
   draw();
   return () => { unsubSync(); };
 }
+

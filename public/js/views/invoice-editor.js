@@ -133,6 +133,22 @@ export async function render(view, ctx) {
     lines: [emptyLine()],
     ...(draft || {}),
   };
+  let clientSearchQ = '';
+
+  const filterClients = (q) => {
+    const term = (q || '').trim().toLowerCase();
+    if (!term) return store.clients;
+    return store.clients.filter((c) => {
+      const name = (c.name || '').toLowerCase();
+      const code = (c.client_code || '').toLowerCase();
+      const mob = (c.mobile || '').toLowerCase();
+      const phone = (c.phone || '').toLowerCase();
+      const tax = (c.tax_number || '').toLowerCase();
+      const cr = (c.commercial_register || '').toLowerCase();
+      return name.includes(term) || code.includes(term) || mob.includes(term) || phone.includes(term) || tax.includes(term) || cr.includes(term);
+    });
+  };
+
   if (!state.is_edit && draft) {
     if (state.client_id && !store.clients.some((c) => c.id === state.client_id)) {
       state.client_id = '';
@@ -156,6 +172,19 @@ export async function render(view, ctx) {
     return undefined;
   }
   if (!state.issuer_id || !activeIssuers.some((i) => i.id === state.issuer_id)) state.issuer_id = activeIssuers[0].id;
+
+  let issuerSearchQ = '';
+  const filterIssuers = (q) => {
+    const term = (q || '').trim().toLowerCase();
+    if (!term) return activeIssuers;
+    return activeIssuers.filter((i) => {
+      const nameAr = (i.name_ar || '').toLowerCase();
+      const nameEn = (i.name_en || '').toLowerCase();
+      const tax = (i.tax_number || '').toLowerCase();
+      const cr = (i.commercial_register || '').toLowerCase();
+      return nameAr.includes(term) || nameEn.includes(term) || tax.includes(term) || cr.includes(term);
+    });
+  };
 
   const issuerOf = () => activeIssuers.find((i) => i.id === state.issuer_id) || activeIssuers[0];
   if (!state.zatca_phase) {
@@ -190,7 +219,7 @@ export async function render(view, ctx) {
         </div>
       </td>
       <td style="width:80px"><input type="text" data-f="unit" value="${esc(l.unit)}" /></td>
-      <td style="width:90px"><input type="number" data-f="quantity" value="${l.quantity}" step="0.001" min="0.001" /></td>
+      <td style="width:90px"><input type="number" data-f="quantity" value="${l.quantity}" step="1" min="1" /></td>
       <td style="width:110px"><input type="number" data-f="unit_price" value="${l.unit_price}" step="0.01" min="0" /></td>
       <td style="width:96px"><input type="number" data-f="discount" value="${l.discount}" step="0.01" min="0" /></td>
       <td style="width:80px"><input type="number" data-f="tax_rate" value="${l.tax_rate}" step="0.01" min="0" max="100" /></td>
@@ -218,6 +247,8 @@ export async function render(view, ctx) {
   const draw = () => {
     const iss = issuerOf();
     const curClient = store.clients.find((c) => c.id === state.client_id);
+    const displayedClients = filterClients(clientSearchQ);
+    const displayedIssuers = filterIssuers(issuerSearchQ);
     view.innerHTML = html`
       <div class="page-head">
         <div class="titles">
@@ -249,9 +280,18 @@ export async function render(view, ctx) {
               <span>البيانات الأساسية للمنشأة</span>
             </div>
             <div class="field">
-              <label class="req">الشركة المصدرة</label>
+              <div class="flex" style="align-items:center;justify-content:space-between;margin-bottom:4px">
+                <label class="req" for="issuer" style="margin:0">الشركة المصدرة</label>
+                <span class="tiny muted" id="issuer-search-hint" style="font-size:11px">
+                  ${issuerSearchQ ? `${displayedIssuers.length} مطابق` : ''}
+                </span>
+              </div>
+              <div style="margin-bottom:6px">
+                <input type="search" id="issuer-search" value="${esc(issuerSearchQ)}" placeholder="بحث سريع في الشركات (اسم، ضريبي، سجل)…" autocomplete="off" style="font-size:13px;padding:6px 9px;" />
+              </div>
               <select id="issuer">
-                ${raw(activeIssuers.map((i) => `<option value="${esc(i.id)}" ${i.id === state.issuer_id ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}
+                <option value="">— ${issuerSearchQ ? `اختر من النتائج (${displayedIssuers.length})` : 'اختر الشركة المصدرة'} —</option>
+                ${raw(displayedIssuers.map((i) => `<option value="${esc(i.id)}" ${i.id === state.issuer_id ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}
               </select>
               <span class="hint">الرقم التسلسلي القادم: <b class="mono" style="color:var(--primary)">${esc((iss.invoice_prefix || 'INV').replace(/[-\s]+$/, '').trim() || 'INV')}-${String(iss.invoice_next_no).padStart(iss.invoice_pad, '0')}</b></span>
             </div>
@@ -279,11 +319,19 @@ export async function render(view, ctx) {
               <span>بيانات العميل المستلم</span>
             </div>
             <div class="field">
-              <label class="req">العميل</label>
+              <div class="flex" style="align-items:center;justify-content:space-between;margin-bottom:4px">
+                <label class="req" for="client" style="margin:0">العميل</label>
+                <span class="tiny muted" id="client-search-hint" style="font-size:11px">
+                  ${clientSearchQ ? `${displayedClients.length} مطابق` : ''}
+                </span>
+              </div>
+              <div style="margin-bottom:6px">
+                <input type="search" id="client-search" value="${esc(clientSearchQ)}" placeholder="بحث سريع في العملاء (اسم، كود، جوال، ضريبي)…" autocomplete="off" style="font-size:13px;padding:6px 9px;" />
+              </div>
               <div class="flex" style="gap:.4rem">
                 <select id="client" style="flex:1;min-width:0">
-                  <option value="">— اختر العميل —</option>
-                  ${raw(store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join(''))}
+                  <option value="">— ${clientSearchQ ? `اختر من النتائج (${displayedClients.length})` : 'اختر العميل'} —</option>
+                  ${raw(displayedClients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join(''))}
                 </select>
                 ${raw(can('clients.write') ? `<button class="btn btn-sm" id="new-client" type="button" title="إضافة عميل جديد" style="flex-shrink:0">${icon.userPlus({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}عميل جديد</button>` : '')}
               </div>
@@ -458,7 +506,67 @@ export async function render(view, ctx) {
       saveDraft(state);
       draw();
     });
+
+    const issuerSearchInput = $('#issuer-search', view);
+    const issuerSelect = $('#issuer', view);
+    const issuerHint = $('#issuer-search-hint', view);
+
+    if (issuerSearchInput && issuerSelect) {
+      issuerSearchInput.addEventListener('input', (e) => {
+        issuerSearchQ = e.target.value;
+        const matched = filterIssuers(issuerSearchQ);
+        if (issuerHint) {
+          issuerHint.textContent = issuerSearchQ.trim() ? `${matched.length} مطابق` : '';
+        }
+        issuerSelect.innerHTML = `<option value="">— ${issuerSearchQ.trim() ? `اختر من النتائج (${matched.length})` : 'اختر الشركة المصدرة'} —</option>` +
+          matched.map((i) => `<option value="${esc(i.id)}" ${i.id === state.issuer_id ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join('');
+      });
+
+      issuerSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const matched = filterIssuers(issuerSearchQ);
+          if (matched.length > 0) {
+            state.issuer_id = matched[0].id;
+            const newIss = activeIssuers.find((i) => i.id === state.issuer_id);
+            if (newIss) state.zatca_phase = newIss.zatca_phase || 'PHASE1';
+            saveDraft(state);
+            draw();
+          }
+        }
+      });
+    }
+
     $('#client', view).addEventListener('change', (e) => { state.client_id = e.target.value; saveDraft(state); draw(); });
+
+    const clientSearchInput = $('#client-search', view);
+    const clientSelect = $('#client', view);
+    const clientHint = $('#client-search-hint', view);
+
+    if (clientSearchInput && clientSelect) {
+      clientSearchInput.addEventListener('input', (e) => {
+        clientSearchQ = e.target.value;
+        const matched = filterClients(clientSearchQ);
+        if (clientHint) {
+          clientHint.textContent = clientSearchQ.trim() ? `${matched.length} مطابق` : '';
+        }
+        clientSelect.innerHTML = `<option value="">— ${clientSearchQ.trim() ? `اختر من النتائج (${matched.length})` : 'اختر العميل'} —</option>` +
+          matched.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join('');
+      });
+
+      clientSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const matched = filterClients(clientSearchQ);
+          if (matched.length > 0) {
+            state.client_id = matched[0].id;
+            saveDraft(state);
+            draw();
+          }
+        }
+      });
+    }
+
     $('#invoice_type', view).addEventListener('change', (e) => { state.invoice_type = e.target.value; saveDraft(state); });
     $('#zatca_phase', view)?.addEventListener('change', (e) => {
       state.zatca_phase = e.target.value;
@@ -820,7 +928,7 @@ export async function render(view, ctx) {
             <div class="popover-item-meta">
               <div class="popover-item-badges">
                 <span class="badge mono gray tiny">${esc(it.item_code)}</span>
-                ${it.barcode ? `<span class="badge mono blue tiny">📦 ${esc(it.barcode)}</span>` : ''}
+                ${it.barcode ? `<span class="badge mono blue tiny">${esc(it.barcode)}</span>` : ''}
               </div>
               <div class="popover-item-price">
                 <strong>${money(it.sale_price)}</strong> <small class="muted">ر.س / ${esc(it.unit || 'حبة')}</small>

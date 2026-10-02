@@ -1,0 +1,11 @@
+.git
+.agents
+.gocache
+*.exe
+*.log
+*.zip
+*.pdf
+data/**
+!data/templates/
+!data/templates/**
+!data/saudi_riyal_symbol.svg

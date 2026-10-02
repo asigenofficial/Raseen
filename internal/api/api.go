@@ -3,6 +3,7 @@ package api
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -41,6 +42,7 @@ type Server struct {
 	sync      *services.SyncHub
 	masterKey []byte
 	publicFS  fs.FS
+	pdfWake   chan struct{}
 }
 
 func NewServer(
@@ -60,7 +62,7 @@ func NewServer(
 	templateSvc := services.NewTemplateService(database, cfg.DataDir)
 	syncSvc := services.NewSyncHub(database)
 
-	return &Server{
+	server := &Server{
 		cfg:       cfg,
 		db:        database,
 		auth:      authSvc,
@@ -75,7 +77,11 @@ func NewServer(
 		sync:      syncSvc,
 		masterKey: masterKey,
 		publicFS:  publicFS,
+		pdfWake:   make(chan struct{}, 1),
 	}
+	server.enqueueMissingPDFs()
+	server.startPDFWorker()
+	return server
 }
 
 func (s *Server) json(w http.ResponseWriter, status int, data any) {
@@ -105,9 +111,6 @@ func (s *Server) getSessionToken(r *http.Request) string {
 	authHeader := r.Header.Get("Authorization")
 	if strings.HasPrefix(authHeader, "Bearer ") {
 		return strings.TrimPrefix(authHeader, "Bearer ")
-	}
-	if q := r.URL.Query().Get("token"); q != "" {
-		return q
 	}
 	return ""
 }
@@ -141,6 +144,12 @@ func (s *Server) Handler() http.Handler {
 
 	// ---------------------------------------------------- العامة والنظام
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := s.db.PingContext(ctx); err != nil {
+			s.err(w, http.StatusServiceUnavailable, "قاعدة البيانات غير متاحة")
+			return
+		}
 		s.json(w, 200, map[string]any{
 			"service":  "Raseen",
 			"database": "connected",
@@ -226,7 +235,7 @@ func (s *Server) Handler() http.Handler {
 			Path:     "/",
 			MaxAge:   s.cfg.SessionTtlHours * 3600,
 			HttpOnly: true,
-			Secure:   r.TLS != nil,
+			Secure:   r.TLS != nil || s.cfg.IsPublicHost(),
 			SameSite: http.SameSiteLaxMode,
 		})
 		s.json(w, 200, user)
@@ -698,6 +707,7 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		_ = s.dirtyIssuerDocuments(id)
 		s.json(w, 200, iss)
 	})
 
@@ -1232,6 +1242,8 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		_ = s.dirtyDocument("invoice", inv.ID, inv.IssuerID)
+		s.dirtyInvoiceReceipts(inv.ID)
 		actorName := actor
 		actorRole := ""
 		if u != nil {
@@ -1272,6 +1284,8 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		_ = s.dirtyDocument("invoice", inv.ID, inv.IssuerID)
+		s.dirtyInvoiceReceipts(inv.ID)
 		actorName := actor
 		if u != nil {
 			actorName = u.FullName
@@ -1302,6 +1316,9 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		if inv, e := s.invoices.GetInvoice(id); e == nil {
+			_ = s.dirtyDocument("invoice", id, inv.IssuerID)
+		}
 		actorName := actor
 		if u != nil {
 			actorName = u.FullName
@@ -1330,6 +1347,7 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		s.deleteDocumentPDF("invoice", id)
 		actorName := actor
 		if u != nil {
 			actorName = u.FullName
@@ -1587,13 +1605,7 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 404, "الفاتورة غير موجودة")
 			return
 		}
-		style := r.URL.Query().Get("style")
-		htmlStr, err := s.templates.RenderInvoiceHTML(inv, style)
-		if err != nil {
-			s.err(w, 500, err.Error())
-			return
-		}
-		pdfBytes, err := services.RenderHTMLToPDF(htmlStr)
+		pdfBytes, err := s.currentPDF("invoice", id, r.URL.Query().Get("style"))
 		if err != nil {
 			s.err(w, 500, err.Error())
 			return
@@ -1603,6 +1615,9 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(pdfBytes)
+	})
+	mux.HandleFunc("GET /api/invoices/{id}/pdf-status", func(w http.ResponseWriter, r *http.Request) {
+		s.pdfStatus(w, "invoice", r.PathValue("id"))
 	})
 
 	mux.HandleFunc("POST /api/invoices/{id}/pdf", func(w http.ResponseWriter, r *http.Request) {
@@ -1621,12 +1636,18 @@ func (s *Server) Handler() http.Handler {
 				return
 			}
 			invNum = inv.InvoiceNumber
-			style := r.URL.Query().Get("style")
-			htmlStr, err = s.templates.RenderInvoiceHTML(inv, style)
-			if err != nil {
-				s.err(w, 500, err.Error())
+			pdfBytes, pdfErr := s.currentPDF("invoice", id, r.URL.Query().Get("style"))
+			if pdfErr != nil {
+				s.err(w, 500, pdfErr.Error())
 				return
 			}
+			filename := fmt.Sprintf("فاتورة_%s.pdf", invNum)
+			encodedFilename := url.PathEscape(filename)
+			w.Header().Set("Content-Type", "application/pdf")
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"invoice_%s.pdf\"; filename*=UTF-8''%s", invNum, encodedFilename))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(pdfBytes)
+			return
 		} else {
 			if inv, err := s.invoices.GetInvoice(id); err == nil && inv != nil {
 				invNum = inv.InvoiceNumber
@@ -1645,6 +1666,63 @@ func (s *Server) Handler() http.Handler {
 		encodedFilename := url.PathEscape(filename)
 		w.Header().Set("Content-Type", "application/pdf")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"invoice_%s.pdf\"; filename*=UTF-8''%s", invNum, encodedFilename))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(pdfBytes)
+	})
+
+	mux.HandleFunc("GET /api/vouchers/{id}/pdf", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		v, err := s.vouchers.GetVoucher(id)
+		if err != nil {
+			s.err(w, 404, "السند غير موجود")
+			return
+		}
+		pdfBytes, err := s.currentPDF("voucher", id)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		filename := fmt.Sprintf("سند_قبض_%s.pdf", v.VoucherNumber)
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"voucher_%s.pdf\"; filename*=UTF-8''%s", v.VoucherNumber, url.PathEscape(filename)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(pdfBytes)
+	})
+	mux.HandleFunc("GET /api/vouchers/{id}/pdf-status", func(w http.ResponseWriter, r *http.Request) {
+		s.pdfStatus(w, "voucher", r.PathValue("id"))
+	})
+
+	mux.HandleFunc("POST /api/vouchers/{id}/pdf", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		var body struct {
+			HTML string `json:"html"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+
+		htmlStr := body.HTML
+		var vNum string
+		if v, err := s.vouchers.GetVoucher(id); err == nil && v != nil {
+			vNum = v.VoucherNumber
+		}
+		if vNum == "" {
+			vNum = id
+		}
+
+		if strings.TrimSpace(htmlStr) == "" {
+			s.err(w, 400, "محتوى السند HTML مطلوب")
+			return
+		}
+
+		pdfBytes, err := services.RenderHTMLToPDF(htmlStr)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+
+		filename := fmt.Sprintf("سند_قبض_%s.pdf", vNum)
+		encodedFilename := url.PathEscape(filename)
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"voucher_%s.pdf\"; filename*=UTF-8''%s", vNum, encodedFilename))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(pdfBytes)
 	})
@@ -1911,6 +1989,7 @@ func (s *Server) Handler() http.Handler {
 				Notes:         "استيراد من ملف Excel",
 			}, username, s.clientIP(r))
 			if err == nil && inv != nil {
+				_ = s.dirtyDocument("invoice", inv.ID, inv.IssuerID)
 				importedCount++
 				importedTotal += models.ToMajor(inv.GrandTotal)
 			}
@@ -1980,6 +2059,7 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		s.dirtyAllCachedDocuments()
 		s.json(w, 201, res)
 	})
 
@@ -1989,6 +2069,7 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		s.dirtyAllCachedDocuments()
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
@@ -1997,6 +2078,7 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		s.dirtyAllCachedDocuments()
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
@@ -2046,6 +2128,7 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 500, err.Error())
 			return
 		}
+		s.dirtyAllCachedDocuments()
 		s.json(w, 201, map[string]any{"id": id, "saved": true})
 	})
 
@@ -2060,6 +2143,7 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 500, err.Error())
 			return
 		}
+		s.dirtyAllCachedDocuments()
 		s.json(w, 200, map[string]any{"id": id, "updated": true})
 	})
 
@@ -2119,6 +2203,8 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		_ = s.dirtyDocument("voucher", v.ID, v.IssuerID)
+		s.dirtyAllocatedInvoices(v.ID)
 		actorName := actor
 		if u != nil {
 			actorName = u.FullName
@@ -2185,6 +2271,8 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		_ = s.dirtyDocument("voucher", v.ID, v.IssuerID)
+		s.dirtyAllocatedInvoices(v.ID)
 		actorName := actor
 		if u != nil {
 			actorName = u.FullName
@@ -2217,6 +2305,10 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		if v, e := s.vouchers.GetVoucher(id); e == nil {
+			_ = s.dirtyDocument("voucher", id, v.IssuerID)
+		}
+		s.dirtyAllocatedInvoices(id)
 		actorName := actor
 		if u != nil {
 			actorName = u.FullName
@@ -2241,10 +2333,13 @@ func (s *Server) Handler() http.Handler {
 			actor = u.Username
 		}
 		id := r.PathValue("id")
+		allocatedInvoices := s.allocatedInvoiceIDs(id)
 		if err := s.vouchers.DeleteVoucher(id, actor, s.clientIP(r)); err != nil {
 			s.err(w, 400, err.Error())
 			return
 		}
+		s.deleteDocumentPDF("voucher", id)
+		s.dirtyInvoicesByID(allocatedInvoices)
 		actorName := actor
 		if u != nil {
 			actorName = u.FullName
@@ -2281,6 +2376,7 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		_ = s.dirtyDocument("voucher", id, updated.IssuerID)
 		s.sync.Broadcast(services.SyncEvent{
 			Type:      "voucher:updated",
 			Entity:    "voucher",
@@ -2547,6 +2643,9 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		if batchID, ok := res["batch_id"].(string); ok {
+			s.dirtyBatchDocuments(batchID)
+		}
 		actorName := username
 		if u != nil {
 			actorName = u.FullName
@@ -2600,7 +2699,11 @@ func (s *Server) Handler() http.Handler {
 			docs = append(docs, htmlStr)
 		}
 
-		combined := services.CombineHTMLDocuments(docs)
+		combined := s.templates.CombineHTMLDocuments(docs)
+		if combined == "" {
+			s.err(w, 500, "تعذر قراءة قالب طباعة الدفعات من مجلد البيانات")
+			return
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(combined))
@@ -2641,7 +2744,11 @@ func (s *Server) Handler() http.Handler {
 			docs = append(docs, htmlStr)
 		}
 
-		combined := services.CombineHTMLDocuments(docs)
+		combined := s.templates.CombineHTMLDocuments(docs)
+		if combined == "" {
+			s.err(w, 500, "تعذر قراءة قالب طباعة الدفعات من مجلد البيانات")
+			return
+		}
 		pdfBytes, err := services.RenderHTMLToPDF(combined)
 		if err != nil {
 			s.err(w, 500, err.Error())
@@ -2703,6 +2810,9 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		_, _ = s.db.Exec(`DELETE FROM document_pdfs WHERE
+			(kind='invoice' AND document_id NOT IN (SELECT id FROM invoices)) OR
+			(kind='voucher' AND document_id NOT IN (SELECT id FROM receipt_vouchers))`)
 		s.sync.Broadcast(services.SyncEvent{
 			Type: "invoice:deleted", Entity: "invoice", Action: "delete",
 			Actor: username, Data: map[string]any{"batch_id": id},
@@ -2727,6 +2837,7 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, err.Error())
 			return
 		}
+		s.dirtyBatchDocuments(id)
 		s.json(w, 200, res)
 	})
 
@@ -2976,13 +3087,22 @@ func (s *Server) handleExportPackage(w http.ResponseWriter, r *http.Request) {
 		s.err(w, 500, "فشل إنشاء نسخة متناسقة من قاعدة البيانات: "+err.Error())
 		return
 	}
+	keyBackupPath := strings.TrimSuffix(res.Path, ".db") + ".key"
+	keyData, err := os.ReadFile(keyBackupPath)
+	if err != nil {
+		s.err(w, 500, "فشل قراءة مفتاح النسخة الاحتياطية: "+err.Error())
+		return
+	}
 
-	exportName := fmt.Sprintf("raseen_package_%s.zip", time.Now().Format("2006-01-02_150405"))
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", exportName))
-
-	zw := zip.NewWriter(w)
-	defer zw.Close()
+	exportFile, err := os.CreateTemp(s.cfg.BackupDir, "raseen_export_*.zip")
+	if err != nil {
+		s.err(w, 500, "فشل تجهيز ملف التصدير: "+err.Error())
+		return
+	}
+	exportPath := exportFile.Name()
+	defer os.Remove(exportPath)
+	defer exportFile.Close()
+	zw := zip.NewWriter(exportFile)
 
 	addFileToZip := func(diskPath, zipRelPath string) error {
 		src, err := os.Open(diskPath)
@@ -3000,24 +3120,40 @@ func (s *Server) handleExportPackage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1. إضافة قاعدة البيانات zsystem.db من النسخة الاحتياطية المتناسقة
-	_ = addFileToZip(res.Path, "zsystem.db")
+	if err := addFileToZip(res.Path, "zsystem.db"); err != nil {
+		s.err(w, 500, "فشل إضافة قاعدة البيانات إلى الحزمة: "+err.Error())
+		return
+	}
+	if keyEntry, err := zw.Create("secret.key"); err != nil {
+		s.err(w, 500, "فشل إضافة مفتاح التشفير إلى الحزمة: "+err.Error())
+		return
+	} else if _, err := keyEntry.Write(keyData); err != nil {
+		s.err(w, 500, "فشل كتابة مفتاح التشفير في الحزمة: "+err.Error())
+		return
+	}
 
 	// 2. إضافة رمز الريال السعودي saudi_riyal_symbol.svg
 	sarSvg := filepath.Join(s.cfg.DataDir, "saudi_riyal_symbol.svg")
 	if _, err := os.Stat(sarSvg); err == nil {
-		_ = addFileToZip(sarSvg, "saudi_riyal_symbol.svg")
+		if err := addFileToZip(sarSvg, "saudi_riyal_symbol.svg"); err != nil {
+			s.err(w, 500, "فشل إضافة رمز العملة إلى الحزمة: "+err.Error())
+			return
+		}
 	}
 
 	// 3. إضافة مجلد القوالب templates
 	tplBaseDir := filepath.Join(s.cfg.DataDir, "templates")
-	var invoiceCount, docCount int
-	_ = filepath.Walk(tplBaseDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+	var invoiceCount, docCount, reportCount, statementCount int
+	if err := filepath.Walk(tplBaseDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
 			return nil
 		}
 		rel, err := filepath.Rel(s.cfg.DataDir, path)
 		if err != nil {
-			return nil
+			return err
 		}
 		relSlash := filepath.ToSlash(rel)
 		if strings.HasSuffix(strings.ToLower(relSlash), ".html") {
@@ -3025,28 +3161,57 @@ func (s *Server) handleExportPackage(w http.ResponseWriter, r *http.Request) {
 				invoiceCount++
 			} else if strings.Contains(relSlash, "documents") {
 				docCount++
+			} else if strings.Contains(relSlash, "reports") {
+				reportCount++
+			} else if strings.Contains(relSlash, "statements") {
+				statementCount++
 			}
 		}
-		_ = addFileToZip(path, relSlash)
-		return nil
-	})
+		return addFileToZip(path, relSlash)
+	}); err != nil && !os.IsNotExist(err) {
+		s.err(w, 500, "فشل إضافة القوالب إلى الحزمة: "+err.Error())
+		return
+	}
 
 	// 4. ملف manifest.json
 	manifest := map[string]any{
-		"app":                "Raseen",
-		"version":            "1.0",
-		"created_at":         time.Now().Format(time.RFC3339),
-		"database_file":      "zsystem.db",
-		"database_size":      res.SizeBytes,
-		"invoice_templates":  invoiceCount,
-		"document_templates": docCount,
+		"app":                 "Raseen",
+		"version":             "1.0",
+		"created_at":          time.Now().Format(time.RFC3339),
+		"database_file":       "zsystem.db",
+		"database_size":       res.SizeBytes,
+		"invoice_templates":   invoiceCount,
+		"document_templates":  docCount,
+		"report_templates":    reportCount,
+		"statement_templates": statementCount,
 	}
-	if mb, err := json.MarshalIndent(manifest, "", "  "); err == nil {
-		if mf, err := zw.Create("manifest.json"); err == nil {
-			_, _ = mf.Write(mb)
-		}
+	mb, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		s.err(w, 500, "فشل تجهيز بيانات الحزمة: "+err.Error())
+		return
+	}
+	mf, err := zw.Create("manifest.json")
+	if err != nil {
+		s.err(w, 500, "فشل إضافة بيان الحزمة: "+err.Error())
+		return
+	}
+	if _, err := mf.Write(mb); err != nil {
+		s.err(w, 500, "فشل كتابة بيان الحزمة: "+err.Error())
+		return
+	}
+	if err := zw.Close(); err != nil {
+		s.err(w, 500, "فشل إكمال ملف الحزمة: "+err.Error())
+		return
+	}
+	if err := exportFile.Close(); err != nil {
+		s.err(w, 500, "فشل حفظ ملف الحزمة: "+err.Error())
+		return
 	}
 
+	exportName := fmt.Sprintf("raseen_package_%s.zip", time.Now().Format("2006-01-02_150405"))
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", exportName))
+	http.ServeFile(w, r, exportPath)
 	s.db.Audit(u.Username, "PACKAGE_EXPORT", "system", "", "", manifest, s.clientIP(r))
 }
 
@@ -3058,9 +3223,12 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 	}
 
 	// سقف حجم الملف 2GB لضمان رفع أضخم قواعد البيانات وحزم الأرشيف
-	if err := r.ParseMultipartForm(2048 << 20); err != nil {
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		s.err(w, 400, "تعذر قراءة الملف المرفوع أو تجاوز الحد المسموح: "+err.Error())
 		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
 	}
 
 	var file multipart.File
@@ -3104,6 +3272,11 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 	zipReader, zipErr := zip.OpenReader(tempPath)
 	if zipErr == nil {
 		defer zipReader.Close()
+		archiveKey, err := packageMasterKey(zipReader.File)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
 
 		var dbRestored bool
 		var preBackupFilename string
@@ -3145,6 +3318,10 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 		}
 
 		if foundDbInZip != nil {
+			if foundDbInZip.UncompressedSize64 > 2*1024*1024*1024 {
+				s.err(w, 400, "قاعدة البيانات داخل الحزمة تتجاوز الحد المسموح")
+				return
+			}
 			rc, err := foundDbInZip.Open()
 			if err != nil {
 				s.err(w, 500, "تعذر فتح ملف قاعدة البيانات داخل الحزمة: "+err.Error())
@@ -3157,7 +3334,7 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 				s.err(w, 500, "تعذر إنشاء ملف قاعدة البيانات المؤقت: "+err.Error())
 				return
 			}
-			_, copyDbErr := io.Copy(outDb, rc)
+			copiedDbBytes, copyDbErr := io.Copy(outDb, io.LimitReader(rc, 2*1024*1024*1024+1))
 			rc.Close()
 			outDb.Close()
 			defer os.Remove(tempDbPath)
@@ -3166,7 +3343,19 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 				s.err(w, 500, "فشل استخراج قاعدة البيانات من الأرشيف: "+copyDbErr.Error())
 				return
 			}
+			if copiedDbBytes > 2*1024*1024*1024 {
+				s.err(w, 400, "قاعدة البيانات داخل الحزمة تتجاوز الحد المسموح")
+				return
+			}
 
+			sourceKey := s.masterKey
+			if archiveKey != nil {
+				sourceKey = archiveKey
+			}
+			if err := prepareImportedDatabaseSecrets(tempDbPath, sourceKey, s.masterKey); err != nil {
+				s.err(w, 400, err.Error())
+				return
+			}
 			preBackup, restoreErr := s.db.RestoreFrom(tempDbPath)
 			if restoreErr != nil {
 				s.err(w, 400, "فشل استعادة قاعدة البيانات من الحزمة: "+restoreErr.Error())
@@ -3179,7 +3368,22 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 		}
 
 		// فحص ما إذا كانت الحزمة تحتوي على قوالب HTML
-		var zipHasTemplates bool
+		templateCategory := func(name string) string {
+			parts := strings.Split(strings.Trim(strings.ToLower(filepath.ToSlash(name)), "/"), "/")
+			for i, part := range parts {
+				if part == "templates" && i+1 < len(parts) {
+					part = parts[i+1]
+				}
+				switch part {
+				case "partials", "reports", "statements", "invoices":
+					return part
+				case "documents", "vouchers":
+					return "documents"
+				}
+			}
+			return "invoices"
+		}
+		archiveCategories := map[string]bool{}
 		for _, f := range zipReader.File {
 			cleanName := filepath.ToSlash(f.Name)
 			lower := strings.ToLower(cleanName)
@@ -3187,21 +3391,20 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 				continue
 			}
 			baseName := filepath.Base(cleanName)
-			if strings.HasSuffix(lower, ".html") && baseName != "index.html" {
-				zipHasTemplates = true
-				break
+			if strings.HasSuffix(lower, ".html") && baseName != "index.html" && f.UncompressedSize64 > 0 {
+				archiveCategories[templateCategory(cleanName)] = true
 			}
 		}
 
-		// تنظيف مجلدات القوالب السابقة إذا كانت الحزمة تحتوي على قوالب جديدة لمنع تراكم الملفات وتكرارها
-		if zipHasTemplates {
-			_ = os.RemoveAll(filepath.Join(s.cfg.DataDir, "templates", "invoices"))
-			_ = os.RemoveAll(filepath.Join(s.cfg.DataDir, "templates", "documents"))
-			_ = os.MkdirAll(filepath.Join(s.cfg.DataDir, "templates", "invoices"), 0755)
-			_ = os.MkdirAll(filepath.Join(s.cfg.DataDir, "templates", "documents"), 0755)
+		// استعادة الفئات الموجودة في الحزمة فقط.
+		for category := range archiveCategories {
+			dir := filepath.Join(s.cfg.DataDir, "templates", category)
+			_ = os.RemoveAll(dir)
+			_ = os.MkdirAll(dir, 0755)
 		}
 
 		// استخراج قوالب HTML والملفات التابعة
+		installedTemplatePaths := map[string]bool{}
 		for _, f := range zipReader.File {
 			cleanName := filepath.ToSlash(f.Name)
 			lower := strings.ToLower(cleanName)
@@ -3215,6 +3418,9 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 
 			// رمز الريال السعودي SVG
 			if filepath.Base(lower) == "saudi_riyal_symbol.svg" {
+				if f.UncompressedSize64 > 2<<20 {
+					continue
+				}
 				rc, err := f.Open()
 				if err == nil {
 					svgData, _ := io.ReadAll(rc)
@@ -3228,15 +3434,15 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 
 			// قوالب HTML
 			if strings.HasSuffix(lower, ".html") {
+				if f.UncompressedSize64 > 10<<20 {
+					continue
+				}
 				baseName := filepath.Base(cleanName)
-				if baseName == "index.html" || strings.HasPrefix(baseName, ".") {
+				if baseName == "index.html" || strings.HasPrefix(baseName, ".") || f.UncompressedSize64 == 0 {
 					continue
 				}
 
-				targetSub := "invoices"
-				if strings.Contains(lower, "documents") || strings.Contains(lower, "vouchers") || strings.Contains(lower, "سند") {
-					targetSub = "documents"
-				}
+				targetSub := templateCategory(cleanName)
 
 				targetDir := filepath.Join(s.cfg.DataDir, "templates", targetSub)
 				_ = os.MkdirAll(targetDir, 0755)
@@ -3250,7 +3456,11 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 				rc.Close()
 				if err == nil && len(content) > 0 {
 					if errWrite := os.WriteFile(targetPath, content, 0644); errWrite == nil {
-						templatesCount++
+						cleanTarget := strings.ToLower(filepath.Clean(targetPath))
+						if !installedTemplatePaths[cleanTarget] {
+							installedTemplatePaths[cleanTarget] = true
+							templatesCount++
+						}
 					}
 				}
 			}
@@ -3290,6 +3500,10 @@ func (s *Server) handleImportSystemPackage(w http.ResponseWriter, r *http.Reques
 	}
 
 	// في حال لم يكن أرشيف ZIP، يتم التعامل معه كملف قاعدة بيانات SQLite مباشر
+	if err := prepareImportedDatabaseSecrets(tempPath, s.masterKey, s.masterKey); err != nil {
+		s.err(w, 400, err.Error())
+		return
+	}
 	preBackup, restoreErr := s.db.RestoreFrom(tempPath)
 	if restoreErr != nil {
 		s.err(w, 400, restoreErr.Error())

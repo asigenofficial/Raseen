@@ -86,6 +86,7 @@ const PERM_CATEGORIES = [
 export async function render(view) {
   let users = [];
   let rolesList = [];
+  let userSearchQ = '';
   const isAdmin = store.user && (store.user.role === 'ADMIN');
   let currentTab = new URLSearchParams(location.hash.split('?')[1] || '').get('tab') || 'users';
   let activeSessions = [];
@@ -782,12 +783,55 @@ export async function render(view) {
     }).join('');
   };
 
+  const filterUsers = (q) => {
+    if (!q) return users;
+    const term = q.trim().toLowerCase();
+    return users.filter((u) => {
+      const fn = (u.full_name || '').toLowerCase();
+      const un = (u.username || '').toLowerCase();
+      const r = (u.role || '').toLowerCase();
+      const rl = (u.role_label || '').toLowerCase();
+      const st = u.is_active ? 'نشط active' : 'معطل disabled';
+      return fn.includes(term) || un.includes(term) || r.includes(term) || rl.includes(term) || st.includes(term);
+    });
+  };
+
+  const renderUsersRows = (list) => {
+    if (!list.length) {
+      return `<tr><td colspan="7" class="text-center muted pad" style="padding:2rem">لا يوجد مستخدمون مطابقون للبحث «${esc(userSearchQ)}»</td></tr>`;
+    }
+    return list.map((u) => {
+      const isCustom = Boolean(u.is_custom_permissions);
+      return `<tr class="${u.is_active ? '' : 'row-off'}">
+        <td><div class="flex" style="gap:.5rem;align-items:center">
+          <div class="avatar sm">${esc(initials(u.full_name || u.username))}</div>
+          <div><b>${esc(u.full_name || u.username)}</b>
+            <div class="tiny muted ltr mono">${esc(u.username)}</div></div>
+        </div></td>
+        <td><span class="badge ${ROLE_TONE[u.role] || 'teal'}">${esc(u.role_label || u.role)}</span></td>
+        <td>${u.is_active ? '<span class="badge green">نشط</span>' : '<span class="badge gray">معطّل</span>'}</td>
+        <td class="tiny">
+          <span class="badge blue">${(u.permissions || []).length} صلاحية</span>
+          ${isCustom ? '<span class="badge amber tiny" style="margin-right:4px">مخصص</span>' : ''}
+        </td>
+        <td class="tiny">${u.last_login_at ? esc(dateTimeAr(u.last_login_at)) : '—'}</td>
+        <td class="tiny muted">${esc(dateTimeAr(u.created_at))}</td>
+        <td class="actions">
+          <button class="btn btn-sm" data-act="edit" data-id="${esc(u.id)}" type="button">${icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}تعديل</button>
+          <button class="btn btn-sm" data-act="perms" data-id="${esc(u.id)}" type="button">${icon.shieldCheck({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}الصلاحيات</button>
+          <button class="btn btn-sm btn-danger" data-act="del" data-id="${esc(u.id)}" type="button">${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}حذف</button>
+        </td>
+      </tr>`;
+    }).join('');
+  };
+
   /** رسم الصفحة الرئيسية للمستخدمين والأدوار أو المزامنة */
   const draw = () => {
     const meta = store.meta || {};
     const permLabels = meta.permission_labels || {};
     const admins = users.filter((u) => u.role === 'ADMIN' && u.is_active).length;
     const onlineCount = activeSessions.filter((s) => s.is_online).length || 1;
+    const filteredUsers = filterUsers(userSearchQ);
 
     view.innerHTML = html`
       <div class="page-head">
@@ -945,36 +989,24 @@ export async function render(view) {
           ? '<div class="alert alert-warn">حساب المدير الافتراضي <b>admin</b> لا يزال موجوداً بكلمة المرور الأولية. غيّر كلمة المرور فوراً من قائمة المستخدم أعلى الشاشة، أو أنشئ حساباً باسمك واحذفه.</div>'
           : '')}
 
+        <!-- فلتر وبحث المستخدمين -->
+        <div class="card" style="margin-bottom:0.75rem;padding:0.65rem 1rem">
+          <div class="row items-center" style="gap:1rem;flex-wrap:wrap">
+            <div class="field" style="flex:1;min-width:240px;margin:0">
+              <input type="search" id="users-search" value="${esc(userSearchQ)}" placeholder="بحث في المستخدمين (الاسم، اسم المستخدم، الدور، الحالة…)…" autocomplete="off" />
+            </div>
+            <span class="tiny muted" id="users-count">${userSearchQ ? `${filteredUsers.length} مطابقة من أصل ` : ''}${users.length} مستخدم</span>
+          </div>
+        </div>
+
         <!-- جدول المستخدمين -->
         <div class="card pad0">
           <div class="table-wrap users-table-wrap">
             <table class="tbl">
               <thead><tr><th>المستخدم</th><th>الدور</th><th>الحالة</th><th>الصلاحيات الفعالة</th>
                 <th>آخر دخول</th><th>تاريخ الإنشاء</th><th></th></tr></thead>
-              <tbody>
-                ${raw(users.map((u) => {
-                  const isCustom = Boolean(u.is_custom_permissions);
-                  return `<tr class="${u.is_active ? '' : 'row-off'}">
-                    <td><div class="flex" style="gap:.5rem;align-items:center">
-                      <div class="avatar sm">${esc(initials(u.full_name || u.username))}</div>
-                      <div><b>${esc(u.full_name || u.username)}</b>
-                        <div class="tiny muted ltr mono">${esc(u.username)}</div></div>
-                    </div></td>
-                    <td><span class="badge ${ROLE_TONE[u.role] || 'teal'}">${esc(u.role_label || u.role)}</span></td>
-                    <td>${u.is_active ? '<span class="badge green">نشط</span>' : '<span class="badge gray">معطّل</span>'}</td>
-                    <td class="tiny">
-                      <span class="badge blue">${u.permissions.length} صلاحية</span>
-                      ${isCustom ? '<span class="badge amber tiny" style="margin-right:4px">مخصص</span>' : ''}
-                    </td>
-                    <td class="tiny">${u.last_login_at ? esc(dateTimeAr(u.last_login_at)) : '—'}</td>
-                    <td class="tiny muted">${esc(dateTimeAr(u.created_at))}</td>
-                    <td class="actions">
-                      <button class="btn btn-sm" data-act="edit" data-id="${esc(u.id)}" type="button">${icon.edit({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}تعديل</button>
-                      <button class="btn btn-sm" data-act="perms" data-id="${esc(u.id)}" type="button">${icon.shieldCheck({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}الصلاحيات</button>
-                      <button class="btn btn-sm btn-danger" data-act="del" data-id="${esc(u.id)}" type="button">${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' })}حذف</button>
-                    </td>
-                  </tr>`;
-                }).join(''))}
+              <tbody id="users-rows">
+                ${raw(renderUsersRows(filteredUsers))}
               </tbody>
             </table>
           </div>
@@ -1079,6 +1111,20 @@ export async function render(view) {
     } else {
       // أحداث المستخدمين
       $('#new-u', view)?.addEventListener('click', () => userForm(null));
+
+      const searchInput = $('#users-search', view);
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          userSearchQ = e.target.value;
+          const filtered = filterUsers(userSearchQ);
+          const tbody = $('#users-rows', view);
+          if (tbody) tbody.innerHTML = renderUsersRows(filtered);
+          const countEl = $('#users-count', view);
+          if (countEl) {
+            countEl.textContent = userSearchQ.trim() ? `${filtered.length} مطابقة من أصل ${users.length} مستخدم` : `${users.length} مستخدم`;
+          }
+        });
+      }
 
       delegate(view, 'click', '[data-act]', async (e, btn) => {
         const user = users.find((u) => u.id === btn.dataset.id);

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>التقرير المالي — الشفق</title>
+<style>
+@page{size:{{page_size}};margin:13mm 12mm}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+html,body{margin:0;min-height:100%;font-family:Tahoma,Arial,sans-serif;color:#183047;background:#f8fbff}
+.art{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:.72}
+.sheet{position:relative;z-index:1;min-height:265mm;padding:8mm;background:rgba(255,255,255,.84);border:1px solid #d9e7ef;border-radius:18px;overflow:hidden}
+.topline{height:5px;margin:-8mm -8mm 8mm;background:linear-gradient(90deg,#15a6a1,#2468a2,#9b77c4)}
+header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid #cbdde9}
+.eyebrow{color:#287c91;font-size:10px;font-weight:bold;letter-spacing:.08em}h1{margin:5px 0;font-size:24px;color:#173b59}.subtitle{color:#60778a;line-height:1.8}.meta{color:#567084;line-height:1.9;text-align:left}
+.stats{display:flex;gap:9px;flex-wrap:wrap;margin:16px 0}.stats>div{flex:1;min-width:115px;padding:10px 12px;border:1px solid #cfe3e7;border-radius:10px;background:#f1faf9;color:#406776}.stats b{display:block;margin-top:4px;color:#173b59;font-size:16px}
+table{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid #d3e1e9;border-radius:10px;font-size:10.5px}th{padding:9px 7px;background:#1c5b77;color:#fff;text-align:right}td{padding:7px;border-bottom:1px solid #e1eaf0;text-align:right}tbody tr:nth-child(even){background:#f1f7fa}tfoot{font-weight:bold;background:#e0f1ee}tfoot td{border-bottom:0}
+footer{display:flex;justify-content:space-between;margin-top:16px;padding-top:8px;border-top:1px solid #cfdee7;color:#718696;font-size:9px}
+</style>
+</head>
+<body>
+<svg class="art" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1400" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+<defs><linearGradient id="aurora" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#56c7be" stop-opacity=".22"/><stop offset=".52" stop-color="#648ed0" stop-opacity=".11"/><stop offset="1" stop-color="#bd8ed2" stop-opacity=".17"/></linearGradient><pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse"><path d="M34 0H0V34" fill="none" stroke="#5595aa" stroke-opacity=".14" stroke-width="1"/></pattern></defs>
+<path fill="url(#aurora)" d="M0 0h1000v390C720 500 620 260 390 370 220 450 110 400 0 530z"/><path fill="url(#grid)" d="M0 0h1000v1400H0z"/>
+<circle cx="900" cy="1230" r="300" fill="#74c8c1" fill-opacity=".10"/><circle cx="900" cy="1230" r="230" fill="none" stroke="#408a9b" stroke-opacity=".16" stroke-width="2"/><circle cx="900" cy="1230" r="165" fill="none" stroke="#408a9b" stroke-opacity=".12" stroke-width="2"/>
+</svg>
+<main class="sheet"><div class="topline"></div><header><div><div class="eyebrow">RASEEN · التقارير المالية</div><h1>{{title}}</h1><div class="subtitle">{{subtitle}}</div></div><div class="meta">المنشأة: {{issuer_name}}<br>تاريخ الإصدار: {{generated_at}}</div></header>
+<section class="stats">{{stats_html}}</section><table><thead><tr>{{headers_html}}</tr></thead><tbody>{{rows_html}}</tbody><tfoot>{{footer_html}}</tfoot></table>
+<footer><span>تقرير مالي صادر من نظام رصين</span><span>نسخة إلكترونية معتمدة</span></footer></main>
+</body></html>

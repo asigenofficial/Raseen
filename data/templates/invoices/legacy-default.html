@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<style>
+  @page { size: A4 portrait; margin: 4mm 5mm; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    min-height: 100%;
+    background: #fff;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body {
+    font-family: Tahoma, 'Cairo', Arial, sans-serif;
+    font-size: 10.5px;
+    color: #1e293b;
+    background: #fff;
+    min-height: 282mm;
+    width: 100%;
+    max-width: 200mm;
+    margin: 0 auto;
+    padding: 3mm 5mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .invoice-container {
+    width: 100%;
+    min-height: 276mm;
+    flex: 1;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .top-wrap {
+    flex-shrink: 0;
+  }
+  .bottom-wrap {
+    margin-top: auto !important;
+    padding-top: 6px;
+    width: 100%;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #059669; padding-bottom: 6px; margin-bottom: 8px; }
+  .header-title { font-size: 18px; font-weight: 900; color: #059669; }
+  .header-meta { font-size: 10px; line-height: 1.5; }
+  .section { margin-bottom: 6px; }
+  .section-title { font-weight: 700; font-size: 10.5px; color: #fff; background: #059669; padding: 2px 8px; border-radius: 3px; display: inline-block; margin-bottom: 4px; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; font-size: 10.5px; }
+  .info-row { display: flex; gap: 4px; }
+  .items-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .items-table th, .items-table td { padding: 4px 6px; border: 1px solid #cbd5e1; text-align: right; }
+  .items-table th { background: #059669; color: #fff; }
+  .items-table tbody tr:nth-child(even) { background: #f0fdf4; }
+  .info-label { color: #64748b; font-size: 10px; min-width: 80px; }
+  .info-value { font-weight: 600; }
+  .summary-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 6px;
+    gap: 14px;
+  }
+  .qr-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .qr-wrap {
+    text-align: right;
+    margin: 0;
+  }
+  .qr-wrap svg {
+    width: 90px !important;
+    height: 90px !important;
+    margin: 0 !important;
+  }
+  .totals-col {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .totals-table {
+    font-size: 10.5px;
+    border-collapse: collapse;
+    min-width: 270px;
+  }
+  .totals-table td { padding: 2.5px 6px; }
+  .totals-table tr:last-child td { font-weight: 900; font-size: 12px; color: #059669; border-top: 2px solid #059669; }
+  .money-cell { text-align: left; direction: ltr; white-space: nowrap; }
+  .footer {
+    text-align: center;
+    font-size: 9.5px;
+    color: #64748b;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 4px;
+    padding-bottom: 1mm;
+    width: 100%;
+    line-height: 1.4;
+  }
+  @media print {
+    @page {
+      size: A4 portrait;
+      margin: 4mm 5mm;
+    }
+    html, body {
+      background: #fff !important;
+      height: 100% !important;
+      min-height: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    body {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-height: 282mm !important;
+      height: auto !important;
+      padding: 2mm 4mm !important;
+      margin: 0 auto !important;
+      box-sizing: border-box !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+    }
+    .invoice-container {
+      width: 100% !important;
+      min-height: 278mm !important;
+      height: auto !important;
+      flex: 1 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      box-sizing: border-box !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+    }
+    .top-wrap {
+      flex-shrink: 0 !important;
+    }
+    .bottom-wrap {
+      margin-top: auto !important;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
+    table {
+      page-break-inside: auto;
+    }
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
+  }
+</style>
+<style data-invoice-pagination>@media print{[data-invoice-page]{break-after:page;page-break-after:always}[data-invoice-page]:last-child{break-after:auto;page-break-after:auto}}</style></head>
+<body>
+<div class="invoice-container">
+<div class="top-wrap">
+  <div class="header">
+    <div>
+      <div class="header-title">{{seller_name}}</div>
+      <div style="font-size:11px;color:#64748b;">الرقم الضريبي: {{seller_tax}}</div>
+      <div style="font-size:11px;color:#64748b;">{{seller_address}}</div>
+    </div>
+    <div class="header-meta">
+      <div><strong>فاتورة ضريبية</strong></div>
+      <div>رقم الفاتورة: <strong>{{invoice_number}}</strong></div>
+      <div>تاريخ الإصدار: <strong>{{issue_date}}</strong></div>
+      <div>نوع الفاتورة: <strong>{{payment_method}}</strong></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">بيانات العميل</div>
+    <div class="info-grid">
+      <div class="info-row"><span class="info-label">الاسم:</span><span class="info-value">{{buyer_name}}</span></div>
+      <div class="info-row"><span class="info-label">الرقم الضريبي:</span><span class="info-value">{{buyer_tax}}</span></div>
+      <div class="info-row"><span class="info-label">العنوان:</span><span class="info-value">{{buyer_address}}</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">الأصناف والخدمات</div>
+    <table class="items-table" dir="rtl">
+      <thead><tr><th>#</th><th>اسم الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الضريبة</th><th>الإجمالي</th></tr></thead>
+      <tbody>{{items_rows}}</tbody>
+    </table>
+  </div>
+</div>
+
+<div class="bottom-wrap">
+  <div class="summary-section">
+    <div class="qr-col">
+      <div class="qr-wrap">{{qr_code}}</div>
+    </div>
+    <div class="totals-col">
+      <table class="totals-table">
+        <tr><td>المجموع قبل الضريبة</td><td class="money-cell">{{sar_symbol}} {{subtotal}}</td></tr>
+        <tr><td>الخصم</td><td class="money-cell">{{sar_symbol}} {{discount}}</td></tr>
+        <tr><td>ضريبة القيمة المضافة (15%)</td><td class="money-cell">{{sar_symbol}} {{tax_amount}}</td></tr>
+        <tr><td>الإجمالي المستحق</td><td class="money-cell">{{sar_symbol}} {{grand_total}}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    {{notes}}<br/>
+    هذه الفاتورة صادرة إلكترونياً ولا تحتاج إلى توقيع يدوي
+  </div>
+</div>
+</div>
+</body>
+</html>

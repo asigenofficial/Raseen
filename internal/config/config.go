@@ -1,10 +1,33 @@
 package config
 
 import (
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 )
+
+const defaultAdminPassword = "Admin@12345"
+
+func (c *Config) IsPublicHost() bool {
+	if c.Host == "localhost" || c.Host == "127.0.0.1" || c.Host == "::1" {
+		return false
+	}
+	if ip := net.ParseIP(c.Host); ip != nil && ip.IsLoopback() {
+		return false
+	}
+	return true
+}
+
+// ValidatePublicAdminPassword refuses a publicly bound server with a known
+// bootstrap credential.
+func (c *Config) ValidatePublicAdminPassword() error {
+	if c.IsPublicHost() && c.BootstrapAdmin.Password == defaultAdminPassword {
+		return fmt.Errorf("public server requires ZS_ADMIN_PASS to differ from the default password")
+	}
+	return nil
+}
 
 type Config struct {
 	Root            string
@@ -94,7 +117,7 @@ func Load() *Config {
 	}
 	adminPass := os.Getenv("ZS_ADMIN_PASS")
 	if adminPass == "" {
-		adminPass = "Admin@12345"
+		adminPass = defaultAdminPassword
 	}
 
 	return &Config{

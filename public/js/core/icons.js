@@ -88,6 +88,7 @@ const rawIcons = {
   desktop: (opt) => createSvg('<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>', opt),
   sar: (opt) => sarSvg(opt),
   riyal: (opt) => sarSvg(opt),
+  riyadhTower: (opt) => riyadhTowerSvg(opt),
 
   // --- الثيمات ---
   sun: (opt) => createSvg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>', opt),
@@ -110,4 +111,22 @@ export function sarSvg({ size = 16, cls = '', style = '' } = {}) {
   const s = typeof size === 'number' ? `${size}px` : size;
   const inlineStyle = `vertical-align:-0.14em;display:inline-block;fill:currentColor;flex-shrink:0;${style}`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1124.14 1256.39" width="${s}" height="${s}" class="sar-sym-svg ${cls}" style="${inlineStyle}" aria-label="ريال سعودي" title="ريال سعودي" role="img"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg>`;
+}
+
+/**
+ * أيقونة برج الرياض (المعلم المعماري الأيقوني للعاصمة - برج المملكة)
+ */
+export function riyadhTowerSvg({ size = 36, color = '#0f766e', cls = '', style = '' } = {}) {
+  const h = typeof size === 'number' ? `${size}px` : size;
+  const inlineStyle = `vertical-align:middle;display:inline-block;flex-shrink:0;${style}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 140" height="${h}" class="riyadh-tower-svg ${cls}" fill="none" stroke="${color}" stroke-linecap="round" stroke-linejoin="round" style="${inlineStyle}">
+    <line x1="16" y1="135" x2="84" y2="135" stroke-width="2.5" />
+    <path d="M 26 135 L 30 50 Q 32 15 40 10 L 60 10 Q 68 15 70 50 L 74 135 Z" stroke-width="2.2" fill="${color}" fill-opacity="0.04" />
+    <path d="M 39 10 L 61 10 L 61 15 L 39 15 Z" fill="${color}" stroke="${color}" stroke-width="1.5" />
+    <path d="M 39 15 C 41 42 46 68 50 68 C 54 68 59 42 61 15 Z" fill="none" stroke="${color}" stroke-width="2" />
+    <line x1="50" y1="68" x2="50" y2="135" stroke-width="1.5" stroke-dasharray="3 3" />
+    <line x1="35" y1="85" x2="65" y2="85" stroke-width="1" />
+    <line x1="33" y1="102" x2="67" y2="102" stroke-width="1" />
+    <line x1="30" y1="119" x2="70" y2="119" stroke-width="1" />
+  </svg>`;
 }

@@ -41,14 +41,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+RUN mkdir -p /app/data
 
 # نسخ الـ binary من مرحلة البناء
 COPY --from=builder /app/raseen .
 
 # نسخ الملفات الثابتة (قوالب، JS، CSS، إلخ)
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/data ./data
-COPY --from=builder /app/data ./data_defaults
+COPY --from=builder /app/data/templates ./data_defaults/templates
+COPY --from=builder /app/data/saudi_riyal_symbol.svg ./data_defaults/saudi_riyal_symbol.svg
 
 EXPOSE 8080
 

@@ -17,10 +17,10 @@ var ErrNoBrowser = errors.New("لم يتم العثور على متصفح Chromi
 // FindAvailableBrowser locates Edge, Chrome, or Chromium on the host system (Windows / Linux / Mac)
 func FindAvailableBrowser() string {
 	candidates := []string{
-		`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
-		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
 		`C:\Program Files\Google\Chrome\Application\chrome.exe`,
 		`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
+		`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
+		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
 		`/usr/bin/chromium`,
 		`/usr/bin/chromium-browser`,
 		`/usr/bin/google-chrome-stable`,
@@ -61,77 +61,8 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 	inPath := filepath.Join(tmpDir, fmt.Sprintf("raseen_%d.html", time.Now().UnixNano()))
 	outPath := filepath.Join(tmpDir, fmt.Sprintf("raseen_%d.pdf", time.Now().UnixNano()))
 
-	// التأكد من وجود ترميز utf-8 وحقن الخط العربي Cairo والخطوط البديلة لضمان عدم ظهور المربعات في بيئة الخادم (Linux/Docker)
-	fontInjection := `<meta charset="utf-8">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
-html, body {
-  font-family: 'Cairo', 'Noto Sans Arabic', 'Amiri', 'KacstOne', 'DejaVu Sans', 'Segoe UI', Tahoma, Arial, sans-serif;
-}
-.mono, .monospace, pre, code {
-  font-family: 'Courier New', Courier, monospace !important;
-}
-@page { size: A4 portrait; margin: 0 !important; }
-.invoice-container, .invoice-frame, .page, [data-invoice-page] {
-  width: 210mm !important;
-  max-width: 210mm !important;
-  min-height: 295mm !important;
-  height: 295mm !important;
-  max-height: 295.5mm !important;
-  box-sizing: border-box !important;
-  margin: 0 auto !important;
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: space-between !important;
-  position: relative !important;
-  overflow: hidden !important;
-}
-.top-content-wrap {
-  flex: 0 0 auto !important;
-  display: block !important;
-}
-.bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
-  margin-top: auto !important;
-  flex-shrink: 0 !important;
-  page-break-inside: avoid !important;
-  break-inside: avoid !important;
-}
-@media print {
-  @page { size: A4 portrait; margin: 0 !important; }
-  html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    height: 297mm !important;
-    max-height: 297mm !important;
-    overflow: hidden !important;
-    background: #fff !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  .invoice-container, .invoice-frame, .page, [data-invoice-page] {
-    width: 210mm !important;
-    max-width: 210mm !important;
-    min-height: 295mm !important;
-    height: 295mm !important;
-    max-height: 295.5mm !important;
-    box-sizing: border-box !important;
-    margin: 0 auto !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
-    overflow: hidden !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
-    margin-top: auto !important;
-    flex-shrink: 0 !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-}
-</style>`
+	// Preserve the page size and layout declared by the selected HTML template.
+	fontInjection := `<meta charset="utf-8">`
 
 	if strings.Contains(htmlContent, "<head>") {
 		htmlContent = strings.Replace(htmlContent, "<head>", "<head>\n"+fontInjection, 1)
@@ -152,7 +83,12 @@ html, body {
 
 	args := []string{
 		"--headless=new",
+		"--no-sandbox",
 		"--disable-gpu",
+		"--disable-gpu-sandbox",
+		"--disable-gpu-compositing",
+		"--disable-gpu-shader-disk-cache",
+		"--disable-features=Vulkan,CanvasOopRasterization,UseSkiaRenderer",
 		"--no-pdf-header-footer",
 		"--prefer-css-page-size",
 		"--disable-extensions",
@@ -165,7 +101,7 @@ html, body {
 		inPath,
 	}
 	if runtime.GOOS != "windows" {
-		args = append(args, "--no-sandbox", "--disable-dev-shm-usage")
+		args = append(args, "--disable-dev-shm-usage")
 	}
 
 	cmd := exec.CommandContext(ctx, browser, args...)

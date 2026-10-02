@@ -292,6 +292,79 @@ export const VOUCHER_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة
 
 راجع قبل الإخراج: الوسوم مكتوبة بدقة، الوثيقة مقروءة بالأبيض والأسود، النص الطويل لا يخرج عن الصفحة، ولا توجد بيانات مختلقة أو عناصر فارغة بارزة.`;
 
+export const REPORT_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة للتقارير المالية العربية. أنشئ قالب تقرير مالي قابلاً لإعادة الاستخدام في نظام محاسبي، ولا تفترض بيانات أو مؤشرات غير موجودة في الوسوم.
+
+المخرج: ملف HTML واحد كامل يبدأ بـ <!DOCTYPE html> وينتهي بـ </html>، مع CSS داخلي فقط. أعد الكود وحده دون Markdown أو شرح خارجي.
+
+الوسوم التي يملؤها النظام:
+- {{title}} عنوان التقرير.
+- {{subtitle}} وصف التقرير أو الفترة والمنشأة.
+- {{issuer_name}} اسم المنشأة.
+- {{generated_at}} تاريخ ووقت إنشاء التقرير.
+- {{page_size}} مقاس الطباعة المناسب، مثل A4 portrait أو A4 landscape.
+- {{stats_html}} بطاقات المؤشرات المالية الجاهزة، وقد تكون فارغة.
+- {{headers_html}} خلايا رؤوس الجدول الجاهزة داخل <thead>.
+- {{rows_html}} صفوف البيانات الجاهزة داخل <tbody>.
+- {{footer_html}} صف الإجمالي الجاهز، وقد يكون فارغاً.
+
+قواعد الربط المهمة:
+1. اكتب كل وسم كما هو تماماً، ولا تنشئ أسماء وسوم بديلة أو بيانات ثابتة تجريبية.
+2. ضع {{stats_html}} و{{headers_html}} و{{rows_html}} و{{footer_html}} في مواضع HTML المناسبة مباشرة؛ هذه الوسوم تحتوي HTML مولداً من بيانات التقرير.
+3. لا تضع الوسوم داخل علامات اقتباس أو خصائص HTML أو JavaScript. استخدم {{title}} و{{subtitle}} و{{issuer_name}} و{{generated_at}} كنصوص في الصفحة.
+4. اجعل منطقة المؤشرات مرنة إذا كانت {{stats_html}} فارغة، وأخفِ صف التذييل إذا كانت {{footer_html}} فارغة باستخدام :empty أو CSS مناسب.
+
+التصميم والطباعة:
+- صفحة عربية lang="ar" dir="rtl"، خط محلي مثل Cairo أو Tahoma، وتسلسل بصري واضح لعنوان التقرير والمنشأة والفترة.
+- استخدم خلفية زخرفية SVG مدمجة داخل الملف (inline SVG) بدرجات خفيفة في أطراف الصفحة، بحيث لا تحجب الجدول أو تستهلك الحبر بكثافة.
+- أضف بطاقات للمؤشرات حول {{stats_html}} وجدولاً مالياً واضحاً حول الرؤوس والصفوف، مع خطوط وألوان مناسبة للطباعة بالأبيض والأسود.
+- اجعل حجم الصفحة ديناميكياً باستخدام @page { size: {{page_size}}; margin: 10mm; }، وأخفِ عناصر الشاشة غير اللازمة في @media print.
+- كرر رأس الجدول عند امتداد التقرير إلى صفحات متعددة، واسمح للصفوف بالانتقال دون قصها. لا تستخدم ارتفاعاً ثابتاً أو overflow:hidden على حاوية التقرير.
+- أضف تذييلاً بسيطاً لاسم المنشأة ووقت الإنشاء باستخدام الوسوم المتاحة، دون اختراع أرقام صفحات أو أرقام مالية.
+- لا تذكر اسم رصين أو Raseen أو أي برنامج في العنوان أو المحتوى أو التذييل. لا تستخدم مصادر أو خطوطاً خارجية أو JavaScript أو إيموجي.
+
+أعد قالباً عاماً يصلح لتقارير المبيعات والضريبة والتحصيل والربحية والأرصدة؛ لا تفترض نوعاً واحداً للأعمدة، لأن النظام يمرر رؤوساً وصفوفاً مختلفة لكل تقرير.`;
+
+export const STATEMENT_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة لكشف حساب عميل عربي. أنشئ كشفاً مالياً واضحاً ودقيقاً؛ لا تخترع حركات أو أرصدة أو بيانات عميل.
+
+المخرج: ملف HTML واحد كامل يبدأ بـ <!DOCTYPE html> وينتهي بـ </html>، مع CSS داخلي فقط. أعد الكود وحده دون Markdown أو شرح خارجي.
+
+الوسوم التي يملؤها النظام:
+- {{issuer_name}} اسم المنشأة.
+- {{issuer_name_en}} اسم المنشأة بالإنجليزية.
+- {{issuer_tax}} الرقم الضريبي.
+- {{issuer_cr}} السجل التجاري.
+- {{issuer_address}} العنوان الوطني بالعربية.
+- {{issuer_address_en}} العنوان بالإنجليزية.
+- {{issuer_phone}} رقم الهاتف.
+- {{issuer_email}} البريد الإلكتروني.
+- {{issuer_city_country}} المدينة والدولة.
+- {{logo_html}} عنصر HTML جاهز لشعار المنشأة؛ أدرجه كما هو دون تعديل أو إنشاء شعار بديل.
+- {{client_name}} اسم العميل.
+- {{client_code}} رقم حساب العميل أو رمزه.
+- {{period_from}} بداية الفترة.
+- {{period_to}} نهاية الفترة.
+- {{opening_balance}} رصيد بداية الفترة.
+- {{total_debit}} إجمالي الحركة المدينة.
+- {{total_credit}} إجمالي الحركة الدائنة.
+- {{closing_balance}} الرصيد الختامي.
+- {{rows_html}} صفوف الحركات الجاهزة داخل جدول كشف الحساب.
+
+ترتيب أعمدة كل صف داخل {{rows_html}} ثابت كما يلي: رقم الحركة التسلسلي، رقم المستند أو القيد، التاريخ، نوع الحركة، البيان، حركة مدين، حركة دائن، الرصيد مدين، الرصيد دائن. يتضمن الوسم صف الرصيد السابق جاهزاً عند توفره؛ لا تضف صفاً افتتاحياً أو أرقاماً بنفسك. يحتوي الوسم على عناصر <tr> و<td> كاملة؛ ضعه مباشرة داخل <tbody> دون ترميزه أو إحاطته بعلامات اقتباس.
+
+التصميم والطباعة:
+- اجعل الصفحة lang="ar" dir="rtl" وباتجاه طباعة A4 عمودي.
+- صمّم ترويسة المنشأة لتطابق صورة المرجع: إطار رفيع أزرق يحيط بالترويسة، ثلاثة أعمدة واضحة؛ اسم المنشأة الإنجليزية وعنوانها والرقم الضريبي والسجل التجاري يساراً، {{logo_html}} في الوسط وتحته «كشف حساب عميل» ثم «ACCOUNT STATEMENT»، واسم المنشأة العربية والعنوان والرقم الضريبي والسجل التجاري يميناً. أضف شريط تواصل سفلي داخل الإطار للهاتف والبريد والمدينة، مع خط ذهبي رفيع أسفله. حافظ على هذا الترتيب في الشاشات والطباعة.
+- ضع فترة الكشف أسفل الترويسة، ثم شريطاً محاطاً بإطار لرقم الحساب واسم الحساب والعملة.
+- أظهر شريط بيانات الحساب والفترة، واجعل صف الرصيد السابق المضمّن في {{rows_html}} أول صف في جدول الحركات. لا تضف ملخصات أو أرصدة مكررة.
+- اجعل الجدول مطابقاً لترتيب الأعمدة: #، رقم المستند/قيد، التاريخ، النوع، البيان، مجموعة «الحركة» وبداخلها مدين ودائن، ومجموعة «الرصيد» وبداخلها مدين ودائن.
+- استخدم ألواناً قريبة من المرجع: نص أزرق داكن، رأس جدول سماوي فاتح، عنوان الكشف أحمر هادئ، ولمسات ذهبية رفيعة. لا تضع زخرفة خلف البيانات أو الأرقام.
+- استخدم جدولاً واضحاً بأرقام سهلة القراءة، وكرّر رأس الجدول في كل صفحة مطبوعة. اسمح للصفوف بالاستمرار إلى صفحات إضافية وتجنب قص النص الطويل أو استخدام ارتفاع ثابت وoverflow:hidden.
+- استخدم @page { size: A4 portrait; margin: 8mm; } وأزل ظلال وأزرار الشاشة عند الطباعة.
+- اعرض الأرصدة والإجماليات كما وصلت من الوسوم. لا تغيّر إشارات المبالغ ولا تعكس معنى المدين والدائن، ولا تضع رصيداً أو حركة افتراضية.
+- لا تذكر اسم رصين أو Raseen أو أي نظام في العنوان أو المحتوى أو التذييل. لا تستخدم وسوماً غير المذكورة، ولا JavaScript أو مصادر خارجية أو إيموجي.
+
+اجعل القالب مناسباً لكشوف الحساب الطويلة، واحتفظ بمساحة توقيع أو اعتماد اختيارية فقط إذا لم تزاحم الحركات، دون إنشاء بيانات توقيع غير موجودة.`;
+
 export const UNIFIED_TAGS_LIST = [
   { cat: 'الشعار والباركود', tag: '{{logo}}', desc: 'شعار المنشأة المعتمد تلقائياً' },
   { cat: 'الشعار والباركود', tag: '{{qr_code}}', desc: 'رمز الاستجابة السريع المعتمد (ZATCA QR)' },
@@ -316,11 +389,41 @@ export const UNIFIED_TAGS_LIST = [
   { cat: 'السندات', tag: '{{amount}}', desc: 'مبلغ السند رقماً' },
   { cat: 'السندات', tag: '{{received_from}}', desc: 'استلمنا من المكرم' },
   { cat: 'السندات', tag: '{{paid_for}}', desc: 'وذلك مقابل / البيان' },
+  { cat: 'التقارير المالية', tag: '{{title}}', desc: 'عنوان التقرير' },
+  { cat: 'التقارير المالية', tag: '{{subtitle}}', desc: 'الفترة ووصف التقرير' },
+  { cat: 'التقارير المالية', tag: '{{issuer_name}}', desc: 'اسم المنشأة' },
+  { cat: 'التقارير المالية', tag: '{{generated_at}}', desc: 'وقت إنشاء التقرير' },
+  { cat: 'التقارير المالية', tag: '{{page_size}}', desc: 'حجم الصفحة واتجاهها للطباعة' },
+  { cat: 'التقارير المالية', tag: '{{stats_html}}', desc: 'بطاقات ملخص التقرير بصيغة HTML' },
+  { cat: 'التقارير المالية', tag: '{{headers_html}}', desc: 'رؤوس أعمدة الجدول بصيغة HTML' },
+  { cat: 'التقارير المالية', tag: '{{rows_html}}', desc: 'صفوف بيانات التقرير بصيغة HTML' },
+  { cat: 'التقارير المالية', tag: '{{footer_html}}', desc: 'صف إجمالي التقرير بصيغة HTML' },
+  { cat: 'كشف الحساب', tag: '{{client_name}}', desc: 'اسم العميل' },
+  { cat: 'كشف الحساب', tag: '{{client_code}}', desc: 'رقم حساب العميل' },
+  { cat: 'كشف الحساب', tag: '{{issuer_name_en}}', desc: 'اسم المنشأة بالإنجليزية' },
+  { cat: 'كشف الحساب', tag: '{{issuer_tax}}', desc: 'الرقم الضريبي للمنشأة' },
+  { cat: 'كشف الحساب', tag: '{{issuer_cr}}', desc: 'السجل التجاري للمنشأة' },
+  { cat: 'كشف الحساب', tag: '{{issuer_address}}', desc: 'عنوان المنشأة بالعربية' },
+  { cat: 'كشف الحساب', tag: '{{issuer_address_en}}', desc: 'عنوان المنشأة بالإنجليزية' },
+  { cat: 'كشف الحساب', tag: '{{issuer_phone}}', desc: 'هاتف المنشأة' },
+  { cat: 'كشف الحساب', tag: '{{issuer_email}}', desc: 'بريد المنشأة' },
+  { cat: 'كشف الحساب', tag: '{{issuer_city_country}}', desc: 'المدينة والدولة' },
+  { cat: 'كشف الحساب', tag: '{{logo_html}}', desc: 'عنصر شعار المنشأة HTML جاهز' },
+  { cat: 'كشف الحساب', tag: '{{currency_name}}', desc: 'اسم العملة' },
+  { cat: 'كشف الحساب', tag: '{{period_from}}', desc: 'بداية فترة الكشف' },
+  { cat: 'كشف الحساب', tag: '{{period_to}}', desc: 'نهاية فترة الكشف' },
+  { cat: 'كشف الحساب', tag: '{{opening_balance}}', desc: 'رصيد بداية الفترة' },
+  { cat: 'كشف الحساب', tag: '{{total_debit}}', desc: 'إجمالي الحركة المدينة' },
+  { cat: 'كشف الحساب', tag: '{{total_credit}}', desc: 'إجمالي الحركة الدائنة' },
+  { cat: 'كشف الحساب', tag: '{{closing_balance}}', desc: 'الرصيد الختامي' },
+  { cat: 'كشف الحساب', tag: '{{rows_html}}', desc: 'صفوف الحركات المالية بصيغة HTML' },
 ];
 
 const ICON_SPARKLE = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>`;
 const ICON_INVOICE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`;
 const ICON_VOUCHER = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>`;
+const ICON_REPORT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-5 5"/><path d="M17 9h2v2"/></svg>`;
+const ICON_STATEMENT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>`;
 const ICON_TAGS = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>`;
 const ICON_COPY = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
 const ICON_CHECK = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg>`;
@@ -328,10 +431,11 @@ const ICON_CHECK = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" 
 /**
  * فتح نافذة برومبت الذكاء الاصطناعي التفاعلية
  * @param {Object} options
- * @param {string} options.defaultType 'invoices' | 'documents'
+ * @param {string} options.defaultType 'invoices' | 'documents' | 'reports' | 'statements'
  */
 export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
-  let activeTab = defaultType === 'documents' || defaultType === 'vouchers' ? 'vouchers' : 'invoices';
+  const allowedTabs = ['invoices', 'vouchers', 'reports', 'statements'];
+  let activeTab = defaultType === 'documents' ? 'vouchers' : (allowedTabs.includes(defaultType) ? defaultType : 'invoices');
 
   const existing = document.getElementById('modal-ai-prompt-studio');
   if (existing) existing.remove();
@@ -362,14 +466,20 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
         <button type="button" id="btn-close-ai-modal" style="background: #1e293b; border: 1px solid #334155; color: #94a3b8; width: 32px; height: 32px; border-radius: 6px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;" title="إغلاق">&times;</button>
       </div>
 
-      <!-- Tab Switcher (فواتير / سندات / وسوم) -->
+      <!-- Tab Switcher (أنواع القوالب / الوسوم) -->
       <div style="background: #0e172a; padding: 8px 18px; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
-        <div style="display: flex; gap: 6px;">
+        <div style="display: flex; gap: 6px; flex-wrap:wrap;">
           <button type="button" class="ai-tab-btn" data-tab="invoices" style="padding: 7px 16px; border-radius: 6px; font-size: 12.5px; font-weight: 700; cursor: pointer; border: 1px solid ${activeTab === 'invoices' ? '#6366f1' : '#334155'}; background: ${activeTab === 'invoices' ? '#4f46e5' : '#1e293b'}; color: #fff; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;">
             ${ICON_INVOICE} برومبت قوالب الفواتير (Invoices)
           </button>
           <button type="button" class="ai-tab-btn" data-tab="vouchers" style="padding: 7px 16px; border-radius: 6px; font-size: 12.5px; font-weight: 700; cursor: pointer; border: 1px solid ${activeTab === 'vouchers' ? '#0ea5e9' : '#334155'}; background: ${activeTab === 'vouchers' ? '#0284c7' : '#1e293b'}; color: #fff; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;">
             ${ICON_VOUCHER} برومبت قوالب السندات والمستندات (Vouchers)
+          </button>
+          <button type="button" class="ai-tab-btn" data-tab="reports" style="padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; border: 1px solid ${activeTab === 'reports' ? '#10b981' : '#334155'}; background: ${activeTab === 'reports' ? '#059669' : '#1e293b'}; color: #fff; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;">
+            ${ICON_REPORT} تقرير مالي
+          </button>
+          <button type="button" class="ai-tab-btn" data-tab="statements" style="padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; border: 1px solid ${activeTab === 'statements' ? '#f59e0b' : '#334155'}; background: ${activeTab === 'statements' ? '#d97706' : '#1e293b'}; color: #fff; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;">
+            ${ICON_STATEMENT} كشف حساب
           </button>
           <button type="button" class="ai-tab-btn" data-tab="tags" style="padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; border: 1px solid #334155; background: #1e293b; color: #94a3b8; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;">
             ${ICON_TAGS} دليل المتغيرات الموحدة
@@ -390,7 +500,7 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
             <label id="lbl-active-prompt-title" style="font-weight: 800; font-size: 13px; color: #38bdf8;">
               نص البرومبت المخصص لقوالب الفواتير (جاهز للنسخ):
             </label>
-            <span style="font-size: 11px; color: #64748b;">مضبوط بقواعد ZATCA واللغة العربية وعناصر A4</span>
+            <span style="font-size: 11px; color: #64748b;">وسوم موحدة وتصميم عربي جاهز للطباعة</span>
           </div>
 
           <textarea id="txt-ai-prompt" readonly style="width: 100%; height: 280px; background: #090e1a; border: 1px solid #1e293b; border-radius: 8px; color: #e2e8f0; padding: 12px 14px; font-size: 12px; font-family: Consolas, monospace, sans-serif; line-height: 1.6; resize: vertical; outline: none;"></textarea>
@@ -463,6 +573,12 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
       } else if (tab === 'vouchers') {
         btn.style.background = isSel ? '#0284c7' : '#1e293b';
         btn.style.borderColor = isSel ? '#0ea5e9' : '#334155';
+      } else if (tab === 'reports') {
+        btn.style.background = isSel ? '#059669' : '#1e293b';
+        btn.style.borderColor = isSel ? '#10b981' : '#334155';
+      } else if (tab === 'statements') {
+        btn.style.background = isSel ? '#d97706' : '#1e293b';
+        btn.style.borderColor = isSel ? '#f59e0b' : '#334155';
       } else {
         btn.style.background = isSel ? '#7c3aed' : '#1e293b';
         btn.style.borderColor = isSel ? '#a855f7' : '#334155';
@@ -482,6 +598,18 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
       lblTitle.textContent = 'نص البرومبت المخصص لقوالب السندات والمستندات المالية (جاهز للنسخ):';
       lblTitle.style.color = '#0284c7';
       txtPrompt.value = VOUCHER_AI_PROMPT;
+    } else if (tab === 'reports') {
+      promptView.style.display = 'flex';
+      tagsView.style.display = 'none';
+      lblTitle.textContent = 'برومبت إنشاء قالب تقرير مالي HTML (جاهز للنسخ):';
+      lblTitle.style.color = '#10b981';
+      txtPrompt.value = REPORT_AI_PROMPT;
+    } else if (tab === 'statements') {
+      promptView.style.display = 'flex';
+      tagsView.style.display = 'none';
+      lblTitle.textContent = 'برومبت إنشاء قالب كشف حساب عميل HTML (جاهز للنسخ):';
+      lblTitle.style.color = '#f59e0b';
+      txtPrompt.value = STATEMENT_AI_PROMPT;
     } else if (tab === 'tags') {
       promptView.style.display = 'none';
       tagsView.style.display = 'flex';
@@ -494,7 +622,13 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
   // Copy Prompt Button
   const btnCopy = overlay.querySelector('#btn-copy-active-prompt');
   btnCopy.onclick = async () => {
-    const textToCopy = activeTab === 'vouchers' ? VOUCHER_AI_PROMPT : INVOICE_AI_PROMPT;
+    const promptByTab = {
+      invoices: INVOICE_AI_PROMPT,
+      vouchers: VOUCHER_AI_PROMPT,
+      reports: REPORT_AI_PROMPT,
+      statements: STATEMENT_AI_PROMPT,
+    };
+    const textToCopy = promptByTab[activeTab] || INVOICE_AI_PROMPT;
     await copyText(textToCopy);
     btnCopy.innerHTML = `${ICON_CHECK} تم نسخ البرومبت بنجاح!`;
     btnCopy.style.background = '#059669';

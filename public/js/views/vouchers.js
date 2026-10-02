@@ -5,15 +5,15 @@ import { api, qs } from '../core/api.js';
 import { store, loadClients, can, currencyLabel, getFilterState, setFilterState, clearFilterState } from '../core/store.js';
 
 const syncNotify = (entity, action, payload) => (typeof store.syncNotify === 'function' ? store.syncNotify(entity, action, payload) : null);
-const onSync = (cb) => (typeof store.onSync === 'function' ? store.onSync(cb) : () => {});
+const onSync = (cb) => (typeof store.onSync === 'function' ? store.onSync(cb) : () => { });
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, today, monthStart, toastOk, toastErr,
   $, $$, delegate, debounce, modal, formValues, confirmDialog, exportCsv, exportExcel, printDoc, toNum,
-  icon, downloadPdfFromHtml, amount, sarSvg,
+  icon, downloadPdfFromHtml, downloadPdfFromUrl, amount, sarSvg, shareDocument, renderStoredVoucher,
+  loadStoredTemplate, fillStoredTemplate,
 } from '../core/util.js';
 import * as _coreUtil from '../core/util.js';
 const fillDynamicTemplateHtml = _coreUtil.fillDynamicTemplateHtml || ((html) => html);
-import { voucherPrint, VOUCHER_TEMPLATES } from '../print/templates.js';
 
 const PAGE = 50;
 
@@ -140,10 +140,10 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
 
   // ── تحديث معاينة الدفعات ────────────────────────────────────────────────
   const updateInstallPreview = () => {
-    const count  = parseInt($('#w-inst-count', m.body)?.value, 10) || 0;
-    const start  = $('#w-inst-start', m.body)?.value;
-    const freq   = parseInt($('#w-inst-freq', m.body)?.value, 10) || 30;
-    const total  = toNum($('#w-inst-total', m.body)?.value, 0);
+    const count = parseInt($('#w-inst-count', m.body)?.value, 10) || 0;
+    const start = $('#w-inst-start', m.body)?.value;
+    const freq = parseInt($('#w-inst-freq', m.body)?.value, 10) || 30;
+    const total = toNum($('#w-inst-total', m.body)?.value, 0);
     const preview = $('#w-inst-preview', m.body);
     if (!preview) return;
     if (!start || !total || count < 2) { preview.innerHTML = ''; return; }
@@ -225,7 +225,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
       const nx = new Date(); nx.setUTCMonth(nx.getUTCMonth() + 1); nx.setUTCDate(1);
       $('#w-inst-start', m.body).value = nx.toISOString().substring(0, 10);
     }
-    ['#w-inst-count','#w-inst-start','#w-inst-freq','#w-inst-total'].forEach((sel) => {
+    ['#w-inst-count', '#w-inst-start', '#w-inst-freq', '#w-inst-total'].forEach((sel) => {
       $('#' + sel.slice(1), m.body)?.addEventListener('input', updateInstallPreview);
     });
     updateInstallPreview();
@@ -285,8 +285,8 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
         <div>إجمالي المتبقي على الفواتير: <b class="num">${amount(totalOpen)}</b></div>
         <div class="spacer"></div>
         ${batchMode
-          ? `<div>المحدد: <b class="num">${amount(totalAlloc)}</b> — <span class="muted">${alloc.size} فاتورة</span></div>`
-          : `<div>الموزّع: <b class="num">${amount(totalAlloc)}</b>${enteredAmount ? ` / غير موزّع: <b class="num" style="color:${Math.abs(enteredAmount - totalAlloc) < 0.005 ? 'var(--success)' : 'var(--warn)'}">${amount(Math.round((enteredAmount - totalAlloc) * 100) / 100)}</b>` : ''}</div>`}
+        ? `<div>المحدد: <b class="num">${amount(totalAlloc)}</b> — <span class="muted">${alloc.size} فاتورة</span></div>`
+        : `<div>الموزّع: <b class="num">${amount(totalAlloc)}</b>${enteredAmount ? ` / غير موزّع: <b class="num" style="color:${Math.abs(enteredAmount - totalAlloc) < 0.005 ? 'var(--success)' : 'var(--warn)'}">${amount(Math.round((enteredAmount - totalAlloc) * 100) / 100)}</b>` : ''}</div>`}
       </div>`;
 
     $$('[data-pick]', box).forEach((cb) => cb.addEventListener('change', () => {
@@ -512,14 +512,14 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
     const issuerSel = $('#w-issuer', m.body).value;
     if (!clientSel || !issuerSel) return toastErr('اختر الشركة والعميل');
 
-    const count   = parseInt($('#w-inst-count', m.body).value, 10);
-    const start   = $('#w-inst-start', m.body).value;
-    const freq    = parseInt($('#w-inst-freq', m.body).value, 10) || 30;
-    const total   = toNum($('#w-inst-total', m.body).value, 0);
+    const count = parseInt($('#w-inst-count', m.body).value, 10);
+    const start = $('#w-inst-start', m.body).value;
+    const freq = parseInt($('#w-inst-freq', m.body).value, 10) || 30;
+    const total = toNum($('#w-inst-total', m.body).value, 0);
     const payType = $('#w-inst-pay', m.body).value || 'CASH';
-    const refNo   = $('#w-inst-ref', m.body).value || '';
+    const refNo = $('#w-inst-ref', m.body).value || '';
 
-    if (!start)               return toastErr('حدد تاريخ أول دفعة');
+    if (!start) return toastErr('حدد تاريخ أول دفعة');
     if (!total || total <= 0) return toastErr('أدخل المبلغ الإجمالي');
     if (count < 2 || count > 24) return toastErr('عدد الدفعات يجب أن يكون بين 2 و 24');
 
@@ -533,7 +533,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
 
     const ok = await confirmDialog({
       title: `إنشاء ${count} سند قبض دفعي`,
-      message: `الإجمالي: ${money(total)} ${cur}\nأول دفعة: ${installments[0].date}\nآخر دفعة: ${installments[count-1].date}\nطريقة الدفع: ${payType}\n\nهل تريد المتابعة؟`,
+      message: `الإجمالي: ${money(total)} ${cur}\nأول دفعة: ${installments[0].date}\nآخر دفعة: ${installments[count - 1].date}\nطريقة الدفع: ${payType}\n\nهل تريد المتابعة؟`,
       confirmText: 'نعم، إنشاء الدفعات',
     });
     if (!ok) return;
@@ -546,7 +546,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
     progressBox.style.display = 'block';
 
     const created = [];
-    const errors  = [];
+    const errors = [];
 
     // FIFO: توزيع الدفعات على الفواتير المختارة من الأقدم للأحدث
     const selInvs = open.filter((i) => alloc.has(i.id)).sort((a, b) => a.issue_date.localeCompare(b.issue_date));
@@ -558,7 +558,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
         <div class="alert alert-info tiny" style="margin-top:10px">
           <b>جاري الإنشاء…</b> دفعة ${i + 1} / ${count} — تاريخ: ${inst.date}
           <div style="height:6px;background:#e2e8f0;border-radius:3px;margin-top:6px">
-            <div style="height:100%;background:var(--brand);border-radius:3px;width:${Math.round(((i+1)/count)*100)}%;transition:width .3s"></div>
+            <div style="height:100%;background:var(--brand);border-radius:3px;width:${Math.round(((i + 1) / count) * 100)}%;transition:width .3s"></div>
           </div>
         </div>`;
 
@@ -652,14 +652,14 @@ export async function showVoucher(id, onChange) {
       try {
         const r = await fetch(`/api/invoices/templates/${encodeURIComponent(targetTpl.id)}/render-html`);
         if (r.ok) rawHtml = await r.text();
-      } catch {}
+      } catch { }
     }
 
     if (rawHtml) {
       return fillDynamicTemplateHtml(rawHtml, { issuer, client, voucher });
     }
 
-    return voucherPrint({ voucher, issuer, client, style });
+    return renderStoredVoucher(voucher, issuer, client, style);
   }
 
   let currentHtml = await renderDoc(currentStyle);
@@ -673,8 +673,8 @@ export async function showVoucher(id, onChange) {
           <span style="font-weight:700;font-size:13px;color:var(--brand)">قالب السند:</span>
           <select id="v-style-select" style="min-width:280px;font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid var(--line);background:var(--field-bg, var(--card));color:var(--text);font-weight:700">
             ${raw(availableTemplates.length
-              ? availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === currentStyle ? 'selected' : ''}>${esc(t.name_ar || t.name)} (${esc(t.badge || 'سند HTML')})</option>`).join('')
-              : '<option value="default">قالب سند قبض (سند HTML)</option>')}
+      ? availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === currentStyle ? 'selected' : ''}>${esc(t.name_ar || t.name)} (${esc(t.badge || 'سند HTML')})</option>`).join('')
+      : '<option value="default">قالب سند قبض (سند HTML)</option>')}
           </select>
           <button class="btn btn-sm" id="btn-adopt-voucher-tpl" type="button" style="font-size:12px;padding:5px 10px;background:var(--brand-light);border:1px solid var(--brand);color:var(--brand);font-weight:700" title="اعتماد هذا القالب كقالب افتراضي لجميع سندات المنشأة">
             اعتماد كقالب افتراضي للمنشأة
@@ -703,15 +703,30 @@ export async function showVoucher(id, onChange) {
     footer: html`
       <div class="flex gap" style="justify-content:space-between;width:100%">
         <div class="flex gap-xs">
+          <span class="badge gray" data-pdf-status title="حالة نسخة PDF المحفوظة">PDF قيد التجهيز</span>
           <button class="btn btn-primary" data-print type="button">${icon.printer({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}طباعة السند</button>
           <button class="btn" data-pdf type="button">${icon.pdf({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}تحميل PDF</button>
-          ${voucher.status !== 'CANCELLED' && can('vouchers.edit') ? html`<button class="btn" data-edit type="button" style="background:var(--brand-light);border-color:var(--brand);color:var(--brand)">${icon.pencil ? icon.pencil({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }) : ''}تعديل</button>` : ''}
+          <button class="btn" data-share type="button" style="background:#10b981;border-color:#10b981;color:#fff">${icon.share({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}مشاركة</button>
+          ${voucher.status !== 'CANCELLED' && can('vouchers.edit') ? raw(`<button class="btn" data-edit type="button" style="background:var(--brand-light);border-color:var(--brand);color:var(--brand)">${icon.pencil ? icon.pencil({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' }) : ''}تعديل</button>`) : ''}
           <button class="btn btn-danger" data-delete type="button">${icon.trash({ size: 15, style: 'vertical-align:text-bottom;margin-left:4px' })}حذف نهائي</button>
         </div>
         <button class="btn" data-close type="button">إغلاق</button>
       </div>
     `,
   });
+
+  const refreshVoucherPdfStatus = async (attempt = 0) => {
+    const badge = m.el.querySelector('[data-pdf-status]');
+    if (!badge) return;
+    try {
+      const pdf = await api.get(`/api/vouchers/${encodeURIComponent(voucher.id)}/pdf-status`, { silent: true });
+      badge.textContent = pdf.status === 'READY' ? 'PDF محفوظ' : pdf.status === 'FAILED' ? 'تعذر تجهيز PDF' : 'PDF قيد التجهيز';
+      badge.className = `badge ${pdf.status === 'READY' ? 'green' : pdf.status === 'FAILED' ? 'red' : 'gray'}`;
+      if (pdf.error) badge.title = pdf.error;
+      if (pdf.status === 'PENDING' && attempt < 5) setTimeout(() => refreshVoucherPdfStatus(attempt + 1), 3000);
+    } catch {}
+  };
+  refreshVoucherPdfStatus();
 
   let vpZoom = 80;
   const updateVpZoom = (z) => {
@@ -771,12 +786,28 @@ export async function showVoucher(id, onChange) {
     pdfBtn.addEventListener('click', async (e) => {
       e.target.disabled = true;
       try {
+        const vNum = voucher.voucher_number || 'سند';
+        const pdfFileName = `سند_قبض_${vNum}.pdf`;
+        await downloadPdfFromUrl(`/api/vouchers/${encodeURIComponent(voucher.id)}/pdf`, pdfFileName);
+      } catch (err) {
+        toastErr(err.message || 'تعذر تحميل ملف PDF');
+      } finally {
+        e.target.disabled = false;
+      }
+    });
+  }
+
+  const shareBtn = m.el.querySelector('[data-share]');
+  if (shareBtn) {
+    shareBtn.addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      try {
         const clientNameClean = (voucher.client_name || client?.name || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
         const vNum = voucher.voucher_number || 'سند';
         const pdfFileName = clientNameClean ? `سند_قبض_${vNum}_${clientNameClean}.pdf` : `سند_قبض_${vNum}.pdf`;
-        await downloadPdfFromHtml(currentHtml, pdfFileName);
+        await shareVoucherPdfFile({ voucher, issuer, client, docHtml: currentHtml, pdfFileName });
       } catch (err) {
-        toastErr(err.message || 'تعذر تحميل ملف PDF');
+        toastErr(err.message || 'تعذر مشاركة السند');
       } finally {
         e.target.disabled = false;
       }
@@ -826,10 +857,10 @@ export async function showVoucher(id, onChange) {
 
 export function openEditVoucherModal(voucher, onDone) {
   const paymentOptions = [
-    { v: 'CASH',     l: 'نقداً' },
+    { v: 'CASH', l: 'نقداً' },
     { v: 'TRANSFER', l: 'تحويل بنكي' },
-    { v: 'CHEQUE',   l: 'شيك' },
-    { v: 'CARD',     l: 'شبكة' },
+    { v: 'CHEQUE', l: 'شيك' },
+    { v: 'CARD', l: 'شبكة' },
   ];
 
   const em = modal({
@@ -865,9 +896,9 @@ export function openEditVoucherModal(voucher, onDone) {
   });
 
   em.el.querySelector('#ev-save').addEventListener('click', async (e) => {
-    const newDate  = em.el.querySelector('#ev-date').value;
-    const newPay   = em.el.querySelector('#ev-pay').value;
-    const newRef   = em.el.querySelector('#ev-ref').value.trim();
+    const newDate = em.el.querySelector('#ev-date').value;
+    const newPay = em.el.querySelector('#ev-pay').value;
+    const newRef = em.el.querySelector('#ev-ref').value.trim();
     const newNotes = em.el.querySelector('#ev-notes').value.trim();
 
     if (!newDate) return toastErr('حدد تاريخ السند');
@@ -890,9 +921,8 @@ export function openEditVoucherModal(voucher, onDone) {
   });
 }
 
-export async function downloadVoucherDirectPdf(voucherId) {
-  toastOk('جارٍ تجهيز ملف PDF للسند...');
-  const voucher = await api.get(`/api/vouchers/${voucherId}`);
+async function getVoucherRenderedData(voucherId) {
+  const voucher = typeof voucherId === 'object' ? voucherId : await api.get(`/api/vouchers/${voucherId}`);
   const [issuer, client, templatesRes] = await Promise.all([
     api.get(`/api/issuers/${voucher.issuer_id}`).catch(() => store.issuers.find((i) => i.id === voucher.issuer_id) || store.activeIssuer || {}),
     api.get(`/api/clients/${voucher.client_id}`).catch(() => store.clients.find((c) => c.id === voucher.client_id) || { name: voucher.client_name }),
@@ -911,17 +941,36 @@ export async function downloadVoucherDirectPdf(voucherId) {
     try {
       const r = await fetch(`/api/invoices/templates/${encodeURIComponent(targetTpl.id)}/render-html`);
       if (r.ok) rawHtml = await r.text();
-    } catch {}
+    } catch { }
   }
 
   const docHtml = rawHtml
     ? fillDynamicTemplateHtml(rawHtml, { issuer, client, voucher })
-    : voucherPrint({ voucher, issuer, client, style: currentStyle });
+    : await renderStoredVoucher(voucher, issuer, client, currentStyle);
 
   const clientNameClean = (voucher.client_name || client?.name || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
   const vNum = voucher.voucher_number || 'سند';
   const pdfFileName = clientNameClean ? `سند_قبض_${vNum}_${clientNameClean}.pdf` : `سند_قبض_${vNum}.pdf`;
-  await downloadPdfFromHtml(docHtml, pdfFileName);
+  return { voucher, issuer, client, docHtml, pdfFileName };
+}
+
+export async function downloadVoucherDirectPdf(voucherId) {
+  toastOk('جارٍ تجهيز ملف PDF للسند...');
+  const { voucher } = await getVoucherRenderedData(voucherId);
+  await downloadPdfFromUrl(`/api/vouchers/${encodeURIComponent(voucher.id)}/pdf`, `سند_قبض_${voucher.voucher_number || 'سند'}.pdf`);
+}
+
+export async function shareVoucherPdfFile({ voucher, issuer, client, docHtml, pdfFileName }) {
+  return shareDocument({
+    title: `سند قبض ${voucher.voucher_number || ''}`,
+    text: `سند قبض رقم ${voucher.voucher_number || ''} بمبلغ ${voucher.total_amount || ''} ر.س من ${issuer?.name_ar || voucher.issuer_name || ''}`,
+    url: `${location.origin}${location.pathname}#/vouchers?q=${encodeURIComponent(voucher.voucher_number || '')}`,
+  });
+}
+
+export async function shareVoucherDirectPdf(voucherId) {
+  const data = await getVoucherRenderedData(voucherId);
+  await shareVoucherPdfFile(data);
 }
 
 export async function render(view, ctx) {
@@ -1092,19 +1141,21 @@ export async function render(view, ctx) {
                   ${v.status === 'CANCELLED' ? '<span class="badge red">ملغى</span>' : '<span class="badge green">نشط</span>'}
                 </td>
                 <td class="actions">
-                  <div class="row-actions-group" style="display:flex;gap:4px;align-items:center;justify-content:center;">
-                    <button class="btn btn-sm btn-ghost" data-act="show" data-id="${esc(v.id)}" type="button" title="عرض السند" style="padding:.28rem .5rem">
+                  <div class="row-actions-group">
+                    <button class="btn btn-sm btn-ghost" data-act="show" data-id="${esc(v.id)}" type="button" title="عرض تفاصيل السند" style="padding:.28rem .55rem">
                       ${icon.eye({ size: 14, style: 'vertical-align:middle' })}<span>عرض</span>
                     </button>
-                    ${v.status !== 'CANCELLED' && can('vouchers.edit') ? `
-                      <button class="btn btn-sm btn-ghost" data-act="edit" data-id="${esc(v.id)}" type="button" title="تعديل السند" style="padding:.28rem .5rem;color:var(--brand);font-weight:600">
-                        ${icon.pencil ? icon.pencil({ size: 13, style: 'vertical-align:middle' }) : ''}<span>تعديل</span>
-                      </button>
-                    ` : ''}
-                    <button class="btn btn-sm btn-icon btn-ghost" data-act="pdf" data-id="${esc(v.id)}" type="button" title="تحميل ملف PDF مباشرة" style="color:var(--info, #0284c7);padding:.28rem .45rem">
+                    <button class="btn btn-sm btn-icon btn-primary" data-act="pdf" data-id="${esc(v.id)}" type="button" title="تحميل ملف PDF">
                       ${icon.pdf({ size: 14, style: 'vertical-align:middle' })}
                     </button>
-                    ${can('vouchers.delete') ? `<button class="btn btn-sm btn-icon btn-danger" data-act="delete" data-id="${esc(v.id)}" data-num="${esc(v.voucher_number)}" type="button" title="حذف السند نهائياً" style="padding:.28rem .45rem">
+                    <button class="btn btn-sm btn-icon" data-act="share" data-id="${esc(v.id)}" type="button" style="background:#10b981;border-color:#10b981;color:#fff" title="مشاركة سند القبض">
+                      ${icon.share({ size: 13, style: 'vertical-align:middle' })}
+                    </button>
+                    ${v.status !== 'CANCELLED' && can('vouchers.edit') ? `
+                    <button class="btn btn-sm btn-icon" data-act="edit" data-id="${esc(v.id)}" type="button" title="تعديل السند">
+                      ${icon.edit({ size: 13, style: 'vertical-align:middle' })}
+                    </button>` : ''}
+                    ${can('vouchers.delete') ? `<button class="btn btn-sm btn-icon btn-danger" data-act="delete" data-id="${esc(v.id)}" data-num="${esc(v.voucher_number)}" type="button" title="حذف السند">
                       ${icon.trash({ size: 13, style: 'vertical-align:middle' })}
                     </button>` : ''}
                   </div>
@@ -1216,6 +1267,12 @@ export async function render(view, ctx) {
       }
     });
 
+    delegate(view, 'click', '[data-act="share"]', async (e, btn) => {
+      const id = btn.dataset.id;
+      const voucher = state.data.items.find((item) => item.id === id);
+      if (voucher) await shareVoucherPdfFile({ voucher, issuer: { name_ar: voucher.issuer_name } });
+    });
+
     delegate(view, 'click', '[data-act="delete"]', async (e, btn) => {
       const id = btn.dataset.id;
       const num = btn.dataset.num || '';
@@ -1237,7 +1294,7 @@ export async function render(view, ctx) {
 
     const headers = ['رقم السند', 'التاريخ', 'العميل', 'الشركة', 'طريقة السداد', 'المرجع', 'المبلغ', 'الموزّع', 'غير موزّع', 'الحالة'];
     const rows = () => state.data.items.map((v) => [v.voucher_number, v.voucher_date, v.client_name, v.issuer_name,
-      v.payment_label, v.reference_no, v.total_amount, v.allocated_total, v.unallocated, v.status_label]);
+    v.payment_label, v.reference_no, v.total_amount, v.allocated_total, v.unallocated, v.status_label]);
     $('#exp-csv', view).addEventListener('click', () => exportCsv('سندات-القبض', headers, rows()));
     $('#exp-xls', view).addEventListener('click', () => exportExcel('سندات-القبض', 'سندات القبض', headers, rows()));
 
@@ -1293,68 +1350,32 @@ export async function render(view, ctx) {
       });
     });
 
-    const getVouchersDocHtml = () => {
-      const now = new Date();
-      return `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>تقرير سندات القبض</title>
-        <style>
-          @page { size: A4 landscape; margin: 10mm; }
-          * { box-sizing: border-box; }
-          body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; color: #0f172a; background: #fff; }
-          .header { border-bottom: 2.5px solid #0d9488; padding-bottom: 4mm; margin-bottom: 4mm; display: flex; justify-content: space-between; align-items: center; }
-          h1 { margin: 0 0 1mm; font-size: 15pt; color: #0f766e; }
-          .sub { color: #64748b; font-size: 8.5pt; }
-          table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-top: 2mm; }
-          th { background: #0d9488; color: #fff; border: 1px solid #0f766e; padding: 2.2mm 1.5mm; font-weight: 700; text-align: right; }
-          th.e { text-align: left; }
-          td { border: 1px solid #cbd5e1; padding: 1.8mm 1.5mm; color: #1e293b; }
-          tr:nth-child(even) td { background: #f8fafc; }
-          tfoot td { background: #f1f5f9; font-weight: 700; border-top: 2px solid #0d9488; }
-          .e { text-align: left; font-variant-numeric: tabular-nums; direction: ltr; }
-          .footer { margin-top: 5mm; display: flex; justify-content: space-between; font-size: 8pt; color: #64748b; }
-        </style></head><body>
-        <div class="header">
-          <div>
-            <h1>تقرير قائمة سندات القبض</h1>
-            <div class="sub">إجمالي السندات: ${num(state.data.total_count)} سند — بمبلغ إجمالي: ${money(state.data.totals.total_amount)} ر.س</div>
-          </div>
-          <div style="font-size:8pt;color:#64748b;text-align:left;direction:ltr">
-            <div><b>Raseen System</b></div>
-            <div>${now.toLocaleDateString('ar-SA')}</div>
-          </div>
-        </div>
-        <table>
-          <thead><tr>${headers.map((h, i) => `<th class="${i >= 6 && i <= 8 ? 'e' : ''}">${esc(h)}</th>`).join('')}</tr></thead>
-          <tbody>${state.data.items.map((v) => `<tr>
-            <td class="e"><b>${esc(v.voucher_number)}</b></td>
-            <td>${esc(v.voucher_date)}</td>
-            <td>${esc(v.client_name)}</td>
-            <td>${esc(v.issuer_name)}</td>
-            <td>${esc(v.payment_label)}</td>
-            <td>${esc(v.reference_no || '—')}</td>
-            <td class="e">${money(v.total_amount)}</td>
-            <td class="e">${money(v.allocated_total)}</td>
-            <td class="e">${money(v.unallocated)}</td>
-            <td>${esc(v.status_label)}</td>
-          </tr>`).join('')}</tbody>
-          <tfoot><tr>
-            <td colspan="6">الإجمالي</td>
-            <td class="e">${money(state.data.totals.total_amount)}</td>
-            <td class="e">${money(state.data.totals.allocated_total || 0)}</td>
-            <td class="e">${money(state.data.totals.unallocated_total || 0)}</td>
-            <td></td>
-          </tr></tfoot>
-        </table>
-        <div class="footer">
-          <span>نظام رصين للفوترة والمحاسبة — تقرير رسمي A4 PDF</span>
-          <span style="direction:ltr">Page 1</span>
-        </div>
-        </body></html>`;
+    const getVouchersDocHtml = async () => {
+      const issuer = store.issuers.find((item) => item.id === state.issuer_id) || store.activeIssuer || {};
+      let settings = issuer.print_settings || {};
+      if (typeof settings === 'string') { try { settings = JSON.parse(settings); } catch { settings = {}; } }
+      const template = await loadStoredTemplate('reports', settings.report_template_style || '');
+      const rows = state.data.items.map((v) => [
+        v.voucher_number, v.voucher_date, v.client_name, v.issuer_name, v.payment_label, v.reference_no || '—',
+        money(v.total_amount), money(v.allocated_total), money(v.unallocated), v.status_label,
+      ]);
+      const totals = state.data.totals || {};
+      const footer = ['الإجمالي', '', '', '', '', '', money(totals.total_amount), money(totals.allocated_total || 0), money(totals.unallocated_total || 0), ''];
+      const cells = (values, tag) => values.map((value) => `<${tag}>${esc(String(value ?? ''))}</${tag}>`).join('');
+      return fillStoredTemplate(template, {
+        title: 'تقرير قائمة سندات القبض',
+        subtitle: `إجمالي السندات: ${num(state.data.total_count)} — الإجمالي: ${money(totals.total_amount)} ر.س`,
+        issuer_name: issuer.name_ar || '', generated_at: new Date().toLocaleString('ar-SA'), page_size: 'A4 landscape',
+        stats_html: '', headers_html: cells(headers, 'th'),
+        rows_html: rows.length ? rows.map((row) => `<tr>${cells(row, 'td')}</tr>`).join('') : `<tr><td colspan="${headers.length}">لا توجد بيانات مسجلة</td></tr>`,
+        footer_html: `<tr>${cells(footer, 'td')}</tr>`,
+      }, ['stats_html', 'headers_html', 'rows_html', 'footer_html']);
     };
 
     $('#btn-pdf-vouchers', view).addEventListener('click', async (e) => {
       e.target.disabled = true;
       try {
-        const docHtml = getVouchersDocHtml();
+        const docHtml = await getVouchersDocHtml();
         await downloadPdfFromHtml(docHtml, 'قائمة-سندات-القبض.pdf');
       } catch (err) {
         toastErr(err.message || 'تعذر تحميل ملف PDF');
@@ -1374,3 +1395,4 @@ export async function render(view, ctx) {
   draw();
   return () => { unsubSync(); };
 }
+

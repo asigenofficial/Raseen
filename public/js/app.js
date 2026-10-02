@@ -39,21 +39,21 @@ const NAV = [
 
 const VIEWS = {
   dashboard: () => import('./views/dashboard.js'),
-  invoices: () => import('./views/invoices.js?v=' + Date.now()),
-  invoice: () => import('./views/invoice-editor.js?v=' + Date.now()),
-  'invoice-view': () => import('./views/invoice-view.js?v=' + Date.now()),
+  invoices: () => import('./views/invoices.js'),
+  invoice: () => import('./views/invoice-editor.js'),
+  'invoice-view': () => import('./views/invoice-view.js'),
   bulk: () => import('./views/bulk.js'),
-  vouchers: () => import('./views/vouchers.js?v=' + Date.now()),
-  'vouchers-install': () => import('./views/vouchers.js?v=' + Date.now()).then((m) => ({
+  vouchers: () => import('./views/vouchers.js'),
+  'vouchers-install': () => import('./views/vouchers.js').then((m) => ({
     render: (view, ctx) => m.render(view, { ...(ctx || {}), query: { ...((ctx && ctx.query) || {}), mode: 'install' } }),
   })),
   statement: () => import('./views/statement.js'),
-  issuers: () => import('./views/issuers.js?v=' + Date.now()),
-  templates: () => import('./views/templates.js?v=' + Date.now()),
-  'template-builder': () => import('./views/template-builder.js?v=' + Date.now()),
-  'doc-reports': () => import('./views/templates.js?v=' + Date.now()),
-  clients: () => import('./views/clients.js?v=' + Date.now()),
-  items: () => import('./views/items.js?v=' + Date.now()),
+  issuers: () => import('./views/issuers.js'),
+  templates: () => import('./views/templates.js'),
+  'template-builder': () => import('./views/template-builder.js'),
+  'doc-reports': () => import('./views/templates.js'),
+  clients: () => import('./views/clients.js'),
+  items: () => import('./views/items.js'),
   reports: () => import('./views/reports.js'),
   audit: () => import('./views/audit.js'),
   users: () => import('./views/users.js'),
@@ -82,7 +82,7 @@ function renderLogin(message) {
           <button class="btn btn-primary btn-block" type="submit">تسجيل الدخول</button>
         </div>
         <p class="tiny muted text-center mt mb0">
-          كل البيانات محفوظة محلياً على هذا الجهاز — لا يتم إرسال أي معلومة لأي خدمة خارجية.
+          تُحفظ بياناتك في مساحة التخزين المهيأة لهذا النظام.
         </p>
       </form>
     </div>`;
@@ -160,11 +160,13 @@ function renderShell() {
             <select id="issuer-select">${raw(issuerOptions())}</select>
           </div>
           <div class="spacer"></div>
-          <button class="sync-badge online" id="sync-badge" type="button" aria-label="حالة المزامنة والاتصال" title="المزامنة اللحظية نشطة">
-            <span class="sync-dot"></span>
-            <span class="sync-label">متزامن</span>
-            <span class="sync-count" id="sync-count">1</span>
-          </button>
+          ${raw(store.user?.role === 'ADMIN' ? `
+            <button class="sync-badge online" id="sync-badge" type="button" aria-label="حالة المزامنة والاتصال" title="المزامنة اللحظية نشطة">
+              <span class="sync-dot"></span>
+              <span class="sync-label">متزامن</span>
+              <span class="sync-count" id="sync-count">1</span>
+            </button>
+          ` : '')}
           <button class="theme-toggle" id="theme-toggle" type="button" aria-label="تبديل الثيم" title="تبديل الثيم الداكن / الفاتح">
             ${raw(theme.current() === 'dark' ? icon.moon({ size: 17 }) : icon.sun({ size: 17 }))}
           </button>
@@ -234,8 +236,10 @@ function renderShell() {
   });
   $('#user-chip').addEventListener('click', openUserMenu);
 
-  // شارة المزامنة اللحظية
-  $('#sync-badge')?.addEventListener('click', openSyncStatusModal);
+  // أدوات مراقبة المزامنة ظاهرة للمدير فقط، بينما يستمر محرك المزامنة لكل المستخدمين.
+  if (store.user?.role === 'ADMIN') {
+    $('#sync-badge')?.addEventListener('click', openSyncStatusModal);
+  }
 
   // زر تبديل الثيم
   $('#theme-toggle').addEventListener('click', () => {

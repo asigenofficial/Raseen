@@ -23,25 +23,160 @@ import (
 	"raseen/internal/zatca"
 )
 
-const SarSymbolSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1124.14 1256.39" width="0.92em" height="0.92em" class="sar-sym-svg" style="vertical-align:-0.14em;display:inline-block;fill:currentColor;margin:0 2px;" aria-label="ريال سعودي" title="ريال سعودي" role="img"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg>`
-
 var (
 	moneySarRegex1 = regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)\s*(?:ر\.س|ر\.\s*س|﷼|SAR)`)
 	moneySarRegex2 = regexp.MustCompile(`(?:ر\.س|ر\.\s*س|﷼|SAR)\s*([0-9]+(?:\.[0-9]+)?)`)
 )
 
 type TemplateService struct {
-	db      *db.DB
-	dataDir string
+	db           *db.DB
+	dataDir      string
+	itemRowHTML  string
+	itemCellHTML string
+	sarSymbolSVG string
 }
 
 func NewTemplateService(d *db.DB, dataDir string) *TemplateService {
 	tplDir := filepath.Join(dataDir, "templates")
 	_ = os.MkdirAll(filepath.Join(tplDir, "invoices"), 0755)
 	_ = os.MkdirAll(filepath.Join(tplDir, "documents"), 0755)
-	s := &TemplateService{db: d, dataDir: dataDir}
+	_ = os.MkdirAll(filepath.Join(tplDir, "reports"), 0755)
+	_ = os.MkdirAll(filepath.Join(tplDir, "statements"), 0755)
+	partialsDir := filepath.Join(tplDir, "partials")
+	_ = os.MkdirAll(partialsDir, 0755)
+	itemRow, _ := os.ReadFile(filepath.Join(partialsDir, "invoice-item-row.html"))
+	itemCell, _ := os.ReadFile(filepath.Join(partialsDir, "invoice-item-cell.html"))
+	sarSymbol, _ := os.ReadFile(filepath.Join(dataDir, "saudi_riyal_symbol.svg"))
+	s := &TemplateService{db: d, dataDir: dataDir, itemRowHTML: string(itemRow), itemCellHTML: string(itemCell), sarSymbolSVG: string(sarSymbol)}
 	_ = s.SyncDiskTemplates()
 	return s
+}
+
+var templateUnsafeFilenameChars = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`)
+var templateLatinLetters = regexp.MustCompile(`[A-Za-z]`)
+
+func templateFileName(dir, name, id, existingPath string) string {
+	base := strings.TrimSpace(name)
+	base = templateUnsafeFilenameChars.ReplaceAllString(base, "-")
+	base = strings.Trim(base, " .")
+	if base == "" {
+		base = "قالب"
+	}
+	fileName := base + ".html"
+	if target := filepath.Join(dir, fileName); filepath.Clean(existingPath) != filepath.Clean(target) {
+		if _, err := os.Stat(target); err == nil {
+			suffix := strings.Trim(id, "-")
+			if len(suffix) > 8 {
+				suffix = suffix[:8]
+			}
+			fileName = base + "-" + suffix + ".html"
+		}
+	}
+	return fileName
+}
+
+func isGenericTemplateTitle(title, category string) bool {
+	title = strings.ToLower(cleanTemplateDisplayName(title))
+	switch category {
+	case "invoices":
+		return title == "فاتورة ضريبية" || title == "فاتورة مبيعات" || title == "قالب فواتير مخصص" || templateLatinLetters.MatchString(title)
+	case "documents", "vouchers":
+		return title == "سند قبض" || title == "سند قبض مالي" || title == "قالب سند مالي مخصص" || templateLatinLetters.MatchString(title)
+	default:
+		return (category == "reports" || category == "statements") && templateLatinLetters.MatchString(title)
+	}
+}
+
+func cleanTemplateDisplayName(title string) string {
+	title = regexp.MustCompile(`\{\{[^}]*\}\}`).ReplaceAllString(title, "")
+	title = regexp.MustCompile(`\s+`).ReplaceAllString(title, " ")
+	return strings.TrimSpace(strings.Trim(title, " —–-"))
+}
+
+func containsArabicText(value string) bool {
+	for _, r := range value {
+		if r >= 0x0600 && r <= 0x06ff || r >= 0x0750 && r <= 0x077f || r >= 0x08a0 && r <= 0x08ff {
+			return true
+		}
+	}
+	return false
+}
+
+func localizedPresetName(baseName, category string) string {
+	labels := map[string]string{
+		"01-royal-navy":           "فاتورة ضريبية — الكحلي الملكي",
+		"02-emerald-corners":      "فاتورة ضريبية — الزمرد والزوايا",
+		"03-burgundy-classic":     "فاتورة ضريبية — العنابي الكلاسيكي",
+		"04-charcoal-ledger":      "فاتورة ضريبية — الدفتر الفحمي",
+		"05-sand-arch":            "فاتورة ضريبية — القوس الرملي",
+		"06-teal-current":         "فاتورة ضريبية — التيار الفيروزي",
+		"07-violet-facets":        "فاتورة ضريبية — الأوجه البنفسجية",
+		"08-copper-lines":         "فاتورة ضريبية — الخطوط النحاسية",
+		"09-cobalt-precision":     "فاتورة ضريبية — الأزرق الدقيق",
+		"10-olive-manuscript":     "فاتورة ضريبية — المخطوطة الزيتونية",
+		"11-slate-editorial":      "فاتورة ضريبية — الأردوازي التحريري",
+		"12-petrol-ribbon":        "فاتورة ضريبية — الشريط البترولي",
+		"13-plum-contour":         "فاتورة ضريبية — المحيط البرقوقي",
+		"14-indigo-origami":       "فاتورة ضريبية — الأوريغامي النيلي",
+		"15-terracotta-horizon":   "فاتورة ضريبية — أفق الطين المحروق",
+		"16-forest-estate":        "فاتورة ضريبية — الغابة العقارية",
+		"17-steel-blueprint":      "فاتورة ضريبية — المخطط الفولاذي",
+		"18-midnight-gold":        "فاتورة ضريبية — الذهب الليلي",
+		"19-azure-flow":           "فاتورة ضريبية — التدفق السماوي",
+		"20-graphite-diamond":     "فاتورة ضريبية — الماس الجرافيتي",
+		"21-ivory-atelier":        "فاتورة ضريبية — المرسم العاجي",
+		"22-jade-pavilion":        "فاتورة ضريبية — الجناح اليشمي",
+		"23-obsidian-fold":        "فاتورة ضريبية — الطيات البركانية",
+		"24-lapis-orbit":          "فاتورة ضريبية — المدار اللازوردي",
+		"25-aubergine-prism":      "فاتورة ضريبية — المنشور الباذنجاني",
+		"26-pearl-architecture":   "فاتورة ضريبية — العمارة اللؤلؤية",
+		"thermal":                 "فاتورة حرارية",
+		"legacy-default":          "فاتورة ضريبية افتراضية",
+		"قالب_سند_قبض_رسمي_معتمد": "سند قبض رسمي معتمد",
+		"قالب_سند_قبض_أزرق":       "سند قبض أزرق",
+		"قالب_سند_قبض":            "سند قبض مالي",
+	}
+	if category == "documents" || category == "vouchers" {
+		if baseName == "legacy-default" {
+			return "سند قبض افتراضي"
+		}
+		if labels[baseName] != "" {
+			return labels[baseName]
+		}
+		if containsArabicText(baseName) {
+			return strings.ReplaceAll(baseName, "_", " ")
+		}
+		return "قالب سند مالي مخصص"
+	}
+	if containsArabicText(baseName) {
+		return strings.ReplaceAll(baseName, "_", " ")
+	}
+	if category != "invoices" {
+		if category == "reports" {
+			return "قالب تقرير مالي مخصص"
+		}
+		if category == "statements" {
+			return "قالب كشف حساب مخصص"
+		}
+		return ""
+	}
+	if labels[baseName] != "" {
+		return labels[baseName]
+	}
+	return "قالب فاتورة ضريبية مخصص"
+}
+
+func setTemplateHTMLTitle(content, title string) string {
+	escapedTitle := html.EscapeString(strings.TrimSpace(title))
+	titleRegex := regexp.MustCompile(`(?is)<title(?:\s[^>]*)?>.*?</title\s*>`)
+	if titleRegex.MatchString(content) {
+		return titleRegex.ReplaceAllStringFunc(content, func(string) string { return "<title>" + escapedTitle + "</title>" })
+	}
+	headRegex := regexp.MustCompile(`(?i)<head(?:\s[^>]*)?>`)
+	if match := headRegex.FindString(content); match != "" {
+		return headRegex.ReplaceAllString(content, match+"\n<title>"+escapedTitle+"</title>")
+	}
+	return "<title>" + escapedTitle + "</title>\n" + content
 }
 
 type TemplateCatalogItem struct {
@@ -62,11 +197,9 @@ type TemplateCatalogItem struct {
 	StyleMeta     map[string]interface{} `json:"style_meta,omitempty"`
 }
 
-var defaultTemplates = []TemplateCatalogItem{}
-
 // ─── Disk Sync ────────────────────────────────────────────────────────────────
 
-// SyncDiskTemplates scans data/templates/{invoices,documents} for *.html files
+// SyncDiskTemplates scans the four data/templates categories for HTML files
 // and registers them in the excel_templates catalog table without overwriting
 // custom template names or IDs.
 func (s *TemplateService) SyncDiskTemplates() error {
@@ -80,6 +213,8 @@ func (s *TemplateService) SyncDiskTemplates() error {
 	}{
 		{filepath.Join(s.dataDir, "templates", "invoices"), "invoices", "فاتورة HTML"},
 		{filepath.Join(s.dataDir, "templates", "documents"), "documents", "سند HTML"},
+		{filepath.Join(s.dataDir, "templates", "reports"), "reports", "تقرير مالي HTML"},
+		{filepath.Join(s.dataDir, "templates", "statements"), "statements", "كشف حساب HTML"},
 	}
 
 	type existingTpl struct {
@@ -92,6 +227,7 @@ func (s *TemplateService) SyncDiskTemplates() error {
 	}
 	existingByPath := make(map[string]existingTpl)
 	existingByID := make(map[string]existingTpl)
+	existingByCategoryAndName := make(map[string]existingTpl)
 
 	rows, err := s.db.Query(`SELECT id, name_ar, badge, category, file_path, color_hex FROM excel_templates`)
 	if err == nil {
@@ -100,12 +236,21 @@ func (s *TemplateService) SyncDiskTemplates() error {
 			if errScan := rows.Scan(&t.id, &t.nameAr, &t.badge, &t.category, &t.filePath, &t.colorHex); errScan == nil {
 				existingByPath[filepath.Clean(t.filePath)] = t
 				existingByID[t.id] = t
+				matchCategory := t.category
+				if matchCategory == "vouchers" {
+					matchCategory = "documents"
+				}
+				key := matchCategory + "\x00" + strings.ToLower(filepath.Base(t.filePath))
+				if _, exists := existingByCategoryAndName[key]; !exists {
+					existingByCategoryAndName[key] = t
+				}
 			}
 		}
 		rows.Close()
 	}
 
 	seenPathsOnDisk := make(map[string]bool)
+	seenTemplateIDs := make(map[string]bool)
 
 	isUuidStr := func(s string) bool {
 		s = strings.TrimSpace(s)
@@ -140,13 +285,18 @@ func (s *TemplateService) SyncDiskTemplates() error {
 			titleFromHtml := ""
 			titleRegex := regexp.MustCompile(`(?i)<title>(.*?)</title>`)
 			if m := titleRegex.FindStringSubmatch(htmlStr); len(m) > 1 {
-				titleFromHtml = strings.TrimSpace(m[1])
+				titleFromHtml = cleanTemplateDisplayName(m[1])
 			}
 
-			// Check if we have an existing record for this path or baseName
+			// Match by current path first, then stable ID, then category and filename.
+			// Filename matching preserves template IDs when a package is restored on a
+			// different computer where the saved absolute data directory has changed.
 			ex, hasExisting := existingByPath[fullPath]
 			if !hasExisting {
 				ex, hasExisting = existingByID[baseName]
+			}
+			if !hasExisting {
+				ex, hasExisting = existingByCategoryAndName[d.category+"\x00"+strings.ToLower(entry.Name())]
 			}
 
 			// Check if this template has a saved builder config in meta table
@@ -210,6 +360,11 @@ func (s *TemplateService) SyncDiskTemplates() error {
 				if hasExisting && !isUuidStr(ex.nameAr) && strings.TrimSpace(ex.nameAr) != "" {
 					id = ex.id
 					nameAr = ex.nameAr
+					if isGenericTemplateTitle(nameAr, ex.category) {
+						if localized := localizedPresetName(baseName, ex.category); localized != "" {
+							nameAr = localized
+						}
+					}
 					category = ex.category
 					badge = ex.badge
 					colorHex = ex.colorHex
@@ -217,6 +372,11 @@ func (s *TemplateService) SyncDiskTemplates() error {
 					h := sha256.Sum256([]byte(d.category + "/" + entry.Name()))
 					id = "tpl_" + hex.EncodeToString(h[:4])
 					nameAr = titleFromHtml
+					if isGenericTemplateTitle(titleFromHtml, d.category) {
+						if localized := localizedPresetName(baseName, d.category); localized != "" {
+							nameAr = localized
+						}
+					}
 					badge = d.badge
 					colorHex = "#059669"
 					category = d.category
@@ -230,7 +390,7 @@ func (s *TemplateService) SyncDiskTemplates() error {
 				}
 			}
 
-			_, _ = s.db.Exec(`
+			if _, err := s.db.Exec(`
 				INSERT INTO excel_templates (id, name_ar, name_en, description, badge, category, file_path, color_hex, headers_json, is_active, updated_at)
 				VALUES (?, ?, '', 'قالب معتمد في النظام', ?, ?, ?, ?, ?, 1, ?)
 				ON CONFLICT(id) DO UPDATE SET
@@ -241,13 +401,15 @@ func (s *TemplateService) SyncDiskTemplates() error {
 					color_hex = excluded.color_hex,
 					headers_json = excluded.headers_json,
 					updated_at = excluded.updated_at
-			`, id, nameAr, badge, category, fullPath, colorHex, string(headersJson), db.NowIso())
+			`, id, nameAr, badge, category, fullPath, colorHex, string(headersJson), db.NowIso()); err == nil {
+				seenTemplateIDs[id] = true
+			}
 		}
 	}
 
 	// Clean up templates whose files were removed from disk (only for disk templates)
 	for p, t := range existingByPath {
-		if strings.Contains(p, "templates") && !seenPathsOnDisk[p] {
+		if strings.Contains(p, "templates") && !seenPathsOnDisk[p] && !seenTemplateIDs[t.id] {
 			_, _ = s.db.Exec("DELETE FROM excel_templates WHERE id = ?", t.id)
 		}
 	}
@@ -292,6 +454,12 @@ func (s *TemplateService) List(typeFilter, categoryFilter string) ([]TemplateCat
 		if err := rows.Scan(&tpl.ID, &tpl.NameAr, &tpl.NameEn, &tpl.Description, &tpl.Badge, &tpl.Category, &filePath, &tpl.ColorHex, &headersJson, &isAct); err != nil {
 			continue
 		}
+		if strings.TrimSpace(tpl.NameAr) == "" {
+			tpl.NameAr = localizedPresetName(strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath)), tpl.Category)
+			if tpl.NameAr == "" {
+				tpl.NameAr = "قالب مخصص"
+			}
+		}
 		tpl.IsActive = isAct == 1
 		tpl.IsDefault = tpl.ID == "standard"
 		tpl.FilePath = filePath
@@ -318,12 +486,18 @@ func (s *TemplateService) List(typeFilter, categoryFilter string) ([]TemplateCat
 			if (typeFilter == "vouchers" || typeFilter == "documents") && tpl.Category != "vouchers" && tpl.Category != "documents" {
 				continue
 			}
+			if (typeFilter == "reports" || typeFilter == "statements") && tpl.Category != typeFilter {
+				continue
+			}
 		}
 		if categoryFilter != "" {
 			if categoryFilter == "invoices" && tpl.Category != "invoices" {
 				continue
 			}
 			if (categoryFilter == "documents" || categoryFilter == "vouchers") && tpl.Category != "vouchers" && tpl.Category != "documents" {
+				continue
+			}
+			if (categoryFilter == "reports" || categoryFilter == "statements") && tpl.Category != categoryFilter {
 				continue
 			}
 		}
@@ -408,6 +582,7 @@ type UploadTemplateInput struct {
 }
 
 func (s *TemplateService) Upload(input UploadTemplateInput) (*TemplateCatalogItem, error) {
+	input.NameAr = strings.TrimSpace(input.NameAr)
 	if input.NameAr == "" {
 		return nil, errors.New("اسم القالب مطلوب")
 	}
@@ -423,11 +598,18 @@ func (s *TemplateService) Upload(input UploadTemplateInput) (*TemplateCatalogIte
 	if input.Category == "vouchers" || input.Category == "documents" {
 		subDir = "documents"
 		input.Category = "documents"
+	} else if input.Category == "reports" || input.Category == "statements" {
+		if !strings.HasSuffix(strings.ToLower(input.Filename), ".html") && !strings.HasSuffix(strings.ToLower(input.Filename), ".htm") {
+			return nil, errors.New("قوالب التقارير وكشوف الحساب يجب أن تكون ملفات HTML")
+		}
+		subDir = input.Category
+	} else {
+		input.Category = "invoices"
 	}
 	targetDir := filepath.Join(s.dataDir, "templates", subDir)
 	_ = os.MkdirAll(targetDir, 0755)
 
-	fileName := fmt.Sprintf("tpl_%s.html", id)
+	fileName := templateFileName(targetDir, input.NameAr, id, "")
 	filePath := filepath.Join(targetDir, fileName)
 
 	// Decode and save
@@ -443,6 +625,7 @@ func (s *TemplateService) Upload(input UploadTemplateInput) (*TemplateCatalogIte
 			return nil, errors.New("بيانات الملف غير صالحة أو فارغة")
 		}
 	}
+	fileData = []byte(setTemplateHTMLTitle(string(fileData), input.NameAr))
 	if err := os.WriteFile(filePath, fileData, 0644); err != nil {
 		return nil, fmt.Errorf("تعذر حفظ الملف: %w", err)
 	}
@@ -460,6 +643,7 @@ func (s *TemplateService) Upload(input UploadTemplateInput) (*TemplateCatalogIte
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
 	`, id, input.NameAr, input.NameEn, input.Description, badge, input.Category, filePath, input.ColorHex, string(headersJson), db.NowIso())
 	if err != nil {
+		_ = os.Remove(filePath)
 		return nil, err
 	}
 
@@ -521,7 +705,7 @@ func (s *TemplateService) GetFilePath(id string) (string, error) {
 	}
 
 	// 2. Direct search on disk by filename in templates/invoices and templates/documents
-	for _, sub := range []string{"invoices", "documents"} {
+	for _, sub := range []string{"invoices", "documents", "reports", "statements"} {
 		// exact match
 		exact := filepath.Join(s.dataDir, "templates", sub, cleanId+".html")
 		if _, errStat := os.Stat(exact); errStat == nil {
@@ -575,31 +759,56 @@ func (s *TemplateService) RenderTemplateHTML(id string) (string, error) {
 	return string(data), nil
 }
 
+func (s *TemplateService) FirstTemplateID(category string) (string, error) {
+	var id string
+	err := s.db.QueryRow(`SELECT id FROM excel_templates WHERE category=? AND is_active=1
+		ORDER BY CASE WHEN file_path LIKE '%legacy-default.html' THEN 0 ELSE 1 END,name_ar,id LIMIT 1`, category).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("لا يوجد قالب HTML محفوظ للفئة %s: %w", category, err)
+	}
+	return id, nil
+}
+
 // RenderInvoiceHTML loads the HTML template and substitutes invoice data tags.
 func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (string, error) {
+	if s.itemRowHTML == "" || s.itemCellHTML == "" {
+		return "", errors.New("قوالب صفوف الأصناف غير موجودة في مجلد data/templates/partials")
+	}
+	fromSavedSettings := false
 	if style == "" || style == "default" {
 		if inv.IssuerSnapshot != nil && inv.IssuerSnapshot.PrintSettings != "" {
 			var pCfg map[string]any
 			if err := json.Unmarshal([]byte(inv.IssuerSnapshot.PrintSettings), &pCfg); err == nil {
 				if t, ok := pCfg["template_style"].(string); ok && t != "" {
 					style = t
+					fromSavedSettings = true
 				}
 			}
 		}
 	}
-	if style == "" {
-		style = "standard"
+	if style == "" || style == "standard" || style == "default" {
+		var err error
+		style, err = s.FirstTemplateID("invoices")
+		if err != nil {
+			return "", err
+		}
 	}
 
 	filePath, err := s.GetFilePath(style)
+	if err != nil && fromSavedSettings {
+		// Older issuer settings may still name a removed built-in style.
+		if fallback, firstErr := s.FirstTemplateID("invoices"); firstErr == nil {
+			style = fallback
+			filePath, err = s.GetFilePath(style)
+		}
+	}
 	if err != nil || filePath == "" {
-		// Fallback: use built-in default template
-		return s.substituteInvoiceTags(defaultInvoiceHTMLTemplate(), inv), nil
+		return "", fmt.Errorf("قالب الفاتورة غير موجود: %s", style)
 	}
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return s.substituteInvoiceTags(defaultInvoiceHTMLTemplate(), inv), nil
+		return "", fmt.Errorf("تعذر قراءة قالب الفاتورة: %w", err)
 	}
 
 	return s.substituteInvoiceTags(string(data), inv), nil
@@ -989,7 +1198,7 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 	}
 
 	tpl = ensureItemsRowsInTbody(tpl)
-	smartRows := generateSmartRows(tpl, inv)
+	smartRows := s.generateSmartRows(tpl, inv)
 
 	sellerMetaAr := ""
 	if sellerTax != "" || sellerCR != "" {
@@ -1127,8 +1336,8 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 			return fmt.Sprintf("%.2f", totalQty)
 		}(),
 		"{{currency}}", "SAR",
-		"{{sar_symbol}}", SarSymbolSVG,
-		"{{currency_symbol}}", SarSymbolSVG,
+		"{{sar_symbol}}", s.sarSymbolSVG,
+		"{{currency_symbol}}", s.sarSymbolSVG,
 
 		// ─── مرحلة الفوترة وبيانات الزكاة ───
 		"{{zatca_phase}}", inv.ZatcaPhase,
@@ -1146,15 +1355,15 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 		}(),
 		"{{zatca_phase_badge}}", func() string {
 			if isPhase2 {
-				return `<span class="badge badge-teal" style="font-size:7.5pt; font-weight:700; background:#0d9488; color:#fff; padding:2px 8px; border-radius:4px;">م2 — مشفر وموقّع ZATCA</span>`
+				return "م2 — مشفر وموقّع ZATCA"
 			}
-			return `<span class="badge badge-gray" style="font-size:7.5pt; font-weight:700; background:#64748b; color:#fff; padding:2px 8px; border-radius:4px;">م1 — أساسي</span>`
+			return "م1 — أساسي"
 		}(),
 		"{{invoice_hash}}", inv.InvoiceHash,
 
 		// ─── جدول الأصناف والباركود ───
 		"{{items_rows}}", smartRows,
-		"{{items_table}}", generateItemsTable(inv),
+		"{{items_table}}", smartRows,
 		"{{qr_code}}", qrB64,
 
 		// ─── سندات القبض والصرف والمستندات ───
@@ -1176,9 +1385,9 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 
 	// استبدال ذكي لوسوم شارة ومرحلة الفوترة
 	zatcaBadgeRegex := regexp.MustCompile(`(?i)\{\{\s*(zatca_phase_badge|zatca_badge|شارة_المرحلة)\s*\}\}`)
-	phaseBadge := `<span class="badge badge-gray" style="font-size:7.5pt; font-weight:700; background:#64748b; color:#fff; padding:2px 8px; border-radius:4px;">م1 — أساسي</span>`
+	phaseBadge := "م1 — أساسي"
 	if isPhase2 {
-		phaseBadge = `<span class="badge badge-teal" style="font-size:7.5pt; font-weight:700; background:#0d9488; color:#fff; padding:2px 8px; border-radius:4px;">م2 — مشفر وموقّع ZATCA</span>`
+		phaseBadge = "م2 — مشفر وموقّع ZATCA"
 	}
 	result = zatcaBadgeRegex.ReplaceAllString(result, phaseBadge)
 
@@ -1222,221 +1431,7 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 	}
 
 	if totalLinesCount > 15 {
-		result = paginateInvoiceHtml(result, inv, 15)
-	} else {
-		singlePagePrintCss := `
-<style>
-@page { size: A4 portrait; margin: 0 !important; }
-.invoice-container, .invoice-frame, .page, [data-invoice-page] {
-  width: 210mm !important;
-  max-width: 210mm !important;
-  min-height: 295mm !important;
-  height: 295mm !important;
-  max-height: 295.5mm !important;
-  box-sizing: border-box !important;
-  margin: 0 auto !important;
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: space-between !important;
-  position: relative !important;
-  overflow: hidden !important;
-}
-.top-content-wrap {
-  flex: 0 0 auto !important;
-  display: block !important;
-}
-.bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
-  margin-top: auto !important;
-  flex-shrink: 0 !important;
-  page-break-inside: avoid !important;
-  break-inside: avoid !important;
-}
-@media print {
-  @page { size: A4 portrait; margin: 0 !important; }
-  html, body {
-    background: #fff !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    height: 297mm !important;
-    max-height: 297mm !important;
-    overflow: hidden !important;
-    width: 100% !important;
-    font-size: 9.5px !important;
-    line-height: 1.35 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  .invoice-container, .invoice-frame, .page, [data-invoice-page] {
-    width: 210mm !important;
-    max-width: 210mm !important;
-    min-height: 295mm !important;
-    height: 295mm !important;
-    max-height: 295.5mm !important;
-    box-sizing: border-box !important;
-    margin: 0 auto !important;
-    padding: 3mm 5mm !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
-    box-shadow: none !important;
-    page-break-after: auto !important;
-    break-after: auto !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-    position: relative !important;
-    overflow: hidden !important;
-  }
-  .top-content-wrap {
-    display: block !important;
-    position: static !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    flex: 0 0 auto !important;
-  }
-  .header, .masthead, .receipt-header, .head {
-    direction: rtl !important;
-    padding-bottom: 4px !important;
-    margin-bottom: 6px !important;
-    gap: 8px !important;
-  }
-  .seller-en, .head-en, .brand-side-info-en, .header-col-left, .comp-name-en, .lux-head-en, .saqr-brand-en {
-    direction: ltr !important;
-    text-align: left !important;
-  }
-  .seller-ar, .head-ar, .brand-side-info, .header-col-right, .comp-name-ar, .lux-head-ar, .saqr-brand-ar {
-    direction: rtl !important;
-    text-align: right !important;
-  }
-  .logo-shell {
-    height: 48px !important;
-    max-height: 48px !important;
-    margin-bottom: 4px !important;
-  }
-  .logo-shell img, .logo-shell svg {
-    max-height: 48px !important;
-  }
-  .invoice-metadata, .metadata, .parties {
-    gap: 8px !important;
-    margin: 4px 0 6px 0 !important;
-  }
-  .info-card, .meta-panel, .party {
-    border-radius: 3px !important;
-  }
-  .card-title, .panel-heading, .party-h {
-    padding: 3px 6px !important;
-    font-size: 10px !important;
-  }
-  .card-body, dl, table.kv td {
-    padding: 3px 5px !important;
-  }
-  .field {
-    margin-bottom: 2px !important;
-    line-height: 1.3 !important;
-  }
-  .seller-contact, .contact-strip {
-    margin: 3px 0 !important;
-    padding: 2px 0 !important;
-    font-size: 8.5px !important;
-  }
-  .items-main-table, table.items {
-    font-size: 8.5px !important;
-    line-height: 1.25 !important;
-    margin-top: 2px !important;
-    margin-bottom: 0 !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  .items-main-table th, table.items th {
-    padding: 3px 2px !important;
-    font-size: 8.5px !important;
-  }
-  .items-main-table td, table.items td {
-    padding: 2.5px 2px !important;
-    font-size: 8.5px !important;
-  }
-  .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
-    margin-top: auto !important;
-    padding-top: 4px !important;
-    flex-shrink: 0 !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  .summary-section, .bottom {
-    gap: 8px !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  .totals, .totals-panel {
-    padding: 4px 6px !important;
-  }
-  .totals-heading {
-    margin-bottom: 2px !important;
-    font-size: 9.5px !important;
-  }
-  .total-row, table.totals td {
-    padding: 1.8px 3px !important;
-    font-size: 8.5px !important;
-  }
-  .grand, tr.grand td {
-    padding: 3px 5px !important;
-    font-size: 10px !important;
-  }
-  .grand .money {
-    font-size: 11px !important;
-  }
-  .amount-words, .words {
-    margin-top: 2px !important;
-    padding-top: 2px !important;
-    font-size: 8px !important;
-  }
-  .verification, .verification-panel {
-    padding: 4px 6px !important;
-    gap: 8px !important;
-  }
-  .qr-box, .qr {
-    width: 85px !important;
-    height: 85px !important;
-    min-width: 85px !important;
-    min-height: 85px !important;
-    padding: 2px !important;
-  }
-  .qr-box svg, .qr-box img, .qr svg {
-    width: 80px !important;
-    height: 80px !important;
-    max-width: 80px !important;
-    max-height: 80px !important;
-  }
-  .notes h2, .notes h3 {
-    margin-bottom: 2px !important;
-    font-size: 9.5px !important;
-  }
-  .notes-body, .notes-content, .note {
-    font-size: 8px !important;
-    line-height: 1.35 !important;
-  }
-  .footer-zone, .footer, footer.foot, footer.footer-zone, footer.footer {
-    margin-top: auto !important;
-    padding-top: 4px !important;
-    font-size: 8px !important;
-    width: 100% !important;
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  .corner-art, .luxury-art {
-    max-width: 45mm !important;
-    max-height: 25mm !important;
-  }
-}
-</style>`
-		if strings.Contains(strings.ToLower(result), "</head>") {
-			headRegex := regexp.MustCompile(`(?i)</head>`)
-			result = headRegex.ReplaceAllString(result, singlePagePrintCss+"\n</head>")
-		} else {
-			result = singlePagePrintCss + "\n" + result
-		}
+		result = s.paginateInvoiceHtml(result, inv, 15)
 	}
 
 	dupNoOtherRegex := regexp.MustCompile(`(لا غير\s*)+لا غير`)
@@ -1629,11 +1624,11 @@ func ensureItemsRowsInTbody(tpl string) string {
 	return tpl
 }
 
-func generateSmartRows(tpl string, inv *InvoiceView) string {
-	return generateSmartRowsSlice(tpl, inv.Lines, 0)
+func (s *TemplateService) generateSmartRows(tpl string, inv *InvoiceView) string {
+	return s.generateSmartRowsSlice(tpl, inv.Lines, 0)
 }
 
-func generateSmartRowsSlice(tpl string, lines []InvoiceItemView, offset int) string {
+func (s *TemplateService) generateSmartRowsSlice(tpl string, lines []InvoiceItemView, offset int) string {
 	headers := extractTableHeaders(tpl)
 	var cols []colType
 	if len(headers) > 0 {
@@ -1645,73 +1640,68 @@ func generateSmartRowsSlice(tpl string, lines []InvoiceItemView, offset int) str
 		cols = []colType{colIndex, colName, colQty, colUnit, colPrice, colTaxable, colDiscount, colTaxAmount, colTaxRate, colTotal}
 	}
 
-	var sb strings.Builder
+	var rows strings.Builder
 	for i, item := range lines {
-		bg := "#fff"
-		if (offset+i)%2 == 1 {
-			bg = "#fafafa"
-		}
-		sb.WriteString(fmt.Sprintf(`<tr style="background:%s;">`, bg))
+		var cells strings.Builder
 		for _, col := range cols {
+			value := ""
 			switch col {
 			case colIndex:
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;">%d</td>`, offset+i+1))
+				value = fmt.Sprint(offset + i + 1)
 			case colCode:
-				code := item.ItemCode
-				if code == "" {
-					code = "—"
+				value = item.ItemCode
+				if value == "" {
+					value = "—"
 				}
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%s</td>`, html.EscapeString(code)))
 			case colName:
-				nameHtml := html.EscapeString(item.ItemName)
-				hasUnitCol := false
+				value = item.ItemName
+				hasUnitColumn := false
 				for _, c := range cols {
 					if c == colUnit {
-						hasUnitCol = true
+						hasUnitColumn = true
 						break
 					}
 				}
-				if !hasUnitCol && item.Unit != "" {
-					nameHtml += fmt.Sprintf(` <span style="font-size:11px;font-weight:normal;color:#64748b;">(%s)</span>`, html.EscapeString(item.Unit))
+				if !hasUnitColumn && item.Unit != "" {
+					value += " (" + item.Unit + ")"
 				}
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;font-weight:600;text-align:right;">%s</td>`, nameHtml))
 			case colUnit:
-				u := item.Unit
-				if u == "" {
-					u = "حبة"
+				value = item.Unit
+				if value == "" {
+					value = "حبة"
 				}
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;">%s</td>`, html.EscapeString(u)))
 			case colPrice:
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%.2f</td>`, item.UnitPriceMajor))
+				value = fmt.Sprintf("%.2f", item.UnitPriceMajor)
 			case colQty:
 				if item.Quantity == float64(int64(item.Quantity)) {
-					sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%.0f</td>`, item.Quantity))
+					value = fmt.Sprintf("%.0f", item.Quantity)
 				} else {
-					sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%.2f</td>`, item.Quantity))
+					value = fmt.Sprintf("%.2f", item.Quantity)
 				}
 			case colTaxable:
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%.2f</td>`, item.TaxableMajor))
+				value = fmt.Sprintf("%.2f", item.TaxableMajor)
 			case colDiscount:
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%.2f</td>`, item.DiscountMajor))
+				value = fmt.Sprintf("%.2f", item.DiscountMajor)
 			case colTaxRate:
-				sb.WriteString(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">15%</td>`)
+				value = "15%"
 			case colTaxAmount:
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;">%.2f</td>`, item.TaxAmountMajor))
+				value = fmt.Sprintf("%.2f", item.TaxAmountMajor)
 			case colTotal:
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 6px;text-align:center;font-family:Tahoma,sans-serif;font-weight:700;">%.2f</td>`, item.TotalLineMajor))
+				value = fmt.Sprintf("%.2f", item.TotalLineMajor)
 			case colNotes:
-				sb.WriteString(`<td style="padding:5px 6px;text-align:center;"></td>`)
+				value = ""
 			default:
-				sb.WriteString(fmt.Sprintf(`<td style="padding:5px 8px;text-align:right;">%s</td>`, html.EscapeString(item.ItemName)))
+				value = item.ItemName
 			}
+			cells.WriteString(strings.ReplaceAll(s.itemCellHTML, "{{value}}", html.EscapeString(value)))
 		}
-		sb.WriteString(`</tr>`)
+		rows.WriteString(strings.ReplaceAll(s.itemRowHTML, "{{cells}}", cells.String()))
 	}
 
-	return sb.String()
+	return rows.String()
 }
 
-func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string {
+func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string {
 	if len(inv.Lines) <= chunkSize {
 		return htmlStr
 	}
@@ -1793,161 +1783,22 @@ func paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string
 			end = len(inv.Lines)
 		}
 		chunk := inv.Lines[start:end]
-		rowsHtml := generateSmartRowsSlice(htmlStr, chunk, start)
+		rowsHtml := s.generateSmartRowsSlice(htmlStr, chunk, start)
 
-		pageBadge := ""
+		pageInner := tableOpen + rowsHtml + tableClose + tableWrapClose
 		if p == 1 {
-			pageBadge = fmt.Sprintf(`
-<div class="invoice-page-indicator" style="display:flex; justify-content:space-between; align-items:center; padding:4px 0 6px 0; margin-bottom:8px; border-bottom:1px solid #e2e8f0; font-size:11px; font-weight:700; color:#64748b;">
-  <span>فاتورة ضريبية رقم: %s</span>
-  <span style="direction:ltr;">Page 1 of %d &bull; صفحة 1 من %d</span>
-</div>`, inv.InvoiceNumber, totalPages, totalPages)
-		} else {
-			pageBadge = fmt.Sprintf(`
-<div class="invoice-continuation-header" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; margin-bottom:12px; background:#f8fafc; border:1px solid #cbd5e1; border-right:4px solid #059669; border-radius:6px; font-size:12px; font-weight:700; color:#1e293b;">
-  <span><span style="background:#059669; color:#fff; padding:2px 8px; border-radius:4px; font-size:11px; margin-left:6px;">متابعة</span> تابع فاتورة ضريبية رقم: %s</span>
-  <span style="direction:ltr; color:#475569;">(Page %d of %d) Continuation Sheet</span>
-</div>`, inv.InvoiceNumber, p, totalPages)
+			pageInner = beforeTable + pageInner
 		}
-
-		nextPageIndicator := ""
-		if p < totalPages {
-			nextPageIndicator = fmt.Sprintf(`
-<div class="invoice-continuation-footer" style="text-align:center; padding:8px 0; margin-top:8px; font-size:11px; font-weight:700; color:#475569; border-top:1px dashed #cbd5e1;">
-  يتبع في الصفحة التالية ⬅ (صفحة %d من %d) &bull; Continued on Next Page
-</div>`, p+1, totalPages)
-		} else {
-			nextPageIndicator = fmt.Sprintf(`
-<div class="invoice-continuation-footer" style="text-align:left; padding:4px 0; margin-top:4px; font-size:10px; color:#94a3b8;">
-  نهاية بنود الفاتورة &bull; صفحة %d من %d &bull; End of Invoice Items
-</div>`, p, totalPages)
-		}
-
-		var pageInner string
-		if p == 1 {
-			if p < totalPages {
-				pageInner = pageBadge + beforeTable + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose
-			} else {
-				pageInner = pageBadge + beforeTable + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose + bottomContent
-			}
-		} else {
-			// صفحة المتابعة لا تكرر ترويسة وبيانات العميل الضخمة بل تكتفي بترويسة المتابعة وجدول الأصناف
-			if p < totalPages {
-				pageInner = pageBadge + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose
-			} else {
-				pageInner = pageBadge + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose + bottomContent
-			}
+		if p == totalPages {
+			pageInner += bottomContent
 		}
 
 		pOpen := strings.Replace(contOpen, "<div", fmt.Sprintf(`<div data-invoice-page="%d"`, p), 1)
 		pages = append(pages, fmt.Sprintf("%s\n%s\n%s", pOpen, pageInner, contClose))
 	}
 
-	multiCss := `
-<style>
-@page { size: A4 portrait; margin: 5mm 6mm; }
-@media screen {
-  body { background: #47556914 !important; padding: 20px 0 !important; }
-  .invoice-container, .invoice-frame, [data-invoice-page] {
-    margin: 0 auto 24px auto !important;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
-    min-height: 268mm !important;
-    max-height: none !important;
-    height: auto !important;
-    box-sizing: border-box !important;
-    background: #fff !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
-  }
-}
-@media print {
-  body { background: #fff !important; padding: 0 !important; margin: 0 !important; height: 100% !important; }
-  .invoice-container, .invoice-frame, [data-invoice-page] {
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 auto !important;
-    padding: 2mm 4mm !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
-    box-shadow: none !important;
-    page-break-after: always !important;
-    break-after: page !important;
-    min-height: 285mm !important;
-    box-sizing: border-box !important;
-    position: relative !important;
-  }
-  .invoice-container:last-child, .invoice-frame:last-child, [data-invoice-page]:last-child {
-    page-break-after: auto !important;
-    break-after: auto !important;
-  }
-  .invoice-container:after {
-    display: none !important;
-  }
-  .bottom-content-wrap, .bottom {
-    margin-top: auto !important;
-    padding-top: 4px !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: flex-end !important;
-    flex: 1 0 auto !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  .footer-zone, .footer, footer.foot, footer.footer-zone, footer.footer {
-    margin-top: auto !important;
-    padding-top: 4px !important;
-    font-size: 7.5px !important;
-    width: 100% !important;
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-}
-</style>`
-
-	result := htmlStr
-	if strings.Contains(strings.ToLower(result), "</head>") {
-		headRegex := regexp.MustCompile(`(?i)</head>`)
-		result = headRegex.ReplaceAllString(result, multiCss+"\n</head>")
-	}
 	allPages := prefix + strings.Join(pages, "\n") + suffix
-	result = bodyRegex.ReplaceAllString(result, fmt.Sprintf("%s\n%s\n%s", bodyOpen, allPages, bodyClose))
-
-	return result
-}
-
-func generateItemsTable(inv *InvoiceView) string {
-	var sb strings.Builder
-	sb.WriteString(`<table style="width:100%;border-collapse:collapse;font-size:10px;line-height:1.35;" dir="rtl">`)
-	sb.WriteString(`<thead><tr style="background:#059669;color:#fff;">`)
-	for _, h := range []string{"#", "اسم الصنف بالكامل", "الكمية", "سعر الوحدة", "الضريبة", "الإجمالي"} {
-		sb.WriteString(`<th style="padding:4px 6px;text-align:right;border:1px solid #ccc;font-size:10px;">`)
-		sb.WriteString(h)
-		sb.WriteString(`</th>`)
-	}
-	sb.WriteString(`</tr></thead><tbody>`)
-
-	for i, item := range inv.Lines {
-		bg := "#fff"
-		if i%2 == 1 {
-			bg = "#f0fdf4"
-		}
-		sb.WriteString(fmt.Sprintf(`<tr style="background:%s;">`, bg))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:3px 6px;border:1px solid #e2e8f0;text-align:center;">%d</td>`, i+1))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:3px 6px;border:1px solid #e2e8f0;font-weight:600;">%s</td>`, html.EscapeString(item.ItemName)))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:3px 6px;border:1px solid #e2e8f0;text-align:center;">%.2f</td>`, item.Quantity))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:3px 6px;border:1px solid #e2e8f0;">%.2f</td>`, item.UnitPriceMajor))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:3px 6px;border:1px solid #e2e8f0;">%.2f</td>`, item.TaxAmountMajor))
-		sb.WriteString(fmt.Sprintf(`<td style="padding:3px 6px;border:1px solid #e2e8f0;font-weight:700;">%.2f</td>`, item.TotalLineMajor))
-		sb.WriteString(`</tr>`)
-	}
-
-	sb.WriteString(`</tbody></table>`)
-	return sb.String()
+	return strings.Replace(htmlStr, bodyMatch[0], bodyOpen+"\n"+allPages+"\n"+bodyClose, 1)
 }
 
 // ─── Builder Config (Save / Load) ─────────────────────────────────────────────
@@ -2007,13 +1858,28 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 	_ = json.Unmarshal(b, &cfgMap)
 
 	category := "invoices"
-	if t, ok := cfgMap["type"].(string); ok && t == "documents" {
-		category = "documents"
+	if t, ok := cfgMap["type"].(string); ok {
+		switch t {
+		case "documents", "vouchers":
+			category = "documents"
+		case "reports", "statements":
+			category = t
+		}
+	} else if t, ok := cfgMap["category"].(string); ok {
+		switch t {
+		case "documents", "vouchers":
+			category = "documents"
+		case "reports", "statements":
+			category = t
+		}
 	}
 
-	nameAr := "قالب مخصص"
+	nameAr := ""
 	if n, ok := cfgMap["name_ar"].(string); ok && strings.TrimSpace(n) != "" {
 		nameAr = strings.TrimSpace(n)
+	}
+	if nameAr == "" {
+		return errors.New("اسم القالب مطلوب")
 	}
 
 	primaryColor := "#059669"
@@ -2026,26 +1892,28 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return err
 	}
-	filePath := filepath.Join(outDir, id+".html")
+	var oldPath string
+	_ = s.db.QueryRow("SELECT file_path FROM excel_templates WHERE id = ?", id).Scan(&oldPath)
+	fileName := templateFileName(outDir, nameAr, id, oldPath)
+	filePath := filepath.Join(outDir, fileName)
 
 	htmlContent := ""
 	if h, ok := cfgMap["html_content"].(string); ok {
 		htmlContent = h
 	}
 	if htmlContent == "" {
-		// Generate a minimal default HTML template
-		htmlContent = buildDefaultHTMLFromConfig(cfgMap, category)
+		return errors.New("محتوى قالب HTML مطلوب؛ ارفع أو أنشئ ملف القالب قبل الحفظ")
 	}
 	htmlContent = ensureItemsRowsInTbody(htmlContent)
 
-	// Ensure <title> matches nameAr
-	titleRegex := regexp.MustCompile(`(?i)<title>(.*?)</title>`)
-	if titleRegex.MatchString(htmlContent) {
-		htmlContent = titleRegex.ReplaceAllString(htmlContent, "<title>"+nameAr+"</title>")
-	} else if strings.Contains(strings.ToLower(htmlContent), "<head>") {
-		htmlContent = strings.Replace(htmlContent, "<head>", "<head>\n<title>"+nameAr+"</title>", 1)
-	} else {
-		htmlContent = "<title>" + nameAr + "</title>\n" + htmlContent
+	htmlContent = setTemplateHTMLTitle(htmlContent, nameAr)
+	cfgMap["name_ar"] = nameAr
+	cfgMap["type"] = category
+	cfgMap["category"] = category
+	cfgMap["html_content"] = htmlContent
+	b, err = json.Marshal(cfgMap)
+	if err != nil {
+		return err
 	}
 
 	if err := os.WriteFile(filePath, []byte(htmlContent), 0644); err != nil {
@@ -2074,6 +1942,9 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 			updated_at = excluded.updated_at
 	`, id, nameAr, id, "قالب HTML من محرر القوالب", badge, category, filePath, primaryColor, string(headersJson), db.NowIso())
 	if err != nil {
+		if filepath.Clean(oldPath) != filepath.Clean(filePath) {
+			_ = os.Remove(filePath)
+		}
 		return err
 	}
 
@@ -2082,337 +1953,18 @@ func (s *TemplateService) SaveBuilderConfig(id string, config any) error {
 		INSERT INTO meta (key, value) VALUES (?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value
 	`, "tpl_builder_config_"+id, string(b))
-	return err
-}
-
-// buildDefaultHTMLFromConfig generates a minimal invoice/voucher HTML template
-// from builder cfg when the user didn't provide html_content.
-func buildDefaultHTMLFromConfig(cfg map[string]any, category string) string {
-	color := "#059669"
-	if c, ok := cfg["primary_color"].(string); ok && c != "" {
-		color = c
+	if err != nil {
+		return err
 	}
-	name := "قالب مخصص"
-	if n, ok := cfg["name_ar"].(string); ok && n != "" {
-		name = n
+	if oldPath != "" && filepath.Clean(oldPath) != filepath.Clean(filePath) {
+		root, _ := filepath.Abs(filepath.Join(s.dataDir, "templates"))
+		oldAbs, _ := filepath.Abs(oldPath)
+		rel, relErr := filepath.Rel(root, oldAbs)
+		if relErr == nil && rel != "." && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			_ = os.Remove(oldAbs)
+		}
 	}
-	if category == "documents" {
-		return defaultVoucherHTMLTemplate()
-	}
-	_ = name
-	_ = color
-	return defaultInvoiceHTMLTemplate()
-}
-
-// ─── Default Built-in HTML Templates ─────────────────────────────────────────
-
-func defaultInvoiceHTMLTemplate() string {
-	return `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8"/>
-<style>
-  @page { size: A4 portrait; margin: 4mm 5mm; }
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    min-height: 100%;
-    background: #fff;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  body {
-    font-family: Tahoma, 'Cairo', Arial, sans-serif;
-    font-size: 10.5px;
-    color: #1e293b;
-    background: #fff;
-    min-height: 282mm;
-    width: 100%;
-    max-width: 200mm;
-    margin: 0 auto;
-    padding: 3mm 5mm;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-  .invoice-container {
-    width: 100%;
-    min-height: 276mm;
-    flex: 1;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-  .top-wrap {
-    flex-shrink: 0;
-  }
-  .bottom-wrap {
-    margin-top: auto !important;
-    padding-top: 6px;
-    width: 100%;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #059669; padding-bottom: 6px; margin-bottom: 8px; }
-  .header-title { font-size: 18px; font-weight: 900; color: #059669; }
-  .header-meta { font-size: 10px; line-height: 1.5; }
-  .section { margin-bottom: 6px; }
-  .section-title { font-weight: 700; font-size: 10.5px; color: #fff; background: #059669; padding: 2px 8px; border-radius: 3px; display: inline-block; margin-bottom: 4px; }
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; font-size: 10.5px; }
-  .info-row { display: flex; gap: 4px; }
-  .info-label { color: #64748b; font-size: 10px; min-width: 80px; }
-  .info-value { font-weight: 600; }
-  .summary-section {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    margin-bottom: 6px;
-    gap: 14px;
-  }
-  .qr-col {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .qr-wrap {
-    text-align: right;
-    margin: 0;
-  }
-  .qr-wrap svg {
-    width: 90px !important;
-    height: 90px !important;
-    margin: 0 !important;
-  }
-  .totals-col {
-    display: flex;
-    justify-content: flex-end;
-  }
-  .totals-table {
-    font-size: 10.5px;
-    border-collapse: collapse;
-    min-width: 270px;
-  }
-  .totals-table td { padding: 2.5px 6px; }
-  .totals-table tr:last-child td { font-weight: 900; font-size: 12px; color: #059669; border-top: 2px solid #059669; }
-  .money-cell { text-align: left; direction: ltr; white-space: nowrap; }
-  .footer {
-    text-align: center;
-    font-size: 9.5px;
-    color: #64748b;
-    border-top: 1px solid #e2e8f0;
-    padding-top: 4px;
-    padding-bottom: 1mm;
-    width: 100%;
-    line-height: 1.4;
-  }
-  @media print {
-    @page {
-      size: A4 portrait;
-      margin: 4mm 5mm;
-    }
-    html, body {
-      background: #fff !important;
-      height: 100% !important;
-      min-height: 100% !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-    body {
-      width: 100% !important;
-      max-width: 100% !important;
-      min-height: 282mm !important;
-      height: auto !important;
-      padding: 2mm 4mm !important;
-      margin: 0 auto !important;
-      box-sizing: border-box !important;
-      display: flex !important;
-      flex-direction: column !important;
-      justify-content: space-between !important;
-    }
-    .invoice-container {
-      width: 100% !important;
-      min-height: 278mm !important;
-      height: auto !important;
-      flex: 1 !important;
-      padding: 0 !important;
-      margin: 0 !important;
-      box-sizing: border-box !important;
-      display: flex !important;
-      flex-direction: column !important;
-      justify-content: space-between !important;
-    }
-    .top-wrap {
-      flex-shrink: 0 !important;
-    }
-    .bottom-wrap {
-      margin-top: auto !important;
-      break-inside: avoid !important;
-      page-break-inside: avoid !important;
-    }
-    table {
-      page-break-inside: auto;
-    }
-    tr {
-      page-break-inside: avoid;
-      page-break-after: auto;
-    }
-  }
-</style>
-</head>
-<body>
-<div class="invoice-container">
-<div class="top-wrap">
-  <div class="header">
-    <div>
-      <div class="header-title">{{seller_name}}</div>
-      <div style="font-size:11px;color:#64748b;">الرقم الضريبي: {{seller_tax}}</div>
-      <div style="font-size:11px;color:#64748b;">{{seller_address}}</div>
-    </div>
-    <div class="header-meta">
-      <div><strong>فاتورة ضريبية</strong></div>
-      <div>رقم الفاتورة: <strong>{{invoice_number}}</strong></div>
-      <div>تاريخ الإصدار: <strong>{{issue_date}}</strong></div>
-      <div>نوع الفاتورة: <strong>{{payment_method}}</strong></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">بيانات العميل</div>
-    <div class="info-grid">
-      <div class="info-row"><span class="info-label">الاسم:</span><span class="info-value">{{buyer_name}}</span></div>
-      <div class="info-row"><span class="info-label">الرقم الضريبي:</span><span class="info-value">{{buyer_tax}}</span></div>
-      <div class="info-row"><span class="info-label">العنوان:</span><span class="info-value">{{buyer_address}}</span></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">الأصناف والخدمات</div>
-    {{items_table}}
-  </div>
-</div>
-
-<div class="bottom-wrap">
-  <div class="summary-section">
-    <div class="qr-col">
-      <div class="qr-wrap">{{qr_code}}</div>
-    </div>
-    <div class="totals-col">
-      <table class="totals-table">
-        <tr><td>المجموع قبل الضريبة</td><td class="money-cell">{{sar_symbol}} {{subtotal}}</td></tr>
-        <tr><td>الخصم</td><td class="money-cell">{{sar_symbol}} {{discount}}</td></tr>
-        <tr><td>ضريبة القيمة المضافة (15%)</td><td class="money-cell">{{sar_symbol}} {{tax_amount}}</td></tr>
-        <tr><td>الإجمالي المستحق</td><td class="money-cell">{{sar_symbol}} {{grand_total}}</td></tr>
-      </table>
-    </div>
-  </div>
-
-  <div class="footer">
-    {{notes}}<br/>
-    هذه الفاتورة صادرة إلكترونياً ولا تحتاج إلى توقيع يدوي
-  </div>
-</div>
-</div>
-</body>
-</html>`
-}
-
-func defaultVoucherHTMLTemplate() string {
-	return `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8"/>
-<style>
-  @page { size: A4 portrait; margin: 6mm 8mm; }
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0;
-    padding: 0;
-    background: #fff;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  body {
-    font-family: Tahoma, 'Cairo', Arial, sans-serif;
-    font-size: 11.5px;
-    color: #1e293b;
-    background: #fff;
-    min-height: 278mm;
-    width: 210mm;
-    max-width: 100%;
-    margin: 0 auto;
-    padding: 8mm 12mm;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-  .top-wrap { flex-shrink: 0; }
-  .bottom-wrap {
-    margin-top: auto !important;
-    padding-top: 6px;
-    width: 100%;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .header { text-align: center; border-bottom: 2px solid #7c3aed; padding-bottom: 8px; margin-bottom: 12px; }
-  .header-title { font-size: 20px; font-weight: 900; color: #7c3aed; }
-  .voucher-box { border: 1.5px solid #7c3aed; border-radius: 6px; padding: 12px; margin-bottom: 10px; }
-  .info-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #e2e8f0; font-size: 11.5px; }
-  .info-row:last-child { border-bottom: none; }
-  .info-label { color: #64748b; }
-  .info-value { font-weight: 700; }
-  .amount-box { text-align: center; background: #f5f3ff; border-radius: 6px; padding: 10px; margin: 10px 0; }
-  .amount-value { font-size: 24px; font-weight: 900; color: #7c3aed; direction: ltr; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-  .qr-wrap { text-align: center; margin-top: 10px; margin-bottom: 8px; }
-  .qr-wrap svg { width: 95px !important; height: 95px !important; margin: 0 auto !important; }
-  .footer { width: 100%; flex-shrink: 0; font-size: 10px; }
-  .sig-row { display: flex; justify-content: space-between; margin-top: 12px; }
-  .sig-line { width: 40%; border-top: 1px solid #64748b; text-align: center; padding-top: 4px; font-size: 10px; color: #64748b; }
-  @media print {
-    @page { size: A4 portrait; margin: 6mm 8mm; }
-    html, body { background: #fff !important; height: 100%; min-height: 100% !important; margin: 0 !important; padding: 0 !important; }
-    body { width: 100% !important; max-width: 100% !important; min-height: 278mm !important; height: auto !important; padding: 0 !important; margin: 0 !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
-    .bottom-wrap { margin-top: auto !important; break-inside: avoid; page-break-inside: avoid; }
-  }
-</style>
-</head>
-<body>
-<div class="top-wrap">
-  <div class="header">
-    <div class="header-title">سند قبض</div>
-    <div style="font-size:12px;color:#64748b;">{{seller_name}} — الرقم الضريبي: {{seller_tax}}</div>
-  </div>
-
-  <div class="voucher-box">
-    <div class="info-row"><span class="info-label">رقم السند:</span><span class="info-value">{{invoice_number}}</span></div>
-    <div class="info-row"><span class="info-label">التاريخ:</span><span class="info-value">{{issue_date}}</span></div>
-    <div class="info-row"><span class="info-label">استلمنا من:</span><span class="info-value">{{buyer_name}}</span></div>
-    <div class="info-row"><span class="info-label">البيان:</span><span class="info-value">{{notes}}</span></div>
-    <div class="info-row"><span class="info-label">طريقة الدفع:</span><span class="info-value">{{payment_method}}</span></div>
-  </div>
-</div>
-
-<div class="bottom-wrap">
-  <div class="amount-box">
-    <div style="font-size:13px;color:#64748b;margin-bottom:4px;">المبلغ المستلم</div>
-    <div class="amount-value">{{sar_symbol}} <span>{{grand_total}}</span></div>
-  </div>
-
-  <div class="qr-wrap">{{qr_code}}</div>
-
-  <div class="footer">
-    <div class="sig-row">
-      <div class="sig-line">توقيع المستلم</div>
-      <div class="sig-line">توقيع المسلّم</div>
-    </div>
-  </div>
-</div>
-</body>
-</html>`
+	return nil
 }
 
 var (
@@ -2443,6 +1995,8 @@ func tafqeetUnder1000(n int64) string {
 	}
 	return strings.Join(parts, " و")
 }
+
+func TafqeetArabic(val float64) string { return tafqeetArabic(val) }
 
 func tafqeetArabic(val float64) string {
 	total := int64(math.Round(val * 100))
@@ -2496,17 +2050,27 @@ func init() {
 	var _ = sql.ErrNoRows
 	_ = moneySarRegex1
 	_ = moneySarRegex2
-	_ = SarSymbolSVG
 }
 
-// CombineHTMLDocuments merges multiple HTML invoice documents into a single printable document with page breaks.
-func CombineHTMLDocuments(docs []string) string {
+// CombineHTMLDocuments applies the HTML wrapper stored in data/templates/partials.
+func (s *TemplateService) CombineHTMLDocuments(docs []string) string {
 	if len(docs) == 0 {
 		return ""
 	}
 	if len(docs) == 1 {
 		return docs[0]
 	}
+
+	wrapperBytes, err := os.ReadFile(filepath.Join(s.dataDir, "templates", "partials", "batch-documents.html"))
+	if err != nil {
+		return ""
+	}
+	itemBytes, err := os.ReadFile(filepath.Join(s.dataDir, "templates", "partials", "batch-document-item.html"))
+	if err != nil {
+		return ""
+	}
+	wrapper := string(wrapperBytes)
+	itemTemplate := string(itemBytes)
 
 	var allStyles strings.Builder
 	var allBodies strings.Builder
@@ -2539,31 +2103,9 @@ func CombineHTMLDocuments(docs []string) string {
 			content = doc
 		}
 
-		allBodies.WriteString(fmt.Sprintf(`<div class="batch-doc-item">%s</div>`, content))
+		allBodies.WriteString(strings.ReplaceAll(itemTemplate, "{{content}}", content))
 	}
 
-	return fmt.Sprintf(`<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8">
-<title>فواتير الدفعة المجمعة</title>
-<style>
-@page { size: A4 portrait; margin: 4mm 5mm; }
-@media print {
-  html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
-  .batch-doc-item { margin: 0 !important; padding: 0 !important; page-break-after: always !important; break-after: page !important; }
-  .batch-doc-item:last-child { page-break-after: auto !important; break-after: auto !important; }
+	wrapper = strings.ReplaceAll(wrapper, "{{styles}}", allStyles.String())
+	return strings.ReplaceAll(wrapper, "{{documents}}", allBodies.String())
 }
-@media screen {
-  body { background: #334155; padding: 20px 0; }
-  .batch-doc-item { margin-bottom: 25px; }
-}
-%s
-</style>
-</head>
-<body style="margin:0;padding:0;">
-%s
-</body>
-</html>`, allStyles.String(), allBodies.String())
-}
-

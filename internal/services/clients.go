@@ -367,8 +367,8 @@ type StatementResult struct {
 
 var docLabels = map[string]string{
 	"OPENING_BALANCE": "رصيد افتتاحي",
-	"INVOICE":         "فاتورة",
-	"INVOICE_CANCEL":  "إلغاء فاتورة",
+	"INVOICE":         "فاتورة بيع",
+	"INVOICE_CANCEL":  "إلغاء فاتورة بيع",
 	"RECEIPT":         "سند قبض",
 	"RECEIPT_CANCEL":  "إلغاء سند قبض",
 }
@@ -483,7 +483,7 @@ func (s *ClientService) Statement(p StatementParams) (*StatementResult, error) {
 			case "RECEIPT":
 				entry.Description = "سداد فاتورة رقم " + allocatedInvoices
 				if allocatedInvoices == "" {
-					entry.Description = "سند قبض رقم " + entry.DocNumber + " (دفعة غير مخصصة لفاتورة)"
+					entry.Description = "سند قبض رقم " + entry.DocNumber + " (سداد دفعة على الحساب)"
 				}
 			}
 			runningBalance += debitMinor - creditMinor

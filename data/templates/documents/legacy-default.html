@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<style>
+  @page { size: A4 portrait; margin: 6mm 8mm; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body {
+    font-family: Tahoma, 'Cairo', Arial, sans-serif;
+    font-size: 11.5px;
+    color: #1e293b;
+    background: #fff;
+    min-height: 278mm;
+    width: 210mm;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 8mm 12mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .top-wrap { flex-shrink: 0; }
+  .bottom-wrap {
+    margin-top: auto !important;
+    padding-top: 6px;
+    width: 100%;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .header { text-align: center; border-bottom: 2px solid #7c3aed; padding-bottom: 8px; margin-bottom: 12px; }
+  .header-title { font-size: 20px; font-weight: 900; color: #7c3aed; }
+  .voucher-box { border: 1.5px solid #7c3aed; border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+  .info-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #e2e8f0; font-size: 11.5px; }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { color: #64748b; }
+  .info-value { font-weight: 700; }
+  .amount-box { text-align: center; background: #f5f3ff; border-radius: 6px; padding: 10px; margin: 10px 0; }
+  .amount-value { font-size: 24px; font-weight: 900; color: #7c3aed; direction: ltr; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .qr-wrap { text-align: center; margin-top: 10px; margin-bottom: 8px; }
+  .qr-wrap svg { width: 95px !important; height: 95px !important; margin: 0 auto !important; }
+  .footer { width: 100%; flex-shrink: 0; font-size: 10px; }
+  .sig-row { display: flex; justify-content: space-between; margin-top: 12px; }
+  .sig-line { width: 40%; border-top: 1px solid #64748b; text-align: center; padding-top: 4px; font-size: 10px; color: #64748b; }
+  @media print {
+    @page { size: A4 portrait; margin: 6mm 8mm; }
+    html, body { background: #fff !important; height: 100%; min-height: 100% !important; margin: 0 !important; padding: 0 !important; }
+    body { width: 100% !important; max-width: 100% !important; min-height: 278mm !important; height: auto !important; padding: 0 !important; margin: 0 !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
+    .bottom-wrap { margin-top: auto !important; break-inside: avoid; page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="top-wrap">
+  <div class="header">
+    <div class="header-title">سند قبض</div>
+    <div style="font-size:12px;color:#64748b;">{{seller_name}} — الرقم الضريبي: {{seller_tax}}</div>
+  </div>
+
+  <div class="voucher-box">
+    <div class="info-row"><span class="info-label">رقم السند:</span><span class="info-value">{{invoice_number}}</span></div>
+    <div class="info-row"><span class="info-label">التاريخ:</span><span class="info-value">{{issue_date}}</span></div>
+    <div class="info-row"><span class="info-label">استلمنا من:</span><span class="info-value">{{buyer_name}}</span></div>
+    <div class="info-row"><span class="info-label">البيان:</span><span class="info-value">{{notes}}</span></div>
+    <div class="info-row"><span class="info-label">طريقة الدفع:</span><span class="info-value">{{payment_method}}</span></div>
+  </div>
+</div>
+
+<div class="bottom-wrap">
+  <div class="amount-box">
+    <div style="font-size:13px;color:#64748b;margin-bottom:4px;">المبلغ المستلم</div>
+    <div class="amount-value">{{sar_symbol}} <span>{{grand_total}}</span></div>
+  </div>
+
+  <div class="qr-wrap">{{qr_code}}</div>
+
+  <div class="footer">
+    <div class="sig-row">
+      <div class="sig-line">توقيع المستلم</div>
+      <div class="sig-line">توقيع المسلّم</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

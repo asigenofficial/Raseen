@@ -437,11 +437,74 @@ function openIssuerImportModal(onSuccess) {
 }
 
 export async function render(view) {
+  let searchQ = '';
   const draw = async () => {
     const rawIssuers = await api.get('/api/issuers');
     const issuers = Array.isArray(rawIssuers) ? rawIssuers : (rawIssuers?.data || []);
     store.issuers = issuers;
     const writable = can('issuers.write');
+
+    const filterIssuers = (q) => {
+      if (!q) return issuers;
+      const term = q.trim().toLowerCase();
+      return issuers.filter((i) => {
+        return (i.name_ar && i.name_ar.toLowerCase().includes(term)) ||
+          (i.name_en && i.name_en.toLowerCase().includes(term)) ||
+          (i.code && i.code.toLowerCase().includes(term)) ||
+          (i.tax_number && i.tax_number.toLowerCase().includes(term)) ||
+          (i.commercial_register && i.commercial_register.toLowerCase().includes(term)) ||
+          (i.city && i.city.toLowerCase().includes(term)) ||
+          (i.city_en && i.city_en.toLowerCase().includes(term));
+      });
+    };
+
+    const cardHtml = (i) => `
+      <div class="card" style="padding:0.65rem 0.85rem; border-radius:8px; border:1px solid ${i.id === store.activeIssuerId ? 'var(--primary, #06b6d4)' : 'var(--line)'}; background:${i.id === store.activeIssuerId ? 'rgba(6,182,212,0.04)' : 'var(--surface)'}; display:flex; flex-direction:column; justify-content:space-between; gap:0.45rem;">
+        <!-- ترويسة البطاقة المصغرة -->
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div style="width:34px; height:34px; border-radius:6px; background:rgba(6,182,212,0.1); display:grid; place-items:center; overflow:hidden; flex:none; border:1px solid rgba(6,182,212,0.2)">
+            ${i.logo_data ? `<img src="${esc(i.logo_data)}" alt="logo" style="width:100%;height:100%;object-fit:contain" />` : icon.building({ size: 18, stroke: 'var(--brand)' })}
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:4px;">
+              <h4 style="margin:0; font-size:0.88rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${esc(i.name_ar)}">${esc(i.name_ar)}</h4>
+              <span class="badge mono" style="font-size:0.65rem; padding:1px 4px; flex:none;">${esc(i.code)}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:3px; margin-top:2px; flex-wrap:wrap;">
+              <span class="badge ${i.is_active ? 'green' : 'gray'}" style="font-size:0.62rem; padding:0 4px;">${i.is_active ? 'نشطة' : 'معطلة'}</span>
+              <span class="badge ${i.zatca_phase === 'PHASE2' ? 'teal' : 'blue'}" style="font-size:0.62rem; padding:0 4px;">${i.zatca_phase === 'PHASE2' ? 'المرحلة 2' : 'المرحلة 1'}</span>
+              ${i.id === store.activeIssuerId ? '<span class="badge amber" style="font-size:0.62rem; padding:0 4px;">النشطة</span>' : ''}
+            </div>
+          </div>
+        </div>
+
+        <!-- بيانات المنشأة في شبكة مدمجة -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:3px 6px; font-size:0.73rem; background:rgba(255,255,255,0.02); padding:5px 7px; border-radius:6px; border:1px solid rgba(255,255,255,0.04);">
+          <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">ضريبي:</span> <span class="mono" style="font-weight:600">${esc(i.tax_number || '—')}</span></div>
+          <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">سجل:</span> <span class="mono">${esc(i.commercial_register || '—')}</span></div>
+          <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">المدينة:</span> <span>${esc(i.city || '—')}</span></div>
+          <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">ترقيم:</span> <span class="mono">${esc((i.invoice_prefix || 'INV').replace(/[-\s]+$/, '').trim() || 'INV')}-${String(i.invoice_next_no).padStart(i.invoice_pad, '0')}</span> (${esc(String(i.default_tax_rate))}%)</div>
+        </div>
+
+        <!-- أزرار الإجراءات المصغرة -->
+        <div style="display:flex; align-items:center; gap:3px; flex-wrap:wrap; padding-top:2px;">
+          ${i.id !== store.activeIssuerId ? `<button class="btn btn-xs" data-act="activate" data-id="${esc(i.id)}" type="button" title="تعيين كمنشأة نشطة">${icon.check({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}نشطة</button>` : ''}
+          ${writable ? `<button class="btn btn-xs" data-act="edit" data-id="${esc(i.id)}" type="button" title="تعديل">${icon.edit({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}تعديل</button>` : ''}
+          <button class="btn btn-xs" data-act="creds" data-id="${esc(i.id)}" type="button" title="الربط الإلكتروني والشهادات">${icon.shieldCheck({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}ربط</button>
+          <button class="btn btn-xs" data-act="chain" data-id="${esc(i.id)}" type="button" title="التحقق من سلسلة الفواتير">${icon.search({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}سلسلة</button>
+          <a class="btn btn-xs" href="#/invoices?issuer_id=${esc(i.id)}" title="فواتير المنشأة">${icon.invoice({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}فواتير</a>
+          ${writable ? `<button class="btn btn-xs btn-danger" style="margin-inline-start:auto; padding:2px 5px;" data-act="del" data-id="${esc(i.id)}" type="button" title="حذف المنشأة">${icon.trash({ size: 10, style: 'vertical-align:middle' })}</button>` : ''}
+        </div>
+      </div>`;
+
+    const renderGrid = (list) => {
+      if (!list.length) {
+        return `<div class="card" style="grid-column:1/-1;text-align:center;padding:2rem"><p class="muted">لا توجد شركات مطابقة للبحث «${esc(searchQ)}»</p></div>`;
+      }
+      return list.map(cardHtml).join('');
+    };
+
+    const initialList = filterIssuers(searchQ);
 
     view.innerHTML = html`
       <div class="page-head">
@@ -457,6 +520,17 @@ export async function render(view) {
         </div>
       </div>
 
+      ${raw(issuers.length > 0 ? `
+        <div class="card" style="margin-bottom:0.75rem;padding:0.65rem 1rem">
+          <div class="row items-center" style="gap:1rem;flex-wrap:wrap">
+            <div class="field" style="flex:1;min-width:240px;margin:0">
+              <input type="search" id="issuers-search" value="${esc(searchQ)}" placeholder="بحث في الشركات (الاسم، الكود، الرقم الضريبي، السجل، المدينة…)…" autocomplete="off" />
+            </div>
+            <span class="tiny muted" id="issuers-count">${searchQ ? `${initialList.length} مطابقة من أصل ` : ''}${issuers.length} شركة</span>
+          </div>
+        </div>
+      ` : '')}
+
       ${raw(!issuers.length ? `<div class="card"><div class="empty">
         <h3>لا توجد شركات مصدرة بعد</h3>
         <p class="muted">أضف أول شركة لتتمكن من إصدار الفواتير وسندات القبض.</p>
@@ -466,46 +540,23 @@ export async function render(view) {
         </div>
       </div></div>` : '')}
 
-      ${raw(issuers.length ? `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:0.65rem;">
-        ${issuers.map((i) => `
-          <div class="card" style="padding:0.65rem 0.85rem; border-radius:8px; border:1px solid ${i.id === store.activeIssuerId ? 'var(--primary, #06b6d4)' : 'var(--line)'}; background:${i.id === store.activeIssuerId ? 'rgba(6,182,212,0.04)' : 'var(--surface)'}; display:flex; flex-direction:column; justify-content:space-between; gap:0.45rem;">
-            <!-- ترويسة البطاقة المصغرة -->
-            <div style="display:flex; align-items:center; gap:8px;">
-              <div style="width:34px; height:34px; border-radius:6px; background:rgba(6,182,212,0.1); display:grid; place-items:center; overflow:hidden; flex:none; border:1px solid rgba(6,182,212,0.2)">
-                ${i.logo_data ? `<img src="${esc(i.logo_data)}" alt="logo" style="width:100%;height:100%;object-fit:contain" />` : icon.building({ size: 18, stroke: 'var(--brand)' })}
-              </div>
-              <div style="flex:1; min-width:0;">
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:4px;">
-                  <h4 style="margin:0; font-size:0.88rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${esc(i.name_ar)}">${esc(i.name_ar)}</h4>
-                  <span class="badge mono" style="font-size:0.65rem; padding:1px 4px; flex:none;">${esc(i.code)}</span>
-                </div>
-                <div style="display:flex; align-items:center; gap:3px; margin-top:2px; flex-wrap:wrap;">
-                  <span class="badge ${i.is_active ? 'green' : 'gray'}" style="font-size:0.62rem; padding:0 4px;">${i.is_active ? 'نشطة' : 'معطلة'}</span>
-                  <span class="badge ${i.zatca_phase === 'PHASE2' ? 'teal' : 'blue'}" style="font-size:0.62rem; padding:0 4px;">${i.zatca_phase === 'PHASE2' ? 'المرحلة 2' : 'المرحلة 1'}</span>
-                  ${i.id === store.activeIssuerId ? '<span class="badge amber" style="font-size:0.62rem; padding:0 4px;">النشطة</span>' : ''}
-                </div>
-              </div>
-            </div>
-
-            <!-- بيانات المنشأة في شبكة مدمجة -->
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:3px 6px; font-size:0.73rem; background:rgba(255,255,255,0.02); padding:5px 7px; border-radius:6px; border:1px solid rgba(255,255,255,0.04);">
-              <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">ضريبي:</span> <span class="mono" style="font-weight:600">${esc(i.tax_number || '—')}</span></div>
-              <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">سجل:</span> <span class="mono">${esc(i.commercial_register || '—')}</span></div>
-              <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">المدينة:</span> <span>${esc(i.city || '—')}</span></div>
-              <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted)">ترقيم:</span> <span class="mono">${esc((i.invoice_prefix || 'INV').replace(/[-\s]+$/, '').trim() || 'INV')}-${String(i.invoice_next_no).padStart(i.invoice_pad, '0')}</span> (${esc(String(i.default_tax_rate))}%)</div>
-            </div>
-
-            <!-- أزرار الإجراءات المصغرة -->
-            <div style="display:flex; align-items:center; gap:3px; flex-wrap:wrap; padding-top:2px;">
-              ${i.id !== store.activeIssuerId ? `<button class="btn btn-xs" data-act="activate" data-id="${esc(i.id)}" type="button" title="تعيين كمنشأة نشطة">${icon.check({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}نشطة</button>` : ''}
-              ${writable ? `<button class="btn btn-xs" data-act="edit" data-id="${esc(i.id)}" type="button" title="تعديل">${icon.edit({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}تعديل</button>` : ''}
-              <button class="btn btn-xs" data-act="creds" data-id="${esc(i.id)}" type="button" title="الربط الإلكتروني والشهادات">${icon.shieldCheck({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}ربط</button>
-              <button class="btn btn-xs" data-act="chain" data-id="${esc(i.id)}" type="button" title="التحقق من سلسلة الفواتير">${icon.search({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}سلسلة</button>
-              <a class="btn btn-xs" href="#/invoices?issuer_id=${esc(i.id)}" title="فواتير المنشأة">${icon.invoice({ size: 10, style: 'vertical-align:middle;margin-left:2px' })}فواتير</a>
-              ${writable ? `<button class="btn btn-xs btn-danger" style="margin-inline-start:auto; padding:2px 5px;" data-act="del" data-id="${esc(i.id)}" type="button" title="حذف المنشأة">${icon.trash({ size: 10, style: 'vertical-align:middle' })}</button>` : ''}
-            </div>
-          </div>`).join('')}
+      ${raw(issuers.length ? `<div id="issuers-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:0.65rem;">
+        ${renderGrid(initialList)}
       </div>` : '')}`;
+
+    const searchInput = $('#issuers-search', view);
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        searchQ = e.target.value;
+        const filtered = filterIssuers(searchQ);
+        const grid = $('#issuers-grid', view);
+        if (grid) grid.innerHTML = renderGrid(filtered);
+        const countEl = $('#issuers-count', view);
+        if (countEl) {
+          countEl.textContent = searchQ.trim() ? `${filtered.length} مطابقة من أصل ${issuers.length} شركة` : `${issuers.length} شركة`;
+        }
+      });
+    }
 
     const addBtn = $('#add-issuer', view);
     if (addBtn) addBtn.addEventListener('click', () => openIssuerModal(null, draw));

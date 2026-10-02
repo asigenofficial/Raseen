@@ -1397,12 +1397,38 @@ table.tbl td.actions {
 /* جداول البيانات الرئيسية فائقة الدقة (Precision Data Tables Layout) */
 .invoices-tbl,
 .vouchers-tbl,
-.statement-tbl,
 .clients-tbl,
 .items-tbl,
 .categories-tbl,
 .audit-tbl {
   min-width: 1040px;
+}
+
+.statement-tbl {
+  min-width: 820px;
+  width: 100%;
+}
+
+.statement-tbl thead tr:first-child th {
+  position: sticky;
+  top: 0;
+  height: 34px;
+  padding: 4px 8px;
+  background: var(--card, #172b3a);
+  z-index: 6;
+}
+
+.statement-tbl thead tr:first-child th[rowspan="2"] {
+  z-index: 7;
+}
+
+.statement-tbl thead tr:nth-child(2) th {
+  position: sticky;
+  top: 34px;
+  height: 30px;
+  padding: 4px 8px;
+  background: var(--card, #172b3a);
+  z-index: 5;
 }
 
 .invoices-tbl th,
@@ -4927,6 +4953,110 @@ html[data-theme="light"] .filter-btn-group .btn:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   align-items: start;
+}
+
+/* التوليد الدفعي: حقول مرنة تمنع تداخل المدخلات في الأعمدة الضيقة */
+.bulk-form-card .form-grid-4,
+.bulk-form-card .form-grid-5,
+.bulk-form-card .form-grid-3,
+.bulk-options-grid {
+  min-width: 0;
+}
+
+.bulk-form-card .field {
+  min-width: 0;
+}
+
+.bulk-form-card .field > label {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.bulk-options-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.bulk-option-card {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.bulk-option-card > label:first-child {
+  font-size: .95rem;
+  color: var(--text);
+}
+
+.bulk-option-card .check {
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  line-height: 1.6;
+}
+
+.bulk-discount-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .65rem;
+  align-items: start;
+}
+
+.bulk-discount-fields .field {
+  min-width: 0;
+}
+
+.bulk-discount-fields .field > label {
+  font-size: .78rem;
+  white-space: nowrap;
+}
+
+.bulk-discount-fields input[type="number"] {
+  min-width: 0;
+  width: 100%;
+  text-align: center;
+  padding: .5rem .35rem;
+}
+
+.bulk-discount-fields .hint {
+  font-size: .7rem;
+  white-space: nowrap;
+}
+
+.bulk-discount-fields[data-disabled] {
+  opacity: .55;
+}
+
+.bulk-discount-fields input:disabled {
+  cursor: not-allowed;
+}
+
+.bulk-form-card input[type="number"],
+.bulk-form-card input[type="date"],
+.bulk-form-card input[type="time"],
+.bulk-form-card select {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .bulk-options-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 540px) {
+  .bulk-discount-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .bulk-option-card {
+    padding: .8rem;
+  }
 }
 
 @media (max-width: 1024px) {

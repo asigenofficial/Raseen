@@ -65,6 +65,9 @@ func openBrowser(url string) {
 func main() {
 	log.SetOutput(os.Stdout)
 	cfg := config.Load()
+	if err := cfg.ValidatePublicAdminPassword(); err != nil {
+		log.Fatal(err)
+	}
 
 	masterKey, err := crypto.GetMasterKey(cfg.KeyFile)
 	if err != nil {
@@ -77,7 +80,29 @@ func main() {
 	if err != nil {
 		log.Fatalf("فشل تهيئة قاعدة البيانات: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
+	if cfg.IsPublicHost() {
+		rows, err := database.Query("SELECT password_hash, password_salt FROM users WHERE role = 'ADMIN' AND is_active = 1")
+		if err != nil {
+			log.Fatalf("فشل التحقق من حسابات المدير: %v", err)
+		}
+		for rows.Next() {
+			var hash, salt string
+			if err := rows.Scan(&hash, &salt); err != nil {
+				rows.Close()
+				log.Fatalf("فشل قراءة حساب المدير: %v", err)
+			}
+			if crypto.VerifyPassword("Admin@12345", salt, hash) {
+				rows.Close()
+				log.Fatal("يرفض الخادم العام كلمة مرور المدير الافتراضية المخزنة؛ غيّرها محلياً أولاً")
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			log.Fatalf("فشل التحقق من حسابات المدير: %v", err)
+		}
+		rows.Close()
+	}
 
 	// النسخ الاحتياطي التلقائي الدوري لحماية بيانات الفواتير والعملاء من أي فقدان
 	go func() {
@@ -143,27 +168,20 @@ func main() {
 	}
 }
 
-// ensureDataInitialized ensures that if dataDir is empty or mounted via a fresh volume,
-// it is automatically initialized with initial database, templates, and assets from data_defaults.
+// ensureDataInitialized copies bundled templates and assets into a fresh data directory.
+// The database is created by db.Open so a local database is never shipped as a seed.
 func ensureDataInitialized(dataDir string) {
 	_ = os.MkdirAll(dataDir, 0755)
 	defaultsDir := "data_defaults"
-	if fi, err := os.Stat(defaultsDir); err != nil || !fi.IsDir() {
-		return
-	}
-
-	// 1. Database file: if zsystem.db does not exist in dataDir, copy it from defaults
-	targetDb := filepath.Join(dataDir, "zsystem.db")
-	if _, err := os.Stat(targetDb); os.IsNotExist(err) {
-		srcDb := filepath.Join(defaultsDir, "zsystem.db")
-		if srcBytes, errRead := os.ReadFile(srcDb); errRead == nil && len(srcBytes) > 0 {
-			_ = os.WriteFile(targetDb, srcBytes, 0644)
-			log.Printf("[Init] تم تهيئة قاعدة البيانات الأولية في مسار التخزين الدائم: %s", targetDb)
+	if fi, err := os.Stat(filepath.Join(defaultsDir, "templates")); err != nil || !fi.IsDir() {
+		defaultsDir = "data"
+		if fi, err := os.Stat(filepath.Join(defaultsDir, "templates")); err != nil || !fi.IsDir() {
+			return
 		}
 	}
 
-	// 2. Templates: copy any missing templates from defaults
-	for _, sub := range []string{"invoices", "documents"} {
+	// Templates: copy any missing templates from defaults.
+	for _, sub := range []string{"invoices", "documents", "reports", "statements", "partials"} {
 		targetSub := filepath.Join(dataDir, "templates", sub)
 		_ = os.MkdirAll(targetSub, 0755)
 		srcSub := filepath.Join(defaultsDir, "templates", sub)
@@ -182,7 +200,7 @@ func ensureDataInitialized(dataDir string) {
 		}
 	}
 
-	// 3. Assets: copy svg or other assets if missing
+	// Assets: copy svg or other assets if missing.
 	for _, f := range []string{"saudi_riyal_symbol.svg"} {
 		dest := filepath.Join(dataDir, f)
 		if _, err := os.Stat(dest); os.IsNotExist(err) {

@@ -89,11 +89,14 @@ func GetMasterKey(keyFilePath string) ([]byte, error) {
 	}
 
 	if data, err := os.ReadFile(keyFilePath); err == nil {
-		key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(data)))
-		if err == nil && len(key) == 32 {
-			cachedMasterKey = key
-			return key, nil
+		key, decodeErr := base64.StdEncoding.DecodeString(strings.TrimSpace(string(data)))
+		if decodeErr != nil || len(key) != 32 {
+			return nil, fmt.Errorf("invalid master key file %s", keyFilePath)
 		}
+		cachedMasterKey = key
+		return key, nil
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to read master key: %w", err)
 	}
 
 	newKey := make([]byte, 32)
@@ -101,7 +104,15 @@ func GetMasterKey(keyFilePath string) ([]byte, error) {
 		return nil, err
 	}
 	b64Key := base64.StdEncoding.EncodeToString(newKey)
-	if err := os.WriteFile(keyFilePath, []byte(b64Key), 0600); err != nil {
+	f, err := os.OpenFile(keyFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create master key: %w", err)
+	}
+	if _, err := f.WriteString(b64Key); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("failed to write master key: %w", err)
+	}
+	if err := f.Close(); err != nil {
 		return nil, err
 	}
 

@@ -129,7 +129,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, mux *http.Ser
 			}
 		}
 	}
-	if (r.Method == "POST" && (r.URL.Path == "/api/auth/login" || r.URL.Path == "/api/invoices/preview-render-html")) || (r.Method == "GET" && (r.URL.Path == "/api/health" || r.URL.Path == "/api/meta" || strings.HasSuffix(r.URL.Path, "/render-html"))) {
+	if (r.Method == "POST" && r.URL.Path == "/api/auth/login") || (r.Method == "GET" && (r.URL.Path == "/api/health" || r.URL.Path == "/api/meta")) {
 		return true
 	}
 	u := s.getSessionUser(r)

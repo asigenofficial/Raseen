@@ -94,6 +94,11 @@ function createBlockElement(htmlContent, blockType = 'block') {
   return wrapper;
 }
 
+function riyadhTowerSvgBackground(color = '#1a2638') {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1414" viewBox="0 0 1000 1414"><defs><linearGradient id="tower"><stop stop-color="#164f68"/><stop offset=".35" stop-color="#71b0bc"/><stop offset=".52" stop-color="#d4e6e7"/><stop offset=".7" stop-color="#518a9e"/><stop offset="1" stop-color="#123c59"/></linearGradient><pattern id="windows" width="14" height="18" patternUnits="userSpaceOnUse"><path d="M0 0H14M0 0V18" fill="none" stroke="#edf8fa" stroke-opacity=".5" stroke-width=".8"/></pattern></defs><path d="M0 0H1000V115Q740 35 530 80T0 55Z" fill="${color}" fill-opacity=".14"/><path d="M0 55Q300 130 535 83T1000 115" fill="none" stroke="#b98e51" stroke-width="4"/><path d="M0 1280Q220 1190 430 1280T1000 1240V1414H0Z" fill="#dbc39b" fill-opacity=".3"/><g opacity=".93"><path id="tower-shape" d="M670 1330L687 740Q690 675 709 620L733 574Q751 634 787 661Q823 634 841 574L865 620Q884 675 887 740L904 1330Z" fill="url(#tower)" stroke="#285873" stroke-width="2"/><path d="M670 1330L687 740Q690 675 709 620L733 574Q751 634 787 661Q823 634 841 574L865 620Q884 675 887 740L904 1330Z" fill="url(#windows)"/><path d="M736 600H838" stroke="#244d68" stroke-width="12"/><path d="M736 594H838" stroke="#e6c68c" stroke-width="3"/><path d="M733 574Q751 634 787 661Q823 634 841 574" fill="none" stroke="#effaff" stroke-width="4"/><path d="M787 665V1330" stroke="#f7fcfd" stroke-opacity=".65" stroke-width="3"/><path d="M704 1330L719 737M870 1330L855 737" fill="none" stroke="#143e59" stroke-opacity=".45" stroke-width="2"/></g><g fill="${color}" opacity=".16"><path d="M460 1330V1170H508V1330M523 1330V1100H573V1330M590 1330V1200H644V1330M926 1330V1145H970V1330"/></g><path d="M55 1330H945" stroke="#b98e51" stroke-width="3" stroke-opacity=".65"/><path d="M55 1350H520" stroke="${color}" stroke-width="1" stroke-opacity=".2"/><circle cx="110" cy="1220" r="90" fill="none" stroke="#b98e51" stroke-width="1" stroke-opacity=".2"/></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 // ─── Dynamic Custom Table Generator ───────────────────────────────────────
 
 function generateCustomTableHTML({
@@ -165,6 +170,16 @@ function generateCustomTableHTML({
 
 // 1. Header Block (Geometric Angled Banner Style)
 function getHeaderBlockHTML(color) {
+  if (docMeta.type === 'invoices') {
+    return `<header style="display:flex;justify-content:space-between;align-items:flex-start;gap:22px;padding:18px 0 20px;margin-bottom:20px;border-bottom:2px solid #b98e51">
+      <div style="flex:1;min-width:0"><div contenteditable="true" style="font-size:25px;font-weight:900;color:${color};margin-bottom:10px">{{seller_name}}</div>
+      <div contenteditable="true" style="font-size:11px;line-height:1.9;color:#475569">الرقم الضريبي: {{seller_tax}}<br>السجل التجاري: {{seller_cr}}<br>{{seller_address}}<br>{{seller_city}} - {{seller_country}}<br>{{seller_phone}} · {{seller_email}}</div></div>
+      <div style="text-align:left;padding:14px 18px;border-inline-start:3px solid #b98e51;background:rgba(255,255,255,.88);border-radius:4px">
+      <div contenteditable="true" style="font-size:24px;font-weight:900;color:${color}">فاتورة ضريبية</div>
+      <div contenteditable="true" style="font-size:10px;letter-spacing:2px;color:#8c6b3a;margin-top:7px">TAX INVOICE</div>
+      <div style="font-size:12px;font-weight:700;color:#475569;margin-top:14px">{{invoice_number}}</div></div>
+    </header>`;
+  }
   return `
     <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #e2e8f0; padding-bottom:14px; margin-bottom:14px;">
       <div style="flex:1;">
@@ -184,6 +199,17 @@ function getHeaderBlockHTML(color) {
 
 // 1b. 3 Info Pills (Metadata Chamber)
 function getInfoPillsBlockHTML(color) {
+  if (docMeta.type === 'invoices') {
+    const fields = [
+      ['رقم الفاتورة', 'invoice_number'], ['تاريخ الإصدار', 'issue_date'],
+      ['وقت الإصدار', 'issue_time'], ['طريقة الدفع', 'payment_method'], ['إجمالي عدد القطع', 'total_qty'],
+    ];
+    return `<section style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:14px">${fields.map(([label, key]) => `
+      <div style="min-width:0;padding:9px 10px;border:1px solid #d6e0e8;border-radius:6px;background:rgba(255,255,255,.9)">
+        <div contenteditable="true" style="font-size:10px;color:#64748b;margin-bottom:5px">${label}</div>
+        <div style="font-size:12px;font-weight:800;color:${color};overflow-wrap:anywhere">{{${key}}}</div>
+      </div>`).join('')}</section>`;
+  }
   return `
     <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:14px;">
       <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; height:36px; display:flex; align-items:center; font-size:12px; font-weight:800; color:#0f172a; overflow:hidden;">
@@ -208,7 +234,7 @@ function getImageBlockHTML(src = '', width = '140px') {
   return `
     <div style="display:flex; justify-content:center; align-items:center; margin-bottom:14px; text-align:center;">
       <div style="position:relative; display:inline-block;" class="logo-container">
-        <img src="${imgSrc}" style="max-height:90px; width:${width}; object-fit:contain; border-radius:4px;" class="user-logo-img" alt="شعار المنشأة" />
+        <img src="${imgSrc}" style="max-height:90px; width:${width}; object-fit:contain; border-radius:4px;" class="user-logo-img" ${docMeta.type === 'invoices' ? 'data-template-logo="true"' : ''} alt="شعار المنشأة" />
         <div class="logo-actions" contenteditable="false" style="margin-top:4px; display:flex; gap:4px; justify-content:center;">
           <button type="button" class="btn-sub-ctrl btn-change-logo" style="font-size:10px; background:#0f172a; color:#fff; border:none; padding:2px 8px; border-radius:3px; cursor:pointer;">تغيير الشعار</button>
           <button type="button" class="btn-sub-ctrl btn-resize-logo" data-size="90px" style="font-size:10px; background:#475569; color:#fff; border:none; padding:2px 6px; border-radius:3px; cursor:pointer;">صغير</button>
@@ -267,37 +293,37 @@ function getItemsTableBlockHTML(color) {
           </label>
         </div>
       </div>
-      <table style="width:100%; border-collapse:collapse; font-size:11.5px; border:1px solid #cbd5e1;" class="data-table">
+      <table style="width:100%; border-collapse:collapse; font-size:11.5px; border:1px solid #cbd5e1;" class="data-table" data-dynamic-items-table="true">
         <thead>
           <tr style="background:${color}; color:#fff;" class="tbl-head-row">
-            <th contenteditable="true" style="padding:8px 6px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:center; width:35px;">#</th>
-            <th contenteditable="true" style="padding:8px 8px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:right;">اسم الصنف بالكامل</th>
-            <th contenteditable="true" style="padding:8px 8px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:right;">بيان الصنف أو الخدمة</th>
+            <th contenteditable="true" style="padding:8px 6px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:center; width:12%;">رقم الصنف</th>
+            <th contenteditable="true" style="padding:8px 8px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:right; width:28%;">اسم الصنف</th>
+            <th contenteditable="true" style="padding:8px 8px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:center; width:8%;">الوحدة</th>
             <th contenteditable="true" style="padding:8px 6px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:center; width:55px;">الكمية</th>
-            <th contenteditable="true" style="padding:8px 6px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:left; width:85px;">سعر الوحدة</th>
-            <th contenteditable="true" style="padding:8px 6px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:left; width:65px;">الخصم</th>
-            <th contenteditable="true" style="padding:8px 6px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:left; width:75px;">الضريبة</th>
-            <th contenteditable="true" style="padding:8px 8px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:left; width:100px;">الإجمالي</th>
+            <th contenteditable="true" style="padding:8px 6px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:left; width:11%;">السعر</th>
+            <th contenteditable="true" style="padding:8px 6px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:left; width:11%;">قبل الضريبة</th>
+            <th contenteditable="true" style="padding:8px 6px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:left; width:10%;">مبلغ الضريبة</th>
+            <th contenteditable="true" style="padding:8px 8px; border:1px solid rgba(255,255,255,0.2); outline:none; text-align:left; width:12%;">شامل الضريبة</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:center; font-weight:700;">1</td>
-            <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:center; color:#64748b;">PRD-01</td>
+            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:center; font-weight:700;">PRD-01</td>
             <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:right; font-weight:700; color:#0f172a;">خدمات برمجية وتطوير أنظمة</td>
+            <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:center;">خدمة</td>
             <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:center; font-weight:700;">1</td>
             <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">${SAR_SYMBOL_SVG} 1,000.00</td>
-            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left; color:#dc2626;">0.00</td>
+            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">1,000.00</td>
             <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">${SAR_SYMBOL_SVG} 150.00</td>
             <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:left; font-weight:800; color:#0f172a;">${SAR_SYMBOL_SVG} 1,150.00</td>
           </tr>
           <tr style="background:#f8fafc;">
-            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:center; font-weight:700;">2</td>
-            <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:center; color:#64748b;">PRD-02</td>
+            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:center; font-weight:700;">PRD-02</td>
             <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:right; font-weight:700; color:#0f172a;">دعم فني وصيانة دورية</td>
+            <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:center;">خدمة</td>
             <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:center; font-weight:700;">1</td>
             <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">${SAR_SYMBOL_SVG} 500.00</td>
-            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left; color:#dc2626;">50.00</td>
+            <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">500.00</td>
             <td contenteditable="true" style="padding:7px 6px; border:1px solid #cbd5e1; outline:none; text-align:left;">${SAR_SYMBOL_SVG} 67.50</td>
             <td contenteditable="true" style="padding:7px 8px; border:1px solid #cbd5e1; outline:none; text-align:left; font-weight:800; color:#0f172a;">${SAR_SYMBOL_SVG} 517.50</td>
           </tr>
@@ -312,7 +338,7 @@ function getTotalsBlockHTML(color) {
   return `
     <div style="display:flex; justify-content:space-between; align-items:stretch; gap:12px; margin-top:10px; margin-bottom:14px;">
       <div style="width:115px; border:1px solid #cbd5e1; border-radius:4px; padding:10px; text-align:center; background:#fff; display:flex; align-items:center; justify-content:center;">
-        <div style="width:90px; height:90px; display:flex; align-items:center; justify-content:center; font-family:'Segoe UI', Arial, sans-serif; font-weight:900; font-size:26px; color:#1e293b; border:1.5px dashed #cbd5e1; border-radius:6px; background:#f8fafc; letter-spacing:1px;">QR</div>
+        <div style="width:90px; height:90px; display:flex; align-items:center; justify-content:center; font-family:'Segoe UI', Arial, sans-serif; font-weight:900; font-size:26px; color:#1e293b; border:1.5px dashed #cbd5e1; border-radius:6px; background:#f8fafc; letter-spacing:1px;">{{qr_code}}</div>
       </div>
       <div style="flex:1; border:1px solid #cbd5e1; border-radius:4px; padding:10px 14px; background:#f8fafc; font-size:11.5px; display:flex; flex-direction:column;">
         <div contenteditable="true" style="font-weight:800; color:${color}; margin-bottom:4px; outline:none;">ملاحظات وشروط الفاتورة:</div>
@@ -335,11 +361,20 @@ function getTotalsBlockHTML(color) {
             <td contenteditable="true" style="padding:6px 10px; background:#f8fafc; font-weight:700; color:#475569; outline:none;">ضريبة القيمة المضافة (15%):</td>
             <td style="padding:6px 10px; text-align:left; font-weight:700; color:#0f172a;">${SAR_SYMBOL_SVG} {{tax_amount}}</td>
           </tr>
+          <tr style="border-bottom:1px solid #f1f5f9;">
+            <td contenteditable="true" style="padding:6px 10px; background:#f8fafc; font-weight:700; color:#475569; outline:none;">المبلغ المدفوع:</td>
+            <td style="padding:6px 10px; text-align:left; font-weight:700; color:#0f172a;">${SAR_SYMBOL_SVG} {{paid_amount}}</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f1f5f9;">
+            <td contenteditable="true" style="padding:6px 10px; background:#f8fafc; font-weight:700; color:#475569; outline:none;">المبلغ المتبقي:</td>
+            <td style="padding:6px 10px; text-align:left; font-weight:700; color:#0f172a;">${SAR_SYMBOL_SVG} {{remaining_amount}}</td>
+          </tr>
           <tr style="background:${color}; color:#fff;" class="totals-grand-row">
             <td contenteditable="true" style="padding:8px 10px; font-size:13px; font-weight:900; outline:none;">المبلغ الإجمالي المستحق:</td>
             <td style="padding:8px 10px; font-size:14px; font-weight:900; text-align:left;">${SAR_SYMBOL_SVG} {{grand_total}}</td>
           </tr>
         </table>
+        <div contenteditable="true" style="padding:8px 10px;text-align:center;font-weight:700;color:${color}">{{amount_in_words}}</div>
       </div>
     </div>
   `;
@@ -949,6 +984,25 @@ function serializeCanvasToCleanHTML() {
 
   const clone = canvas.cloneNode(true);
 
+  // يعرض المحرر صفوفاً إرشادية، بينما يستبدل النظام جسم الجدول بصفوف الفاتورة الفعلية عند الطباعة.
+  clone.querySelectorAll('table[data-dynamic-items-table]').forEach((table) => {
+    const tbody = table.querySelector('tbody');
+    if (tbody) tbody.innerHTML = '{{items_rows}}';
+    table.removeAttribute('data-dynamic-items-table');
+  });
+  clone.querySelectorAll('table[data-statement-rows-table]').forEach((table) => {
+    const tbody = table.querySelector('tbody');
+    if (tbody) tbody.innerHTML = '{{rows_html}}';
+    table.removeAttribute('data-statement-rows-table');
+  });
+  clone.querySelectorAll('[data-statement-logo-slot]').forEach((slot) => {
+    slot.outerHTML = '{{logo_html}}';
+  });
+  clone.querySelectorAll('img[data-template-logo]').forEach((img) => {
+    img.setAttribute('src', '{{logo}}');
+    img.removeAttribute('data-template-logo');
+  });
+
   // Remove editor UI controls
   $$('.block-controls', clone).forEach(c => c.remove());
   $$('.preset-section-controls', clone).forEach(c => c.remove());
@@ -1327,6 +1381,8 @@ function renderView() {
           <select id="sel-doc-type" style="padding:4px 8px; font-size:0.8rem; font-weight:700; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:5px;">
             <option value="invoices" ${docMeta.type === 'invoices' ? 'selected' : ''}>قالب فاتورة ضريبية</option>
             <option value="documents" ${docMeta.type === 'documents' ? 'selected' : ''}>قالب سند مالي / قبض</option>
+            <option value="reports" ${docMeta.type === 'reports' ? 'selected' : ''}>قالب تقرير مالي</option>
+            <option value="statements" ${docMeta.type === 'statements' ? 'selected' : ''}>قالب كشف حساب</option>
           </select>
 
           <select id="sel-preset-template" style="padding:4px 8px; font-size:0.8rem; font-weight:700; background:#0f172a; color:#38bdf8; border:1px solid #0284c7; border-radius:5px; cursor:pointer;" title="تحميل قالب جاهز ومعتمد للتعديل عليه">
@@ -2018,6 +2074,42 @@ function populateInitialBlocks() {
   canvas.innerHTML = '';
   const col = docMeta.primary_color;
 
+  if (docMeta.type === 'reports') {
+    canvas.appendChild(createBlockElement(`
+      <div style="position:relative;overflow:hidden;padding:24px;border:1px solid #dbe5ec;border-radius:14px;background:linear-gradient(145deg,#fff 55%,#f2f8fa);color:#173047">
+        <svg aria-hidden="true" viewBox="0 0 640 180" style="position:absolute;inset:0 0 auto;width:100%;height:180px;opacity:.16;pointer-events:none"><path fill="${col}" d="M0 0h640v55Q480 145 320 65T0 110z"/><circle cx="570" cy="145" r="100" fill="none" stroke="${col}" stroke-width="2"/><circle cx="570" cy="145" r="72" fill="none" stroke="${col}" stroke-width="2"/></svg>
+        <header style="position:relative;display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding-bottom:16px;border-bottom:2px solid ${col}">
+          <div><div contenteditable="true" style="font-size:11px;font-weight:800;color:${col};margin-bottom:5px">التقارير المالية</div><h1 contenteditable="true" style="font-size:24px;margin:0 0 8px;color:#173047">{{title}}</h1><div contenteditable="true" style="font-size:12px;color:#64748b">{{subtitle}}</div></div>
+          <div contenteditable="true" style="font-size:11px;line-height:1.9;text-align:left;color:#475569">المنشأة: {{issuer_name}}<br>تاريخ التقرير: {{generated_at}}</div>
+        </header>
+        <section style="position:relative;display:flex;gap:8px;flex-wrap:wrap;margin:16px 0">{{stats_html}}</section>
+        <div contenteditable="true" style="font-weight:800;color:${col};margin:0 0 7px">تفاصيل التقرير</div>
+        <table style="position:relative;width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:${col};color:white">{{headers_html}}</tr></thead><tbody>{{rows_html}}</tbody><tfoot>{{footer_html}}</tfoot></table>
+        <footer contenteditable="true" style="display:flex;justify-content:space-between;margin-top:16px;padding-top:8px;border-top:1px solid #dbe5ec;color:#64748b;font-size:10px"><span>تقرير مالي صادر من النظام</span><span>{{generated_at}}</span></footer>
+      </div>
+    `, 'report_starter'));
+    return;
+  }
+
+  if (docMeta.type === 'statements') {
+    canvas.appendChild(createBlockElement(`
+      <div style="position:relative;padding:7px;border:1px solid #294b70;background:#fff;color:#173e66">
+        <div style="border:1.5px solid #294b70;padding:5px 12px 0;margin-bottom:8px;background:linear-gradient(125deg,#fff 0 52%,#f6f8fa 52% 100%)">
+          <div style="min-height:48mm;display:grid;grid-template-columns:1fr 175px 1fr;align-items:center;gap:12px;padding:8px 3px;direction:ltr">
+            <div style="direction:ltr;text-align:left;font-size:13px;font-weight:800;line-height:1.7;color:#173e66"><div contenteditable="true">{{issuer_name_en}}</div><div contenteditable="true" style="font-size:10px;font-weight:400;color:#394b61">{{issuer_address_en}}</div><div contenteditable="true" style="font-size:10px;font-weight:400">VAT: {{issuer_tax}}<br>CR: {{issuer_cr}}</div></div>
+            <div style="text-align:center"><div data-statement-logo-slot="true" style="width:130px;height:62px;margin:0 auto 5px;border:1.5px dashed #97aac1;border-radius:8px;display:grid;place-items:center;color:#617d9b;font-size:12px">شعار المنشأة</div><div contenteditable="true" style="font-size:19px;font-weight:900;color:#173e66">كشف حساب عميل</div><div style="font-size:10px;font-weight:800;letter-spacing:1.7px">ACCOUNT STATEMENT</div></div>
+            <div style="direction:rtl;text-align:right;font-size:14px;font-weight:800;line-height:1.8;color:#173e66"><div contenteditable="true">{{issuer_name}}</div><div contenteditable="true" style="font-size:10px;font-weight:400;color:#394b61">{{issuer_address}}</div><div contenteditable="true" style="font-size:10px;font-weight:400">الرقم الضريبي: {{issuer_tax}}<br>السجل التجاري: {{issuer_cr}}</div></div>
+          </div>
+          <div style="min-height:10mm;border-top:1px solid #d6dce3;border-bottom:2px solid #c6a66a;display:flex;justify-content:space-around;align-items:center;gap:10px;color:#173e66;font-size:10px;direction:ltr"><span>{{issuer_email}}</span><span>{{issuer_phone}}</span><span>{{issuer_city_country}}</span></div>
+        </div>
+        <div style="display:flex;justify-content:center;gap:30px;margin:10px 0 8px;font-size:12px;font-weight:800"><span>من تاريخ {{period_from}}</span><span>إلى تاريخ {{period_to}}</span></div>
+        <section style="display:grid;grid-template-columns:1fr 1.5fr 1fr;align-items:center;min-height:39px;border:1px solid #444;padding:5px 10px;font-size:11px;font-weight:800"><div>رقم الحساب: {{client_code}}</div><div style="text-align:center">اسم الحساب: {{client_name}}</div><div style="text-align:left">العملة: {{currency_name}}</div></section>
+        <table data-statement-rows-table="true" style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px"><thead><tr style="background:#a7eef0"><th rowspan="2">#</th><th rowspan="2">رقم المستند/قيد</th><th rowspan="2">التاريخ</th><th rowspan="2">النوع</th><th rowspan="2">البيان</th><th colspan="2">الحركة</th><th colspan="2">الرصيد</th></tr><tr style="background:#d0f5f5"><th>مدين</th><th>دائن</th><th>مدين</th><th>دائن</th></tr></thead><tbody><tr><td>1</td><td>INV-0001</td><td>2026/01/01</td><td>فاتورة بيع</td><td>نموذج حركة حساب</td><td>0.00</td><td>0.00</td><td>0.00</td><td>0.00</td></tr></tbody></table>
+      </div>
+    `, 'statement_starter'));
+    return;
+  }
+
   if (docMeta.type === 'documents') {
     canvas.appendChild(createBlockElement(getHeaderBlockHTML(col), 'header'));
     canvas.appendChild(createBlockElement(getImageBlockHTML(), 'logo'));
@@ -2028,7 +2120,13 @@ function populateInitialBlocks() {
     sig.style.marginTop = 'auto';
     canvas.appendChild(sig);
   } else {
+    if (docMeta.type === 'invoices' && !sheetBg.bgImage) {
+      sheetBg.bgImage = riyadhTowerSvgBackground(col);
+      sheetBg.bgImageOpacity = 0.34;
+      sheetBg.bgImageFit = 'cover';
+    }
     canvas.appendChild(createBlockElement(getHeaderBlockHTML(col), 'header'));
+    if (docMeta.type === 'invoices') canvas.appendChild(createBlockElement(getImageBlockHTML('', '110px'), 'logo'));
     canvas.appendChild(createBlockElement(getInfoPillsBlockHTML(col), 'info_pills'));
     canvas.appendChild(createBlockElement(getBuyerBlockHTML(col), 'buyer'));
     canvas.appendChild(createBlockElement(getItemsTableBlockHTML(col), 'items_table'));
@@ -2435,7 +2533,7 @@ function loadRawHtmlIntoCanvas(rawHtml, tplName) {
   attachPresetSectionDrag();
 
   if (tplName) {
-    const cleanName = tplName.replace(/\(.*?\)/g, '').trim();
+    const cleanName = tplName.trim();
     docMeta.name_ar = cleanName;
     const inpName = $('#inp-doc-name', view);
     if (inpName) inpName.value = cleanName;
@@ -2496,7 +2594,11 @@ function attachAppEvents() {
     const htmlCode = txt?.value.trim();
     if (!htmlCode) return toastErr('يرجى لصق كود HTML أولاً');
     const inp = $('#inp-paste-tpl-name', view);
-    const customName = inp?.value.trim() || 'قالب مستورد مخصص';
+    const defaultNameByType = {
+      invoices: 'قالب فاتورة مستورد', documents: 'قالب سند مستورد',
+      reports: 'قالب تقرير مالي مستورد', statements: 'قالب كشف حساب مستورد',
+    };
+    const customName = inp?.value.trim() || defaultNameByType[docMeta.type] || defaultNameByType.invoices;
     loadRawHtmlIntoCanvas(htmlCode, customName);
     if (pasteModal) pasteModal.style.display = 'none';
   });
@@ -2611,7 +2713,14 @@ function attachAppEvents() {
     selType.onchange = () => {
       if (confirm('تغيير نوع القالب سيبدأ بتصميم أساسي مناسب للنوع المختار، هل تريد المتابعة؟')) {
         docMeta.type = selType.value;
-        docMeta.name_ar = docMeta.type === 'invoices' ? 'قالب فواتير مخصص' : 'قالب سند مالي مخصص';
+        sheetBg.bgImage = docMeta.type === 'invoices' ? riyadhTowerSvgBackground(docMeta.primary_color) : '';
+        sheetBg.bgImageOpacity = 0.34;
+        sheetBg.bgImageFit = 'cover';
+        const defaultNames = {
+          invoices: 'قالب فاتورة ضريبية مخصص', documents: 'قالب سند مالي مخصص',
+          reports: 'قالب تقرير مالي مخصص', statements: 'قالب كشف حساب مخصص',
+        };
+        docMeta.name_ar = defaultNames[docMeta.type] || defaultNames.invoices;
         renderView();
       } else {
         selType.value = docMeta.type;
@@ -3102,13 +3211,18 @@ export async function render(container) {
     sessionStorage.removeItem('raseen_imported_ai_html');
     sessionStorage.removeItem('raseen_imported_ai_type');
     docMeta.type = aiType || 'invoices';
-    docMeta.name_ar = aiType === 'documents' ? 'سند مالي بالذكاء الاصطناعي' : 'فاتورة بالذكاء الاصطناعي';
+    const aiNames = {
+      invoices: 'فاتورة بالذكاء الاصطناعي', documents: 'سند مالي بالذكاء الاصطناعي',
+      reports: 'تقرير مالي بالذكاء الاصطناعي', statements: 'كشف حساب بالذكاء الاصطناعي',
+    };
+    docMeta.name_ar = aiNames[docMeta.type] || aiNames.invoices;
     renderView();
     loadRawHtmlIntoCanvas(aiHtml, docMeta.name_ar);
     return;
   }
 
-  const requestedId = new URLSearchParams(window.location.hash.split('?')[1] || '').get('id');
+  const routeParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+  const requestedId = routeParams.get('id');
   if (requestedId) {
     try {
       const response = await api.get('/api/templates/builder/' + encodeURIComponent(requestedId));
@@ -3126,6 +3240,15 @@ export async function render(container) {
     } catch (err) {
       toastErr('تعذر فتح القالب: ' + (err.message || 'خطأ غير متوقع'));
     }
+  }
+  const requestedType = routeParams.get('type');
+  if (['invoices', 'documents', 'reports', 'statements'].includes(requestedType)) {
+    docMeta.type = requestedType;
+    const defaultNames = {
+      invoices: 'قالب فاتورة ضريبية مخصص', documents: 'قالب سند مالي مخصص',
+      reports: 'قالب تقرير مالي مخصص', statements: 'قالب كشف حساب مخصص',
+    };
+    docMeta.name_ar = defaultNames[requestedType];
   }
   renderView();
 }

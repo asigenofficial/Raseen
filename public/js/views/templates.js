@@ -6,13 +6,9 @@ import { api } from '../core/api.js';
 import { store, can } from '../core/store.js';
 import {
   html, raw, esc, printDoc, modal, toastOk, toastErr, $, $$, exportExcel, downloadPdfFromHtml,
-  fillDynamicTemplateHtml,
+  fillDynamicTemplateHtml, fillStoredTemplate,
 } from '../core/util.js';
 
-import {
-  invoiceA4, invoiceThermal, invoicePreviewDoc, INVOICE_TEMPLATES,
-  VOUCHER_TEMPLATES, voucherPrint,
-} from '../print/templates.js?v=5';
 import { PRESET_LOGOS } from '../print/logos.js';
 import { openAiPromptModal } from './ai-prompt-modal.js';
 
@@ -188,7 +184,7 @@ export async function render(view) {
   } catch { issuerQrSettings = {}; }
 
   let printCfg = {
-    template_style: 'standard',
+    template_style: '',
     primary_color: '#06b6d4',
     dark_color: '#0891b2',
     light_color: '#ecfeff',
@@ -213,6 +209,42 @@ export async function render(view) {
     custom_css: '',
     ...issuerPrintSettings,
   };
+  function normalizeTemplateDefaults(settings = printCfg) {
+    const categories = [
+      { key: 'template_style', mode: 'invoices', names: ['invoices'] },
+      { key: 'voucher_template_style', mode: 'documents', names: ['documents', 'vouchers'] },
+      { key: 'report_template_style', mode: 'reports', names: ['reports'] },
+      { key: 'statement_template_style', mode: 'statements', names: ['statements'] },
+    ];
+    settings.template_selection_modes = { ...(settings.template_selection_modes || {}) };
+    for (const { key, mode, names } of categories) {
+      const templates = excelTemplates.filter((tpl) => names.includes(tpl.category));
+      if (!templates.some((tpl) => tpl.id === settings[key])) {
+        settings[key] = templates[0]?.id || '';
+        settings.template_selection_modes[mode] = 'auto';
+      } else if (!settings.template_selection_modes[mode]) {
+        // Existing saved selections predate the mode flag and are treated as user-confirmed.
+        settings.template_selection_modes[mode] = 'manual';
+      }
+    }
+    return settings;
+  }
+  function isAutomaticTemplate(settingKey) {
+    const modeBySetting = {
+      template_style: 'invoices', voucher_template_style: 'documents',
+      report_template_style: 'reports', statement_template_style: 'statements',
+    };
+    return printCfg.template_selection_modes?.[modeBySetting[settingKey]] === 'auto';
+  }
+  function confirmTemplateSelection(settingKey, templateId) {
+    const modeBySetting = {
+      template_style: 'invoices', voucher_template_style: 'documents',
+      report_template_style: 'reports', statement_template_style: 'statements',
+    };
+    printCfg[settingKey] = templateId;
+    printCfg.template_selection_modes = { ...(printCfg.template_selection_modes || {}), [modeBySetting[settingKey]]: 'manual' };
+  }
+  normalizeTemplateDefaults();
 
   let qrCfg = {
     show_a4: true,
@@ -226,7 +258,9 @@ export async function render(view) {
   // فحص علامة التبويب من الرابط
   const hash = window.location.hash || '';
   let activeHubTab = 'invoices'; // افتراضياً فواتير المبيعات
-  if (hash.includes('tab=vouchers')) activeHubTab = 'vouchers';
+  if (hash.includes('tab=reports')) activeHubTab = 'reports';
+  else if (hash.includes('tab=statements')) activeHubTab = 'statements';
+  else if (hash.includes('tab=vouchers')) activeHubTab = 'vouchers';
   else activeHubTab = 'invoices';
 
   let printSubTab = 'branding';
@@ -268,7 +302,7 @@ export async function render(view) {
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           </div>
           <div class="doc-tpl-kpi-info">
-            <span class="doc-tpl-kpi-val" style="font-size:1.05rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;">${esc(currentTpl.name_ar || currentTpl.name)}</span>
+            <span class="doc-tpl-kpi-val" style="font-size:1.05rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;">${esc(currentTpl?.name_ar || currentTpl?.name || 'لم يُعتمد قالب بعد')}</span>
             <span class="doc-tpl-kpi-label">قالب الفاتورة المعتمد</span>
           </div>
         </div>
@@ -286,13 +320,16 @@ export async function render(view) {
   }
 
   function renderSearchBarHtml(activeTab) {
-    const uploadLabel = activeTab === 'vouchers' ? 'رفع قالب سند قبض جديد (.html)' : 'رفع قالب فاتورة جديد (.html)';
+    const uploadLabel = activeTab === 'vouchers' ? 'رفع قالب سند قبض جديد (.html)' : activeTab === 'reports' ? 'رفع قالب تقرير مالي (.html)' : activeTab === 'statements' ? 'رفع قالب كشف حساب (.html)' : 'رفع قالب فاتورة جديد (.html)';
     return `
       <div class="card" style="padding:0.75rem 1rem; margin:0; background:rgba(255,255,255,0.02); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem;">
         <div style="position:relative; flex:1; min-width:240px; max-width:460px;">
           <input type="text" id="inp-hub-search" value="${esc(searchQuery)}" placeholder="بحث في أسماء القوالب أو الأعمدة المكتشفة..." style="width:100%; padding-inline-start:34px; font-size:0.86rem;" />
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); color:var(--muted);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </div>
+        <label class="btn btn-primary" style="cursor:pointer">${esc(uploadLabel)}
+          <input class="file-upload-tab-specific" type="file" accept="${activeTab === 'reports' || activeTab === 'statements' ? '.html,.htm' : '.html,.htm,.xlsx,.xls'}" style="display:none">
+        </label>
       </div>
     `;
   }
@@ -470,9 +507,9 @@ export async function render(view) {
                 عرض الفاتورة (صورة)
               </button>
               ${isActive ? `
-                <button type="button" class="btn btn-sm btn-tpl-active-state" disabled>معتمد للمنشأة ✓</button>
+                <button type="button" class="btn btn-sm btn-tpl-active-state" disabled>${isAutomaticTemplate('template_style') ? 'يعمل تلقائياً ✓' : 'معتمد ✓'}</button>
               ` : `
-                <button type="button" class="btn btn-sm btn-primary btn-select-template" data-tpl-id="${esc(tpl.id)}" style="font-size:0.78rem; padding:4px 10px;">اعتماد القالب</button>
+                <button type="button" class="btn btn-sm btn-primary btn-select-template" data-tpl-id="${esc(tpl.id)}" title="اعتماد هذا القالب للفواتير" style="font-size:0.78rem; padding:4px 10px;">اعتماد</button>
               `}
             </div>
             <div class="doc-tpl-card-actions">
@@ -545,9 +582,9 @@ export async function render(view) {
                 عرض السند (صورة)
               </button>
               ${isVoucherActive ? `
-                <button type="button" class="btn btn-sm btn-tpl-active-state" disabled>معتمد للمنشأة ✓</button>
+                <button type="button" class="btn btn-sm btn-tpl-active-state" disabled>${isAutomaticTemplate('voucher_template_style') ? 'يعمل تلقائياً ✓' : 'معتمد ✓'}</button>
               ` : `
-                <button type="button" class="btn btn-sm btn-primary btn-select-voucher-template" data-tpl-id="${esc(tpl.id)}" style="font-size:0.78rem; padding:4px 10px;">اعتماد القالب</button>
+                <button type="button" class="btn btn-sm btn-primary btn-select-voucher-template" data-tpl-id="${esc(tpl.id)}" title="اعتماد هذا القالب للسندات" style="font-size:0.78rem; padding:4px 10px;">اعتماد</button>
               `}
             </div>
             <div class="doc-tpl-card-actions">
@@ -764,8 +801,7 @@ export async function render(view) {
 
   function renderView() {
     const currentTpl = excelTemplates.find((t) => t.id === printCfg.template_style)
-      || INVOICE_TEMPLATES.find((t) => t.id === printCfg.template_style)
-      || { name_ar: 'الرسمي المعتمد', id: 'standard' };
+      || excelTemplates.find((t) => t.category === 'invoices') || null;
 
     const invoiceTemplates = excelTemplates.filter((t) => t.category === 'invoices' || t.category === 'custom' || t.category === 'custom_invoices');
     const voucherTemplates = excelTemplates.filter((t) => t.category === 'documents' || t.category === 'vouchers' || t.category === 'custom_vouchers');
@@ -789,7 +825,17 @@ export async function render(view) {
     const searchBarHtml = activeHubTab !== 'print' ? renderSearchBarHtml(activeHubTab) : '';
 
     let contentHtml = '';
-    if (activeHubTab === 'vouchers') {
+    if (activeHubTab === 'reports' || activeHubTab === 'statements') {
+      const settingKey = activeHubTab === 'reports' ? 'report_template_style' : 'statement_template_style';
+      const matched = filterList(excelTemplates.filter((tpl) => tpl.category === activeHubTab));
+      contentHtml = matched.length ? `<div class="doc-tpl-grid">${matched.map((tpl) => `<div class="doc-tpl-card" style="padding:1rem">
+        <strong>${esc(tpl.name_ar || tpl.name)}</strong><p class="muted">${esc(tpl.description || 'قالب HTML قابل للتخصيص')}</p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="btn btn-sm" type="button" data-file-preview="${esc(tpl.id)}">معاينة</button>
+          <button class="btn btn-sm ${printCfg[settingKey] === tpl.id ? 'btn-tpl-active-state' : 'btn-primary'}" type="button" data-select-data-template="${esc(tpl.id)}" data-setting-key="${settingKey}" title="اعتماد هذا القالب لهذه الفئة" ${printCfg[settingKey] === tpl.id ? 'disabled' : ''}>${printCfg[settingKey] === tpl.id ? (isAutomaticTemplate(settingKey) ? 'يعمل تلقائياً ✓' : 'معتمد ✓') : 'اعتماد'}</button>
+          <button class="btn btn-sm btn-danger" type="button" data-file-delete="${esc(tpl.id)}">حذف</button>
+        </div></div>`).join('')}</div>` : '<div class="doc-tpl-empty">لا توجد قوالب في هذه الفئة. ارفع ملف HTML لإضافتها.</div>';
+    } else if (activeHubTab === 'vouchers') {
       contentHtml = renderVouchersGridHtml(filteredVouchers);
     } else if (activeHubTab === 'print') {
       contentHtml = renderPrintStudioHtml(printSubTab, printCfg, qrCfg, activeIssuer, activeZatcaPhase, zoomLevel);
@@ -808,7 +854,7 @@ export async function render(view) {
             </h1>
           </div>
           <div class="page-actions" style="flex-wrap:wrap; gap:.5rem;">
-            <a class="btn btn-primary" href="#/template-builder">إنشاء قالب فاتورة أو مستند</a>
+            <a class="btn btn-primary" href="#/template-builder${activeHubTab === 'reports' || activeHubTab === 'statements' ? `?type=${activeHubTab}` : ''}">${activeHubTab === 'reports' ? 'إنشاء قالب تقرير مالي' : activeHubTab === 'statements' ? 'إنشاء قالب كشف حساب' : 'إنشاء قالب فاتورة أو مستند'}</a>
             <div class="field" style="margin:0; min-width:160px; flex:1 1 auto;">
               <select id="sel-issuer">
                 ${raw(issuers.map((iss) => `<option value="${esc(iss.id)}"${iss.id === activeIssuer.id ? ' selected' : ''}>${esc(iss.name_ar)} (${esc(iss.code)})</option>`).join(''))}
@@ -833,6 +879,8 @@ export async function render(view) {
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
             قوالب المستندات والسندات (${voucherTemplates.length})
           </button>
+          <button type="button" class="doc-tpl-tab-btn ${activeHubTab === 'statements' ? 'active' : ''}" data-hub-tab="statements">قوالب كشف الحساب (${excelTemplates.filter((tpl) => tpl.category === 'statements').length})</button>
+          <button type="button" class="doc-tpl-tab-btn ${activeHubTab === 'reports' ? 'active' : ''}" data-hub-tab="reports">قوالب التقارير المالية (${excelTemplates.filter((tpl) => tpl.category === 'reports').length})</button>
         </div>
 
         <!-- شريط البحث السريع والرفع -->
@@ -1060,13 +1108,7 @@ export async function render(view) {
 
     const { issuerToUse, clientToUse, invToRender } = resolvePreviewEntities(tpl);
 
-    const fallbackHtml = () => invoicePreviewDoc({
-      invoice: invToRender,
-      issuer: issuerToUse,
-      client: clientToUse,
-      printSettings: printCfg,
-      qrSettings: qrCfg,
-    });
+    const fallbackHtml = () => '<p dir="rtl">تعذر قراءة ملف قالب الفاتورة من data.</p>';
 
     if (tpl && tpl.id) {
       iframe.srcdoc = getTemplateLoadingHtml(`جارٍ تحميل قالب: ${tpl.name_ar || tpl.name}`);
@@ -1113,13 +1155,7 @@ export async function render(view) {
       const { issuerToUse, clientToUse, invToRender } = resolvePreviewEntities(tpl);
 
       let docHtml = '';
-      const fallbackHtml = () => invoicePreviewDoc({
-        invoice: invToRender,
-        issuer: issuerToUse,
-        client: clientToUse,
-        printSettings: previewPrintCfg,
-        qrSettings: qrCfg,
-      });
+      const fallbackHtml = () => '<p dir="rtl">تعذر قراءة ملف قالب الفاتورة من data.</p>';
 
       let fsZoom = 80;
       const m = modal({
@@ -1285,9 +1321,7 @@ export async function render(view) {
       }
     } catch {}
 
-    if (!docHtml) {
-      docHtml = voucherPrint({ voucher: placeholderVoucher, issuer: placeholderIssuer, client: placeholderClient, style: tplId });
-    }
+    if (!docHtml) throw new Error('تعذر قراءة ملف قالب السند من data');
 
     let vfsZoom = 80;
     const m = modal({
@@ -2091,12 +2125,13 @@ export async function render(view) {
           const detectedHeaders = inspection?.headers || [];
           const detectedMeta = inspection?.metadata || inspection?.metadataFields || {};
           const detectedTitleVal = inspection?.detectedTitle || inspection?.title;
-          const suggestedTitle = (detectedTitleVal && detectedTitleVal.length < 60) ? detectedTitleVal : defaultName;
 
           let detectedCategory = categoryHint;
           if (detectedCategory === 'auto') {
             const nameLower = file.name.toLowerCase();
-            if (nameLower.includes('report') || nameLower.includes('summary') || nameLower.includes('تقرير') || nameLower.includes('ملخص')) {
+            if (nameLower.includes('statement') || nameLower.includes('كشف')) {
+              detectedCategory = 'statements';
+            } else if (nameLower.includes('report') || nameLower.includes('summary') || nameLower.includes('تقرير') || nameLower.includes('ملخص')) {
               detectedCategory = 'reports';
             } else if (nameLower.includes('voucher') || nameLower.includes('receipt') || nameLower.includes('سند') || nameLower.includes('قبض')) {
               detectedCategory = 'vouchers';
@@ -2104,6 +2139,15 @@ export async function render(view) {
               detectedCategory = 'invoices';
             }
           }
+
+          const categoryDefaultNames = {
+            invoices: 'قالب فاتورة ضريبية', vouchers: 'قالب سند قبض', documents: 'قالب سند قبض',
+            reports: 'قالب تقرير مالي', statements: 'قالب كشف حساب',
+          };
+          const candidateTitle = detectedTitleVal && detectedTitleVal.length < 60 ? detectedTitleVal : defaultName;
+          const suggestedTitle = /[\u0600-\u06ff]/.test(candidateTitle)
+            ? candidateTitle
+            : categoryDefaultNames[detectedCategory] || categoryDefaultNames.invoices;
 
           const detectedHeadersChipsHtml = detectedHeaders.map((h, i) => `
             <div style="background:rgba(255,255,255,0.04); border:1px solid var(--line); padding:3px 8px; border-radius:5px; font-size:0.75rem; color:#e2e8f0;">
@@ -2134,8 +2178,10 @@ export async function render(view) {
                 <div class="field" style="margin-bottom:1rem;">
                   <label style="font-weight:700; color:#fff;">تصنيف القالب *</label>
                   <select id="sel-tpl-category" style="width:100%;">
-                    <option value="invoices"${detectedCategory !== 'vouchers' ? ' selected' : ''}>قالب فاتورة مبيعات (Sales Invoice)</option>
+                    <option value="invoices"${detectedCategory === 'invoices' ? ' selected' : ''}>قالب فاتورة مبيعات (Sales Invoice)</option>
                     <option value="vouchers"${detectedCategory === 'vouchers' ? ' selected' : ''}>قالب سند قبض (Receipt Voucher)</option>
+                    <option value="statements"${detectedCategory === 'statements' ? ' selected' : ''}>قالب كشف حساب عميل (HTML)</option>
+                    <option value="reports"${detectedCategory === 'reports' ? ' selected' : ''}>قالب تقرير مالي (HTML)</option>
                   </select>
                 </div>
 
@@ -2174,8 +2220,7 @@ export async function render(view) {
               toastOk(`تم رفع واعتماد قالب «${chosenName}» بنجاح!`);
               uploadModal.close();
 
-              if (chosenCategory === 'vouchers') activeHubTab = 'vouchers';
-              else activeHubTab = 'invoices';
+              activeHubTab = chosenCategory;
 
               templateHtmlCache.clear();
               await loadTemplates();
@@ -2196,7 +2241,144 @@ export async function render(view) {
     }
   }
 
+  function openStoredDocumentPreview(tpl, docHtml, kindLabel) {
+    let zoom = 80;
+    const title = tpl.name_ar || tpl.name || kindLabel;
+    const m = modal({
+      title: `معاينة ${kindLabel}: ${title}`,
+      wide: true,
+      body: html`
+        <div style="padding:0.2rem 0">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;background:rgba(255,255,255,.03);padding:.5rem .85rem;border-radius:8px;border:1px solid var(--line);flex-wrap:wrap;gap:.5rem">
+            <div class="flex gap-xs" style="align-items:center">
+              <span class="badge green" style="font-weight:700">معاينة A4 رسمية</span>
+              <span class="tiny muted">${esc(title)}</span>
+            </div>
+            <div class="tpl-zoom-controls" style="margin:0">
+              <button type="button" class="tpl-zoom-btn" id="stored-preview-zoom-out" title="تصغير">−</button>
+              <span class="tpl-zoom-val" id="stored-preview-zoom-text">${zoom}%</span>
+              <button type="button" class="tpl-zoom-btn" id="stored-preview-zoom-in" title="تكبير">+</button>
+              <button type="button" class="tpl-zoom-btn" id="stored-preview-zoom-fit" title="ملاءمة الشاشة" style="border-inline-start:1px solid var(--line-strong);font-size:.72rem">العرض</button>
+            </div>
+          </div>
+          <div class="modal-paper-stage" id="stored-preview-stage">
+            <div class="modal-paper-scaler" id="stored-preview-scaler" style="transform:scale(${zoom / 100})">
+              <div class="modal-paper-sheet">
+                <iframe id="stored-preview-iframe" title="معاينة ${esc(kindLabel)}" style="width:100%;height:100%;min-height:920px;border:0;display:block;background:#fff"></iframe>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      footer: html`
+        <div class="modal-preview-bar">
+          <button class="btn btn-primary" id="stored-preview-print" type="button">طباعة الآن</button>
+          <button class="btn" id="stored-preview-pdf" type="button">تنزيل PDF</button>
+          <button class="btn" data-close type="button" style="padding:0 1.25rem">إغلاق</button>
+        </div>
+      `,
+    });
+
+    const iframe = $('#stored-preview-iframe', m.el);
+    if (iframe) iframe.srcdoc = docHtml;
+    const updateZoom = (next) => {
+      zoom = Math.max(25, Math.min(130, next));
+      const text = $('#stored-preview-zoom-text', m.el);
+      const scaler = $('#stored-preview-scaler', m.el);
+      if (text) text.textContent = `${zoom}%`;
+      if (scaler) scaler.style.transform = `scale(${zoom / 100})`;
+    };
+    const fitZoom = () => {
+      const stage = $('#stored-preview-stage', m.el);
+      if (!stage || stage.clientWidth <= 60) return;
+      const scale = Math.min(1.15, Math.max(.25, Math.round(((stage.clientWidth - 20) / 794) * 95) / 100));
+      updateZoom(Math.round(scale * 100));
+    };
+    $('#stored-preview-zoom-in', m.el)?.addEventListener('click', () => updateZoom(zoom + 10));
+    $('#stored-preview-zoom-out', m.el)?.addEventListener('click', () => updateZoom(zoom - 10));
+    $('#stored-preview-zoom-fit', m.el)?.addEventListener('click', fitZoom);
+    setTimeout(fitZoom, 40);
+    $('#stored-preview-print', m.el)?.addEventListener('click', () => printDoc(docHtml));
+    $('#stored-preview-pdf', m.el)?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const safeName = String(title).replace(/[\\/?%*:|"<>]/g, '_').trim() || kindLabel;
+        await downloadPdfFromHtml(docHtml, `معاينة_${safeName}.pdf`);
+      } catch (err) {
+        toastErr(`فشل تصدير ملف PDF: ${err.message || err}`);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
   function attachEvents() {
+    $$('[data-file-preview]', view).forEach((btn) => btn.addEventListener('click', async () => {
+      try {
+        const tpl = excelTemplates.find((item) => item.id === btn.dataset.filePreview);
+        if (!tpl || !['reports', 'statements'].includes(tpl.category)) throw new Error('تعذر تحديد فئة القالب');
+        const res = await fetch(`/api/invoices/templates/${encodeURIComponent(tpl.id)}/render-html`, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('تعذر قراءة القالب');
+        const rawTemplate = await res.text();
+        const isStatement = tpl.category === 'statements';
+        const now = new Date();
+        const issuerName = activeIssuer.name_ar || activeIssuer.name || 'اسم المنشأة';
+        const sampleRows = isStatement
+          ? '<tr class="opening-row"><td>—</td><td>—</td><td>01-01-2026</td><td>رصيد افتتاحي</td><td class="desc">الرصيد الافتتاحي</td><td>0.00</td><td>0.00</td><td>0.00</td><td>0.00</td></tr><tr><td>1</td><td>INV-1001</td><td>15-01-2026</td><td>فاتورة</td><td class="desc">فاتورة بيع رقم INV-1001</td><td>1,150.00</td><td>0.00</td><td>1,150.00</td><td>0.00</td></tr><tr><td>2</td><td>VCH-2001</td><td>20-01-2026</td><td>سند</td><td class="desc">سداد فاتورة رقم INV-1001</td><td>0.00</td><td>500.00</td><td>650.00</td><td>0.00</td></tr>'
+          : '<tr><td>يناير</td><td>12</td><td>18,500.00</td><td>3,250.00</td></tr><tr><td>فبراير</td><td>9</td><td>14,200.00</td><td>2,100.00</td></tr><tr><td>الإجمالي</td><td>21</td><td>32,700.00</td><td>5,350.00</td></tr>';
+        const values = {
+          title: isStatement ? 'كشف حساب عميل' : 'التقرير المالي',
+          subtitle: isStatement ? 'حركة الحساب خلال الفترة' : 'ملخص الأداء المالي للفترة',
+          issuer_name: issuerName,
+          issuer_name_en: activeIssuer.name_en || 'Company / Establishment Name',
+          issuer_tax: activeIssuer.tax_number || activeIssuer.vat_number || '300000000000003',
+          issuer_cr: activeIssuer.commercial_register || activeIssuer.cr_number || '1010000000',
+          issuer_address: activeIssuer.address || activeIssuer.street || 'جدة - حي الروضة - شارع الأمير سلطان',
+          issuer_address_en: activeIssuer.address_en || 'Jeddah - Al Rawdah Dist. - Prince Sultan St.',
+          issuer_phone: activeIssuer.phone || activeIssuer.mobile || '05xxxxxxxx',
+          issuer_email: activeIssuer.email || 'info@example.com',
+          issuer_city_country: [activeIssuer.city, activeIssuer.country].filter(Boolean).join(' - ') || 'جدة - المملكة العربية السعودية',
+          client_name: 'مؤسسة العميل التجارية', client_code: 'ACC-1001', currency_name: activeIssuer.currency || 'ريال سعودي',
+          period_from: '01-01-2026', period_to: '31-12-2026',
+          opening_balance: '0.00', total_debit: '1,150.00', total_credit: '500.00', closing_balance: '650.00',
+          generated_at: now.toLocaleString('ar-SA'), page_size: 'A4 portrait',
+          headers_html: isStatement
+            ? '<th rowspan="2">#</th><th rowspan="2">رقم المستند/قيد</th><th rowspan="2">التاريخ</th><th rowspan="2">النوع</th><th rowspan="2">البيان</th><th colspan="2">الحركة</th><th colspan="2">الرصيد</th>'
+            : '<th>الفترة</th><th>عدد العمليات</th><th>الإيرادات</th><th>المصروفات</th>',
+          rows_html: sampleRows,
+          stats_html: '<div><strong>إجمالي الإيرادات</strong><br>32,700.00</div><div><strong>عدد العمليات</strong><br>21</div><div><strong>صافي الفترة</strong><br>27,350.00</div>',
+          footer_html: '<tr><td>الإجمالي</td><td>21</td><td>32,700.00</td><td>5,350.00</td></tr>',
+          logo_html: '<div style="width:130px;height:54px;border:1.5px dashed #97aac1;border-radius:8px;display:grid;place-items:center;color:#617d9b;font-size:12px">شعار المنشأة</div>',
+        };
+        const docHtml = fillStoredTemplate(rawTemplate, values, ['headers_html', 'rows_html', 'stats_html', 'footer_html', 'logo_html']);
+        openStoredDocumentPreview(tpl, docHtml, isStatement ? 'كشف حساب' : 'تقرير مالي');
+      } catch (err) { toastErr(err.message); }
+    }));
+    $$('[data-select-data-template]', view).forEach((btn) => btn.addEventListener('click', async () => {
+      try {
+        confirmTemplateSelection(btn.dataset.settingKey, btn.dataset.selectDataTemplate);
+        await api.put(`/api/issuers/${activeIssuer.id}`, { ...activeIssuer, print_settings: printCfg, qr_settings: qrCfg });
+        activeIssuer.print_settings = printCfg;
+        toastOk('تم تعيين القالب الافتراضي لهذه الفئة'); renderView();
+      } catch (err) { toastErr(err.message || 'تعذر حفظ القالب'); }
+    }));
+    $$('[data-file-delete]', view).forEach((btn) => btn.addEventListener('click', async () => {
+      if (!confirm('هل تريد حذف ملف القالب من data؟')) return;
+      try {
+        const deletedId = btn.dataset.fileDelete;
+        await api.del(`/api/invoices/templates/${encodeURIComponent(deletedId)}`);
+        for (const key of ['template_style', 'voucher_template_style', 'report_template_style', 'statement_template_style']) {
+          if (printCfg[key] === deletedId) printCfg[key] = '';
+        }
+        await loadTemplates();
+        normalizeTemplateDefaults();
+        await api.put(`/api/issuers/${activeIssuer.id}`, { ...activeIssuer, print_settings: printCfg, qr_settings: qrCfg });
+        activeIssuer.print_settings = printCfg;
+        renderView();
+      }
+      catch (err) { toastErr(err.message || 'تعذر حذف القالب'); }
+    }));
     // تبديل تبويبات المركز
     $$('.doc-tpl-tab-btn', view).forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -2285,7 +2467,7 @@ export async function render(view) {
       btn.addEventListener('click', async () => {
         const tplId = btn.dataset.tplId;
         const tpl = excelTemplates.find((t) => t.id === tplId);
-        printCfg.template_style = tplId;
+        confirmTemplateSelection('template_style', tplId);
         if (tpl) {
           const selH = tpl.headers || [];
           printCfg.headers = selH.some((h) => String(h).startsWith('{{') || /seller_|buyer_|qr_|logo/i.test(String(h))) ? [] : selH;
@@ -2318,7 +2500,7 @@ export async function render(view) {
       btn.addEventListener('click', async () => {
         const tplId = btn.dataset.tplId;
         const tpl = excelTemplates.find((t) => t.id === tplId);
-        printCfg.voucher_template_style = tplId;
+        confirmTemplateSelection('voucher_template_style', tplId);
         try {
           await api.put(`/api/issuers/${activeIssuer.id}`, {
             ...activeIssuer,
@@ -2374,18 +2556,17 @@ export async function render(view) {
         try {
           await api.del(`/api/invoices/templates/${tplId}`);
           toastOk(`تم حذف قالب «${tplName}»`);
-          if (printCfg.template_style === tplId) {
-            printCfg.template_style = 'standard';
-          }
-          if (printCfg.voucher_template_style === tplId) {
-            printCfg.voucher_template_style = '';
-          }
+          if (printCfg.template_style === tplId) printCfg.template_style = '';
+          if (printCfg.voucher_template_style === tplId) printCfg.voucher_template_style = '';
+          if (printCfg.report_template_style === tplId) printCfg.report_template_style = '';
+          if (printCfg.statement_template_style === tplId) printCfg.statement_template_style = '';
+          await loadTemplates();
+          normalizeTemplateDefaults();
           await api.put(`/api/issuers/${activeIssuer.id}`, {
             ...activeIssuer,
             print_settings: printCfg,
             qr_settings: qrCfg,
           }).catch(() => {});
-          await loadTemplates();
           renderView();
         } catch (err) {
           toastErr('فشل حذف القالب: ' + err.message);
@@ -2408,7 +2589,8 @@ export async function render(view) {
     // فتح نافذة برومبت الذكاء الاصطناعي
     $('.btn-open-ai-prompt', view)?.addEventListener('click', () => {
       openAiPromptModal({
-        defaultType: activeHubTab === 'vouchers' || activeHubTab === 'documents' ? 'documents' : 'invoices',
+        defaultType: activeHubTab === 'vouchers' || activeHubTab === 'documents' ? 'documents'
+          : activeHubTab === 'reports' || activeHubTab === 'statements' ? activeHubTab : 'invoices',
       });
     });
 
@@ -2418,8 +2600,13 @@ export async function render(view) {
       try {
         activeIssuer = await api.get(`/api/issuers/${newId}`);
         activeZatcaPhase = activeIssuer.zatca_phase || 'PHASE1';
+        let selectedPrintSettings = activeIssuer.print_settings || {};
+        if (typeof selectedPrintSettings === 'string') {
+          try { selectedPrintSettings = JSON.parse(selectedPrintSettings); }
+          catch { selectedPrintSettings = {}; }
+        }
         printCfg = {
-          template_style: 'standard',
+          template_style: '',
           primary_color: '#06b6d4',
           dark_color: '#0891b2',
           light_color: '#ecfeff',
@@ -2442,15 +2629,21 @@ export async function render(view) {
           qr_position: 'right',
           copies: 1,
           custom_css: '',
-          ...(activeIssuer.print_settings || {}),
+          ...selectedPrintSettings,
         };
+        normalizeTemplateDefaults();
+        let selectedQrSettings = activeIssuer.qr_settings || {};
+        if (typeof selectedQrSettings === 'string') {
+          try { selectedQrSettings = JSON.parse(selectedQrSettings); }
+          catch { selectedQrSettings = {}; }
+        }
         qrCfg = {
           show_a4: true,
           show_thermal: true,
           size: 'medium',
           scale: 4,
           thermal_scale: 3,
-          ...(activeIssuer.qr_settings || {}),
+          ...selectedQrSettings,
         };
         await loadIssuerData();
         currentInvoice = getDynamicPreviewInvoice();

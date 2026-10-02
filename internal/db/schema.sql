@@ -246,6 +246,23 @@ CREATE TABLE IF NOT EXISTS invoice_documents (
   client_json TEXT NOT NULL
 );
 
+-- النسخة الحالية القابلة لإعادة التوليد. تبقى بيانات الفاتورة و XML الأصلية مستقلة عنها.
+CREATE TABLE IF NOT EXISTS document_pdfs (
+  kind TEXT NOT NULL CHECK(kind IN ('invoice', 'voucher')),
+  document_id TEXT NOT NULL,
+  issuer_id TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  rendered_revision INTEGER NOT NULL DEFAULT 0,
+  style TEXT NOT NULL DEFAULT '',
+  pdf BLOB,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  error TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(kind, document_id)
+);
+CREATE INDEX IF NOT EXISTS idx_document_pdfs_pending ON document_pdfs(status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_document_pdfs_issuer ON document_pdfs(issuer_id);
+
 CREATE TABLE IF NOT EXISTS batch_requests (
   request_key TEXT PRIMARY KEY,
   request_hash TEXT NOT NULL,
