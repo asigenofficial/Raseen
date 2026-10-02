@@ -6,6 +6,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -295,6 +296,29 @@ func (s *IssuerService) NextVoucherNumber(tx *sql.Tx, issuerID string) (number s
 
 	number = crypto.FormatSerial(prefix, nextNo, pad)
 	return number, nextNo, nil
+}
+
+// SyncVoucherNextNoAfterManual adjusts voucher_next_no so future auto-generated numbers won't collide with the manual number.
+func (s *IssuerService) SyncVoucherNextNoAfterManual(tx *sql.Tx, issuerID string, manualNumber string) {
+	var prefix string
+	var nextNo int64
+	row := tx.QueryRow(`SELECT voucher_prefix, voucher_next_no FROM issuers WHERE id = ?`, issuerID)
+	if err := row.Scan(&prefix, &nextNo); err != nil {
+		return
+	}
+	serialPrefix := strings.TrimRight(strings.TrimSpace(prefix), "-")
+	clean := strings.TrimSpace(manualNumber)
+	if serialPrefix != "" && strings.HasPrefix(strings.ToUpper(clean), strings.ToUpper(serialPrefix)) {
+		clean = strings.TrimPrefix(clean, serialPrefix)
+		clean = strings.TrimPrefix(clean, "-")
+	}
+	re := regexp.MustCompile(`(\d+)$`)
+	m := re.FindString(clean)
+	if m != "" {
+		if n, err := strconv.ParseInt(m, 10, 64); err == nil && n >= nextNo {
+			_, _ = tx.Exec(`UPDATE issuers SET voucher_next_no = ? WHERE id = ?`, n+1, issuerID)
+		}
+	}
 }
 
 func (s *IssuerService) GenerateKeys(issuerID string, masterKey []byte) (*zatca.KeyPair, error) {

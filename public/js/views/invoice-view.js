@@ -88,6 +88,7 @@ function receiptModal(invoice, onDone) {
           </select></div>
       </div>
       <div class="row mt">
+        <div class="field"><label>رقم السند (اختياري)</label><input type="text" name="voucher_number" class="ltr" placeholder="تلقائي..." title="اتركه فارغاً للترقيم التلقائي أو أدخل رقماً يدوياً" /></div>
         <div class="field"><label>التاريخ</label><input type="date" name="voucher_date" value="${today()}" /></div>
         <div class="field"><label>رقم المرجع / الشيك</label><input type="text" name="reference_no" class="ltr" /></div>
       </div>

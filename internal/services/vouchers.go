@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"raseen/internal/crypto"
@@ -26,22 +27,24 @@ type VoucherAllocationInput struct {
 }
 
 type CreateVoucherInput struct {
-	IssuerID     string                   `json:"issuer_id"`
-	ClientID     string                   `json:"client_id"`
-	VoucherDate  string                   `json:"voucher_date"`
-	TotalAmount  float64                  `json:"total_amount"`
-	PaymentType  string                   `json:"payment_type"`
-	ReferenceNo  string                   `json:"reference_no"`
-	Notes        string                   `json:"notes"`
-	AutoAllocate bool                     `json:"auto_allocate"`
-	Allocations  []VoucherAllocationInput `json:"allocations"`
+	VoucherNumber string                   `json:"voucher_number"`
+	IssuerID      string                   `json:"issuer_id"`
+	ClientID      string                   `json:"client_id"`
+	VoucherDate   string                   `json:"voucher_date"`
+	TotalAmount   float64                  `json:"total_amount"`
+	PaymentType   string                   `json:"payment_type"`
+	ReferenceNo   string                   `json:"reference_no"`
+	Notes         string                   `json:"notes"`
+	AutoAllocate  bool                     `json:"auto_allocate"`
+	Allocations   []VoucherAllocationInput `json:"allocations"`
 }
 
 type UpdateVoucherInput struct {
-	VoucherDate string `json:"voucher_date"`
-	PaymentType string `json:"payment_type"`
-	ReferenceNo string `json:"reference_no"`
-	Notes       string `json:"notes"`
+	VoucherNumber string `json:"voucher_number"`
+	VoucherDate   string `json:"voucher_date"`
+	PaymentType   string `json:"payment_type"`
+	ReferenceNo   string `json:"reference_no"`
+	Notes         string `json:"notes"`
 }
 
 type VoucherView struct {
@@ -117,9 +120,22 @@ func (s *VoucherService) CreateVoucher(input CreateVoucherInput, actor, ip strin
 	}
 	defer tx.Rollback()
 
-	voucherNumber, _, err := s.issuers.NextVoucherNumber(tx, input.IssuerID)
-	if err != nil {
-		return nil, err
+	var voucherNumber string
+	manualNumber := strings.TrimSpace(input.VoucherNumber)
+	if manualNumber != "" {
+		var existingID string
+		errCheck := tx.QueryRow("SELECT id FROM receipt_vouchers WHERE issuer_id = ? AND voucher_number = ?", input.IssuerID, manualNumber).Scan(&existingID)
+		if errCheck == nil && existingID != "" {
+			return nil, fmt.Errorf("رقم السند '%s' مستخدم مسبقاً لهذه المنشأة", manualNumber)
+		}
+		voucherNumber = manualNumber
+		s.issuers.SyncVoucherNextNoAfterManual(tx, input.IssuerID, manualNumber)
+	} else {
+		var errV error
+		voucherNumber, _, errV = s.issuers.NextVoucherNumber(tx, input.IssuerID)
+		if errV != nil {
+			return nil, errV
+		}
 	}
 
 	voucherID := crypto.UUID()
@@ -645,6 +661,18 @@ func (s *VoucherService) UpdateVoucher(id string, input UpdateVoucherInput, acto
 		return nil, errors.New("طريقة السداد غير صالحة")
 	}
 
+	newNumber := strings.TrimSpace(input.VoucherNumber)
+	if newNumber == "" {
+		newNumber = v.VoucherNumber
+	}
+	if newNumber != v.VoucherNumber {
+		var existingID string
+		errCheck := s.db.QueryRow("SELECT id FROM receipt_vouchers WHERE issuer_id = ? AND voucher_number = ? AND id != ?", v.IssuerID, newNumber, id).Scan(&existingID)
+		if errCheck == nil && existingID != "" {
+			return nil, fmt.Errorf("رقم السند '%s' مستخدم مسبقاً لهذه المنشأة", newNumber)
+		}
+	}
+
 	now := db.NowIso()
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -653,15 +681,19 @@ func (s *VoucherService) UpdateVoucher(id string, input UpdateVoucherInput, acto
 	defer tx.Rollback()
 	_, err = tx.Exec(`
 		UPDATE receipt_vouchers
-		SET voucher_date = ?, payment_type = ?, reference_no = ?, notes = ?, updated_at = ?
+		SET voucher_number = ?, voucher_date = ?, payment_type = ?, reference_no = ?, notes = ?, updated_at = ?
 		WHERE id = ?`,
-		newDate, newPayment, input.ReferenceNo, input.Notes, now, id)
+		newNumber, newDate, newPayment, input.ReferenceNo, input.Notes, now, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// تحديث قيد كشف الحساب (تاريخ المستند)
-	if _, err = tx.Exec(`UPDATE client_ledger SET transaction_date = ? WHERE doc_id = ? AND doc_type = 'RECEIPT'`, newDate, id); err != nil {
+	if newNumber != v.VoucherNumber {
+		s.issuers.SyncVoucherNextNoAfterManual(tx, v.IssuerID, newNumber)
+	}
+
+	// تحديث قيد كشف الحساب (رقم وتاريخ المستند)
+	if _, err = tx.Exec(`UPDATE client_ledger SET doc_number = ?, transaction_date = ? WHERE doc_id = ? AND doc_type = 'RECEIPT'`, newNumber, newDate, id); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {

@@ -39,7 +39,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
         </button>
       </div>
 
-      <div class="form-grid-3">
+      <div class="form-grid-4">
         <div class="field"><label class="req">الشركة المصدرة</label>
           <select name="issuer_id" id="w-issuer">
             ${raw(store.issuers.filter((i) => i.is_active).map((i) => `<option value="${esc(i.id)}" ${i.id === issuerId ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}
@@ -49,6 +49,8 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
             <option value="">— اختر العميل —</option>
             ${raw(store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === clientId ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join(''))}
           </select></div>
+        <div class="field"><label>رقم السند (اختياري)</label>
+          <input type="text" name="voucher_number" id="w-number" class="ltr" placeholder="تلقائي..." title="اتركه فارغاً للترقيم التلقائي أو أدخل رقماً يدوياً" /></div>
         <div class="field" id="w-date-wrap"><label>التاريخ</label>
           <input type="date" name="voucher_date" id="w-date" value="${today()}" /></div>
       </div>
@@ -375,6 +377,7 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
     e.target.disabled = true;
     try {
       const voucher = await api.post('/api/vouchers', {
+        voucher_number: values.voucher_number ? values.voucher_number.trim() : undefined,
         issuer_id: values.issuer_id,
         client_id: values.client_id,
         voucher_date: values.voucher_date,
@@ -868,6 +871,10 @@ export function openEditVoucherModal(voucher, onDone) {
     body: html`
       <div class="form-grid" style="gap:14px">
         <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
+          رقم السند
+          <input id="ev-number" type="text" class="input ltr" value="${esc(voucher.voucher_number || '')}" placeholder="رقم السند" style="font-size:14px;font-weight:700">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
           تاريخ السند
           <input id="ev-date" type="date" class="input" value="${voucher.voucher_date}" style="font-size:14px">
         </label>
@@ -896,6 +903,7 @@ export function openEditVoucherModal(voucher, onDone) {
   });
 
   em.el.querySelector('#ev-save').addEventListener('click', async (e) => {
+    const newNumber = em.el.querySelector('#ev-number')?.value.trim();
     const newDate = em.el.querySelector('#ev-date').value;
     const newPay = em.el.querySelector('#ev-pay').value;
     const newRef = em.el.querySelector('#ev-ref').value.trim();
@@ -906,6 +914,7 @@ export function openEditVoucherModal(voucher, onDone) {
     e.target.disabled = true;
     try {
       const updated = await api.patch(`/api/vouchers/${voucher.id}`, {
+        voucher_number: newNumber || undefined,
         voucher_date: newDate,
         payment_type: newPay,
         reference_no: newRef,
