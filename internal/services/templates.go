@@ -47,7 +47,15 @@ func NewTemplateService(d *db.DB, dataDir string) *TemplateService {
 	itemRow, _ := os.ReadFile(filepath.Join(partialsDir, "invoice-item-row.html"))
 	itemCell, _ := os.ReadFile(filepath.Join(partialsDir, "invoice-item-cell.html"))
 	sarSymbol, _ := os.ReadFile(filepath.Join(dataDir, "saudi_riyal_symbol.svg"))
-	s := &TemplateService{db: d, dataDir: dataDir, itemRowHTML: string(itemRow), itemCellHTML: string(itemCell), sarSymbolSVG: string(sarSymbol)}
+	rowHTML := string(itemRow)
+	if rowHTML == "" {
+		rowHTML = "<tr>{{cells}}</tr>"
+	}
+	cellHTML := string(itemCell)
+	if cellHTML == "" {
+		cellHTML = "<td>{{value}}</td>"
+	}
+	s := &TemplateService{db: d, dataDir: dataDir, itemRowHTML: rowHTML, itemCellHTML: cellHTML, sarSymbolSVG: string(sarSymbol)}
 	_ = s.SyncDiskTemplates()
 	return s
 }
@@ -771,17 +779,18 @@ func (s *TemplateService) FirstTemplateID(category string) (string, error) {
 
 // RenderInvoiceHTML loads the HTML template and substitutes invoice data tags.
 func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (string, error) {
-	if s.itemRowHTML == "" || s.itemCellHTML == "" {
-		return "", errors.New("قوالب صفوف الأصناف غير موجودة في مجلد data/templates/partials")
+	if s.itemRowHTML == "" {
+		s.itemRowHTML = "<tr>{{cells}}</tr>"
 	}
-	fromSavedSettings := false
+	if s.itemCellHTML == "" {
+		s.itemCellHTML = "<td>{{value}}</td>"
+	}
 	if style == "" || style == "default" {
 		if inv.IssuerSnapshot != nil && inv.IssuerSnapshot.PrintSettings != "" {
 			var pCfg map[string]any
 			if err := json.Unmarshal([]byte(inv.IssuerSnapshot.PrintSettings), &pCfg); err == nil {
 				if t, ok := pCfg["template_style"].(string); ok && t != "" {
 					style = t
-					fromSavedSettings = true
 				}
 			}
 		}
@@ -795,8 +804,8 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 	}
 
 	filePath, err := s.GetFilePath(style)
-	if err != nil && fromSavedSettings {
-		// Older issuer settings may still name a removed built-in style.
+	if err != nil || filePath == "" {
+		// Fallback to first available invoice template if the requested style is missing or moved
 		if fallback, firstErr := s.FirstTemplateID("invoices"); firstErr == nil {
 			style = fallback
 			filePath, err = s.GetFilePath(style)
