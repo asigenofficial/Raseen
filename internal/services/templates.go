@@ -51,14 +51,26 @@ const ltrIconsStyleTag = `<style>
   gap: 6px !important;
   unicode-bidi: isolate !important;
 }
-.seller-en-info .header-info-line svg, .seller-en-info .header-info-line .icon-svg, .seller-en .header-info-line svg, .seller-en .company-line svg, .seller-en .company-line .icon, .seller-block.en .seller-row svg, .seller-en p svg, .seller.seller-en p svg, .seller-en p .icon, .seller.seller-en p .icon {
-  order: 1 !important;
-  margin-right: 6px !important;
+.seller-en-info .header-info-line svg, .seller-en-info .header-info-line .icon-svg, .seller-en-info .header-info-line .icon,
+.seller-en .header-info-line svg, .seller-en .header-info-line .icon,
+.seller-en .company-line svg, .seller-en .company-line .icon,
+.seller-block.en .seller-row svg, .seller-block.en .seller-row .icon,
+.seller-en p > svg, .seller-en p > .icon,
+.seller.seller-en p > svg, .seller.seller-en p > .icon {
+  order: 0 !important;
+  margin-right: 4px !important;
   margin-left: 0 !important;
+  margin-inline-start: 0 !important;
+  margin-inline-end: 0 !important;
   flex-shrink: 0 !important;
 }
-.seller-en-info .header-info-line span, .seller-en .company-line span, .seller-block.en .seller-row span, .seller-en p span {
-  order: 2 !important;
+.seller-en-info .header-info-line span, .seller-en-info .header-info-line bdi,
+.seller-en .header-info-line span, .seller-en .header-info-line bdi,
+.seller-en .company-line span, .seller-en .company-line bdi,
+.seller-block.en .seller-row span, .seller-block.en .seller-row bdi,
+.seller-en p > span, .seller-en p > bdi, .seller-en p > .inline-label,
+.seller.seller-en p > span, .seller.seller-en p > bdi {
+  order: 1 !important;
   text-align: left !important;
   direction: ltr !important;
   unicode-bidi: isolate !important;
@@ -75,6 +87,11 @@ svg.sar-sym-svg, svg.sar-sym, .sar-sym svg, .currency-symbol svg {
   vertical-align: -.08em;
   flex: 0 0 auto;
 }
+</style>`
+
+const documentFontStyleTag = `<style data-document-font>
+@font-face { font-family: 'Raseen Document'; src: url('/fonts/NotoSansArabic.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+body, body * { font-family: 'Raseen Document', Tahoma, Arial, sans-serif !important; }
 </style>`
 
 func injectLtrIconsStyle(h string) string {
@@ -841,6 +858,7 @@ func (s *TemplateService) RenderTemplateHTML(id string) (string, error) {
 	}
 	html := injectLtrIconsStyle(string(data))
 	html = injectTemplateStyle(html, sarSymbolSizeStyleTag)
+	html = injectTemplateStyle(html, documentFontStyleTag)
 	if filepath.Base(filepath.Dir(filePath)) == "invoices" {
 		html = normalizeInvoiceMeasurements(html)
 	}
@@ -900,7 +918,7 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 		return "", fmt.Errorf("تعذر قراءة قالب الفاتورة: %w", err)
 	}
 
-	return normalizeInvoiceMeasurements(s.substituteInvoiceTags(string(data), inv)), nil
+	return injectTemplateStyle(normalizeInvoiceMeasurements(s.substituteInvoiceTags(string(data), inv)), documentFontStyleTag), nil
 }
 
 // Apply the reference invoice's element sizes at render time, leaving each
@@ -1925,6 +1943,8 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 		bottomContent = afterTableRaw[bottomLoc[0]:]
 	}
 
+	divOpenRegex := regexp.MustCompile(`(?i)<div\b`)
+	divCloseRegex := regexp.MustCompile(`(?i)</div\s*>`)
 	var pages []string
 	for p := 1; p <= totalPages; p++ {
 		start := (p - 1) * chunkSize
@@ -1939,6 +1959,13 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 		if p == totalPages {
 			pageInner += bottomContent
 		}
+		// Some templates wrap the items table in an unnamed div. On continuation
+		// pages the bottom section is omitted, so its closing div must stay here.
+		openDivs := len(divOpenRegex.FindAllStringIndex(pageInner, -1))
+		closedDivs := len(divCloseRegex.FindAllStringIndex(pageInner, -1))
+		if openDivs > closedDivs {
+			pageInner += strings.Repeat("</div>", openDivs-closedDivs)
+		}
 
 		pOpen := strings.Replace(contOpen, "<div", fmt.Sprintf(`<div data-invoice-page="%d"`, p), 1)
 		pages = append(pages, fmt.Sprintf("%s\n%s\n%s", pOpen, pageInner, contClose))
@@ -1951,6 +1978,7 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
  html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }
  [data-invoice-page] { width: 210mm !important; min-height: 295mm !important; height: 295mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }
  [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }
+ [data-invoice-page] .invoice-frame:not([data-invoice-page]) { position: absolute !important; inset: 5mm !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; display: block !important; break-after: auto !important; page-break-after: auto !important; }
 }
 </style>`)
 }

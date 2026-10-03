@@ -178,6 +178,18 @@ export function startSync() {
     es.addEventListener('invoice:imported', handleInvoiceEvent);
     es.addEventListener('invoice:bulk_created', handleInvoiceEvent);
 
+    es.addEventListener('template:updated', (e) => {
+      try {
+        const ev = JSON.parse(e.data);
+        emitLocal(ev.type, ev);
+        if (store.user?.username === ev.actor) return;
+        if (router.currentView() === 'templates') router.render();
+        else toastOk('تم تحديث القوالب على الخادم؛ ستظهر النسخة الجديدة عند فتح المستند');
+      } catch (err) {
+        console.error('[SyncEngine] فشل تحديث القوالب:', err);
+      }
+    });
+
     // استقبال أحداث سندات القبض
     const handleVoucherEvent = (e) => {
       try {

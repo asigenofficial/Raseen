@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -16,6 +17,7 @@ import (
 	"raseen/internal/config"
 	"raseen/internal/crypto"
 	"raseen/internal/db"
+	"raseen/internal/services"
 )
 
 //go:embed all:public
@@ -126,6 +128,9 @@ func main() {
 			log.Fatalf("فشل تجهيز ملفات الواجهة: %v", subErr)
 		}
 	}
+	if font, err := fs.ReadFile(publicFS, "fonts/NotoSansArabic.ttf"); err == nil {
+		services.SetDocumentFont(font)
+	}
 
 	server := api.NewServer(cfg, database, masterKey, publicFS)
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
@@ -164,7 +169,7 @@ func main() {
 	}
 }
 
-// ensureDataInitialized copies bundled templates and assets into a fresh data directory.
+// ensureDataInitialized refreshes bundled presets and preserves user-created templates.
 // The database is created by db.Open so a local database is never shipped as a seed.
 func ensureDataInitialized(dataDir string) {
 	_ = os.MkdirAll(dataDir, 0755)
@@ -176,7 +181,8 @@ func ensureDataInitialized(dataDir string) {
 		}
 	}
 
-	// Templates: copy any missing templates from defaults.
+	// Bundled presets are versioned with the app. Refresh their exact filenames
+	// on a persistent volume; files created by users have different names.
 	for _, sub := range []string{"invoices", "documents", "reports", "statements", "partials"} {
 		targetSub := filepath.Join(dataDir, "templates", sub)
 		_ = os.MkdirAll(targetSub, 0755)
@@ -187,22 +193,28 @@ func ensureDataInitialized(dataDir string) {
 					continue
 				}
 				destPath := filepath.Join(targetSub, e.Name())
-				if _, errStat := os.Stat(destPath); os.IsNotExist(errStat) {
-					if content, errRead := os.ReadFile(filepath.Join(srcSub, e.Name())); errRead == nil {
-						_ = os.WriteFile(destPath, content, 0644)
-					}
+				content, errRead := os.ReadFile(filepath.Join(srcSub, e.Name()))
+				if errRead != nil {
+					continue
+				}
+				current, errRead := os.ReadFile(destPath)
+				if errRead != nil || !bytes.Equal(current, content) {
+					_ = os.WriteFile(destPath, content, 0644)
 				}
 			}
 		}
 	}
 
-	// Assets: copy svg or other assets if missing.
+	// Keep bundled assets in step with the version used by every device.
 	for _, f := range []string{"saudi_riyal_symbol.svg"} {
 		dest := filepath.Join(dataDir, f)
-		if _, err := os.Stat(dest); os.IsNotExist(err) {
-			if content, errRead := os.ReadFile(filepath.Join(defaultsDir, f)); errRead == nil {
-				_ = os.WriteFile(dest, content, 0644)
-			}
+		content, errRead := os.ReadFile(filepath.Join(defaultsDir, f))
+		if errRead != nil {
+			continue
+		}
+		current, errRead := os.ReadFile(dest)
+		if errRead != nil || !bytes.Equal(current, content) {
+			_ = os.WriteFile(dest, content, 0644)
 		}
 	}
 }

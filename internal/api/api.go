@@ -84,6 +84,14 @@ func NewServer(
 	return server
 }
 
+func (s *Server) broadcastTemplateChange(r *http.Request, action, id string) {
+	event := services.SyncEvent{Type: "template:updated", Entity: "templates", Action: action, Data: map[string]any{"id": id}}
+	if user := s.getSessionUser(r); user != nil {
+		event.Actor, event.ActorName = user.Username, user.FullName
+	}
+	s.sync.Broadcast(event)
+}
+
 func (s *Server) json(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -1600,6 +1608,7 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	mux.HandleFunc("GET /api/invoices/{id}/pdf", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
 		id := r.PathValue("id")
 		inv, err := s.invoices.GetInvoice(id)
 		if err != nil {
@@ -1672,6 +1681,7 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	mux.HandleFunc("GET /api/vouchers/{id}/pdf", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
 		id := r.PathValue("id")
 		v, err := s.vouchers.GetVoucher(id)
 		if err != nil {
@@ -2061,6 +2071,7 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		s.dirtyAllCachedDocuments()
+		s.broadcastTemplateChange(r, "upload", res.ID)
 		s.json(w, 201, res)
 	})
 
@@ -2071,6 +2082,7 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		s.dirtyAllCachedDocuments()
+		s.broadcastTemplateChange(r, "delete", id)
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
@@ -2080,6 +2092,7 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		s.dirtyAllCachedDocuments()
+		s.broadcastTemplateChange(r, "reset", "")
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
@@ -2131,6 +2144,7 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		s.dirtyAllCachedDocuments()
+		s.broadcastTemplateChange(r, "save", id)
 		s.json(w, 201, map[string]any{"id": id, "saved": true})
 	})
 
@@ -2146,6 +2160,7 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		s.dirtyAllCachedDocuments()
+		s.broadcastTemplateChange(r, "save", id)
 		s.json(w, 200, map[string]any{"id": id, "updated": true})
 	})
 

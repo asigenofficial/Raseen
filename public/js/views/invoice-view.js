@@ -132,7 +132,7 @@ export async function fetchInvoicePdfBlob(invoiceId, docHtml, style = '') {
     let endpoint = `/api/invoices/${encodeURIComponent(invoiceId)}/pdf`;
     if (style) endpoint += `?style=${encodeURIComponent(style)}`;
 
-    const res = await fetch(endpoint, { credentials: 'same-origin' });
+    const res = await fetch(endpoint, { credentials: 'same-origin', cache: 'no-store' });
     if (res.ok) return await res.blob();
   } catch (e) {
     console.warn('PDF server endpoint unreachable:', e);

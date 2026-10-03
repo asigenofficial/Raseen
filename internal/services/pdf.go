@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +15,13 @@ import (
 )
 
 var ErrNoBrowser = errors.New("لم يتم العثور على متصفح Chromium أو Chrome لتحويل المستند إلى PDF")
+
+var documentFontData string
+
+// SetDocumentFont supplies the same bundled font used in HTML previews.
+func SetDocumentFont(font []byte) {
+	documentFontData = base64.StdEncoding.EncodeToString(font)
+}
 
 // FindAvailableBrowser locates Edge, Chrome, or Chromium on the host system (Windows / Linux / Mac)
 func FindAvailableBrowser() string {
@@ -77,6 +85,9 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 		orientation = "landscape"
 	}
 	a4Style := `<style>@page { size: A4 ` + orientation + ` !important; }</style>`
+	if documentFontData != "" {
+		a4Style += `<style data-pdf-document-font>@font-face { font-family: 'Raseen Document'; src: url('data:font/ttf;base64,` + documentFontData + `') format('truetype'); font-weight: 100 900; } body, body * { font-family: 'Raseen Document', Tahoma, Arial, sans-serif !important; }</style>`
+	}
 	if headEnd := strings.LastIndex(strings.ToLower(htmlContent), "</head>"); headEnd >= 0 {
 		htmlContent = htmlContent[:headEnd] + a4Style + "\n" + htmlContent[headEnd:]
 	} else {

@@ -541,7 +541,7 @@ export function printDoc(docHtml, { flowing = false } = {}) {
   }
 
   if (finalHtml.includes('data-invoice-page="')) {
-    finalHtml = finalHtml.replace(/<\/head>/i, "<style data-invoice-pages-print>\n@media print {\n @page { size: A4 portrait; margin: 0 !important; }\n html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }\n [data-invoice-page] { width: 210mm !important; min-height: 295mm !important; height: 295mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }\n [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }\n}\n</style>" + '\n</head>');
+    finalHtml = finalHtml.replace(/<\/head>/i, "<style data-invoice-pages-print>\n@media print {\n @page { size: A4 portrait; margin: 0 !important; }\n html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }\n [data-invoice-page] { width: 210mm !important; min-height: 295mm !important; height: 295mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }\n [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }\n [data-invoice-page] .invoice-frame:not([data-invoice-page]) { position: absolute !important; inset: 5mm !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; display: block !important; break-after: auto !important; page-break-after: auto !important; }\n}\n</style>" + '\n</head>');
   }
 
   doc.open();
@@ -714,24 +714,12 @@ export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
 }
 
 /** يفتح اختيار مكان الحفظ في المتصفحات الداعمة، وينزّل الملف بالطريقة المعتادة فيما عداها. */
-const pdfDestinations = new Map();
-
 export async function choosePdfDestination(filename, documentKey = '') {
-  const previous = documentKey && pdfDestinations.get(documentKey);
-  if (previous) {
-    try {
-      if (await previous.queryPermission({ mode: 'readwrite' }) === 'granted' ||
-          await previous.requestPermission({ mode: 'readwrite' }) === 'granted') return previous;
-    } catch { /* let the user choose a new destination */ }
-    pdfDestinations.delete(documentKey);
-  }
   if (window.showSaveFilePicker) {
-    const handle = await window.showSaveFilePicker({
+    return window.showSaveFilePicker({
       suggestedName: filename,
       types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }],
     });
-    if (documentKey) pdfDestinations.set(documentKey, handle);
-    return handle;
   }
   return null;
 }
@@ -761,7 +749,7 @@ export async function savePdfFile(fileObj, filename, handle = null) {
 
 export async function downloadPdfFromUrl(url, filename) {
   const saveHandle = await choosePdfDestination(filename, url);
-  const res = await fetch(url, { credentials: 'same-origin' });
+  const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
   if (!res.ok) {
     const errJson = await res.json().catch(() => ({}));
     throw new Error(errJson.error || `تعذر تجهيز ملف PDF (${res.status})`);
@@ -775,7 +763,12 @@ export async function downloadPdfFromUrl(url, filename) {
   if (blob.size < 100) {
     throw new Error('ملف PDF فارغ أو تالف، يرجى المحاولة مرة أخرى');
   }
-  await savePdfFile(blob, filename, saveHandle);
+  try {
+    await savePdfFile(blob, filename, saveHandle);
+  } catch (err) {
+    if (!saveHandle || err?.name === 'AbortError') throw err;
+    await savePdfFile(blob, filename);
+  }
 }
 
 /** Read a selected HTML template from data/templates via the database catalog. */
@@ -1800,7 +1793,6 @@ export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 15) {
     bottomContent = afterTableRaw.slice(bottomLoc);
   }
 
-  const invNum = inv?.invoice_number || '';
   const pages = [];
   for (let p = 1; p <= totalPages; p++) {
     const start = (p - 1) * chunkSize;
@@ -1808,30 +1800,16 @@ export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 15) {
     const chunk = lines.slice(start, end);
     const rowsHtml = generateSmartRowsJS(htmlStr, chunk, start);
 
-    const pageBadge = p === 1
-      ? `<div class="invoice-page-indicator" style="display:flex; justify-content:space-between; align-items:center; padding:4px 0 6px 0; margin-bottom:8px; border-bottom:1px solid #e2e8f0; font-size:11px; font-weight:700; color:#64748b;">
-          <span>فاتورة ضريبية رقم: ${invNum}</span>
-          <span style="direction:ltr;">Page 1 of ${totalPages} &bull; صفحة 1 من ${totalPages}</span>
-        </div>`
-      : `<div class="invoice-continuation-header" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; margin-bottom:12px; background:#f8fafc; border:1px solid #cbd5e1; border-right:4px solid #059669; border-radius:6px; font-size:12px; font-weight:700; color:#1e293b;">
-          <span><span style="background:#059669; color:#fff; padding:2px 8px; border-radius:4px; font-size:11px; margin-left:6px;">متابعة</span> تابع فاتورة ضريبية رقم: ${invNum}</span>
-          <span style="direction:ltr; color:#475569;">(Page ${p} of ${totalPages}) Continuation Sheet</span>
-        </div>`;
-
-    const nextPageIndicator = p < totalPages
-      ? `<div class="invoice-continuation-footer" style="text-align:center; padding:8px 0; margin-top:8px; font-size:11px; font-weight:700; color:#475569; border-top:1px dashed #cbd5e1;">
-          يتبع في الصفحة التالية ⬅ (صفحة ${p + 1} من ${totalPages}) &bull; Continued on Next Page
-        </div>`
-      : `<div class="invoice-continuation-footer" style="text-align:left; padding:4px 0; margin-top:4px; font-size:10px; color:#94a3b8;">
-          نهاية بنود الفاتورة &bull; صفحة ${p} من ${totalPages} &bull; End of Invoice Items
-        </div>`;
-
     let pageInner = '';
     if (p < totalPages) {
-      pageInner = pageBadge + beforeTable + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose;
+      pageInner = beforeTable + tableOpen + rowsHtml + tableClose + tableWrapClose;
     } else {
-      pageInner = pageBadge + beforeTable + tableOpen + rowsHtml + tableClose + nextPageIndicator + tableWrapClose + bottomContent;
+      pageInner = beforeTable + tableOpen + rowsHtml + tableClose + tableWrapClose + bottomContent;
     }
+
+    const openDivs = (pageInner.match(/<div\b/gi) || []).length;
+    const closedDivs = (pageInner.match(/<\/div\s*>/gi) || []).length;
+    if (openDivs > closedDivs) pageInner += '</div>'.repeat(openDivs - closedDivs);
 
     const pOpen = contOpen.replace('<div', `<div data-invoice-page="${p}"`);
     pages.push(`${pOpen}\n${pageInner}\n${contClose}`);
@@ -1871,7 +1849,7 @@ export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 15) {
   if (/<\/head>/i.test(res)) {
     res = res.replace(/<\/head>/i, multiCss + '\n</head>');
   }
-  res = res.replace(/<\/head>/i, "<style data-invoice-pages-print>\n@media print {\n @page { size: A4 portrait; margin: 0 !important; }\n html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }\n [data-invoice-page] { width: 210mm !important; min-height: 295mm !important; height: 295mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }\n [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }\n}\n</style>" + '\n</head>');
+  res = res.replace(/<\/head>/i, "<style data-invoice-pages-print>\n@media print {\n @page { size: A4 portrait; margin: 0 !important; }\n html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }\n [data-invoice-page] { width: 210mm !important; min-height: 295mm !important; height: 295mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }\n [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }\n [data-invoice-page] .invoice-frame:not([data-invoice-page]) { position: absolute !important; inset: 5mm !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; display: block !important; break-after: auto !important; page-break-after: auto !important; }\n}\n</style>" + '\n</head>');
   const allPages = prefix + pages.join('\n') + suffix;
   res = res.replace(/<body\b([^>]*)>[\s\S]*?<\/body>/i, `<body${bodyAttrs}>\n${allPages}\n</body>`);
 

@@ -784,7 +784,8 @@ export async function showVoucher(id, onChange) {
   const pdfBtn = m.el.querySelector('[data-pdf]');
   if (pdfBtn) {
     pdfBtn.addEventListener('click', async (e) => {
-      e.target.disabled = true;
+      const button = e.currentTarget;
+      button.disabled = true;
       try {
         const vNum = voucher.voucher_number || 'سند';
         const pdfFileName = clientPdfFilename('سند قبض', voucher.client_name || client?.name, vNum);
@@ -792,7 +793,7 @@ export async function showVoucher(id, onChange) {
       } catch (err) {
         toastErr(err.message || 'تعذر تحميل ملف PDF');
       } finally {
-        e.target.disabled = false;
+        button.disabled = false;
       }
     });
   }
