@@ -37,7 +37,7 @@ function enforceLtrHeaderIcons(html) {
       unicode-bidi: isolate !important;
     }
     .seller-en-info .header-info-line svg, .seller-en-info .header-info-line .icon-svg, .seller-en .header-info-line svg, .seller-en .company-line svg, .seller-en .company-line .icon, .seller-block.en .seller-row svg, .seller-en p svg, .seller.seller-en p svg, .seller-en p .icon, .seller.seller-en p .icon {
-      order: 1 !important;
+      order: -1 !important;
       margin-right: 6px !important;
       margin-left: 0 !important;
       flex-shrink: 0 !important;
