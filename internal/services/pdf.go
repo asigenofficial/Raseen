@@ -104,10 +104,11 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 		"--prefer-css-page-size",
 		"--disable-extensions",
 		"--disable-sync",
+		"--disable-background-networking",
 		"--allow-file-access-from-files",
 		"--disable-web-security",
 		"--run-all-compositor-stages-before-draw",
-		"--virtual-time-budget=1500",
+		"--virtual-time-budget=4000",
 		fmt.Sprintf("--print-to-pdf=%s", outPath),
 		inPath,
 	}
@@ -124,8 +125,11 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("تعذر قراءة ملف PDF المنشأ: %w", err)
 	}
-	if len(data) == 0 {
-		return nil, fmt.Errorf("ملف PDF الناتج فارغ")
+	if len(data) < 100 {
+		return nil, fmt.Errorf("ملف PDF الناتج فارغ أو غير مكتمل")
+	}
+	if !strings.HasPrefix(string(data[:5]), "%PDF-") {
+		return nil, fmt.Errorf("الملف الناتج ليس PDF صالحاً")
 	}
 	return data, nil
 }

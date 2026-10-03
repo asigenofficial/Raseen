@@ -964,7 +964,15 @@ async function getVoucherRenderedData(voucherId) {
 export async function downloadVoucherDirectPdf(voucherId) {
   toastOk('جارٍ تجهيز ملف PDF للسند...');
   const { voucher, client } = await getVoucherRenderedData(voucherId);
-  await downloadPdfFromUrl(`/api/vouchers/${encodeURIComponent(voucher.id)}/pdf`, clientPdfFilename('سند قبض', voucher.client_name || client?.name, voucher.voucher_number || 'سند'));
+  const vid = encodeURIComponent(voucher.id);
+  // انتظار اكتمال PDF (حتى 20 ثانية) قبل التحميل
+  for (let i = 0; i < 10; i++) {
+    const status = await api.get(`/api/vouchers/${vid}/pdf-status`).catch(() => null);
+    if (!status || status.status === 'READY') break;
+    if (status.status === 'FAILED') throw new Error('فشل توليد ملف PDF: ' + (status.error || ''));
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  await downloadPdfFromUrl(`/api/vouchers/${vid}/pdf`, clientPdfFilename('سند قبض', voucher.client_name || client?.name, voucher.voucher_number || 'سند'));
 }
 
 export async function shareVoucherPdfFile({ voucher, issuer, client, docHtml, pdfFileName }) {

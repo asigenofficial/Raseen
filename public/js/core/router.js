@@ -49,3 +49,4 @@ export function start() {
 }
 
 export const currentRoute = () => parseHash().name;
+export const currentView  = currentRoute;

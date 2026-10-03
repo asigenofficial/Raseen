@@ -762,8 +762,20 @@ export async function savePdfFile(fileObj, filename, handle = null) {
 export async function downloadPdfFromUrl(url, filename) {
   const saveHandle = await choosePdfDestination(filename, url);
   const res = await fetch(url, { credentials: 'same-origin' });
-  if (!res.ok) throw new Error('تعذر تجهيز ملف PDF');
-  await savePdfFile(await res.blob(), filename, saveHandle);
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    throw new Error(errJson.error || `تعذر تجهيز ملف PDF (${res.status})`);
+  }
+  const contentType = res.headers.get('Content-Type') || '';
+  if (!contentType.includes('pdf')) {
+    const errJson = await res.json().catch(() => ({}));
+    throw new Error(errJson.error || 'الملف المستلم ليس PDF صحيحاً، يرجى المحاولة مرة أخرى');
+  }
+  const blob = await res.blob();
+  if (blob.size < 100) {
+    throw new Error('ملف PDF فارغ أو تالف، يرجى المحاولة مرة أخرى');
+  }
+  await savePdfFile(blob, filename, saveHandle);
 }
 
 /** Read a selected HTML template from data/templates via the database catalog. */
