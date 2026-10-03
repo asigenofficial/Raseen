@@ -899,6 +899,20 @@ func normalizeInvoiceMeasurements(html string) string {
 		return html
 	}
 	const style = `<style data-invoice-measurements>
+.invoice-container, .invoice-frame { padding: 8mm !important; }
+.invoice-container .header { margin-bottom: 8px !important; padding-bottom: 8px !important; }
+.invoice-metadata, .metadata { margin-bottom: 8px !important; }
+.invoice-container .masthead { padding-block: 8px !important; }
+.invoice-container .contact-strip { margin-block: 8px !important; }
+.invoice-container .field { margin-bottom: 3px !important; }
+.invoice-container dl { padding-top: 6px !important; padding-bottom: 6px !important; }
+.bottom-content-wrap { padding-top: 3mm !important; }
+.total-row { padding-top: 3px !important; padding-bottom: 3px !important; }
+
+.items-main-table th, .items-main-table td, .items-table th, .items-table td, .items-table-wrapper th, .items-table-wrapper td {
+ height: auto !important; padding: 3px !important; line-height: 1.25 !important; font-size: 9.5px !important;
+}
+
 @media print { @page { size: A4 portrait; } }
 body { font-size: 11px; }
 .seller h2, .seller-ar .company-name, .seller-info .seller-title { font-size: 14.5px; }
@@ -1909,10 +1923,7 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 		chunk := inv.Lines[start:end]
 		rowsHtml := s.generateSmartRowsSlice(htmlStr, chunk, start)
 
-		pageInner := tableOpen + rowsHtml + tableClose + tableWrapClose
-		if p == 1 {
-			pageInner = beforeTable + pageInner
-		}
+		pageInner := beforeTable + tableOpen + rowsHtml + tableClose + tableWrapClose
 		if p == totalPages {
 			pageInner += bottomContent
 		}

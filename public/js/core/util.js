@@ -1703,6 +1703,24 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
     result = currencySymbolStyle + '\n' + result;
   }
 
+  if (invoice) {
+    const rowsStyle = `<style data-invoice-row-fit>
+.invoice-container, .invoice-frame { padding: 8mm !important; }
+.invoice-container .header { margin-bottom: 8px !important; padding-bottom: 8px !important; }
+.invoice-metadata, .metadata { margin-bottom: 8px !important; }
+.invoice-container .masthead { padding-block: 8px !important; }
+.invoice-container .contact-strip { margin-block: 8px !important; }
+.invoice-container .field { margin-bottom: 3px !important; }
+.invoice-container dl { padding-top: 6px !important; padding-bottom: 6px !important; }
+.bottom-content-wrap { padding-top: 3mm !important; }
+.total-row { padding-top: 3px !important; padding-bottom: 3px !important; }
+
+.items-main-table th, .items-main-table td, .items-table th, .items-table td, .items-table-wrapper th, .items-table-wrapper td {
+ height: auto !important; padding: 3px !important; line-height: 1.25 !important; font-size: 9.5px !important;
+}
+</style>`;
+    result = result.replace(/<\/head>/i, rowsStyle + '\n</head>');
+  }
   if (voucher) result = applyVoucherPageStyle(result);
 
   return result;
