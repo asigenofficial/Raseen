@@ -57,7 +57,7 @@ const ltrIconsStyleTag = `<style>
 .seller-block.en .seller-row svg, .seller-block.en .seller-row .icon,
 .seller-en p > svg, .seller-en p > .icon,
 .seller.seller-en p > svg, .seller.seller-en p > .icon {
-  order: 0 !important;
+  order: -1 !important;
   margin-right: 4px !important;
   margin-left: 0 !important;
   margin-inline-start: 0 !important;
