@@ -51,26 +51,14 @@ const ltrIconsStyleTag = `<style>
   gap: 6px !important;
   unicode-bidi: isolate !important;
 }
-.seller-en-info .header-info-line svg, .seller-en-info .header-info-line .icon-svg, .seller-en-info .header-info-line .icon,
-.seller-en .header-info-line svg, .seller-en .header-info-line .icon,
-.seller-en .company-line svg, .seller-en .company-line .icon,
-.seller-block.en .seller-row svg, .seller-block.en .seller-row .icon,
-.seller-en p > svg, .seller-en p > .icon,
-.seller.seller-en p > svg, .seller.seller-en p > .icon {
+.seller-en-info .header-info-line svg, .seller-en-info .header-info-line .icon-svg, .seller-en .header-info-line svg, .seller-en .company-line svg, .seller-en .company-line .icon, .seller-block.en .seller-row svg, .seller-en p svg, .seller.seller-en p svg, .seller-en p .icon, .seller.seller-en p .icon {
   order: -1 !important;
-  margin-right: 4px !important;
+  margin-right: 6px !important;
   margin-left: 0 !important;
-  margin-inline-start: 0 !important;
-  margin-inline-end: 0 !important;
   flex-shrink: 0 !important;
 }
-.seller-en-info .header-info-line span, .seller-en-info .header-info-line bdi,
-.seller-en .header-info-line span, .seller-en .header-info-line bdi,
-.seller-en .company-line span, .seller-en .company-line bdi,
-.seller-block.en .seller-row span, .seller-block.en .seller-row bdi,
-.seller-en p > span, .seller-en p > bdi, .seller-en p > .inline-label,
-.seller.seller-en p > span, .seller.seller-en p > bdi {
-  order: 1 !important;
+.seller-en-info .header-info-line span, .seller-en .company-line span, .seller-block.en .seller-row span, .seller-en p span {
+  order: 2 !important;
   text-align: left !important;
   direction: ltr !important;
   unicode-bidi: isolate !important;
