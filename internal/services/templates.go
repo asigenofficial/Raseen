@@ -918,17 +918,17 @@ func normalizeInvoiceMeasurements(html string) string {
 	}
 	const style = `<style data-invoice-measurements>
 .invoice-container, .invoice-frame { padding: 8mm !important; }
-.invoice-container .header { margin-bottom: 8px !important; padding-bottom: 8px !important; }
-.invoice-metadata, .metadata { margin-bottom: 8px !important; }
-.invoice-container .masthead { padding-block: 8px !important; }
-.invoice-container .contact-strip { margin-block: 8px !important; }
-.invoice-container .field { margin-bottom: 3px !important; }
-.invoice-container dl { padding-top: 6px !important; padding-bottom: 6px !important; }
-.bottom-content-wrap { padding-top: 3mm !important; }
-.total-row { padding-top: 3px !important; padding-bottom: 3px !important; }
+.invoice-container .header { margin-bottom: 10px !important; padding-bottom: 10px !important; }
+.invoice-metadata, .metadata { margin-bottom: 12px !important; }
+.invoice-container .masthead { padding-block: 10px !important; }
+.invoice-container .contact-strip { margin-block: 10px !important; }
+.invoice-container .field { margin-bottom: 4px !important; }
+.invoice-container dl { padding-top: 8px !important; padding-bottom: 8px !important; }
+.bottom-content-wrap { padding-top: 4mm !important; }
+.total-row { padding-top: 4px !important; padding-bottom: 4px !important; }
 
 .items-main-table th, .items-main-table td, .items-table th, .items-table td, .items-table-wrapper th, .items-table-wrapper td {
- height: auto !important; padding: 3px !important; line-height: 1.25 !important; font-size: 9.5px !important;
+ height: auto !important; padding: 5px 3px !important; line-height: 1.3 !important; font-size: 10px !important;
 }
 
 @media print { @page { size: A4 portrait; } }
