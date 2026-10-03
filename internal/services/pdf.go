@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -71,7 +72,11 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 	} else {
 		htmlContent = fontInjection + "\n" + htmlContent
 	}
-	a4Style := `<style>@page { size: A4 portrait !important; }</style>`
+	orientation := "portrait"
+	if regexp.MustCompile(`(?is)@page[^{}]*\{[^}]*size\s*:\s*[^;}]*\blandscape\b`).MatchString(htmlContent) {
+		orientation = "landscape"
+	}
+	a4Style := `<style>@page { size: A4 ` + orientation + ` !important; }</style>`
 	if headEnd := strings.LastIndex(strings.ToLower(htmlContent), "</head>"); headEnd >= 0 {
 		htmlContent = htmlContent[:headEnd] + a4Style + "\n" + htmlContent[headEnd:]
 	} else {

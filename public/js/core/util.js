@@ -396,7 +396,36 @@ export function parseSpreadsheetText(content, filename = '') {
  * طباعة مستند مستقل داخل إطار مخفي (يعمل بدون نوافذ منبثقة).
  * @param {string} docHtml مستند HTML كامل بأنماطه الخاصة
  */
-export function printDoc(docHtml) {
+function applyVoucherPageStyle(html) {
+  const style = `<style data-voucher-page>
+@page { size: A4 portrait !important; margin: 10mm !important; }
+html { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; }
+body {
+  width: 190mm !important; max-width: 190mm !important;
+  height: auto !important; min-height: 276mm !important; max-height: none !important;
+  margin: 0 auto !important; padding: 0 !important; box-sizing: border-box !important; overflow: visible !important;
+}
+body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page {
+  width: 190mm !important; max-width: 190mm !important;
+  height: auto !important; min-height: 276mm !important; max-height: none !important;
+  margin: 0 !important; box-sizing: border-box !important;
+  display: flex !important; flex-direction: column !important; justify-content: space-between !important;
+  overflow: visible !important; break-inside: avoid !important; page-break-inside: avoid !important;
+}
+body > .receipt-page > .document-heading { margin-top: 4mm !important; margin-bottom: 4mm !important; }
+body > .receipt-page > .amount-card { margin-top: 4mm !important; margin-bottom: 4mm !important; }
+body > .receipt-page > .ornament { margin-top: 4mm !important; margin-bottom: 4mm !important; }
+body > .receipt-page > .bottom-rule { margin-top: 4mm !important; }
+body > .receipt-card > *, body > .receipt-container > *, body > .receipt-page > *, body > .receipt > *, body > .page > * { flex-shrink: 0; }
+@media print {
+  body { margin: 0 !important; background: #fff !important; }
+  body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page { box-shadow: none !important; }
+}
+</style>`;
+  return /<\/head>/i.test(html) ? html.replace(/<\/head>/i, style + "\n</head>") : style + "\n" + html;
+}
+
+export function printDoc(docHtml, { flowing = false } = {}) {
   const holder = document.getElementById('print-root') || document.body;
   const frame = document.createElement('iframe');
   frame.setAttribute('title', 'طباعة');
@@ -406,7 +435,7 @@ export function printDoc(docHtml) {
   holder.appendChild(frame);
   const doc = frame.contentWindow.document;
 
-  const printFixStyle = `<style>
+  const printFixStyle = flowing ? `<style>@media print { html, body { height: auto !important; max-height: none !important; overflow: visible !important; } thead { display: table-header-group; } tr { break-inside: avoid; } }</style>` : `<style>
     @page { size: A4 portrait; margin: 0 !important; }
     .invoice-container, .invoice-frame, .page, [data-invoice-page] {
       width: 210mm !important;
@@ -507,31 +536,12 @@ export function printDoc(docHtml) {
     finalHtml = printFixStyle + '\n' + finalHtml;
   }
 
-  if (/class=["'][^"']*\b(receipt-card|receipt-container|receipt-page|voucher-box|top-wrap)\b/i.test(finalHtml)) {
-    const voucherPrintStyle = `<style>
-      @media print {
-        html, body {
-          height: auto !important;
-          min-height: 0 !important;
-          max-height: none !important;
-          overflow: visible !important;
-        }
-        body { padding: 0 !important; }
-        .receipt-card, .receipt-container, .receipt-page, .receipt, .page, .top-wrap {
-          height: auto !important;
-          min-height: 0 !important;
-          max-height: none !important;
-          overflow: visible !important;
-          break-inside: avoid !important;
-          page-break-inside: avoid !important;
-        }
-      }
-    </style>`;
-    if (finalHtml.includes('</head>')) {
-      finalHtml = finalHtml.replace('</head>', voucherPrintStyle + '\n</head>');
-    } else {
-      finalHtml = voucherPrintStyle + '\n' + finalHtml;
-    }
+  if (/data-voucher-page|class=["'][^"']*\b(receipt-card|receipt-container|receipt-page|receipt|voucher-box|top-wrap)\b/i.test(finalHtml)) {
+    finalHtml = applyVoucherPageStyle(finalHtml);
+  }
+
+  if (finalHtml.includes('data-invoice-page="')) {
+    finalHtml = finalHtml.replace(/<\/head>/i, "<style data-invoice-pages-print>\n@media print {\n @page { size: A4 portrait; margin: 0 !important; }\n html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }\n [data-invoice-page] { width: 210mm !important; min-height: 295mm !important; height: 295mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }\n [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }\n}\n</style>" + '\n</head>');
   }
 
   doc.open();
@@ -1693,6 +1703,8 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
     result = currencySymbolStyle + '\n' + result;
   }
 
+  if (voucher) result = applyVoucherPageStyle(result);
+
   return result;
 }
 
@@ -1749,7 +1761,7 @@ export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 15) {
   const tableClose = tableMatch[4] + tableMatch[5];
   const afterTableRaw = contInner.slice(tableIdx + tableMatch[0].length);
 
-  const bottomRegex = /<(?:div|section|table)\b[^>]*(?:class|id)=["'][^"']*(?:bottom|summary)["']/i;
+  const bottomRegex = /<(?:div|section|table)\b[^>]*(?:class|id)=["'][^"']*(?:bottom|summary)[^"']*["']/i;
   const bottomLoc = afterTableRaw.search(bottomRegex);
   let tableWrapClose = '';
   let bottomContent = afterTableRaw;
@@ -1829,6 +1841,7 @@ export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 15) {
   if (/<\/head>/i.test(res)) {
     res = res.replace(/<\/head>/i, multiCss + '\n</head>');
   }
+  res = res.replace(/<\/head>/i, "<style data-invoice-pages-print>\n@media print {\n @page { size: A4 portrait; margin: 0 !important; }\n html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }\n [data-invoice-page] { width: 210mm !important; min-height: 295mm !important; height: 295mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }\n [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }\n}\n</style>" + '\n</head>');
   const allPages = prefix + pages.join('\n') + suffix;
   res = res.replace(/<body\b([^>]*)>[\s\S]*?<\/body>/i, `<body${bodyAttrs}>\n${allPages}\n</body>`);
 

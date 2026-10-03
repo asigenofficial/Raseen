@@ -537,7 +537,7 @@ export async function render(view, ctx) {
     });
 
     $('#print', view).addEventListener('click', async () => {
-      try { printDoc(await getReportDocHtml()); }
+      try { printDoc(await getReportDocHtml(), { flowing: true }); }
       catch (err) { toastErr(err.message || 'تعذر تحميل قالب التقرير'); }
     });
 
@@ -613,7 +613,7 @@ export async function render(view, ctx) {
       $('#modal-zoom-out', m.el)?.addEventListener('click', () => updateZoom(currentZoom - 10));
       $('#modal-zoom-fit', m.el)?.addEventListener('click', fitReportZoom);
       setTimeout(fitReportZoom, 40);
-      $('#btn-modal-print-doc', m.el)?.addEventListener('click', () => printDoc(docHtml));
+      $('#btn-modal-print-doc', m.el)?.addEventListener('click', () => printDoc(docHtml, { flowing: true }));
       $('#btn-modal-pdf-doc', m.el)?.addEventListener('click', async (e) => {
         e.currentTarget.disabled = true;
         try {

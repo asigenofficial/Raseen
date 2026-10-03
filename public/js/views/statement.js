@@ -321,7 +321,7 @@ export async function render(view, ctx) {
 
     $('#print', view).addEventListener('click', async () => {
       const issuer = await getIssuerForDoc();
-      try { printDoc(await renderStatementFromStoredTemplate(d, issuer, d.client)); }
+      try { printDoc(await renderStatementFromStoredTemplate(d, issuer, d.client), { flowing: true }); }
       catch (err) { toastErr(err.message || 'تعذر تحميل قالب كشف الحساب'); }
     });
 

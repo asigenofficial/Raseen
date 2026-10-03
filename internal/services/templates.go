@@ -1821,6 +1821,11 @@ func (s *TemplateService) generateSmartRowsSlice(tpl string, lines []InvoiceItem
 }
 
 func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string {
+	if len(inv.Lines) == 0 && len(inv.Items) > 0 {
+		copy := *inv
+		copy.Lines = inv.Items
+		inv = &copy
+	}
 	if len(inv.Lines) <= chunkSize {
 		return htmlStr
 	}
@@ -1917,7 +1922,14 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 	}
 
 	allPages := prefix + strings.Join(pages, "\n") + suffix
-	return strings.Replace(htmlStr, bodyMatch[0], bodyOpen+"\n"+allPages+"\n"+bodyClose, 1)
+	return injectTemplateStyle(strings.Replace(htmlStr, bodyMatch[0], bodyOpen+"\n"+allPages+"\n"+bodyClose, 1), `<style data-invoice-pages-print>
+@media print {
+ @page { size: A4 portrait; margin: 0 !important; }
+ html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }
+ [data-invoice-page] { width: 210mm !important; min-height: 295mm !important; height: 295mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }
+ [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }
+}
+</style>`)
 }
 
 // ─── Builder Config (Save / Load) ─────────────────────────────────────────────
