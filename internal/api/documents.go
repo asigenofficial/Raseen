@@ -339,11 +339,14 @@ func (s *Server) renderVoucherHTML(id, style string) (string, error) {
 		"payment_method": v.PaymentLabel, "reference_no": v.ReferenceNo,
 		"notes": v.Notes, "paid_for": paidFor,
 		"amount": amount, "total_amount": amount, "grand_total": amount,
-		"sar_symbol": "ر.س", "qr_code": "", "amount_in_words": services.TafqeetArabic(v.TotalAmount), "tafqeet": services.TafqeetArabic(v.TotalAmount), "receiver_name": issuer.NameAr,
+		"qr_code": "", "amount_in_words": services.TafqeetArabic(v.TotalAmount), "tafqeet": services.TafqeetArabic(v.TotalAmount), "receiver_name": issuer.NameAr,
 	}
 	for key, value := range replacements {
 		tpl = strings.ReplaceAll(tpl, "{{"+key+"}}", html.EscapeString(value))
 	}
+	sarSymbol := s.templates.SARSymbolSVG()
+	tpl = strings.ReplaceAll(tpl, "{{sar_symbol}}", sarSymbol)
+	tpl = strings.ReplaceAll(tpl, "{{currency_symbol}}", sarSymbol)
 	logo := ""
 	if issuer.LogoData != nil && strings.HasPrefix(*issuer.LogoData, "data:image/") {
 		logo = `<img style="max-width:130px;max-height:80px" src="` + html.EscapeString(*issuer.LogoData) + `">`

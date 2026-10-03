@@ -99,6 +99,18 @@ type TemplateService struct {
 	sarSymbolSVG string
 }
 
+// SARSymbolSVG returns the same inline icon used by invoice and browser previews.
+// The XML declaration belongs to a standalone SVG file, not embedded HTML.
+func (s *TemplateService) SARSymbolSVG() string {
+	if s == nil {
+		return ""
+	}
+	if start := strings.Index(s.sarSymbolSVG, "<svg"); start >= 0 {
+		return s.sarSymbolSVG[start:]
+	}
+	return ""
+}
+
 func NewTemplateService(d *db.DB, dataDir string) *TemplateService {
 	tplDir := filepath.Join(dataDir, "templates")
 	_ = os.MkdirAll(filepath.Join(tplDir, "invoices"), 0755)
