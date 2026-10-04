@@ -367,9 +367,12 @@ body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .r
   width: 190mm !important; max-width: 190mm !important;
   height: auto !important; min-height: 276mm !important; max-height: none !important;
   margin: 0 !important; box-sizing: border-box !important;
-  display: flex !important; flex-direction: column !important; justify-content: space-between !important;
+  display: flex !important; flex-direction: column !important; justify-content: flex-start !important;
   overflow: visible !important; break-inside: avoid !important; page-break-inside: avoid !important;
 }
+body > .receipt-card > .head, body > .receipt-container > .head, body > .receipt-page > .head { margin-bottom: 5px !important; flex-shrink: 0 !important; }
+body > .receipt-card > .receipt-box, body > .receipt-container > .receipt-box { margin-top: 0 !important; flex-shrink: 0 !important; }
+body > .receipt-card > footer, body > .receipt-container > footer, body > .receipt-container > .foot, body > .receipt-page > footer { margin-top: auto !important; flex-shrink: 0 !important; }
 body > .receipt-page > .document-heading { margin-top: 4mm !important; margin-bottom: 4mm !important; }
 body > .receipt-page > .amount-card { margin-top: 4mm !important; margin-bottom: 4mm !important; }
 body > .receipt-page > .ornament { margin-top: 4mm !important; margin-bottom: 4mm !important; }
