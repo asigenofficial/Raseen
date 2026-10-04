@@ -917,7 +917,7 @@ func normalizeInvoiceMeasurements(html string) string {
 		return html
 	}
 	const style = `<style data-invoice-measurements>
-.invoice-container, .invoice-frame { padding: 8mm !important; }
+.invoice-container, .invoice-frame { box-sizing: border-box !important; min-height: 281mm !important; padding: 8mm !important; }
 .invoice-container .header { margin-bottom: 10px !important; padding-bottom: 10px !important; }
 .invoice-metadata, .metadata { margin-bottom: 12px !important; }
 .invoice-container .masthead { padding-block: 10px !important; }
