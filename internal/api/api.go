@@ -2134,7 +2134,6 @@ func (s *Server) Handler() http.Handler {
 		w.Write(data)
 	}
 	mux.HandleFunc("GET /api/invoices/templates/{id}/download", handleTemplateDownload)
-	mux.HandleFunc("GET /api/templates/{id}/download", handleTemplateDownload)
 
 
 	mux.HandleFunc("GET /api/templates/builder/{id}", func(w http.ResponseWriter, r *http.Request) {
