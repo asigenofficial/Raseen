@@ -150,8 +150,6 @@ func (s *Server) startPDFWorker() {
 	go func() {
 		// Re-queue any previously failed PDFs on startup so they re-render cleanly
 		_, _ = s.db.Exec("UPDATE document_pdfs SET status='PENDING' WHERE status='FAILED'")
-		// Rebuild saved invoices and vouchers with the current templates and A4 PDF settings.
-		_, _ = s.db.Exec("UPDATE document_pdfs SET status='PENDING', pdf=NULL, rendered_revision=0 WHERE kind IN ('invoice', 'voucher')")
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 		for {

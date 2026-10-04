@@ -680,7 +680,6 @@ export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
       raw += '.pdf';
     }
     const safeName = raw.replace(/[\/\\?%*:|"<>]/g, '_').replace(/\s+/g, '_');
-    const saveHandle = await choosePdfDestination(safeName);
     const res = await fetch('/api/pdf/render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -701,7 +700,7 @@ export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
       fileObj = blob;
     }
 
-    await savePdfFile(fileObj, safeName, saveHandle);
+    await savePdfFile(fileObj, safeName);
     toastOk('تم حفظ ملف PDF بنجاح 📄');
     return blob;
   } catch (err) {
@@ -716,39 +715,46 @@ export async function downloadPdfFromHtml(docHtml, filename = 'document.pdf') {
 /** يفتح اختيار مكان الحفظ في المتصفحات الداعمة، وينزّل الملف بالطريقة المعتادة فيما عداها. */
 export async function choosePdfDestination(filename, documentKey = '') {
   if (window.showSaveFilePicker) {
-    return window.showSaveFilePicker({
-      suggestedName: filename,
-      types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }],
-    });
+    try {
+      return await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }],
+      });
+    } catch {
+      return null;
+    }
   }
   return null;
 }
 
 export async function savePdfFile(fileObj, filename, handle = null) {
   if (handle) {
-    const writer = await handle.createWritable();
-    try { await writer.write(fileObj); await writer.close(); }
-    catch (err) { await writer.abort().catch(() => {}); throw err; }
-    return;
+    try {
+      const writer = await handle.createWritable();
+      await writer.write(fileObj);
+      await writer.close();
+      return;
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      console.warn('Handle write failed, fallback to standard download:', err);
+    }
   }
   const url = URL.createObjectURL(fileObj);
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      try {
-        a.remove();
-        URL.revokeObjectURL(url);
-      } catch { }
-    }, 60000);
-  return;
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    try {
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch { }
+  }, 60000);
 }
 
 export async function downloadPdfFromUrl(url, filename) {
-  const saveHandle = await choosePdfDestination(filename, url);
   const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
   if (!res.ok) {
     const errJson = await res.json().catch(() => ({}));
@@ -763,12 +769,7 @@ export async function downloadPdfFromUrl(url, filename) {
   if (blob.size < 100) {
     throw new Error('ملف PDF فارغ أو تالف، يرجى المحاولة مرة أخرى');
   }
-  try {
-    await savePdfFile(blob, filename, saveHandle);
-  } catch (err) {
-    if (!saveHandle || err?.name === 'AbortError') throw err;
-    await savePdfFile(blob, filename);
-  }
+  await savePdfFile(blob, filename);
 }
 
 /** Read a selected HTML template from data/templates via the database catalog. */

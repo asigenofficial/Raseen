@@ -11,8 +11,11 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
+
+var pdfMu sync.Mutex
 
 var ErrNoBrowser = errors.New("لم يتم العثور على متصفح Chromium أو Chrome لتحويل المستند إلى PDF")
 
@@ -61,6 +64,9 @@ func FindAvailableBrowser() string {
 
 // RenderHTMLToPDF converts an HTML document string to a PDF byte slice using a headless browser.
 func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
+	pdfMu.Lock()
+	defer pdfMu.Unlock()
+
 	browser := FindAvailableBrowser()
 	if browser == "" {
 		return nil, ErrNoBrowser
@@ -69,6 +75,7 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 	tmpDir := os.TempDir()
 	inPath := filepath.Join(tmpDir, fmt.Sprintf("raseen_%d.html", time.Now().UnixNano()))
 	outPath := filepath.Join(tmpDir, fmt.Sprintf("raseen_%d.pdf", time.Now().UnixNano()))
+	userDataDir := filepath.Join(tmpDir, fmt.Sprintf("raseen_prof_%d", time.Now().UnixNano()))
 
 	// Keep template margins, but make every downloaded PDF use A4 paper.
 	fontInjection := `<meta charset="utf-8">`
@@ -99,6 +106,7 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 	}
 	defer os.Remove(inPath)
 	defer os.Remove(outPath)
+	defer os.RemoveAll(userDataDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
@@ -118,8 +126,12 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 		"--disable-background-networking",
 		"--allow-file-access-from-files",
 		"--disable-web-security",
+		"--disable-crash-reporter",
+		"--disable-breakpad",
+		"--no-zygote",
 		"--run-all-compositor-stages-before-draw",
 		"--virtual-time-budget=4000",
+		fmt.Sprintf("--user-data-dir=%s", userDataDir),
 		fmt.Sprintf("--print-to-pdf=%s", outPath),
 		inPath,
 	}

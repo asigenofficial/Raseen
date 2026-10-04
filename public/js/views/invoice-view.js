@@ -158,12 +158,11 @@ export async function downloadInvoicePdf({ invoice, issuer, client, printSetting
   const invNum = (invoice.invoice_number || invoice.id || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
   const filename = clientPdfFilename('فاتورة', client?.name || invoice.client_name || invoice.buyer_name, invNum);
   try {
-    const saveHandle = await choosePdfDestination(filename, `invoice:${invoice.id}`);
     toastOk('جارٍ تجهيز نسخة PDF المحفوظة...');
     const cfg = printSettings || (typeof issuer?.print_settings === 'string'
       ? JSON.parse(issuer.print_settings || '{}') : (issuer?.print_settings || {})) || {};
     const blob = await fetchInvoicePdfBlob(invoice.id, null, cfg.template_style || '');
-    await savePdfFile(blob, filename, saveHandle);
+    await savePdfFile(blob, filename);
     toastOk('تم حفظ الفاتورة PDF بنجاح');
     return blob;
   } catch (err) {
