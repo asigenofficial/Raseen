@@ -175,6 +175,36 @@
       font-size: 7.5pt;
       color: #64748b;
     }
+    @media print {
+      @page { size: A4 portrait; margin: 10mm; }
+      html, body {
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .receipt-container {
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        min-height: 276mm;
+        width: 190mm !important;
+        margin: 0 auto !important;
+        box-sizing: border-box !important;
+      }
+      .head {
+        margin-bottom: 5px !important;
+        flex-shrink: 0 !important;
+      }
+      .receipt-box {
+        margin-top: 0 !important;
+        flex-shrink: 0 !important;
+      }
+      .foot {
+        margin-top: auto !important;
+        flex-shrink: 0 !important;
+      }
+    }
   
 /* ── English Seller Info Left Alignment ── */
 .seller-en-info,
