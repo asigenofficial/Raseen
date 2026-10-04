@@ -19,7 +19,7 @@
       line-height: 1.6;
       color: #0f172a;
       background: #fff;
-      padding: 12px;
+      padding: 4px 12px;
       direction: rtl;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
@@ -30,13 +30,15 @@
       margin: 0 auto;
       background: #fff;
       position: relative;
+      display: flex;
+      flex-direction: column;
     }
     .head {
       background: #f8fafc;
       border: 1.5px solid #cbd5e1;
       border-radius: 6px;
       padding: 10px 16px;
-      margin-bottom: 12px;
+      margin-bottom: 5px;
       display: grid;
       grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 1.1fr);
       gap: 8px 14px;
@@ -80,7 +82,8 @@
       border: 1.5px solid #0f172a;
       border-radius: 6px;
       padding: 16px;
-      margin-top: 14px;
+      margin-top: 0;
+      flex-shrink: 0;
       background: #fff;
     }
     .receipt-top-row {
@@ -161,7 +164,7 @@
       width: 100%;
     }
     .foot {
-      margin-top: 30px;
+      margin-top: auto;
       padding-top: 4mm;
       border-top: 1px solid #e2e8f0;
     }
