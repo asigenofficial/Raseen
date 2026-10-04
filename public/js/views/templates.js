@@ -445,6 +445,10 @@ export async function render(view) {
               </button>
             </div>
             <div class="doc-tpl-card-actions">
+              <a class="btn btn-sm btn-download-tpl" href="/api/invoices/templates/${encodeURIComponent(tpl.id)}/download" download title="تحميل ملف القالب" style="padding:4px 8px; font-size:0.76rem; display:inline-flex; align-items:center; gap:4px; text-decoration:none;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                تحميل
+              </a>
               <button type="button" class="btn btn-sm btn-inspect-tpl" data-tpl-id="${esc(tpl.id)}" title="فحص خلايا القالب" style="padding:4px 8px; font-size:0.76rem;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 فحص
@@ -513,6 +517,10 @@ export async function render(view) {
               `}
             </div>
             <div class="doc-tpl-card-actions">
+              <a class="btn btn-sm btn-download-tpl" href="/api/invoices/templates/${encodeURIComponent(tpl.id)}/download" download title="تحميل ملف القالب" style="padding:4px 8px; font-size:0.76rem; display:inline-flex; align-items:center; gap:4px; text-decoration:none;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                تحميل
+              </a>
               <button type="button" class="btn btn-sm btn-inspect-tpl" data-tpl-id="${esc(tpl.id)}" title="فحص خلايا القالب" style="padding:4px 8px; font-size:0.76rem;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 فحص
@@ -588,6 +596,10 @@ export async function render(view) {
               `}
             </div>
             <div class="doc-tpl-card-actions">
+              <a class="btn btn-sm btn-download-tpl" href="/api/invoices/templates/${encodeURIComponent(tpl.id)}/download" download title="تحميل ملف القالب" style="padding:4px 8px; font-size:0.76rem; display:inline-flex; align-items:center; gap:4px; text-decoration:none;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                تحميل
+              </a>
               ${tpl.is_builtin ? '' : `
                 ${tpl.badge === 'سند مخصص' ? `<a class="btn btn-sm" href="#/template-builder?id=${encodeURIComponent(tpl.id)}">تعديل التصميم</a>` : ''}
                 <button type="button" class="btn btn-sm btn-inspect-tpl" data-tpl-id="${esc(tpl.id)}" title="فحص خلايا القالب" style="padding:4px 8px; font-size:0.76rem;">فحص</button>
@@ -1195,6 +1207,10 @@ export async function render(view) {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 <span>تنزيل PDF</span>
               </button>
+              <a class="btn" id="btn-modal-download-tpl" href="/api/invoices/templates/${encodeURIComponent(tpl?.id || '')}/download" download style="display:inline-flex; align-items:center; gap:6px; text-decoration:none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>تحميل القالب</span>
+              </a>
             </div>
             <button class="btn" data-close type="button" style="padding:0 1.25rem;">إغلاق</button>
           </div>
@@ -1361,6 +1377,10 @@ export async function render(view) {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               <span>تنزيل PDF</span>
             </button>
+            <a class="btn" id="btn-modal-download-voucher-tpl" href="/api/invoices/templates/${encodeURIComponent(tplId)}/download" download style="display:inline-flex; align-items:center; gap:6px; text-decoration:none;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>تحميل القالب</span>
+            </a>
           </div>
           <button class="btn" data-close type="button" style="padding:0 1.25rem;">إغلاق</button>
         </div>
@@ -1889,12 +1909,18 @@ export async function render(view) {
       `,
       footer: html`
         <div class="flex gap" style="justify-content:space-between; width:100%;">
-          ${(tpl.category === 'documents' || tpl.category === 'vouchers') ? `
-            <button class="btn btn-sm btn-info" id="btn-insp-preview-voucher" type="button" style="display:inline-flex; align-items:center; gap:5px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-              معاينة السند الآن
-            </button>
-          ` : '<div></div>'}
+          <div class="flex gap-xs" style="align-items:center;">
+            <a class="btn btn-sm" href="/api/invoices/templates/${encodeURIComponent(tpl.id)}/download" download style="display:inline-flex; align-items:center; gap:5px; text-decoration:none;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              تحميل ملف القالب
+            </a>
+            ${(tpl.category === 'documents' || tpl.category === 'vouchers') ? `
+              <button class="btn btn-sm btn-info" id="btn-insp-preview-voucher" type="button" style="display:inline-flex; align-items:center; gap:5px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                معاينة السند الآن
+              </button>
+            ` : ''}
+          </div>
           <button class="btn btn-primary" data-close type="button">إغلاق</button>
         </div>
       `,

@@ -2109,6 +2109,34 @@ func (s *Server) Handler() http.Handler {
 		w.Write([]byte(htmlStr))
 	})
 
+	handleTemplateDownload := func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		filePath, err := s.templates.GetFilePath(id)
+		if err != nil {
+			s.err(w, 404, err.Error())
+			return
+		}
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			s.err(w, 500, "تعذر قراءة ملف القالب")
+			return
+		}
+		filename := filepath.Base(filePath)
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+		if strings.HasSuffix(strings.ToLower(filename), ".html") {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		} else if strings.HasSuffix(strings.ToLower(filename), ".xlsx") {
+			w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		} else {
+			w.Header().Set("Content-Type", "application/octet-stream")
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write(data)
+	}
+	mux.HandleFunc("GET /api/invoices/templates/{id}/download", handleTemplateDownload)
+	mux.HandleFunc("GET /api/templates/{id}/download", handleTemplateDownload)
+
+
 	mux.HandleFunc("GET /api/templates/builder/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		res, err := s.templates.GetBuilderConfig(id)
