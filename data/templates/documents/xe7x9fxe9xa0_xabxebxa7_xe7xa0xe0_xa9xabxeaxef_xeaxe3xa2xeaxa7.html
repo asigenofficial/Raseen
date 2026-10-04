@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>سند قبض وقسيمة تحصيل رسمية (Payment Slip / RECEIPT)</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #0f172a;
+      background: #fff;
+      padding: 4px 12px;
+      direction: rtl;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .receipt-container {
+      width: 100%;
+      max-width: 210mm;
+      margin: 0 auto;
+      background: #fff;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    .head {
+      background: #f8fafc;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 10px 16px;
+      margin-bottom: 5px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 1.1fr);
+      gap: 8px 14px;
+      align-items: center;
+    }
+    .head-en {
+      text-align: left;
+      direction: ltr;
+    }
+    .head-en .seller-en {
+      font-size: 12pt;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .head-en .meta-en {
+      font-size: 8pt;
+      color: #475569;
+    }
+    .head-logo {
+      text-align: center;
+    }
+    .head-logo img {
+      max-height: 60px;
+      max-width: 130px;
+      object-fit: contain;
+    }
+    .head-ar {
+      text-align: right;
+      direction: rtl;
+    }
+    .head-ar .seller-ar {
+      font-size: 13pt;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .head-ar .meta-ar {
+      font-size: 8.5pt;
+      color: #0f172a;
+    }
+    .receipt-box {
+      border: 1.5px solid #0f172a;
+      border-radius: 6px;
+      padding: 16px;
+      margin-top: 0;
+      flex-shrink: 0;
+      background: #fff;
+    }
+    .receipt-top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1.5px solid #0f172a;
+      padding-bottom: 10px;
+      margin-bottom: 14px;
+    }
+    .title-main {
+      font-size: 16pt;
+      font-weight: 900;
+      color: #0f172a;
+    }
+    .title-sub {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: #64748b;
+      margin-inline-start: 6px;
+    }
+    .amount-badge {
+      font-size: 14pt;
+      font-weight: 900;
+      color: #0f172a;
+      background: #f1f5f9;
+      padding: 4px 16px;
+      border: 1.5px solid #0f172a;
+      border-radius: 4px;
+    }
+    .kv-table {
+      width: 100%;
+      font-size: 9.5pt;
+      border-collapse: collapse;
+      line-height: 2.2;
+    }
+    .kv-table td {
+      padding: 3px 6px;
+      vertical-align: middle;
+    }
+    .lbl {
+      width: 110px;
+      font-weight: 700;
+      color: #475569;
+    }
+    .mono {
+      font-family: monospace;
+      font-size: 10pt;
+    }
+    .tafqeet-box {
+      background: #f8fafc;
+      padding: 3px 10px;
+      border-radius: 3px;
+      display: inline-block;
+      border: 1px solid #e2e8f0;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .signatures-zone {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: 45px;
+      padding: 0 30px;
+      text-align: center;
+    }
+    .sig-col {
+      width: 140px;
+    }
+    .sig-title {
+      margin-bottom: 45px;
+      font-weight: 800;
+      font-size: 9pt;
+      color: #0f172a;
+    }
+    .sig-line {
+      border-top: 1.5px dashed #64748b;
+      width: 100%;
+    }
+    .foot {
+      margin-top: auto;
+      padding-top: 4mm;
+      border-top: 1px solid #e2e8f0;
+    }
+    .foot-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 7.5pt;
+      color: #64748b;
+    }
+    @media print {
+      @page { size: A4 portrait; margin: 10mm; }
+      html, body {
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .receipt-container {
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        min-height: 276mm;
+        width: 190mm !important;
+        margin: 0 auto !important;
+        box-sizing: border-box !important;
+      }
+      .head {
+        margin-bottom: 5px !important;
+        flex-shrink: 0 !important;
+      }
+      .receipt-box {
+        margin-top: 0 !important;
+        flex-shrink: 0 !important;
+      }
+      .foot {
+        margin-top: auto !important;
+        flex-shrink: 0 !important;
+      }
+    }
+  
+/* ── English Seller Info Left Alignment ── */
+.seller-en-info,
+.seller-en,
+.seller.seller-en,
+.seller-block.en,
+td.seller-en {
+  direction: ltr !important;
+  text-align: left !important;
+  justify-items: flex-start !important;
+  align-items: flex-start !important;
+  unicode-bidi: isolate !important;
+}
+
+.seller-en-info .company-name-en,
+.seller-en .company-name-en,
+.seller-en .company-name,
+.seller-block.en .seller-name-en,
+.seller-en-info h2,
+.seller-en h2,
+.seller-block.en h2 {
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: isolate !important;
+}
+
+.seller-en-info .header-info-line,
+.seller-en .header-info-line,
+.seller-en .company-line,
+.seller-block.en .seller-row,
+.seller-en p,
+.seller.seller-en p {
+  direction: ltr !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 5px !important;
+  unicode-bidi: isolate !important;
+}
+
+.seller-en-info .header-info-line svg,
+.seller-en-info .header-info-line .icon-svg,
+.seller-en .header-info-line svg,
+.seller-en .company-line svg,
+.seller-en .company-line .icon,
+.seller-block.en .seller-row svg,
+.seller-en p svg,
+.seller.seller-en p svg,
+.seller-en p .icon,
+.seller.seller-en p .icon {
+  order: -1 !important;
+  margin-right: 5px !important;
+  margin-left: 0 !important;
+    margin-right: 6px !important;
+  flex-shrink: 0 !important;
+}
+
+.seller-en-info .header-info-line span,
+.seller-en .company-line span,
+.seller-block.en .seller-row span,
+.seller-en p span {
+  order: 2 !important;
+  text-align: left !important;
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+}
+
+</style>
+</head>
+<body>
+  <div class="receipt-container">
+    <header class="head">
+      <div class="head-ar">
+        <div class="seller-ar">{{seller_name}}</div>
+        <div class="meta-ar">الرقم الضريبي: <span class="mono">{{seller_tax}}</span></div>
+        <div class="meta-ar">السجل التجاري: <span class="mono">{{seller_cr}}</span></div>
+      </div>
+      <div class="head-logo">
+        {{logo}}
+      </div>
+      <div class="head-en">
+        <div class="seller-en" dir="ltr" lang="en">{{seller_name_en}}</div>
+        <div class="meta-en">VAT: {{seller_tax}}</div>
+        <div class="meta-en">CR: {{seller_cr}}</div>
+      </div>
+    </header>
+
+    <div class="receipt-box">
+      <div class="receipt-top-row">
+        <div>
+          <span class="title-main">سند قبض</span>
+          <span class="title-sub">/ Payment Slip / RECEIPT</span>
+        </div>
+        <div class="amount-badge">
+          المبلغ: {{total_amount}} {{sar_symbol}}
+        </div>
+      </div>
+
+      <table class="kv-table">
+        <tr>
+          <td class="lbl">رقم السند:</td>
+          <td><b class="mono">{{voucher_number}}</b></td>
+          <td class="lbl">تاريخ السند:</td>
+          <td><b>{{voucher_date}}</b></td>
+        </tr>
+        <tr>
+          <td class="lbl">استلمنا من:</td>
+          <td colspan="3"><b style="font-size:11pt;">{{client_name}}</b></td>
+        </tr>
+        <tr>
+          <td class="lbl">مبلغ وقدره:</td>
+          <td colspan="3"><span class="tafqeet-box">{{tafqeet}}</span></td>
+        </tr>
+        <tr>
+          <td class="lbl">وذلك عن:</td>
+          <td colspan="3">{{notes}}</td>
+        </tr>
+        <tr>
+          <td class="lbl">طريقة السداد:</td>
+          <td colspan="3">{{payment_method}}</td>
+        </tr>
+      </table>
+
+      <div class="signatures-zone">
+        <div class="sig-col">
+          <div class="sig-title">الصندوق</div>
+          <div class="sig-line"></div>
+        </div>
+        <div class="sig-col">
+          <div class="sig-title">توقيع المحاسب</div>
+          <div class="sig-line"></div>
+        </div>
+        <div class="sig-col">
+          <div class="sig-title">توقيع وختم المستلم</div>
+          <div class="sig-line"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="foot">
+      <div class="foot-row">
+        <span>{{seller_address}}</span>
+        <span class="mono" style="font-weight:800;">OBS | RECEIPT CARD</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>
