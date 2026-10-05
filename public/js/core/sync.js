@@ -12,6 +12,18 @@ let heartbeatTimer = null;
 let activeCount = 1;
 let isConnected = false;
 const listeners = new Map();
+let renderDebounceTimer = null;
+
+/**
+ * جدولة إعادة رسم الواجهة بذكاء لمنع تجميد المتصفح وعواصف إعادة الرسم (Debounce)
+ */
+function scheduleSmartRender(delay = 250) {
+  if (renderDebounceTimer) clearTimeout(renderDebounceTimer);
+  renderDebounceTimer = setTimeout(() => {
+    renderDebounceTimer = null;
+    router.render();
+  }, delay);
+}
 
 /**
  * الاشتراك في نوع معين من أحداث المزامنة
@@ -162,9 +174,9 @@ export function startSync() {
           }
         }
 
-        // تحديث الشاشة الحالية إذا كانت معنية بالفواتير
+        // تحديث الشاشة الحالية بسلاسة إذا كانت معنية بالفواتير
         if (['invoices', 'dashboard', 'statement', 'reports'].includes(curView)) {
-          router.render();
+          scheduleSmartRender();
         }
       } catch (err) {
         console.error('[SyncEngine] فشل معالجة حدث الفاتورة:', err);
@@ -183,7 +195,7 @@ export function startSync() {
         const ev = JSON.parse(e.data);
         emitLocal(ev.type, ev);
         if (store.user?.username === ev.actor) return;
-        if (router.currentView() === 'templates') router.render();
+        if (router.currentView() === 'templates') scheduleSmartRender();
         else toastOk('تم تحديث القوالب على الخادم؛ ستظهر النسخة الجديدة عند فتح المستند');
       } catch (err) {
         console.error('[SyncEngine] فشل تحديث القوالب:', err);
@@ -205,7 +217,7 @@ export function startSync() {
         }
 
         if (['vouchers', 'invoices', 'dashboard', 'statement', 'reports'].includes(curView)) {
-          router.render();
+          scheduleSmartRender();
         }
       } catch (err) {
         console.error('[SyncEngine] فشل معالجة حدث السند:', err);
@@ -223,7 +235,7 @@ export function startSync() {
         emitLocal(ev.type, ev);
         const curView = router.currentView();
         if (['clients', 'items', 'invoice'].includes(curView)) {
-          router.render();
+          scheduleSmartRender();
         }
       } catch {}
     };
@@ -237,7 +249,7 @@ export function startSync() {
         const ev = JSON.parse(e.data);
         emitLocal('sync:force', ev);
         toastOk(`مزامنة فورية: ${ev.data?.message || 'تم تحديث البيانات بناءً على طلب مسؤول النظام'}`);
-        router.render();
+        scheduleSmartRender(50);
       } catch {}
     });
 
@@ -304,6 +316,10 @@ export function startSync() {
  * إيقاف محرك المزامنة
  */
 export function stopSync() {
+  if (renderDebounceTimer) {
+    clearTimeout(renderDebounceTimer);
+    renderDebounceTimer = null;
+  }
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;

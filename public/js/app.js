@@ -291,7 +291,11 @@ function openUserMenu() {
     const values = formValues(m.body);
     if (!values.current_password || !values.new_password) return toastErr('أدخل كلمة المرور الحالية والجديدة');
     try {
-      await api.post('/api/auth/password', values);
+      await api.post('/api/auth/password', {
+        old_password: values.current_password,
+        current_password: values.current_password,
+        new_password: values.new_password,
+      });
       toastOk('تم تحديث كلمة المرور، يرجى تسجيل الدخول من جديد');
       m.close();
       store.user = null;

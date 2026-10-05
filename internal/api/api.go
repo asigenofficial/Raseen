@@ -279,14 +279,19 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		var req struct {
-			OldPassword string `json:"old_password"`
-			NewPassword string `json:"new_password"`
+			OldPassword     string `json:"old_password"`
+			CurrentPassword string `json:"current_password"`
+			NewPassword     string `json:"new_password"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			s.err(w, 400, "بيانات غير صالحة")
 			return
 		}
-		if err := s.auth.ChangePassword(u.ID, req.OldPassword, req.NewPassword); err != nil {
+		oldPass := req.OldPassword
+		if oldPass == "" {
+			oldPass = req.CurrentPassword
+		}
+		if err := s.auth.ChangePassword(u.ID, oldPass, req.NewPassword); err != nil {
 			s.err(w, 400, err.Error())
 			return
 		}

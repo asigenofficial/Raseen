@@ -244,6 +244,15 @@ export async function render(view) {
     printCfg[settingKey] = templateId;
     printCfg.template_selection_modes = { ...(printCfg.template_selection_modes || {}), [modeBySetting[settingKey]]: 'manual' };
   }
+  function syncStoreIssuerSettings(printSettings, qrSettings = null) {
+    if (store.issuers && Array.isArray(store.issuers)) {
+      const stored = store.issuers.find((i) => i.id === activeIssuer.id);
+      if (stored) {
+        stored.print_settings = printSettings;
+        if (qrSettings) stored.qr_settings = qrSettings;
+      }
+    }
+  }
   normalizeTemplateDefaults();
 
   let qrCfg = {
@@ -2386,7 +2395,8 @@ export async function render(view) {
         confirmTemplateSelection(btn.dataset.settingKey, btn.dataset.selectDataTemplate);
         await api.put(`/api/issuers/${activeIssuer.id}`, { ...activeIssuer, print_settings: printCfg, qr_settings: qrCfg });
         activeIssuer.print_settings = printCfg;
-        toastOk('تم تعيين القالب الافتراضي لهذه الفئة'); renderView();
+        syncStoreIssuerSettings(printCfg, qrCfg);
+        toastOk('تم تعيين القالب الافتراضي لهذه المنشأة بنجاح'); renderView();
       } catch (err) { toastErr(err.message || 'تعذر حفظ القالب'); }
     }));
     $$('[data-file-delete]', view).forEach((btn) => btn.addEventListener('click', async () => {
@@ -2401,6 +2411,7 @@ export async function render(view) {
         normalizeTemplateDefaults();
         await api.put(`/api/issuers/${activeIssuer.id}`, { ...activeIssuer, print_settings: printCfg, qr_settings: qrCfg });
         activeIssuer.print_settings = printCfg;
+        syncStoreIssuerSettings(printCfg, qrCfg);
         renderView();
       }
       catch (err) { toastErr(err.message || 'تعذر حذف القالب'); }
@@ -2513,6 +2524,7 @@ export async function render(view) {
             qr_settings: qrCfg,
           });
           activeIssuer.print_settings = printCfg;
+          syncStoreIssuerSettings(printCfg, qrCfg);
           toastOk(`تم اعتماد قالب «${tpl?.name_ar || tplId}» رسمياً للمنشأة وحفظ الإعدادات بنجاح`);
         } catch (err) {
           toastErr('حدث خطأ أثناء حفظ اعتماد القالب: ' + err.message);
@@ -2534,6 +2546,7 @@ export async function render(view) {
             qr_settings: qrCfg,
           });
           activeIssuer.print_settings = printCfg;
+          syncStoreIssuerSettings(printCfg, qrCfg);
           toastOk(`تم اعتماد قالب «${tpl?.name_ar || tplId}» رسمياً لسندات القبض وحفظ الإعدادات بنجاح`);
         } catch (err) {
           toastErr('حدث خطأ أثناء حفظ اعتماد القالب: ' + err.message);
@@ -2593,6 +2606,7 @@ export async function render(view) {
             print_settings: printCfg,
             qr_settings: qrCfg,
           }).catch(() => {});
+          syncStoreIssuerSettings(printCfg, qrCfg);
           renderView();
         } catch (err) {
           toastErr('فشل حذف القالب: ' + err.message);
@@ -2623,6 +2637,7 @@ export async function render(view) {
     // تبديل الشركة المصدرة
     $('#sel-issuer', view)?.addEventListener('change', async (e) => {
       const newId = e.target.value;
+      store.activeIssuerId = newId;
       try {
         activeIssuer = await api.get(`/api/issuers/${newId}`);
         activeZatcaPhase = activeIssuer.zatca_phase || 'PHASE1';
@@ -2687,6 +2702,9 @@ export async function render(view) {
           print_settings: printCfg,
           qr_settings: qrCfg,
         });
+        activeIssuer.print_settings = printCfg;
+        activeIssuer.qr_settings = qrCfg;
+        syncStoreIssuerSettings(printCfg, qrCfg);
         toastOk('تم حفظ تخصيص الطباعة للمنشأة بنجاح');
       } catch (err) {
         toastErr('فشل حفظ الإعدادات: ' + err.message);

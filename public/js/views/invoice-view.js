@@ -2,7 +2,7 @@
 //  عرض فاتورة: التفاصيل، رمز QR، الطباعة (A4 / حراري)، التصدير، السداد.
 // ==========================================================================
 import { api } from '../core/api.js';
-import { can } from '../core/store.js';
+import { can, store } from '../core/store.js';
 import * as router from '../core/router.js';
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, qrSvg, printDoc, toastOk, toastErr,
@@ -316,7 +316,14 @@ export async function render(view, ctx) {
       }
     }
 
-    if (!availableTemplates.some((tpl) => tpl.id === selectedTplStyle)) selectedTplStyle = availableTemplates[0]?.id || '';
+    const defaultTplStyle = issuerPrintCfg.template_style;
+    if (!selectedTplStyle || !availableTemplates.some((tpl) => tpl.id === selectedTplStyle)) {
+      if (defaultTplStyle && availableTemplates.some((tpl) => tpl.id === defaultTplStyle)) {
+        selectedTplStyle = defaultTplStyle;
+      } else {
+        selectedTplStyle = availableTemplates[0]?.id || '';
+      }
+    }
 
     const getPrintSettings = () => {
       const tpl = availableTemplates.find((t) => t.id === selectedTplStyle);
@@ -402,9 +409,12 @@ export async function render(view, ctx) {
                     </optgroup>` : ''}
                   `)}
                 </select>
-                <button class="btn btn-sm" id="btn-adopt-invoice-tpl" type="button" style="font-size:12px;padding:6px 12px;background:var(--brand-light);border:1px solid var(--brand);color:var(--brand);font-weight:700;white-space:nowrap;border-radius:6px;flex-shrink:0" title="اعتماد هذا القالب كقالب افتراضي لجميع فواتير المنشأة">
-                  اعتماد كقالب افتراضي للمنشأة
-                </button>
+                ${raw((() => {
+                  const isCurrentDefault = selectedTplStyle && selectedTplStyle === issuerPrintCfg.template_style;
+                  return `<button class="btn btn-sm" id="btn-adopt-invoice-tpl" type="button" style="font-size:12px;padding:6px 12px;background:${isCurrentDefault ? 'rgba(16,185,129,0.12)' : 'var(--brand-light)'};border:1px solid ${isCurrentDefault ? 'rgba(16,185,129,0.3)' : 'var(--brand)'};color:${isCurrentDefault ? '#10b981' : 'var(--brand)'};font-weight:700;white-space:nowrap;border-radius:6px;flex-shrink:0" title="${isCurrentDefault ? 'هذا القالب معتمد حالياً كافتراضي لجميع فواتير هذه المنشأة' : 'اعتماد هذا القالب كقالب افتراضي لجميع فواتير المنشأة'}">
+                    ${isCurrentDefault ? '✓ القالب المعتمد للمنشأة' : '★ اعتماد كقالب افتراضي للمنشأة'}
+                  </button>`;
+                })())}
               </div>
             </div>
 
@@ -656,9 +666,29 @@ export async function render(view, ctx) {
       }
     }
 
+    const updateAdoptBtnState = () => {
+      const btn = $('#btn-adopt-invoice-tpl', view);
+      if (!btn) return;
+      const isDefault = selectedTplStyle && selectedTplStyle === issuerPrintCfg.template_style;
+      if (isDefault) {
+        btn.innerHTML = '✓ القالب المعتمد للمنشأة';
+        btn.style.background = 'rgba(16,185,129,0.12)';
+        btn.style.borderColor = 'rgba(16,185,129,0.3)';
+        btn.style.color = '#10b981';
+        btn.title = 'هذا القالب معتمد حالياً كافتراضي لجميع فواتير هذه المنشأة';
+      } else {
+        btn.innerHTML = '★ اعتماد كقالب افتراضي للمنشأة';
+        btn.style.background = 'var(--brand-light)';
+        btn.style.borderColor = 'var(--brand)';
+        btn.style.color = 'var(--brand)';
+        btn.title = 'حفظ واعتماد هذا القالب ليكون القالب الافتراضي الدائم لفواتير هذه المنشأة';
+      }
+    };
+
     // تبديل نمط القالب المعروض
     $('#sel-invoice-tpl', view)?.addEventListener('change', (e) => {
       selectedTplStyle = e.target.value;
+      updateAdoptBtnState();
       updateInvoicePreview();
     });
 
@@ -680,8 +710,13 @@ export async function render(view, ctx) {
           print_settings: issuerPrintCfg,
         });
         issuer.print_settings = issuerPrintCfg;
+        if (store.issuers) {
+          const stored = store.issuers.find((i) => i.id === issuer.id);
+          if (stored) stored.print_settings = issuerPrintCfg;
+        }
         const tplName = tpl?.name_ar || selectedTplStyle;
         toastOk(`تم اعتماد قالب «${tplName}» كقالب افتراضي لجميع فواتير المنشأة بنجاح`);
+        updateAdoptBtnState();
       } catch (err) {
         toastErr('فشل اعتماد القالب: ' + (err.message || 'حدث خطأ'));
       } finally {

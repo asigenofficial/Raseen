@@ -162,7 +162,7 @@ func (h *SyncHub) Subscribe(sessionToken, userID, username, fullName, role, ip, 
 	defer h.subMu.Unlock()
 
 	subID := crypto.UUID()
-	ch := make(chan SyncEvent, 64) // buffered so slow readers don't block broadcasts
+	ch := make(chan SyncEvent, 256) // high-capacity buffer so fast bursts never drop events
 
 	sub := &ClientSubscriber{
 		ID:           subID,
@@ -182,14 +182,16 @@ func (h *SyncHub) Subscribe(sessionToken, userID, username, fullName, role, ip, 
 
 	h.subscribers[subID] = sub
 
-	// Update DB session info
-	nowStr := db.NowIso()
-	if h.db != nil {
-		_, _ = h.db.Exec(`
-			UPDATE sessions 
-			SET ip = ?, user_agent = ?, last_active_at = ?
-			WHERE token = ?
-		`, ip, userAgent, nowStr, sessionToken)
+	// Update DB session info asynchronously without blocking SSE handshake
+	if h.db != nil && sessionToken != "" {
+		nowStr := db.NowIso()
+		go func(tok, clientIP, ua, t string) {
+			_, _ = h.db.Exec(`
+				UPDATE sessions 
+				SET ip = ?, user_agent = ?, last_active_at = ?
+				WHERE token = ?
+			`, clientIP, ua, t, tok)
+		}(sessionToken, ip, userAgent, nowStr)
 	}
 
 	cancel := func() {
@@ -208,14 +210,15 @@ func (h *SyncHub) Subscribe(sessionToken, userID, username, fullName, role, ip, 
 func (h *SyncHub) Heartbeat(sessionToken, currentView string) int {
 	h.subMu.Lock()
 	now := time.Now()
-	nowStr := db.NowIso()
 	count := 0
+	viewChanged := false
 
 	for _, sub := range h.subscribers {
 		if sub.SessionToken == sessionToken {
 			sub.LastSeenAt = now
-			if currentView != "" {
+			if currentView != "" && sub.CurrentView != currentView {
 				sub.CurrentView = currentView
+				viewChanged = true
 			}
 		}
 		if now.Sub(sub.LastSeenAt) <= 60*time.Second {
@@ -224,13 +227,16 @@ func (h *SyncHub) Heartbeat(sessionToken, currentView string) int {
 	}
 	h.subMu.Unlock()
 
-	// Update DB
-	if h.db != nil && sessionToken != "" {
-		_, _ = h.db.Exec(`
-			UPDATE sessions 
-			SET current_view = ?, last_active_at = ?
-			WHERE token = ?
-		`, currentView, nowStr, sessionToken)
+	// Update DB asynchronously only when view changes, completely avoiding constant disk write locks
+	if h.db != nil && sessionToken != "" && viewChanged {
+		nowStr := db.NowIso()
+		go func(tok, cv, t string) {
+			_, _ = h.db.Exec(`
+				UPDATE sessions 
+				SET current_view = ?, last_active_at = ?
+				WHERE token = ?
+			`, cv, t, tok)
+		}(sessionToken, currentView, nowStr)
 	}
 
 	return count

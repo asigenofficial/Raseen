@@ -26,13 +26,19 @@ func NewAuthService(d *db.DB, hours ...int) *AuthService {
 }
 
 func (s *AuthService) permissions(user *models.User) {
+	if user.Role == "ADMIN" {
+		user.EffectivePermissions = []string{"*"}
+		return
+	}
+	var custom []string
+	if user.Permissions != "" && user.Permissions != "[]" {
+		if json.Unmarshal([]byte(user.Permissions), &custom) == nil && len(custom) > 0 {
+			user.EffectivePermissions = custom
+			return
+		}
+	}
 	_, roles := s.GetRolesAndPermissions()
 	user.EffectivePermissions = append([]string{}, roles[user.Role]...)
-	var extra []string
-	if json.Unmarshal([]byte(user.Permissions), &extra) == nil {
-		user.EffectivePermissions = append(user.EffectivePermissions, extra...)
-	}
-	if user.Role == "ADMIN" { user.EffectivePermissions = []string{"*"} }
 }
 
 func HasPermission(user *models.User, permission string) bool {
@@ -190,6 +196,7 @@ func (s *AuthService) ListUsers() ([]models.User, error) {
 				u.LastLoginAt = &lastLogin.String
 			}
 			u.RoleLabel = roleLabel(u.Role)
+			s.permissions(&u)
 			list = append(list, u)
 		}
 	}
@@ -229,7 +236,7 @@ func (s *AuthService) CreateUser(input CreateUserInput) (*models.User, error) {
 		return nil, fmt.Errorf("اسم المستخدم مستخدم بالفعل أو غير صالح")
 	}
 
-	return &models.User{
+	resUser := &models.User{
 		ID:          id,
 		Username:    input.Username,
 		FullName:    input.FullName,
@@ -238,7 +245,9 @@ func (s *AuthService) CreateUser(input CreateUserInput) (*models.User, error) {
 		Permissions: string(permsJSON),
 		IsActive:    1,
 		CreatedAt:   now,
-	}, nil
+	}
+	s.permissions(resUser)
+	return resUser, nil
 }
 
 type UpdateUserInput struct {
@@ -323,6 +332,7 @@ func (s *AuthService) UpdateUser(id string, input UpdateUserInput) (*models.User
 	}
 
 	current.RoleLabel = roleLabel(current.Role)
+	s.permissions(&current)
 	return &current, nil
 }
 

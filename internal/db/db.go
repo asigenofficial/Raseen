@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -41,13 +42,22 @@ func Open(cfg *config.Config) (*DB, error) {
 		return nil, fmt.Errorf("failed to create data dir: %w", err)
 	}
 
-	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-64000)&_pragma=temp_store(MEMORY)", cfg.DbFile)
+	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(15000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-128000)&_pragma=mmap_size(268435456)&_pragma=temp_store(MEMORY)&_pragma=wal_autocheckpoint(1000)", cfg.DbFile)
 	sqldb, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open sqlite: %w", err)
 	}
 
-	sqldb.SetMaxOpenConns(1) // SQLite serialized WAL safety
+	maxConns := runtime.NumCPU() * 4
+	if maxConns < 10 {
+		maxConns = 10
+	} else if maxConns > 50 {
+		maxConns = 50
+	}
+	sqldb.SetMaxOpenConns(maxConns)
+	sqldb.SetMaxIdleConns(maxConns)
+	sqldb.SetConnMaxLifetime(1 * time.Hour)
+	sqldb.SetConnMaxIdleTime(15 * time.Minute)
 
 	database := &DB{DB: sqldb, cfg: cfg}
 	if err := database.initSchema(); err != nil {
@@ -351,12 +361,21 @@ func (d *DB) rollbackFailedRestore(backup *BackupResult, cause error) error {
 }
 
 func (d *DB) reopen() error {
-	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)", d.cfg.DbFile)
+	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(15000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-128000)&_pragma=mmap_size(268435456)&_pragma=temp_store(MEMORY)&_pragma=wal_autocheckpoint(1000)", d.cfg.DbFile)
 	sqldb, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return err
 	}
-	sqldb.SetMaxOpenConns(1)
+	maxConns := runtime.NumCPU() * 4
+	if maxConns < 10 {
+		maxConns = 10
+	} else if maxConns > 50 {
+		maxConns = 50
+	}
+	sqldb.SetMaxOpenConns(maxConns)
+	sqldb.SetMaxIdleConns(maxConns)
+	sqldb.SetConnMaxLifetime(1 * time.Hour)
+	sqldb.SetConnMaxIdleTime(15 * time.Minute)
 	if err := sqldb.Ping(); err != nil {
 		sqldb.Close()
 		return err

@@ -26,6 +26,7 @@ Thumbs.db
 # Tests, Agents & PDFs
 tests/
 .agents/
+AGENTS.md
 *.pdf
 .gocache/
 

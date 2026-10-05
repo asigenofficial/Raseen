@@ -394,8 +394,18 @@ export async function render(view) {
   const userForm = (user) => {
     const isNew = !user;
     const initialRole = user ? user.role : 'ACCOUNTANT';
-    const initialPerms = new Set(user ? user.permissions : (rolesList.find((r) => r.id === initialRole)?.permissions || []));
-    const isCustomMode = Boolean(user && user.is_custom_permissions);
+    const parseUserPerms = (p) => {
+      if (Array.isArray(p)) return p;
+      if (typeof p === 'string' && p.trim().startsWith('[')) {
+        try { return JSON.parse(p); } catch {}
+      }
+      return [];
+    };
+    const rawCustomPerms = user ? parseUserPerms(user.permissions) : [];
+    const roleDefaultPerms = rolesList.find((r) => r.id === initialRole)?.permissions || [];
+    const isCustomMode = Boolean(user && rawCustomPerms.length > 0);
+    const activePermsList = isCustomMode ? rawCustomPerms : (user?.effective_permissions?.length ? user.effective_permissions : roleDefaultPerms);
+    const initialPerms = new Set(activePermsList);
 
     const m = modal({
       title: isNew ? 'مستخدم جديد' : `تعديل المستخدم: ${user.username}`,
@@ -525,8 +535,7 @@ export async function render(view) {
         full_name: values.full_name,
         role: r,
         is_active: !!values.is_active,
-        custom_mode: isCustom,
-        permissions: checked,
+        permissions: isCustom ? checked : [],
       };
 
       if (isNew) {
@@ -801,7 +810,16 @@ export async function render(view) {
       return `<tr><td colspan="7" class="text-center muted pad" style="padding:2rem">لا يوجد مستخدمون مطابقون للبحث «${esc(userSearchQ)}»</td></tr>`;
     }
     return list.map((u) => {
-      const isCustom = Boolean(u.is_custom_permissions);
+      const parseUserPerms = (p) => {
+        if (Array.isArray(p)) return p;
+        if (typeof p === 'string' && p.trim().startsWith('[')) {
+          try { return JSON.parse(p); } catch {}
+        }
+        return [];
+      };
+      const rawCustom = parseUserPerms(u.permissions);
+      const isCustom = rawCustom.length > 0;
+      const totalCount = (u.effective_permissions && u.effective_permissions.length) || rawCustom.length || (rolesList.find((r) => r.id === u.role)?.permissions || []).length;
       return `<tr class="${u.is_active ? '' : 'row-off'}">
         <td><div class="flex" style="gap:.5rem;align-items:center">
           <div class="avatar sm">${esc(initials(u.full_name || u.username))}</div>
@@ -811,7 +829,7 @@ export async function render(view) {
         <td><span class="badge ${ROLE_TONE[u.role] || 'teal'}">${esc(u.role_label || u.role)}</span></td>
         <td>${u.is_active ? '<span class="badge green">نشط</span>' : '<span class="badge gray">معطّل</span>'}</td>
         <td class="tiny">
-          <span class="badge blue">${(u.permissions || []).length} صلاحية</span>
+          <span class="badge blue">${totalCount} صلاحية</span>
           ${isCustom ? '<span class="badge amber tiny" style="margin-right:4px">مخصص</span>' : ''}
         </td>
         <td class="tiny">${u.last_login_at ? esc(dateTimeAr(u.last_login_at)) : '—'}</td>

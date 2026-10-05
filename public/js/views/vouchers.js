@@ -676,9 +676,12 @@ export async function showVoucher(id, onChange) {
       ? availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === currentStyle ? 'selected' : ''}>${esc(t.name_ar || t.name)} (${esc(t.badge || 'سند HTML')})</option>`).join('')
       : '<option value="default">قالب سند قبض (سند HTML)</option>')}
           </select>
-          <button class="btn btn-sm" id="btn-adopt-voucher-tpl" type="button" style="font-size:12px;padding:5px 10px;background:var(--brand-light);border:1px solid var(--brand);color:var(--brand);font-weight:700" title="اعتماد هذا القالب كقالب افتراضي لجميع سندات المنشأة">
-            اعتماد كقالب افتراضي للمنشأة
-          </button>
+          ${raw((() => {
+        const isVoucherDefault = currentStyle && currentStyle === issuerPrintCfg.voucher_template_style;
+        return `<button class="btn btn-sm" id="btn-adopt-voucher-tpl" type="button" style="font-size:12px;padding:5px 12px;background:${isVoucherDefault ? 'rgba(16,185,129,0.12)' : 'var(--brand-light)'};border:1px solid ${isVoucherDefault ? 'rgba(16,185,129,0.3)' : 'var(--brand)'};color:${isVoucherDefault ? '#10b981' : 'var(--brand)'};font-weight:700;border-radius:6px;white-space:nowrap" title="${isVoucherDefault ? 'هذا القالب معتمد حالياً كافتراضي لجميع سندات هذه المنشأة' : 'اعتماد هذا القالب كقالب افتراضي لجميع سندات المنشأة'}">
+              ${isVoucherDefault ? '✓ القالب المعتمد للمنشأة' : 'اعتماد كقالب افتراضي للمنشأة'}
+            </button>`;
+      })())}
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
           <div style="font-size:12px;color:var(--muted)">
@@ -753,10 +756,30 @@ export async function showVoucher(id, onChange) {
   const iframe = $('#v-preview-iframe', m.body);
   if (iframe) iframe.srcdoc = currentHtml;
 
+  const updateVoucherAdoptBtn = () => {
+    const adoptBtn = $('#btn-adopt-voucher-tpl', m.body);
+    if (!adoptBtn) return;
+    const isDefault = currentStyle && currentStyle === issuerPrintCfg.voucher_template_style;
+    if (isDefault) {
+      adoptBtn.innerHTML = '✓ القالب المعتمد للمنشأة';
+      adoptBtn.style.background = 'rgba(16,185,129,0.12)';
+      adoptBtn.style.borderColor = 'rgba(16,185,129,0.3)';
+      adoptBtn.style.color = '#10b981';
+      adoptBtn.title = 'هذا القالب معتمد حالياً كافتراضي لجميع سندات هذه المنشأة';
+    } else {
+      adoptBtn.innerHTML = '★ اعتماد كقالب افتراضي للمنشأة';
+      adoptBtn.style.background = 'var(--brand-light)';
+      adoptBtn.style.borderColor = 'var(--brand)';
+      adoptBtn.style.color = 'var(--brand)';
+      adoptBtn.title = 'حفظ واعتماد هذا القالب ليكون القالب الافتراضي الدائم لسندات هذه المنشأة';
+    }
+  };
+
   const styleSel = $('#v-style-select', m.body);
   if (styleSel) {
     styleSel.addEventListener('change', async () => {
       currentStyle = styleSel.value;
+      updateVoucherAdoptBtn();
       currentHtml = await renderDoc(currentStyle);
       if (iframe) iframe.srcdoc = currentHtml;
     });
@@ -772,7 +795,13 @@ export async function showVoucher(id, onChange) {
           ...issuer,
           print_settings: issuerPrintCfg,
         });
+        issuer.print_settings = issuerPrintCfg;
+        if (store.issuers) {
+          const stored = store.issuers.find((i) => i.id === issuer.id);
+          if (stored) stored.print_settings = issuerPrintCfg;
+        }
         toastOk('تم اعتماد القالب كافتراضي لجميع سندات المنشأة بنجاح');
+        updateVoucherAdoptBtn();
       } catch (err) {
         toastErr('فشل اعتماد القالب: ' + err.message);
       } finally {
