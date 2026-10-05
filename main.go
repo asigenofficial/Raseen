@@ -108,7 +108,7 @@ func main() {
 		if res, err := database.CreateBackup(); err == nil {
 			log.Printf("[AutoBackup] تم أخذ نسخة احتياطية أولية تلقائية: %s (%d بايت)", res.Filename, res.SizeBytes)
 		}
-		ticker := time.NewTicker(2 * time.Hour)
+		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
 		for range ticker.C {
 			if res, err := database.CreateBackup(); err == nil {

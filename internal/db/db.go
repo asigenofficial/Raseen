@@ -193,8 +193,8 @@ func (d *DB) CreateBackup() (*BackupResult, error) {
 		return nil, fmt.Errorf("failed to back up encryption key: %w", err)
 	}
 
-	// Keep latest 50 backups to prevent disk overflow while ensuring safety
-	pruneOldBackups(d.cfg.BackupDir, 50)
+	// Keep latest 5 backups to prevent disk overflow while ensuring safety
+	pruneOldBackups(d.cfg.BackupDir, 5)
 
 	return &BackupResult{
 		Filename:  filename,
