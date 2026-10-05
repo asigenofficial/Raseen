@@ -12,8 +12,9 @@ RUN go build -ldflags="-w -s" -o raseen .
 # ─── مرحلة التشغيل ────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
 
-# تثبيت Chromium والخطوط العربية (Kacst, Amiri, Noto) وأدوات الخطوط لمنع ظهور النصوص كمربعات في الـ PDF
+# تثبيت Chromium وأداة tini والخطوط العربية (Kacst, Amiri, Noto) وأدوات الخطوط لمنع ظهور النصوص كمربعات في الـ PDF
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tini \
     chromium \
     fonts-liberation \
     fonts-kacst \
@@ -53,4 +54,5 @@ COPY --from=builder /app/data/saudi_riyal_symbol.svg ./data_defaults/saudi_riyal
 
 EXPOSE 8080
 
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["./raseen"]
