@@ -211,8 +211,8 @@ export async function render(view) {
   };
   function normalizeTemplateDefaults(settings = printCfg) {
     const categories = [
-      { key: 'template_style', mode: 'invoices', names: ['invoices'] },
-      { key: 'voucher_template_style', mode: 'documents', names: ['documents', 'vouchers'] },
+      { key: 'template_style', mode: 'invoices', names: ['invoices', 'custom', 'custom_invoices'] },
+      { key: 'voucher_template_style', mode: 'documents', names: ['documents', 'vouchers', 'custom_vouchers'] },
       { key: 'report_template_style', mode: 'reports', names: ['reports'] },
       { key: 'statement_template_style', mode: 'statements', names: ['statements'] },
     ];
@@ -519,9 +519,11 @@ export async function render(view) {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                 عرض الفاتورة (صورة)
               </button>
-              ${isActive ? `
-                <button type="button" class="btn btn-sm btn-tpl-active-state" disabled>${isAutomaticTemplate('template_style') ? 'يعمل تلقائياً ✓' : 'معتمد ✓'}</button>
-              ` : `
+              ${isActive ? (
+                isAutomaticTemplate('template_style')
+                  ? `<button type="button" class="btn btn-sm btn-primary btn-select-template" data-tpl-id="${esc(tpl.id)}" title="اعتماد هذا القالب رسمياً للمنشأة" style="font-size:0.78rem; padding:4px 10px;">اعتماد للمنشأة</button>`
+                  : `<button type="button" class="btn btn-sm btn-tpl-active-state" disabled>معتمد ✓</button>`
+              ) : `
                 <button type="button" class="btn btn-sm btn-primary btn-select-template" data-tpl-id="${esc(tpl.id)}" title="اعتماد هذا القالب للفواتير" style="font-size:0.78rem; padding:4px 10px;">اعتماد</button>
               `}
             </div>
@@ -598,9 +600,11 @@ export async function render(view) {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                 عرض السند (صورة)
               </button>
-              ${isVoucherActive ? `
-                <button type="button" class="btn btn-sm btn-tpl-active-state" disabled>${isAutomaticTemplate('voucher_template_style') ? 'يعمل تلقائياً ✓' : 'معتمد ✓'}</button>
-              ` : `
+              ${isVoucherActive ? (
+                isAutomaticTemplate('voucher_template_style')
+                  ? `<button type="button" class="btn btn-sm btn-primary btn-select-voucher-template" data-tpl-id="${esc(tpl.id)}" title="اعتماد هذا القالب رسمياً لسندات المنشأة" style="font-size:0.78rem; padding:4px 10px;">اعتماد للمنشأة</button>`
+                  : `<button type="button" class="btn btn-sm btn-tpl-active-state" disabled>معتمد ✓</button>`
+              ) : `
                 <button type="button" class="btn btn-sm btn-primary btn-select-voucher-template" data-tpl-id="${esc(tpl.id)}" title="اعتماد هذا القالب للسندات" style="font-size:0.78rem; padding:4px 10px;">اعتماد</button>
               `}
             </div>
@@ -853,7 +857,7 @@ export async function render(view) {
         <strong>${esc(tpl.name_ar || tpl.name)}</strong><p class="muted">${esc(tpl.description || 'قالب HTML قابل للتخصيص')}</p>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-sm" type="button" data-file-preview="${esc(tpl.id)}">معاينة</button>
-          <button class="btn btn-sm ${printCfg[settingKey] === tpl.id ? 'btn-tpl-active-state' : 'btn-primary'}" type="button" data-select-data-template="${esc(tpl.id)}" data-setting-key="${settingKey}" title="اعتماد هذا القالب لهذه الفئة" ${printCfg[settingKey] === tpl.id ? 'disabled' : ''}>${printCfg[settingKey] === tpl.id ? (isAutomaticTemplate(settingKey) ? 'يعمل تلقائياً ✓' : 'معتمد ✓') : 'اعتماد'}</button>
+          <button class="btn btn-sm ${printCfg[settingKey] === tpl.id && !isAutomaticTemplate(settingKey) ? 'btn-tpl-active-state' : 'btn-primary'}" type="button" data-select-data-template="${esc(tpl.id)}" data-setting-key="${settingKey}" title="اعتماد هذا القالب لهذه الفئة" ${printCfg[settingKey] === tpl.id && !isAutomaticTemplate(settingKey) ? 'disabled' : ''}>${printCfg[settingKey] === tpl.id && !isAutomaticTemplate(settingKey) ? 'معتمد ✓' : 'اعتماد للمنشأة'}</button>
           <button class="btn btn-sm btn-danger" type="button" data-file-delete="${esc(tpl.id)}">حذف</button>
         </div></div>`).join('')}</div>` : '<div class="doc-tpl-empty">لا توجد قوالب في هذه الفئة. ارفع ملف HTML لإضافتها.</div>';
     } else if (activeHubTab === 'vouchers') {

@@ -78,13 +78,13 @@ export async function render(view) {
     if (!availableTemplates.length) {
       const fallbackRes = await api.get('/api/invoices/templates?type=all');
       const allList = Array.isArray(fallbackRes) ? fallbackRes : (fallbackRes?.data || []);
-      availableTemplates = allList.filter((t) => !t.category || t.category === 'invoices');
+      availableTemplates = allList.filter((t) => !t.category || t.category === 'invoices' || t.category === 'custom' || t.category === 'custom_invoices');
     }
   } catch {
     try {
       const fallbackRes = await api.get('/api/invoices/templates?type=all');
       const allList = Array.isArray(fallbackRes) ? fallbackRes : (fallbackRes?.data || []);
-      availableTemplates = allList.filter((t) => !t.category || t.category === 'invoices');
+      availableTemplates = allList.filter((t) => !t.category || t.category === 'invoices' || t.category === 'custom' || t.category === 'custom_invoices');
     } catch {
       availableTemplates = [];
     }

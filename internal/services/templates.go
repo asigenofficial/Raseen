@@ -568,10 +568,10 @@ func (s *TemplateService) List(typeFilter, categoryFilter string) ([]TemplateCat
 		}
 
 		if typeFilter != "" && typeFilter != "all" {
-			if typeFilter == "invoices" && tpl.Category != "invoices" {
+			if typeFilter == "invoices" && tpl.Category != "invoices" && tpl.Category != "custom" && tpl.Category != "custom_invoices" {
 				continue
 			}
-			if (typeFilter == "vouchers" || typeFilter == "documents") && tpl.Category != "vouchers" && tpl.Category != "documents" {
+			if (typeFilter == "vouchers" || typeFilter == "documents") && tpl.Category != "vouchers" && tpl.Category != "documents" && tpl.Category != "custom_vouchers" {
 				continue
 			}
 			if (typeFilter == "reports" || typeFilter == "statements") && tpl.Category != typeFilter {
@@ -579,10 +579,10 @@ func (s *TemplateService) List(typeFilter, categoryFilter string) ([]TemplateCat
 			}
 		}
 		if categoryFilter != "" {
-			if categoryFilter == "invoices" && tpl.Category != "invoices" {
+			if categoryFilter == "invoices" && tpl.Category != "invoices" && tpl.Category != "custom" && tpl.Category != "custom_invoices" {
 				continue
 			}
-			if (categoryFilter == "documents" || categoryFilter == "vouchers") && tpl.Category != "vouchers" && tpl.Category != "documents" {
+			if (categoryFilter == "documents" || categoryFilter == "vouchers") && tpl.Category != "vouchers" && tpl.Category != "documents" && tpl.Category != "custom_vouchers" {
 				continue
 			}
 			if (categoryFilter == "reports" || categoryFilter == "statements") && tpl.Category != categoryFilter {
