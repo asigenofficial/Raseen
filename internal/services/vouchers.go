@@ -719,7 +719,7 @@ func (s *VoucherService) DeleteVoucher(id, actor, ip string) error {
 			}
 			newPaid := paidAmount - allocMinor
 			if newPaid < 0 {
-				newPaid = 0
+				return errors.New("السدادات الحالية لا تطابق التخصيصات؛ يلزم مراجعة السند")
 			}
 			newRem := grandTotal - newPaid
 			newStatus := "UNPAID"
@@ -743,10 +743,12 @@ func (s *VoucherService) DeleteVoucher(id, actor, ip string) error {
 	}
 
 	// Remove ledger entries for this voucher (both RECEIPT and RECEIPT_CANCEL)
-	_, _ = tx.Exec("DELETE FROM client_ledger WHERE doc_id = ? AND doc_type IN ('RECEIPT', 'RECEIPT_CANCEL')", id)
-
-	// Remove allocations
-	_, _ = tx.Exec("DELETE FROM voucher_allocations WHERE voucher_id = ?", id)
+	if _, err = tx.Exec("DELETE FROM client_ledger WHERE doc_id = ? AND doc_type IN ('RECEIPT', 'RECEIPT_CANCEL')", id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("DELETE FROM document_pdfs WHERE kind='voucher' AND document_id=?", id); err != nil {
+		return err
+	}
 
 	// Delete voucher record completely from receipt_vouchers
 	result, err := tx.Exec("DELETE FROM receipt_vouchers WHERE id = ?", id)

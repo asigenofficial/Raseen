@@ -42,7 +42,8 @@ func Open(cfg *config.Config) (*DB, error) {
 		return nil, fmt.Errorf("failed to create data dir: %w", err)
 	}
 
-	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(15000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-128000)&_pragma=mmap_size(268435456)&_pragma=temp_store(MEMORY)&_pragma=wal_autocheckpoint(1000)", cfg.DbFile)
+	// Reserve the writer before reading, so concurrent saves wait instead of failing a WAL snapshot upgrade.
+	dsn := fmt.Sprintf("%s?_txlock=immediate&_pragma=busy_timeout(15000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-128000)&_pragma=mmap_size(268435456)&_pragma=temp_store(MEMORY)&_pragma=wal_autocheckpoint(1000)", cfg.DbFile)
 	sqldb, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open sqlite: %w", err)
@@ -279,6 +280,15 @@ func (d *DB) RestoreFrom(sourcePath string) (*BackupResult, error) {
 		testDb.Close()
 		return nil, fmt.Errorf("ملف قاعدة البيانات لا يحتوي على جميع جداول رسين الأساسية")
 	}
+	var invalidReferences int
+	if err = testDb.QueryRow("SELECT COUNT(*) FROM pragma_foreign_key_check").Scan(&invalidReferences); err != nil {
+		testDb.Close()
+		return nil, fmt.Errorf("تعذر فحص مراجع قاعدة البيانات المستوردة: %w", err)
+	}
+	if invalidReferences > 0 {
+		testDb.Close()
+		return nil, fmt.Errorf("قاعدة البيانات المستوردة تحتوي على %d مراجع يتيمة؛ يلزم تسويتها قبل الاستعادة", invalidReferences)
+	}
 	if d.cfg.IsPublicHost() {
 		rows, err := testDb.Query("SELECT password_hash, password_salt FROM users WHERE role = 'ADMIN' AND is_active = 1")
 		if err != nil {
@@ -361,7 +371,7 @@ func (d *DB) rollbackFailedRestore(backup *BackupResult, cause error) error {
 }
 
 func (d *DB) reopen() error {
-	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(15000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-128000)&_pragma=mmap_size(268435456)&_pragma=temp_store(MEMORY)&_pragma=wal_autocheckpoint(1000)", d.cfg.DbFile)
+	dsn := fmt.Sprintf("%s?_txlock=immediate&_pragma=busy_timeout(15000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-128000)&_pragma=mmap_size(268435456)&_pragma=temp_store(MEMORY)&_pragma=wal_autocheckpoint(1000)", d.cfg.DbFile)
 	sqldb, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return err

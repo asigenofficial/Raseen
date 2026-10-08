@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"math"
+	"time"
 
 	"raseen/internal/db"
 	"raseen/internal/models"
@@ -979,22 +980,40 @@ func (s *ReportService) AgingDetailedReport(issuerID, asOf string) (*AgingDetail
 	if asOf == "" {
 		asOf = db.TodayIso()
 	}
-	where := "WHERE i.status IN ('UNPAID', 'PARTIAL') AND i.issue_date <= ?"
-	var args []any
-	args = append(args, asOf, asOf, asOf, asOf, asOf)
+	if _, err := time.Parse("2006-01-02", asOf); err != nil {
+		return nil, fmt.Errorf("تاريخ أعمار الديون غير صالح")
+	}
+	where := "WHERE i.outstanding > 0"
+	args := []any{asOf, asOf, asOf, asOf, asOf, asOf, asOf, asOf}
 	if issuerID != "" {
 		where += " AND i.issuer_id = ?"
 		args = append(args, issuerID)
 	}
 
 	q := fmt.Sprintf(`
+		WITH payments AS (
+			SELECT a.invoice_id, SUM(a.allocated_amount) AS paid
+			FROM voucher_allocations a JOIN receipt_vouchers v ON v.id=a.voucher_id
+			WHERE v.voucher_date <= ? AND NOT EXISTS (
+				SELECT 1 FROM client_ledger l WHERE l.doc_id=v.id
+				AND l.doc_type='RECEIPT_CANCEL' AND l.transaction_date <= ?
+			)
+			GROUP BY a.invoice_id
+		), balances AS (
+			SELECT inv.*, inv.grand_total-COALESCE(p.paid,0) AS outstanding
+			FROM invoices inv LEFT JOIN payments p ON p.invoice_id=inv.id
+			WHERE inv.issue_date <= ? AND NOT EXISTS (
+				SELECT 1 FROM client_ledger l WHERE l.doc_id=inv.id
+				AND l.doc_type='INVOICE_CANCEL' AND l.transaction_date <= ?
+			)
+		)
 		SELECT c.name, c.client_code,
-		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(i.due_date, i.issue_date)) AS INT) <= 30 THEN i.remaining_amount ELSE 0 END), 0) AS b0_30,
-		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(i.due_date, i.issue_date)) AS INT) BETWEEN 31 AND 60 THEN i.remaining_amount ELSE 0 END), 0) AS b31_60,
-		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(i.due_date, i.issue_date)) AS INT) BETWEEN 61 AND 90 THEN i.remaining_amount ELSE 0 END), 0) AS b61_90,
-		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(i.due_date, i.issue_date)) AS INT) > 90 THEN i.remaining_amount ELSE 0 END), 0) AS b90_plus,
-		       COALESCE(SUM(i.remaining_amount), 0) AS total
-		FROM invoices i
+		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(NULLIF(i.due_date,''), i.issue_date)) AS INT) <= 30 THEN i.outstanding ELSE 0 END), 0) AS b0_30,
+		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(NULLIF(i.due_date,''), i.issue_date)) AS INT) BETWEEN 31 AND 60 THEN i.outstanding ELSE 0 END), 0) AS b31_60,
+		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(NULLIF(i.due_date,''), i.issue_date)) AS INT) BETWEEN 61 AND 90 THEN i.outstanding ELSE 0 END), 0) AS b61_90,
+		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(NULLIF(i.due_date,''), i.issue_date)) AS INT) > 90 THEN i.outstanding ELSE 0 END), 0) AS b90_plus,
+		       COALESCE(SUM(i.outstanding), 0) AS total
+		FROM balances i
 		JOIN clients c ON c.id = i.client_id
 		%s
 		GROUP BY c.id, c.name, c.client_code

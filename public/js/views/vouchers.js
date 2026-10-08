@@ -818,7 +818,7 @@ export async function showVoucher(id, onChange) {
       try {
         const vNum = voucher.voucher_number || 'سند';
         const pdfFileName = clientPdfFilename('سند قبض', voucher.client_name || client?.name, vNum);
-        await downloadPdfFromUrl(`/api/vouchers/${encodeURIComponent(voucher.id)}/pdf`, pdfFileName);
+        await downloadPdfFromUrl(`/api/vouchers/${encodeURIComponent(voucher.id)}/pdf?style=${encodeURIComponent(currentStyle)}`, pdfFileName);
       } catch (err) {
         toastErr(err.message || 'تعذر تحميل ملف PDF');
       } finally {

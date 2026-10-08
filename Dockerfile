@@ -1,5 +1,5 @@
 # ─── مرحلة البناء ─────────────────────────────────────────────────────────────
-FROM golang:bookworm AS builder
+FROM golang:1.26-bookworm AS builder
 ENV GOTOOLCHAIN=auto
 
 WORKDIR /app
@@ -43,6 +43,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 RUN mkdir -p /app/data
+ENV PORT=8080 \
+    ZS_DATA_DIR=/app/data \
+    NO_BROWSER=1
 
 # نسخ الـ binary من مرحلة البناء
 COPY --from=builder /app/raseen .
@@ -53,6 +56,8 @@ COPY --from=builder /app/data/templates ./data_defaults/templates
 COPY --from=builder /app/data/saudi_riyal_symbol.svg ./data_defaults/saudi_riyal_symbol.svg
 
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl --fail --silent "http://127.0.0.1:${PORT:-8080}/api/health" || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["./raseen"]

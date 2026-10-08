@@ -1041,6 +1041,13 @@ func (s *BulkService) DeleteBatch(batchID, actor, ip string) error {
 		}
 		return err
 	}
+	var signed int
+	if err = tx.QueryRow("SELECT COUNT(*) FROM invoices WHERE batch_id=? AND signature_mode NOT IN ('LOCAL','NONE')", batchID).Scan(&signed); err != nil {
+		return err
+	}
+	if signed > 0 {
+		return errors.New("الدفعة تحتوي على مستندات بتوقيع إنتاجي؛ لا يمكن حذفها")
+	}
 
 	rows, err := tx.Query("SELECT id FROM invoices WHERE batch_id = ?", batchID)
 	if err != nil {
@@ -1049,11 +1056,17 @@ func (s *BulkService) DeleteBatch(batchID, actor, ip string) error {
 	var invIDs []string
 	for rows.Next() {
 		var id string
-		if errScan := rows.Scan(&id); errScan == nil {
-			invIDs = append(invIDs, id)
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
 		}
+		invIDs = append(invIDs, id)
 	}
+	err = rows.Err()
 	rows.Close()
+	if err != nil {
+		return err
+	}
 	// A receipt may also settle invoices outside this batch. Never remove it implicitly.
 	var sharedVouchers int
 	if err = tx.QueryRow(`SELECT COUNT(DISTINCT a.voucher_id)
@@ -1071,29 +1084,48 @@ func (s *BulkService) DeleteBatch(batchID, actor, ip string) error {
 
 	for _, id := range invIDs {
 		vRows, errV := tx.Query("SELECT voucher_id FROM voucher_allocations WHERE invoice_id = ?", id)
-		if errV == nil {
-			var vIDs []string
-			for vRows.Next() {
-				var vid string
-				if errVScan := vRows.Scan(&vid); errVScan == nil {
-					vIDs = append(vIDs, vid)
-				}
+		if errV != nil {
+			return errV
+		}
+		var vIDs []string
+		for vRows.Next() {
+			var vid string
+			if err = vRows.Scan(&vid); err != nil {
+				vRows.Close()
+				return err
 			}
-			vRows.Close()
+			vIDs = append(vIDs, vid)
+		}
+		err = vRows.Err()
+		vRows.Close()
+		if err != nil {
+			return err
+		}
 
-			for _, vid := range vIDs {
-				_, _ = tx.Exec("DELETE FROM voucher_allocations WHERE voucher_id = ?", vid)
-				_, _ = tx.Exec("DELETE FROM client_ledger WHERE doc_id = ? AND doc_type IN ('RECEIPT', 'PAYMENT')", vid)
-				_, _ = tx.Exec("DELETE FROM receipt_vouchers WHERE id = ?", vid)
+		for _, vid := range vIDs {
+			if _, err = tx.Exec("DELETE FROM client_ledger WHERE doc_id = ? AND doc_type IN ('RECEIPT', 'RECEIPT_CANCEL', 'PAYMENT')", vid); err != nil {
+				return err
+			}
+			if _, err = tx.Exec("DELETE FROM document_pdfs WHERE kind='voucher' AND document_id=?", vid); err != nil {
+				return err
+			}
+			if _, err = tx.Exec("DELETE FROM receipt_vouchers WHERE id = ?", vid); err != nil {
+				return err
 			}
 		}
 
-		_, _ = tx.Exec("DELETE FROM invoice_items WHERE invoice_id = ?", id)
-		_, _ = tx.Exec("DELETE FROM invoice_documents WHERE invoice_id = ?", id)
-		_, _ = tx.Exec("DELETE FROM client_ledger WHERE doc_id = ? AND doc_type IN ('INVOICE', 'INVOICE_CANCEL')", id)
+		if _, err = tx.Exec("DELETE FROM client_ledger WHERE doc_id = ? AND doc_type IN ('INVOICE', 'INVOICE_CANCEL')", id); err != nil {
+			return err
+		}
+		if _, err = tx.Exec("DELETE FROM document_pdfs WHERE kind='invoice' AND document_id=?", id); err != nil {
+			return err
+		}
 	}
 
 	if _, err := tx.Exec("DELETE FROM invoices WHERE batch_id = ?", batchID); err != nil {
+		return err
+	}
+	if err = s.invoices.rebuildInvoiceChainTx(tx, issuerID); err != nil {
 		return err
 	}
 

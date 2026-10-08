@@ -240,24 +240,23 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 	// Allocate serial and ICV
 	invoiceNumber := input.InvoiceNumber
 	var sequenceNo int64
-	if invoiceNumber != "" {
-		if err := tx.QueryRow("SELECT COALESCE(MAX(sequence_no), 0) + 1 FROM invoices WHERE issuer_id = ?", issuer.ID).Scan(&sequenceNo); err != nil {
-			return nil, err
-		}
-	} else {
-		num, seq, err := s.issuers.NextInvoiceNumber(tx, issuer.ID)
+	if invoiceNumber == "" {
+		num, _, err := s.issuers.NextInvoiceNumber(tx, issuer.ID)
 		if err != nil {
 			return nil, err
 		}
 		invoiceNumber = num
-		sequenceNo = seq
+	}
+	// The chain counter is independent of editable invoice numbering.
+	if err := tx.QueryRow("SELECT COALESCE(MAX(sequence_no), 0) + 1 FROM invoices WHERE issuer_id = ?", issuer.ID).Scan(&sequenceNo); err != nil {
+		return nil, err
 	}
 
 	// Previous invoice hash
 	var pih string
 	err = tx.QueryRow(`
 		SELECT invoice_hash FROM invoices
-		WHERE issuer_id = ? AND status <> 'CANCELLED'
+		WHERE issuer_id = ?
 		ORDER BY sequence_no DESC LIMIT 1
 	`, issuer.ID).Scan(&pih)
 	if err != nil || pih == "" {
@@ -350,39 +349,12 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 	signature := ""
 	signatureMode := "NONE"
 	if zatcaPhase == "PHASE2" {
-		var privKeyEnc sql.NullString
-		var pubKeyDer sql.NullString
-		_ = tx.QueryRow("SELECT private_key_enc, public_key_der FROM issuer_credentials WHERE issuer_id = ?", issuer.ID).
-			Scan(&privKeyEnc, &pubKeyDer)
-		var privPem string
-		if privKeyEnc.Valid && privKeyEnc.String != "" {
-			privPem, _ = crypto.DecryptSecret(privKeyEnc.String, s.masterKey)
+		signature, qrParams.PublicKey, err = s.signInvoiceHashTx(tx, issuer.ID, invHash)
+		if err != nil {
+			return nil, err
 		}
-		// إذا لم تكن المفاتيح موجودة أو تعذر فك تشفيرها بمفتاح السيرفر، يتم توليد زوج جديد فوراً وحفظه
-		if privPem == "" || !pubKeyDer.Valid || pubKeyDer.String == "" {
-			if kp, err := zatca.GenerateKeyPair(); err == nil {
-				if enc, err := crypto.EncryptSecret(kp.PrivateKeyPem, s.masterKey); err == nil {
-					_, _ = tx.Exec(`
-						INSERT INTO issuer_credentials (issuer_id, private_key_enc, public_key_der, updated_at)
-						VALUES (?, ?, ?, ?)
-						ON CONFLICT(issuer_id) DO UPDATE SET
-							private_key_enc = excluded.private_key_enc,
-							public_key_der = excluded.public_key_der,
-							updated_at = excluded.updated_at
-					`, issuer.ID, enc, kp.PublicKeyDerBase64, db.NowIso())
-					privPem = kp.PrivateKeyPem
-					pubKeyDer = sql.NullString{String: kp.PublicKeyDerBase64, Valid: true}
-				}
-			}
-		}
-		if privPem != "" && pubKeyDer.Valid && pubKeyDer.String != "" {
-			if sig, err := zatca.SignHash(privPem, invHash); err == nil {
-				signature = sig
-				signatureMode = "LOCAL"
-				qrParams.Signature = sig
-				qrParams.PublicKey = pubKeyDer.String
-			}
-		}
+		signatureMode = "LOCAL"
+		qrParams.Signature = signature
 	}
 
 	qrPayload := zatca.BuildQrPayload(qrParams)
@@ -948,6 +920,9 @@ func (s *InvoiceService) DeleteInvoice(id, actor, ip string) error {
 	if inv.PaidAmount > 0 {
 		return errors.New("لا يمكن حذف فاتورة تم تسجيل سدادات عليها، يرجى إلغاء السندات أولاً أو إلغاء الفاتورة")
 	}
+	if inv.SignatureMode != "LOCAL" && inv.SignatureMode != "NONE" {
+		return errors.New("لا يمكن حذف مستند بتوقيع إنتاجي؛ استخدم الإلغاء")
+	}
 
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -955,13 +930,17 @@ func (s *InvoiceService) DeleteInvoice(id, actor, ip string) error {
 	}
 	defer tx.Rollback()
 
-	_, _ = tx.Exec("DELETE FROM invoice_items WHERE invoice_id = ?", id)
-	if _, err = tx.Exec("DELETE FROM invoice_documents WHERE invoice_id = ?", id); err != nil {
+	if _, err = tx.Exec("DELETE FROM client_ledger WHERE doc_id = ? AND doc_type IN ('INVOICE', 'INVOICE_CANCEL')", id); err != nil {
 		return err
 	}
-	_, _ = tx.Exec("DELETE FROM client_ledger WHERE doc_id = ? AND doc_type IN ('INVOICE', 'INVOICE_CANCEL')", id)
+	if _, err = tx.Exec("DELETE FROM document_pdfs WHERE kind='invoice' AND document_id=?", id); err != nil {
+		return err
+	}
 	_, err = tx.Exec("DELETE FROM invoices WHERE id = ?", id)
 	if err != nil {
+		return err
+	}
+	if err = s.rebuildInvoiceChainTx(tx, inv.IssuerID); err != nil {
 		return err
 	}
 	if inv.BatchID != nil && *inv.BatchID != "" {
@@ -1199,6 +1178,9 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	if inv.Status == "CANCELLED" {
 		return nil, errors.New("لا يمكن تعديل فاتورة ملغاة")
 	}
+	if inv.SignatureMode != "LOCAL" && inv.SignatureMode != "NONE" {
+		return nil, errors.New("لا يمكن إعادة كتابة مستند بتوقيع إنتاجي؛ استخدم الإلغاء وإصدار مستند جديد")
+	}
 
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -1213,6 +1195,16 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	issuer, err := getIssuer(tx, issuerID)
 	if err != nil {
 		return nil, fmt.Errorf("المنشأة غير موجودة: %w", err)
+	}
+	if issuerID != inv.IssuerID {
+		if err = tx.QueryRow("SELECT COALESCE(MAX(sequence_no),0)+1 FROM invoices WHERE issuer_id=?", issuerID).Scan(&inv.SequenceNo); err != nil {
+			return nil, err
+		}
+		inv.PreviousInvoiceHash = zatca.GenesisPIH
+		err = tx.QueryRow("SELECT invoice_hash FROM invoices WHERE issuer_id=? ORDER BY sequence_no DESC LIMIT 1", issuerID).Scan(&inv.PreviousInvoiceHash)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
 	}
 
 	clientID := input.ClientID
@@ -1402,38 +1394,12 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	signature := ""
 	signatureMode := "NONE"
 	if zatcaPhase == "PHASE2" {
-		var privKeyEnc sql.NullString
-		var pubKeyDer sql.NullString
-		_ = tx.QueryRow("SELECT private_key_enc, public_key_der FROM issuer_credentials WHERE issuer_id = ?", issuer.ID).
-			Scan(&privKeyEnc, &pubKeyDer)
-		var privPem string
-		if privKeyEnc.Valid && privKeyEnc.String != "" {
-			privPem, _ = crypto.DecryptSecret(privKeyEnc.String, s.masterKey)
+		signature, qrParams.PublicKey, err = s.signInvoiceHashTx(tx, issuer.ID, invHash)
+		if err != nil {
+			return nil, err
 		}
-		if privPem == "" || !pubKeyDer.Valid || pubKeyDer.String == "" {
-			if kp, err := zatca.GenerateKeyPair(); err == nil {
-				if enc, err := crypto.EncryptSecret(kp.PrivateKeyPem, s.masterKey); err == nil {
-					_, _ = tx.Exec(`
-						INSERT INTO issuer_credentials (issuer_id, private_key_enc, public_key_der, updated_at)
-						VALUES (?, ?, ?, ?)
-						ON CONFLICT(issuer_id) DO UPDATE SET
-							private_key_enc = excluded.private_key_enc,
-							public_key_der = excluded.public_key_der,
-							updated_at = excluded.updated_at
-					`, issuer.ID, enc, kp.PublicKeyDerBase64, db.NowIso())
-					privPem = kp.PrivateKeyPem
-					pubKeyDer = sql.NullString{String: kp.PublicKeyDerBase64, Valid: true}
-				}
-			}
-		}
-		if privPem != "" && pubKeyDer.Valid && pubKeyDer.String != "" {
-			if sig, err := zatca.SignHash(privPem, invHash); err == nil {
-				signature = sig
-				signatureMode = "LOCAL"
-				qrParams.Signature = sig
-				qrParams.PublicKey = pubKeyDer.String
-			}
-		}
+		signatureMode = "LOCAL"
+		qrParams.Signature = signature
 	}
 
 	qrPayload := zatca.BuildQrPayload(qrParams)
@@ -1494,7 +1460,7 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 			due_date = ?, cheque_date = ?, cheque_no = ?, prices_include_tax = ?,
 			seller_name = ?, seller_tax_number = ?, seller_cr = ?, seller_address = ?, seller_address_en = ?,
 			buyer_name = ?, buyer_tax_number = ?, buyer_cr = ?, buyer_address = ?,
-			qr_payload = ?, invoice_hash = ?, signature = ?, signature_mode = ?, notes = ?, updated_at = ?
+			qr_payload = ?, invoice_hash = ?, previous_invoice_hash = ?, sequence_no = ?, signature = ?, signature_mode = ?, notes = ?, updated_at = ?
 		WHERE id = ?
 	`,
 		invoiceNumber,
@@ -1506,7 +1472,7 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		input.DueDate, input.ChequeDate, input.ChequeNo, pricesIncInt,
 		issuer.NameAr, issuer.TaxNumber, issuer.CommercialRegister, sellerAddr, sellerAddressEn,
 		client.Name, client.TaxNumber, client.CommercialRegister, buyerAddr,
-		qrPayload, invHash, signature, signatureMode, input.Notes, nowIso, id,
+		qrPayload, invHash, inv.PreviousInvoiceHash, inv.SequenceNo, signature, signatureMode, input.Notes, nowIso, id,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update invoice: %w", err)
@@ -1576,6 +1542,14 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 			WHERE id = ?
 		`, *inv.BatchID, *inv.BatchID, *inv.BatchID)
 	}
+	if err = s.rebuildInvoiceChainTx(tx, inv.IssuerID); err != nil {
+		return nil, err
+	}
+	if issuer.ID != inv.IssuerID {
+		if err = s.rebuildInvoiceChainTx(tx, issuer.ID); err != nil {
+			return nil, err
+		}
+	}
 
 	if err := tx.Commit(); err != nil {
 		return nil, err
@@ -1591,10 +1565,10 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 
 func (s *InvoiceService) VerifyChain(issuerID string) (map[string]any, error) {
 	rows, err := s.db.Query(`
-		SELECT id, sequence_no, invoice_hash, previous_invoice_hash
-		FROM invoices
-		WHERE issuer_id = ? AND status <> 'CANCELLED'
-		ORDER BY sequence_no ASC
+		SELECT i.id, i.sequence_no, i.invoice_hash, i.previous_invoice_hash, d.xml
+		FROM invoices i LEFT JOIN invoice_documents d ON d.invoice_id=i.id
+		WHERE i.issuer_id = ?
+		ORDER BY i.sequence_no ASC
 	`, issuerID)
 	if err != nil {
 		return nil, err
@@ -1604,19 +1578,25 @@ func (s *InvoiceService) VerifyChain(issuerID string) (map[string]any, error) {
 	count := 0
 	prevHash := zatca.GenesisPIH
 	valid := true
+	var lastSequence int64
 
 	for rows.Next() {
 		var id string
 		var seq int64
 		var invHash, pih string
-		if err := rows.Scan(&id, &seq, &invHash, &pih); err != nil {
+		var xml sql.NullString
+		if err := rows.Scan(&id, &seq, &invHash, &pih, &xml); err != nil {
 			return nil, err
 		}
 		count++
-		if pih != prevHash {
+		if pih != prevHash || seq <= lastSequence || (xml.Valid && zatca.InvoiceHash(xml.String) != invHash) {
 			valid = false
 		}
 		prevHash = invHash
+		lastSequence = seq
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return map[string]any{

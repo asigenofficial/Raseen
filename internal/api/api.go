@@ -1693,7 +1693,7 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 404, "السند غير موجود")
 			return
 		}
-		pdfBytes, err := s.currentPDF("voucher", id)
+		pdfBytes, err := s.currentPDF("voucher", id, r.URL.Query().Get("style"))
 		if err != nil {
 			s.err(w, 500, err.Error())
 			return
@@ -2139,7 +2139,6 @@ func (s *Server) Handler() http.Handler {
 		w.Write(data)
 	}
 	mux.HandleFunc("GET /api/invoices/templates/{id}/download", handleTemplateDownload)
-
 
 	mux.HandleFunc("GET /api/templates/builder/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
