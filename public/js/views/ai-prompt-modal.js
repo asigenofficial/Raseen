@@ -4,7 +4,35 @@
 // ==========================================================================
 import { toastOk, toastErr, copyText } from '../core/util.js';
 
+const DESIGN_RULES = `قواعد الإطار وأيقونات SVG الجديدة:
+- ابتكر إطاراً مختلفاً في هندسته وزواياه وتوزيع زخارفه، وليس مجرد تغيير اللون. إذا أُرفق قالب سابق فقارن به وتجنب تكرار الإطار ومسارات الأيقونات.
+- التغيير في الإطار والزخارف والأيقونات فقط. حافظ على ترتيب البيانات والجداول وعدد الأعمدة والوسوم وأماكن الشعار والإجماليات.
+- اسم المنشأة العربي والإنجليزي أفقيان: writing-mode: horizontal-tb دون تدوير أو حروف عمودية، مع RTL للعربية وLTR للإنجليزية والتفاف النص الطويل. استخدم وسوم الأسماء المتاحة فقط دون اختلاق ترجمة.
+- استخدم inline SVG أصلياً للإطار والأيقونات، مع الحفاظ على دلالة الهاتف والبريد وغيرها. لا تستبدل شعار المنشأة أو QR أو رمز العملة المعتمد.
+- ضع الزخارف داخل الهوامش بعيداً عن النص والأرقام، مع aria-hidden="true" وpointer-events:none. حافظ على مساحة المحتوى ومقاسات الطباعة واستمرار الجداول وتكرار رؤوسها؛ لا تضف JavaScript أو محرك تقسيم صفحات أو مصادر خارجية.
+- توجيه الإطار المرفق يحدد الزخرفة فقط، ولا يغير عقد البيانات والطباعة أدناه.`;
+
+const FRAME_DIRECTIONS = [
+  'إطار مفتوح غير متناظر بخطين متقابلين وزوايا قصيرة منفصلة؛ زخارف SVG من خطوط متدرجة وأيقونات خطية بزوايا قائمة.',
+  'إطار بأقواس ربع دائرية منفصلة عند الزوايا دون مستطيل كامل؛ زخارف حلقية وأيقونات مستديرة مفتوحة المسارات.',
+  'إطار بدرجات هندسية عند أعلى اليمين وأسفل اليسار؛ زخارف مربعات مجوفة وأيقونات بنهايات مربعة.',
+  'إطار مزدوج متقطع مع فراغات واسعة عند الزوايا؛ زخارف نقاط وخطوط قصيرة وأيقونات من دوائر وخطوط بسيطة.',
+  'إطار بأركان مشطوفة ووصلات قطرية قصيرة؛ زخارف معينات مجوفة وأيقونات مضلعة دون أمواج.',
+  'إطار منحني على الحافتين الجانبيتين فقط؛ زخارف بمسارات انسيابية رفيعة وأيقونات بخط متصل ونهايات مستديرة.',
+];
+let frameIndex = 0;
+try { frameIndex = parseInt(localStorage.getItem('ai-template-frame-index'), 10) || 0; } catch { /* Storage is optional. */ }
+frameIndex = ((frameIndex % FRAME_DIRECTIONS.length) + FRAME_DIRECTIONS.length) % FRAME_DIRECTIONS.length;
+function nextFrameDirection() {
+  const direction = FRAME_DIRECTIONS[frameIndex];
+  frameIndex = (frameIndex + 1) % FRAME_DIRECTIONS.length;
+  try { localStorage.setItem('ai-template-frame-index', String(frameIndex)); } catch { /* Continue in memory. */ }
+  return direction;
+}
+
 export const INVOICE_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة متخصص في الفواتير العربية. أنشئ قالب عرض للفاتورة، مع مراعاة الحقول الضريبية المتاحة؛ لا تدّعِ أن تصميم HTML وحده يثبت الامتثال لـ ZATCA، فالامتثال يعتمد أيضاً على بيانات الفاتورة وآلية إصدارها.
+
+${DESIGN_RULES}
 
 المطلوب:
 صمّم قالب فاتورة ضريبية رسمي وأنيق، واضح عند الطباعة والقراءة، في ملف HTML مستقل مع CSS داخلي. أعطِ البيانات والجدول والإجماليات أولوية على الزخرفة؛ لا تخترع بيانات أو وسوماً غير مدعومة.
@@ -28,14 +56,8 @@ export const INVOICE_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة
 ═══════════════════════════════════════════════════════════════
 القواعد الفنية والخلفيات الإبداعية الإلزامية (Aesthetic Standards):
 ═══════════════════════════════════════════════════════════════
-1. الخلفيات واللمسات الجمالية التلقائية:
-   - يجب تضمين خلفيات فنية عصرية مدمجة عبر SVG نقي (Pure Inline SVG) تضفي طابعاً ملكياً واحترافياً على الورقة:
-     * إما أمواج انسيابية متعددة الطبقات في الزوايا العلوية والسفلية (Corner Waves SVG) بتدرجات لونية هادئة ونسب شفافية ناعمة (0.10 إلى 0.50).
-     * أو أشكال هندسية عصرية في الزوايا (Geometric Polygons SVG) تتكون من شرائط ومثلثات مائلة متوازية تفصلها مسافات نقية.
-   - علامة مائية خلفية خفيفة جداً في منتصف الصفحة (Watermark) بختم أو شكل هندسي أو زخرفة إسلامية ناعمة لا تتجاوز شفافية 0.035 ليبقى النص مقروءاً بامتياز.
-   - أشرطة وعناوين هندسية مقطوعة بزوايا مائلة متميزة بـ clip-path (مثل clip-path: polygon(0 0, 85% 0, 100% 100%, 0 100%)).
-   - خطوط تزيينية جانبية للشعار (Flank lines) أو كبسولات ملونة لمعلومات الفاتورة (Info Pills).
-   - استخدام أيقونات فيكتور SVG نقية ومدمجة حصراً بجانب العناوين، الهاتف، السجل التجاري، البريد، والرقم الضريبي (يُمنع استخدام أي رموز إيموجي نهائياً).
+1. الإطار واللمسات الجمالية:
+   - اتبع توجيه الإطار المتغير المرفق دون فرض أمواج أو مثلثات أو علامة مائية أو زوايا مقصوصة على جميع القوالب. استخدم أيقونات SVG مدمجة واضحة ومتناسقة مع الإطار الجديد؛ لا تستخدم إيموجي.
 
 2. اتجاه الصفحة والطباعة وجودة العرض:
    - الصفحة كاملة تعمل باتجاه اليمين إلى اليسار: dir="rtl" ولغة lang="ar".
@@ -59,7 +81,7 @@ export const INVOICE_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة
      overflow: visible;
      display: flex;
      flex-direction: column;
-     justify-content: space-between;
+     justify-content: flex-start;
      position: relative;
      background: #fff;
      margin: 0 auto;
@@ -206,10 +228,10 @@ export const INVOICE_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة
 ═══════════════════════════════════════════════════════════════
 الهيكل المعماري المعتمد للفاتورة (Corporate Invoice Layout Blueprint):
 ═══════════════════════════════════════════════════════════════
-يجب أن تتطابق تركيبة وهندسة الفاتورة مع التنسيق المعتمد التالي بدقة:
+ثبّت ترتيب البيانات التالي، مع ابتكار الإطار والزخارف والأيقونات وفق التوجيه المرفق:
 
 1. الإطار الخارجي العام للصفحة (Page Boundary Frame):
-   - إطار مستطيل متقن وواضح يحيط بكامل مساحة ورقة الـ A4 من الداخل (border: 1px solid #71717a; أو border: 1.5px solid var(--primary);) مع هوامش داخلية نظيفة (padding: 12mm-14mm).
+   - الإطار وفق التوجيه المرفق داخل الهوامش الآمنة، دون فرض مستطيل كامل أو تغيير padding الحاوية المحدد سابقاً (8mm 9mm).
 
 2. الترويسة العلوية المتوازنة ثلاثية الأعمدة (3-Column Header):
    - مقسمة إلى 3 أقسام متوازنة (display: grid; grid-template-columns: 1fr auto 1fr; أو flex justify-between):
@@ -229,7 +251,7 @@ export const INVOICE_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة
        - ⚠️ قاعدة أيقونات الهيدر الإنجليزي الصارمة: يجب أن تظهر أيقونات الـ SVG دائماً على يسار النص الإنجليزي بصرياً (order: -1 !important; margin-right: 6px !important; margin-left: 0 !important;) لتطابق الترويسة العربية تماماً بحيث تسبق الأيقونة النص ولا تظهر على يمينه إطلاقاً.
 
 3. صندوقا البيانات المتقابلان (Dual Side-by-Side Metadata Boxes):
-   - أسفل الترويسة مباشرة، صندوقان مستطيلان متجاوران محاطان بإطار نظيف (border: 1px solid #cbd5e1; border-radius: 4px;):
+   - أسفل الترويسة مباشرة، قسمان متجاوران بتنسيق متناسق مع الإطار الجديد:
      * الصندوق الأيمن (بيانات الفاتورة):
        - رقم الفاتورة: {{invoice_number}}
        - تاريخ الإصدار: {{issue_date}}
@@ -269,6 +291,8 @@ export const INVOICE_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة
 
 export const VOUCHER_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة باللغة العربية. أنشئ قالب سند قبض مالي رسمي وأنيق ومتوافق مع وسوم نظام القوالب أدناه. اجعل التصميم مناسباً لبيانات سند حقيقية، ولا تفترض أن القالب ينشئ أو يتحقق من بيانات غير متاحة له.
 
+${DESIGN_RULES}
+
 المخرج: ملف HTML واحد يبدأ بـ <!DOCTYPE html> وينتهي بـ </html>، مع CSS داخلي فقط. أعد الكود وحده بلا مقدمة أو Markdown أو بيانات تجريبية.
 
 الهوية والتصميم:
@@ -294,6 +318,8 @@ export const VOUCHER_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة
 راجع قبل الإخراج: الوسوم مكتوبة بدقة، الوثيقة مقروءة بالأبيض والأسود، النص الطويل لا يخرج عن الصفحة، ولا توجد بيانات مختلقة أو عناصر فارغة بارزة.`;
 
 export const REPORT_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة للتقارير المالية العربية. أنشئ قالب تقرير مالي قابلاً لإعادة الاستخدام في نظام محاسبي، ولا تفترض بيانات أو مؤشرات غير موجودة في الوسوم.
+
+${DESIGN_RULES}
 
 المخرج: ملف HTML واحد كامل يبدأ بـ <!DOCTYPE html> وينتهي بـ </html>، مع CSS داخلي فقط. أعد الكود وحده دون Markdown أو شرح خارجي.
 
@@ -327,6 +353,8 @@ export const REPORT_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة 
 
 export const STATEMENT_AI_PROMPT = `أنت مصمم قوالب HTML للطباعة لكشف حساب عميل عربي. أنشئ كشفاً مالياً واضحاً ودقيقاً؛ لا تخترع حركات أو أرصدة أو بيانات عميل.
 
+${DESIGN_RULES}
+
 المخرج: ملف HTML واحد كامل يبدأ بـ <!DOCTYPE html> وينتهي بـ </html>، مع CSS داخلي فقط. أعد الكود وحده دون Markdown أو شرح خارجي.
 
 الوسوم التي يملؤها النظام:
@@ -342,6 +370,7 @@ export const STATEMENT_AI_PROMPT = `أنت مصمم قوالب HTML للطباع
 - {{logo_html}} عنصر HTML جاهز لشعار المنشأة؛ أدرجه كما هو دون تعديل أو إنشاء شعار بديل.
 - {{client_name}} اسم العميل.
 - {{client_code}} رقم حساب العميل أو رمزه.
+- {{currency_name}} اسم العملة.
 - {{period_from}} بداية الفترة.
 - {{period_to}} نهاية الفترة.
 - {{opening_balance}} رصيد بداية الفترة.
@@ -354,11 +383,11 @@ export const STATEMENT_AI_PROMPT = `أنت مصمم قوالب HTML للطباع
 
 التصميم والطباعة:
 - اجعل الصفحة lang="ar" dir="rtl" وباتجاه طباعة A4 عمودي.
-- صمّم ترويسة المنشأة لتطابق صورة المرجع: إطار رفيع أزرق يحيط بالترويسة، ثلاثة أعمدة واضحة؛ اسم المنشأة الإنجليزية وعنوانها والرقم الضريبي والسجل التجاري يساراً، {{logo_html}} في الوسط وتحته «كشف حساب عميل» ثم «ACCOUNT STATEMENT»، واسم المنشأة العربية والعنوان والرقم الضريبي والسجل التجاري يميناً. أضف شريط تواصل سفلي داخل الإطار للهاتف والبريد والمدينة، مع خط ذهبي رفيع أسفله. حافظ على هذا الترتيب في الشاشات والطباعة.
+- حافظ على ترويسة بثلاثة أعمدة واضحة بإطار وزخارف وفق التوجيه الجديد؛ اسم المنشأة الإنجليزية وعنوانها والرقم الضريبي والسجل التجاري يساراً، {{logo_html}} في الوسط وتحته «كشف حساب عميل» ثم «ACCOUNT STATEMENT»، واسم المنشأة العربية والعنوان والرقم الضريبي والسجل التجاري يميناً. أضف شريط تواصل سفلي داخل الإطار للهاتف والبريد والمدينة، بتنسيق متناسق مع الإطار المختار دون فرض خط ذهبي. حافظ على هذا الترتيب في الشاشات والطباعة.
 - ضع فترة الكشف أسفل الترويسة، ثم شريطاً محاطاً بإطار لرقم الحساب واسم الحساب والعملة.
 - أظهر شريط بيانات الحساب والفترة، واجعل صف الرصيد السابق المضمّن في {{rows_html}} أول صف في جدول الحركات. لا تضف ملخصات أو أرصدة مكررة.
 - اجعل الجدول مطابقاً لترتيب الأعمدة: #، رقم المستند/قيد، التاريخ، النوع، البيان، مجموعة «الحركة» وبداخلها مدين ودائن، ومجموعة «الرصيد» وبداخلها مدين ودائن.
-- استخدم ألواناً قريبة من المرجع: نص أزرق داكن، رأس جدول سماوي فاتح، عنوان الكشف أحمر هادئ، ولمسات ذهبية رفيعة. لا تضع زخرفة خلف البيانات أو الأرقام.
+- اختر ألواناً متناسقة عالية التباين؛ الاختلاف المطلوب في هندسة الإطار وأيقونات SVG وليس اللون وحده. لا تضع زخرفة خلف البيانات أو الأرقام.
 - استخدم جدولاً واضحاً بأرقام سهلة القراءة، وكرّر رأس الجدول في كل صفحة مطبوعة. اسمح للصفوف بالاستمرار إلى صفحات إضافية وتجنب قص النص الطويل أو استخدام ارتفاع ثابت وoverflow:hidden.
 - استخدم @page { size: A4 portrait; margin: 8mm; } وأزل ظلال وأزرار الشاشة عند الطباعة.
 - اعرض الأرصدة والإجماليات كما وصلت من الوسوم. لا تغيّر إشارات المبالغ ولا تعكس معنى المدين والدائن، ولا تضع رصيداً أو حركة افتراضية.
@@ -454,7 +483,7 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
     <div style="background: #111a2e; border: 1px solid #233554; border-radius: 12px; width: 850px; max-width: 96vw; max-height: 92vh; display: flex; flex-direction: column; box-shadow: 0 25px 60px rgba(0,0,0,0.7); color: #f1f5f9; overflow: hidden; animation: popInModal 0.2s ease-out;">
       
       <!-- Top Modal Header -->
-      <div style="background: #0b1322; padding: 14px 20px; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center;">
+      <div style="background: #0b1322; padding: 14px 20px; border-bottom: 1px solid #1e293b; display: flex; justify-content: flex-start; align-items: center;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <div style="width: 34px; height: 34px; border-radius: 8px; background: linear-gradient(135deg, #4f46e5, #7c3aed); display: flex; align-items: center; justify-content: center; color: #fff; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);">
             ${ICON_SPARKLE}
@@ -468,7 +497,7 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
       </div>
 
       <!-- Tab Switcher (أنواع القوالب / الوسوم) -->
-      <div style="background: #0e172a; padding: 8px 18px; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+      <div style="background: #0e172a; padding: 8px 18px; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: flex-start; gap: 8px; flex-wrap: wrap;">
         <div style="display: flex; gap: 6px; flex-wrap:wrap;">
           <button type="button" class="ai-tab-btn" data-tab="invoices" style="padding: 7px 16px; border-radius: 6px; font-size: 12.5px; font-weight: 700; cursor: pointer; border: 1px solid ${activeTab === 'invoices' ? '#6366f1' : '#334155'}; background: ${activeTab === 'invoices' ? '#4f46e5' : '#1e293b'}; color: #fff; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;">
             ${ICON_INVOICE} برومبت قوالب الفواتير (Invoices)
@@ -487,6 +516,7 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
           </button>
         </div>
 
+        <button type="button" id="btn-next-frame" style="cursor:pointer; padding:7px 12px;">إطار مختلف</button>
         <button type="button" id="btn-copy-active-prompt" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; padding: 7px 18px; border-radius: 6px; font-size: 13px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); transition: transform 0.1s;">
           ${ICON_COPY} نسخ البرومبت
         </button>
@@ -497,7 +527,7 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
         
         <!-- Prompt Box View -->
         <div id="ai-prompt-view" style="display: flex; flex-direction: column; gap: 10px;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; justify-content: flex-start; align-items: center;">
             <label id="lbl-active-prompt-title" style="font-weight: 800; font-size: 13px; color: #38bdf8;">
               نص البرومبت المخصص لقوالب الفواتير (جاهز للنسخ):
             </label>
@@ -514,7 +544,7 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
             </div>
             <div style="display: flex; align-items: flex-start; gap: 6px;">
               <span style="background: #0284c7; color: #fff; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; flex-shrink: 0;">2</span>
-              <span>الصقه في ChatGPT أو Claude واطلب الألوان التي تحبها.</span>
+              <span>الصقه في الوكيل وأرفق القالب السابق للمقارنة؛ استخدم «إطار مختلف» لتغيير التوجيه قبل النسخ.</span>
             </div>
             <div style="display: flex; align-items: flex-start; gap: 6px;">
               <span style="background: #10b981; color: #fff; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; flex-shrink: 0;">3</span>
@@ -557,6 +587,8 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
 
   document.body.appendChild(overlay);
 
+  const frameDirections = {};
+
   // Tab Handling
   const txtPrompt = overlay.querySelector('#txt-ai-prompt');
   const lblTitle = overlay.querySelector('#lbl-active-prompt-title');
@@ -566,6 +598,9 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
 
   function updateActiveTab(tab) {
     activeTab = tab;
+    overlay.querySelector("#btn-next-frame").hidden = tab === "tags";
+    overlay.querySelector("#btn-copy-active-prompt").hidden = tab === "tags";
+    if (tab !== "tags" && !frameDirections[tab]) frameDirections[tab] = nextFrameDirection();
     tabBtns.forEach(btn => {
       const isSel = btn.dataset.tab === tab;
       if (tab === 'invoices') {
@@ -592,25 +627,25 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
       tagsView.style.display = 'none';
       lblTitle.textContent = 'نص البرومبت المخصص لقوالب الفواتير الضريبية (جاهز للنسخ):';
       lblTitle.style.color = '#38bdf8';
-      txtPrompt.value = INVOICE_AI_PROMPT;
+      txtPrompt.value = INVOICE_AI_PROMPT + "\n\nتوجيه الإطار لهذه النسخة:\n" + frameDirections[tab];
     } else if (tab === 'vouchers') {
       promptView.style.display = 'flex';
       tagsView.style.display = 'none';
       lblTitle.textContent = 'نص البرومبت المخصص لقوالب السندات والمستندات المالية (جاهز للنسخ):';
       lblTitle.style.color = '#0284c7';
-      txtPrompt.value = VOUCHER_AI_PROMPT;
+      txtPrompt.value = VOUCHER_AI_PROMPT + "\n\nتوجيه الإطار لهذه النسخة:\n" + frameDirections[tab];
     } else if (tab === 'reports') {
       promptView.style.display = 'flex';
       tagsView.style.display = 'none';
       lblTitle.textContent = 'برومبت إنشاء قالب تقرير مالي HTML (جاهز للنسخ):';
       lblTitle.style.color = '#10b981';
-      txtPrompt.value = REPORT_AI_PROMPT;
+      txtPrompt.value = REPORT_AI_PROMPT + "\n\nتوجيه الإطار لهذه النسخة:\n" + frameDirections[tab];
     } else if (tab === 'statements') {
       promptView.style.display = 'flex';
       tagsView.style.display = 'none';
       lblTitle.textContent = 'برومبت إنشاء قالب كشف حساب عميل HTML (جاهز للنسخ):';
       lblTitle.style.color = '#f59e0b';
-      txtPrompt.value = STATEMENT_AI_PROMPT;
+      txtPrompt.value = STATEMENT_AI_PROMPT + "\n\nتوجيه الإطار لهذه النسخة:\n" + frameDirections[tab];
     } else if (tab === 'tags') {
       promptView.style.display = 'none';
       tagsView.style.display = 'flex';
@@ -620,16 +655,16 @@ export function openAiPromptModal({ defaultType = 'invoices' } = {}) {
   tabBtns.forEach(b => b.addEventListener('click', () => updateActiveTab(b.dataset.tab)));
   updateActiveTab(activeTab);
 
+  overlay.querySelector("#btn-next-frame").onclick = () => {
+    frameDirections[activeTab] = nextFrameDirection();
+    updateActiveTab(activeTab);
+  };
+
   // Copy Prompt Button
   const btnCopy = overlay.querySelector('#btn-copy-active-prompt');
   btnCopy.onclick = async () => {
-    const promptByTab = {
-      invoices: INVOICE_AI_PROMPT,
-      vouchers: VOUCHER_AI_PROMPT,
-      reports: REPORT_AI_PROMPT,
-      statements: STATEMENT_AI_PROMPT,
-    };
-    const textToCopy = promptByTab[activeTab] || INVOICE_AI_PROMPT;
+    if (activeTab === "tags") return;
+    const textToCopy = txtPrompt.value;
     await copyText(textToCopy);
     btnCopy.innerHTML = `${ICON_CHECK} تم نسخ البرومبت بنجاح!`;
     btnCopy.style.background = '#059669';

@@ -94,11 +94,6 @@ function createBlockElement(htmlContent, blockType = 'block') {
   return wrapper;
 }
 
-function riyadhTowerSvgBackground(color = '#1a2638') {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1414" viewBox="0 0 1000 1414"><defs><linearGradient id="tower"><stop stop-color="#164f68"/><stop offset=".35" stop-color="#71b0bc"/><stop offset=".52" stop-color="#d4e6e7"/><stop offset=".7" stop-color="#518a9e"/><stop offset="1" stop-color="#123c59"/></linearGradient><pattern id="windows" width="14" height="18" patternUnits="userSpaceOnUse"><path d="M0 0H14M0 0V18" fill="none" stroke="#edf8fa" stroke-opacity=".5" stroke-width=".8"/></pattern></defs><path d="M0 0H1000V115Q740 35 530 80T0 55Z" fill="${color}" fill-opacity=".14"/><path d="M0 55Q300 130 535 83T1000 115" fill="none" stroke="#b98e51" stroke-width="4"/><path d="M0 1280Q220 1190 430 1280T1000 1240V1414H0Z" fill="#dbc39b" fill-opacity=".3"/><g opacity=".93"><path id="tower-shape" d="M670 1330L687 740Q690 675 709 620L733 574Q751 634 787 661Q823 634 841 574L865 620Q884 675 887 740L904 1330Z" fill="url(#tower)" stroke="#285873" stroke-width="2"/><path d="M670 1330L687 740Q690 675 709 620L733 574Q751 634 787 661Q823 634 841 574L865 620Q884 675 887 740L904 1330Z" fill="url(#windows)"/><path d="M736 600H838" stroke="#244d68" stroke-width="12"/><path d="M736 594H838" stroke="#e6c68c" stroke-width="3"/><path d="M733 574Q751 634 787 661Q823 634 841 574" fill="none" stroke="#effaff" stroke-width="4"/><path d="M787 665V1330" stroke="#f7fcfd" stroke-opacity=".65" stroke-width="3"/><path d="M704 1330L719 737M870 1330L855 737" fill="none" stroke="#143e59" stroke-opacity=".45" stroke-width="2"/></g><g fill="${color}" opacity=".16"><path d="M460 1330V1170H508V1330M523 1330V1100H573V1330M590 1330V1200H644V1330M926 1330V1145H970V1330"/></g><path d="M55 1330H945" stroke="#b98e51" stroke-width="3" stroke-opacity=".65"/><path d="M55 1350H520" stroke="${color}" stroke-width="1" stroke-opacity=".2"/><circle cx="110" cy="1220" r="90" fill="none" stroke="#b98e51" stroke-width="1" stroke-opacity=".2"/></svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-}
-
 // ─── Dynamic Custom Table Generator ───────────────────────────────────────
 
 function generateCustomTableHTML({
@@ -2120,11 +2115,6 @@ function populateInitialBlocks() {
     sig.style.marginTop = 'auto';
     canvas.appendChild(sig);
   } else {
-    if (docMeta.type === 'invoices' && !sheetBg.bgImage) {
-      sheetBg.bgImage = riyadhTowerSvgBackground(col);
-      sheetBg.bgImageOpacity = 0.34;
-      sheetBg.bgImageFit = 'cover';
-    }
     canvas.appendChild(createBlockElement(getHeaderBlockHTML(col), 'header'));
     if (docMeta.type === 'invoices') canvas.appendChild(createBlockElement(getImageBlockHTML('', '110px'), 'logo'));
     canvas.appendChild(createBlockElement(getInfoPillsBlockHTML(col), 'info_pills'));
@@ -2713,9 +2703,9 @@ function attachAppEvents() {
     selType.onchange = () => {
       if (confirm('تغيير نوع القالب سيبدأ بتصميم أساسي مناسب للنوع المختار، هل تريد المتابعة؟')) {
         docMeta.type = selType.value;
-        sheetBg.bgImage = docMeta.type === 'invoices' ? riyadhTowerSvgBackground(docMeta.primary_color) : '';
-        sheetBg.bgImageOpacity = 0.34;
-        sheetBg.bgImageFit = 'cover';
+        sheetBg.bgImage = '';
+        sheetBg.bgImageOpacity = 0.15;
+        sheetBg.bgImageFit = 'contain';
         const defaultNames = {
           invoices: 'قالب فاتورة ضريبية مخصص', documents: 'قالب سند مالي مخصص',
           reports: 'قالب تقرير مالي مخصص', statements: 'قالب كشف حساب مخصص',

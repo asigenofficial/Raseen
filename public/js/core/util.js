@@ -448,7 +448,7 @@ export function printDoc(docHtml, { flowing = false } = {}) {
       max-height: 295.5mm !important;
       display: flex !important;
       flex-direction: column !important;
-      justify-content: space-between !important;
+      justify-content: flex-start !important;
       box-sizing: border-box !important;
       margin: 0 auto !important;
       position: relative !important;
@@ -481,7 +481,7 @@ export function printDoc(docHtml, { flowing = false } = {}) {
         max-height: 295.5mm !important;
         display: flex !important;
         flex-direction: column !important;
-        justify-content: space-between !important;
+        justify-content: flex-start !important;
         box-sizing: border-box !important;
         margin: 0 auto !important;
         overflow: hidden !important;
@@ -1594,7 +1594,7 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
         margin: 0 auto !important;
         display: flex !important;
         flex-direction: column !important;
-        justify-content: space-between !important;
+        justify-content: flex-start !important;
         position: relative !important;
         overflow: hidden !important;
       }
@@ -1631,7 +1631,7 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
           overflow: hidden !important;
           display: flex !important;
           flex-direction: column !important;
-          justify-content: space-between !important;
+          justify-content: flex-start !important;
         }
         .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
           margin-top: auto !important;
@@ -1714,6 +1714,10 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
 
   if (invoice) {
     const rowsStyle = `<style data-invoice-row-fit>
+.invoice-container, .invoice-frame { display: flex !important; flex-direction: column !important; justify-content: flex-start !important; }
+.top-content-wrap { flex: 0 0 auto !important; }
+.invoice-container > .items-table-container, .invoice-container > .items-table-wrapper, .invoice-container > .items-main-table { flex: 0 0 auto !important; margin-top: 0 !important; }
+.bottom-content-wrap, .invoice-container > .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > .footer-zone { margin-top: auto !important; flex-shrink: 0 !important; }
 .invoice-container, .invoice-frame { padding: 8mm !important; }
 .invoice-container .header { margin-bottom: 10px !important; padding-bottom: 10px !important; }
 .invoice-metadata, .metadata { margin-bottom: 12px !important; }

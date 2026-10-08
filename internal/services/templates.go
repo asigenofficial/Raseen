@@ -917,6 +917,10 @@ func normalizeInvoiceMeasurements(html string) string {
 		return html
 	}
 	const style = `<style data-invoice-measurements>
+.invoice-container, .invoice-frame { display: flex !important; flex-direction: column !important; justify-content: flex-start !important; }
+.top-content-wrap { flex: 0 0 auto !important; }
+.invoice-container > .items-table-container, .invoice-container > .items-table-wrapper, .invoice-container > .items-main-table { flex: 0 0 auto !important; margin-top: 0 !important; }
+.bottom-content-wrap, .invoice-container > .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > .footer-zone { margin-top: auto !important; flex-shrink: 0 !important; }
 .invoice-container, .invoice-frame { box-sizing: border-box !important; min-height: 281mm !important; padding: 8mm !important; }
 .invoice-container .header { margin-bottom: 10px !important; padding-bottom: 10px !important; }
 .invoice-metadata, .metadata { margin-bottom: 12px !important; }
