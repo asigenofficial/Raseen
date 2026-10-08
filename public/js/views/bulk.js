@@ -195,8 +195,8 @@ export async function render(view) {
     distribution_mode: state.distribution_mode,
     min_items: toNum(state.min_items, 1),
     max_items: toNum(state.max_items, 6),
-    min_qty: toNum(state.min_qty, 1),
-    max_qty: toNum(state.max_qty, 20),
+    min_qty: state.min_qty === '' ? 0 : toNum(state.min_qty, 0),
+    max_qty: state.max_qty === '' ? 0 : toNum(state.max_qty, 0),
     min_invoice_total: state.min_invoice_total === '' ? 0 : toNum(state.min_invoice_total, 0),
     max_invoice_total: state.max_invoice_total === '' ? 0 : toNum(state.max_invoice_total, 0),
     discount_enabled: state.discount_enabled,
@@ -790,12 +790,12 @@ export async function render(view) {
           <div class="field">
             <label>أقل كمية</label>
             <input type="number" id="min_qty" value="${state.min_qty}" min="0.01" step="0.01" />
-            <span class="hint">أدنى كمية للصنف</span>
+            <span class="hint">اختياري؛ عند تركه فارغاً يبدأ من كمية 1</span>
           </div>
           <div class="field">
             <label>أكثر كمية</label>
             <input type="number" id="max_qty" value="${state.max_qty}" min="0.01" step="0.01" />
-            <span class="hint">أعلى كمية للصنف</span>
+            <span class="hint">اختياري؛ اتركه فارغاً لحساب الكميات تلقائياً حسب المبلغ</span>
           </div>
           <div class="field">
             <label>تفاوت السعر ±%</label>

@@ -239,10 +239,10 @@ func (s *Server) currentPDF(kind, id string, styleOverride ...string) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	if rendered == revision && len(pdf) > 0 && storedStyle == expectedStyle {
+	if rendered == revision && len(pdf) > 0 && storedStyle == documentPDFStyleKey(kind, expectedStyle) {
 		return pdf, nil
 	}
-	if rendered == revision && storedStyle != expectedStyle {
+	if rendered == revision && storedStyle != documentPDFStyleKey(kind, expectedStyle) {
 		var issuerID string
 		_ = s.db.QueryRow("SELECT issuer_id FROM document_pdfs WHERE kind=? AND document_id=?", kind, id).Scan(&issuerID)
 		if err := s.dirtyDocument(kind, id, issuerID); err != nil {
@@ -282,7 +282,7 @@ func (s *Server) renderAndSavePDF(kind, id string, revision int64, suppliedHTML 
 		return nil, err
 	}
 	result, err := s.db.Exec(`UPDATE document_pdfs SET pdf=?,rendered_revision=?,style=?,status='READY',error='',updated_at=?
-		WHERE kind=? AND document_id=? AND revision=?`, pdf, revision, style, db.NowIso(), kind, id, revision)
+		WHERE kind=? AND document_id=? AND revision=?`, pdf, revision, documentPDFStyleKey(kind, style), db.NowIso(), kind, id, revision)
 	if err != nil {
 		return nil, err
 	}
@@ -296,6 +296,27 @@ func (s *Server) renderAndSavePDF(kind, id string, revision int64, suppliedHTML 
 func (s *Server) failPDF(kind, id string, revision int64, renderErr error) {
 	_, _ = s.db.Exec(`UPDATE document_pdfs SET status='FAILED',error=?,updated_at=?
 		WHERE kind=? AND document_id=? AND revision=?`, renderErr.Error(), db.NowIso(), kind, id, revision)
+}
+
+// Invalidate older voucher PDFs once when their amount formatting changes.
+func documentPDFStyleKey(kind, style string) string {
+	if kind == "voucher" {
+		return style + "|amount-grouping-v1"
+	}
+	return style
+}
+
+func formatVoucherAmount(amount float64) string {
+	parts := strings.SplitN(fmt.Sprintf("%.2f", amount), ".", 2)
+	whole := parts[0]
+	sign := ""
+	if strings.HasPrefix(whole, "-") {
+		sign, whole = "-", whole[1:]
+	}
+	for i := len(whole) - 3; i > 0; i -= 3 {
+		whole = whole[:i] + "," + whole[i:]
+	}
+	return sign + whole + "." + parts[1]
 }
 
 func (s *Server) renderVoucherHTML(id, style string) (string, error) {
@@ -325,7 +346,7 @@ func (s *Server) renderVoucherHTML(id, style string) (string, error) {
 	if len(allocations) > 0 {
 		paidFor = "سداد فواتير رقم " + strings.Join(allocations, "، ")
 	}
-	amount := fmt.Sprintf("%.2f", v.TotalAmount)
+	amount := formatVoucherAmount(v.TotalAmount)
 	replacements := map[string]string{
 		"seller_name": issuer.NameAr, "seller_name_en": issuer.NameEn,
 		"seller_tax": issuer.TaxNumber, "seller_phone": issuer.Phone,

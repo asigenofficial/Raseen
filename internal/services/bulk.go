@@ -517,7 +517,12 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 	}
 	maxQty := req.MaxQty
 	if maxQty == 0 {
-		maxQty = minQty
+		// Without a target, use a practical default; with a target, let the
+		// quantity solver derive quantities from prices and the invoice amount.
+		maxQty = math.Max(minQty, 25)
+		if req.TargetTotal > 0 {
+			maxQty = 1e6
+		}
 	}
 	if !validAmount(minQty) || !validAmount(maxQty) || maxQty < minQty || maxQty > 1e6 {
 		return nil, errors.New("حدود الكميات غير صالحة")
@@ -582,7 +587,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		}
 		// Move random amounts between random invoices, preserving the batch target.
 		// Explicit invoice bounds take precedence over the default wider spread.
-		lower, upper := max(int64(1), base*55/100), base*145/100
+		lower, upper := max(int64(1), base*80/100), max(int64(1), base*120/100)
 		if req.MinInvoiceTotal > 0 {
 			lower = models.ToMinor(req.MinInvoiceTotal)
 		}
