@@ -943,16 +943,18 @@ func normalizeInvoiceMeasurements(html string) string {
  height: auto !important; padding: 5px 3px !important; line-height: 1.3 !important; font-size: 10px !important;
 }
 
-.invoice-container { min-height: 295mm !important; height: 295mm !important; }
+.invoice-container { width: 210mm !important; min-height: 297mm !important; height: 297mm !important; max-height: 297mm !important; box-sizing: border-box !important; }
 .invoice-container .top-content-wrap, .invoice-container .top-wrap { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; }
 .invoice-container .top-content-wrap > :not(.items-table-container):not(.items-table-wrapper):not(.items-main-table):not(.items-table) { flex-shrink: 0; }
 .invoice-container .items-table-container, .invoice-container .items-table-wrapper, .invoice-container .items-container, .invoice-container .items-section, .invoice-container .section:has(> table.items-table) { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; margin-top: 0 !important; }
-.invoice-container .items-main-table, .invoice-container table.items-table, .invoice-container .items-table-wrapper > table { height: 100% !important; flex: 1 1 auto !important; }
+.invoice-container .items-main-table, .invoice-container table.items-table, .invoice-container .items-table-wrapper > table { height: auto !important; flex: 0 0 auto !important; }
 .invoice-container .items-main-table thead, .invoice-container table.items-table thead, .invoice-container .items-table-wrapper > table thead { height: 1px; }
 .invoice-container .invoice-body-content { display: flex !important; flex-direction: column !important; flex: 1 1 auto !important; min-height: 0 !important; }
 .invoice-container > footer, .invoice-container > .bottom-wrap { margin-top: auto !important; flex-shrink: 0 !important; }
 
-@media print { @page { size: A4 portrait; } }
+@page { size: A4 portrait !important; margin: 0 !important; }
+html, body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; max-height: none !important; }
+body { width: 210mm !important; max-width: 210mm !important; box-sizing: border-box !important; }
 body { font-size: 11px; }
 .seller h2, .seller-ar .company-name, .seller-info .seller-title { font-size: 14.5px; }
 .seller-en h2, .seller-en .company-name { font-size: 13px; }
@@ -1977,7 +1979,12 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 		}
 
 		pOpen := strings.Replace(contOpen, "<div", fmt.Sprintf(`<div data-invoice-page="%d"`, p), 1)
-		pages = append(pages, fmt.Sprintf("%s\n%s\n%s", pOpen, pageInner, contClose))
+		continuation := "تابع الفاتورة"
+		if p < totalPages {
+			continuation = "متابعة الفاتورة في الصفحة التالية"
+		}
+		pageLabel := fmt.Sprintf(`<div class="invoice-page-label" style="flex-shrink:0;font-size:11px;text-align:center;margin-top:auto;padding-top:3mm">%s — صفحة %d من %d</div>`, continuation, p, totalPages)
+		pages = append(pages, fmt.Sprintf("%s\n%s\n%s\n%s", pOpen, pageInner, pageLabel, contClose))
 	}
 
 	allPages := prefix + strings.Join(pages, "\n") + suffix
@@ -1985,7 +1992,7 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 @media print {
  @page { size: A4 portrait; margin: 0 !important; }
  html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }
- [data-invoice-page] { width: 210mm !important; min-height: 295mm !important; height: 295mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }
+ [data-invoice-page] { width: 210mm !important; min-height: 297mm !important; height: 297mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }
  [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }
  [data-invoice-page] .invoice-frame:not([data-invoice-page]) { position: absolute !important; inset: 5mm !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; display: block !important; break-after: auto !important; page-break-after: auto !important; }
 }

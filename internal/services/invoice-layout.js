@@ -23,8 +23,12 @@
       set(page, 'display', 'flex');
       set(page, 'flex-direction', 'column');
       set(page, 'justify-content', 'flex-start');
-      set(page, 'min-height', '295mm');
-      set(page, 'height', 'auto');
+      set(page, 'flex', '0 0 auto');
+      set(page, 'box-sizing', 'border-box');
+      set(page, 'width', '210mm');
+      set(page, 'min-height', '297mm');
+      set(page, 'height', '297mm');
+      set(page, 'max-height', '297mm');
       let branch = table;
       while (branch !== page) {
         const parent = branch.parentElement;
@@ -43,10 +47,11 @@
       set(bottomBranch, 'margin-top', 'auto');
       set(bottomBranch, 'flex-shrink', '0');
       set(table, 'height', 'auto');
+      set(table, 'flex', '0 0 auto');
       const tableRect = table.getBoundingClientRect();
       const bottomRect = bottomBranch.getBoundingClientRect();
       const gap = bottomRect.top - tableRect.bottom;
-      if (gap > 1) set(table, 'height', (tableRect.height + gap) + 'px');
+      if (rows.length < 15 && gap > 1) set(table, 'height', (tableRect.height + gap) + 'px');
       if (table.tHead) set(table.tHead, 'height', '1px');
       page.dataset.invoiceLayout = 'fitted';
     }

@@ -443,9 +443,9 @@ export function printDoc(docHtml, { flowing = false } = {}) {
     .invoice-container, .invoice-frame, .page, [data-invoice-page] {
       width: 210mm !important;
       max-width: 210mm !important;
-      min-height: 295mm !important;
-      height: 295mm !important;
-      max-height: 295.5mm !important;
+      min-height: 297mm !important;
+      height: 297mm !important;
+      max-height: 297mm !important;
       display: flex !important;
       flex-direction: column !important;
       justify-content: flex-start !important;
@@ -478,9 +478,9 @@ export function printDoc(docHtml, { flowing = false } = {}) {
       .invoice-container, .invoice-frame, .page, [data-invoice-page] {
         width: 210mm !important;
         max-width: 210mm !important;
-        height: 295.5mm !important;
-        min-height: 295.5mm !important;
-        max-height: 295.5mm !important;
+        height: 297mm !important;
+        min-height: 297mm !important;
+        max-height: 297mm !important;
         display: flex !important;
         flex-direction: column !important;
         justify-content: flex-start !important;
@@ -546,7 +546,7 @@ export function printDoc(docHtml, { flowing = false } = {}) {
   }
 
   if (finalHtml.includes('data-invoice-page="')) {
-    finalHtml = finalHtml.replace(/<\/head>/i, "<style data-invoice-pages-print>\n@media print {\n @page { size: A4 portrait; margin: 0 !important; }\n html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }\n [data-invoice-page] { width: 210mm !important; min-height: 295mm !important; height: 295mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }\n [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }\n [data-invoice-page] .invoice-frame:not([data-invoice-page]) { position: absolute !important; inset: 5mm !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; display: block !important; break-after: auto !important; page-break-after: auto !important; }\n}\n</style>" + '\n</head>');
+    finalHtml = finalHtml.replace(/<\/head>/i, "<style data-invoice-pages-print>\n@media print {\n @page { size: A4 portrait; margin: 0 !important; }\n html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }\n [data-invoice-page] { width: 210mm !important; min-height: 297mm !important; height: 297mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }\n [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }\n [data-invoice-page] .invoice-frame:not([data-invoice-page]) { position: absolute !important; inset: 5mm !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; display: block !important; break-after: auto !important; page-break-after: auto !important; }\n}\n</style>" + '\n</head>');
   }
 
   doc.open();
@@ -1589,9 +1589,9 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       .invoice-container, .invoice-frame, .page, [data-invoice-page] {
         width: 210mm !important;
         max-width: 210mm !important;
-        min-height: 295mm !important;
-        height: 295mm !important;
-        max-height: 295.5mm !important;
+        min-height: 297mm !important;
+        height: 297mm !important;
+        max-height: 297mm !important;
         box-sizing: border-box !important;
         margin: 0 auto !important;
         display: flex !important;
@@ -1627,9 +1627,9 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
         .invoice-container, .invoice-frame, .page, [data-invoice-page] {
           width: 210mm !important;
           max-width: 210mm !important;
-          min-height: 295mm !important;
-          height: 295mm !important;
-          max-height: 295.5mm !important;
+          min-height: 297mm !important;
+          height: 297mm !important;
+          max-height: 297mm !important;
           box-sizing: border-box !important;
           margin: 0 auto !important;
           overflow: hidden !important;
@@ -1735,14 +1735,17 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
 .items-main-table th, .items-main-table td, .items-table th, .items-table td, .items-table-wrapper th, .items-table-wrapper td {
  height: auto !important; padding: 5px 3px !important; line-height: 1.3 !important; font-size: 10px !important;
 }
-.invoice-container { min-height: 295mm !important; height: 295mm !important; }
+.invoice-container { width: 210mm !important; min-height: 297mm !important; height: 297mm !important; max-height: 297mm !important; box-sizing: border-box !important; }
 .invoice-container .top-content-wrap, .invoice-container .top-wrap { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; }
 .invoice-container .top-content-wrap > :not(.items-table-container):not(.items-table-wrapper):not(.items-main-table):not(.items-table) { flex-shrink: 0; }
 .invoice-container .items-table-container, .invoice-container .items-table-wrapper, .invoice-container .items-container, .invoice-container .items-section, .invoice-container .section:has(> table.items-table) { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; margin-top: 0 !important; }
-.invoice-container .items-main-table, .invoice-container table.items-table, .invoice-container .items-table-wrapper > table { height: 100% !important; flex: 1 1 auto !important; }
+.invoice-container .items-main-table, .invoice-container table.items-table, .invoice-container .items-table-wrapper > table { height: auto !important; flex: 0 0 auto !important; }
 .invoice-container .items-main-table thead, .invoice-container table.items-table thead, .invoice-container .items-table-wrapper > table thead { height: 1px; }
 .invoice-container .invoice-body-content { display: flex !important; flex-direction: column !important; flex: 1 1 auto !important; min-height: 0 !important; }
 .invoice-container > footer, .invoice-container > .bottom-wrap { margin-top: auto !important; flex-shrink: 0 !important; }
+@page { size: A4 portrait !important; margin: 0 !important; }
+html, body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; max-height: none !important; }
+body { width: 210mm !important; max-width: 210mm !important; box-sizing: border-box !important; }
 </style>`;
     result = result.replace(/<\/head>/i, rowsStyle + '\n</head>');
   }
@@ -1832,7 +1835,9 @@ export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 15) {
     if (openDivs > closedDivs) pageInner += '</div>'.repeat(openDivs - closedDivs);
 
     const pOpen = contOpen.replace('<div', `<div data-invoice-page="${p}"`);
-    pages.push(`${pOpen}\n${pageInner}\n${contClose}`);
+    const continuation = p < totalPages ? 'متابعة الفاتورة في الصفحة التالية' : 'تابع الفاتورة';
+    const pageLabel = `<div class="invoice-page-label" style="flex-shrink:0;font-size:11px;text-align:center;margin-top:auto;padding-top:3mm">${continuation} — صفحة ${p} من ${totalPages}</div>`;
+    pages.push(`${pOpen}\n${pageInner}\n${pageLabel}\n${contClose}`);
   }
 
   const multiCss = `
@@ -1869,7 +1874,7 @@ export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 15) {
   if (/<\/head>/i.test(res)) {
     res = res.replace(/<\/head>/i, multiCss + '\n</head>');
   }
-  res = res.replace(/<\/head>/i, "<style data-invoice-pages-print>\n@media print {\n @page { size: A4 portrait; margin: 0 !important; }\n html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }\n [data-invoice-page] { width: 210mm !important; min-height: 295mm !important; height: 295mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }\n [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }\n [data-invoice-page] .invoice-frame:not([data-invoice-page]) { position: absolute !important; inset: 5mm !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; display: block !important; break-after: auto !important; page-break-after: auto !important; }\n}\n</style>" + '\n</head>');
+  res = res.replace(/<\/head>/i, "<style data-invoice-pages-print>\n@media print {\n @page { size: A4 portrait; margin: 0 !important; }\n html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }\n [data-invoice-page] { width: 210mm !important; min-height: 297mm !important; height: 297mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }\n [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }\n [data-invoice-page] .invoice-frame:not([data-invoice-page]) { position: absolute !important; inset: 5mm !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; display: block !important; break-after: auto !important; page-break-after: auto !important; }\n}\n</style>" + '\n</head>');
   const allPages = prefix + pages.join('\n') + suffix;
   res = res.replace(/<body\b([^>]*)>[\s\S]*?<\/body>/i, `<body${bodyAttrs}>\n${allPages}\n</body>`);
 
