@@ -302,7 +302,7 @@
         padding: 5mm;
       }
     }
-  
+
 /* ── English Seller Info Left Alignment ── */
 .seller-en-info,
 .seller-en,
@@ -377,7 +377,7 @@ td.seller-en {
 <body>
 
   <div class="invoice-container">
-    <div>
+    <div class="top-content-wrap">
       <!-- ── الترويسة العلوية ── -->
       <header class="top-header-grid">
         <!-- المنتصف: شارة الفاتورة ورقمها -->
@@ -392,9 +392,7 @@ td.seller-en {
         </div>
 
         <!-- اليمين: رمز الاستجابة السريع QR -->
-        <div class="qr-frame-box">
-          {{qr_code}}
-        </div>
+
       </header>
 
       <!-- ── شريط بيانات الفاتورة والمخزن ── -->
@@ -508,7 +506,11 @@ td.seller-en {
     </div>
 
     <!-- ── القسم السفلي: الإجماليات + ختم البائع والتذييل ── -->
-    <div>
+    <div class="bottom-content-wrap">
+<div class="qr-frame-box">
+          {{qr_code}}
+        </div>
+
       <div class="bottom-section-grid">
         <!-- جدول الإجماليات المالية -->
         <table class="totals-box-table">

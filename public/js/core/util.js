@@ -1738,9 +1738,10 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
 .invoice-container { min-height: 295mm !important; height: 295mm !important; }
 .invoice-container .top-content-wrap, .invoice-container .top-wrap { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; }
 .invoice-container .top-content-wrap > :not(.items-table-container):not(.items-table-wrapper):not(.items-main-table):not(.items-table) { flex-shrink: 0; }
-.invoice-container .items-table-container, .invoice-container .items-table-wrapper, .invoice-container .section:has(> table.items-table) { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; margin-top: 0 !important; }
-.invoice-container .items-main-table, .invoice-container table.items-table { height: 100% !important; flex: 1 1 auto !important; }
-.invoice-container .items-main-table thead, .invoice-container table.items-table thead { height: 1px; }
+.invoice-container .items-table-container, .invoice-container .items-table-wrapper, .invoice-container .items-container, .invoice-container .items-section, .invoice-container .section:has(> table.items-table) { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; margin-top: 0 !important; }
+.invoice-container .items-main-table, .invoice-container table.items-table, .invoice-container .items-table-wrapper > table { height: 100% !important; flex: 1 1 auto !important; }
+.invoice-container .items-main-table thead, .invoice-container table.items-table thead, .invoice-container .items-table-wrapper > table thead { height: 1px; }
+.invoice-container .invoice-body-content { display: flex !important; flex-direction: column !important; flex: 1 1 auto !important; min-height: 0 !important; }
 .invoice-container > footer, .invoice-container > .bottom-wrap { margin-top: auto !important; flex-shrink: 0 !important; }
 </style>`;
     result = result.replace(/<\/head>/i, rowsStyle + '\n</head>');

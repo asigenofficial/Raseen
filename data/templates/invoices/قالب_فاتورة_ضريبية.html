@@ -312,7 +312,7 @@
         border: 2px solid #b89758;
       }
     }
-  
+
 /* ── English Seller Info Left Alignment ── */
 .seller-en-info,
 .seller-en,
@@ -386,8 +386,8 @@ td.seller-en {
 
 <body>
 
-  <div class="invoice-frame">
-    <div>
+  <div class="invoice-frame invoice-container">
+    <div class="top-content-wrap">
       <!-- ── Top Header ── -->
       <header class="header-wrap">
         <!-- Right: Seller Details -->
@@ -410,9 +410,7 @@ td.seller-en {
         </div>
 
         <!-- Left: ZATCA QR Code -->
-        <div class="qr-frame">
-          {{qr_code}}
-        </div>
+
       </header>
 
       <!-- ── Customer & Invoice Details Table ── -->
@@ -463,7 +461,11 @@ td.seller-en {
 
     </div>
 
-    <div>
+    <div class="bottom-content-wrap">
+<div class="qr-frame">
+          {{qr_code}}
+        </div>
+
       <!-- ── Bottom Summary: Notes + Financial Totals ── -->
       <div class="bottom-summary-grid">
         <!-- Notes Box (Left in RTL) -->

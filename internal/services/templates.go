@@ -3,6 +3,7 @@ package services
 import (
 	"crypto/sha256"
 	"database/sql"
+	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -911,7 +912,14 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 
 // Apply the reference invoice's element sizes at render time, leaving each
 // template's colors, structure, source file, and page decorations intact.
+//
+//go:embed invoice-layout.js
+var invoiceLayoutScript string
+
 func normalizeInvoiceMeasurements(html string) string {
+	if !strings.Contains(html, "data-invoice-layout-runtime") {
+		html = injectTemplateStyle(html, `<script data-invoice-layout-runtime>`+invoiceLayoutScript+`</script>`)
+	}
 	const marker = "data-invoice-measurements"
 	if strings.Contains(html, marker) {
 		return html
@@ -938,9 +946,10 @@ func normalizeInvoiceMeasurements(html string) string {
 .invoice-container { min-height: 295mm !important; height: 295mm !important; }
 .invoice-container .top-content-wrap, .invoice-container .top-wrap { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; }
 .invoice-container .top-content-wrap > :not(.items-table-container):not(.items-table-wrapper):not(.items-main-table):not(.items-table) { flex-shrink: 0; }
-.invoice-container .items-table-container, .invoice-container .items-table-wrapper, .invoice-container .section:has(> table.items-table) { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; margin-top: 0 !important; }
-.invoice-container .items-main-table, .invoice-container table.items-table { height: 100% !important; flex: 1 1 auto !important; }
-.invoice-container .items-main-table thead, .invoice-container table.items-table thead { height: 1px; }
+.invoice-container .items-table-container, .invoice-container .items-table-wrapper, .invoice-container .items-container, .invoice-container .items-section, .invoice-container .section:has(> table.items-table) { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; margin-top: 0 !important; }
+.invoice-container .items-main-table, .invoice-container table.items-table, .invoice-container .items-table-wrapper > table { height: 100% !important; flex: 1 1 auto !important; }
+.invoice-container .items-main-table thead, .invoice-container table.items-table thead, .invoice-container .items-table-wrapper > table thead { height: 1px; }
+.invoice-container .invoice-body-content { display: flex !important; flex-direction: column !important; flex: 1 1 auto !important; min-height: 0 !important; }
 .invoice-container > footer, .invoice-container > .bottom-wrap { margin-top: auto !important; flex-shrink: 0 !important; }
 
 @media print { @page { size: A4 portrait; } }
