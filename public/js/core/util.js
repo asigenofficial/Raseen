@@ -455,8 +455,10 @@ export function printDoc(docHtml, { flowing = false } = {}) {
       overflow: hidden !important;
     }
     .top-content-wrap {
-      flex: 0 0 auto !important;
-      display: block !important;
+      flex: 1 1 auto !important;
+      display: flex !important;
+      flex-direction: column !important;
+      min-height: 0 !important;
     }
     .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
       margin-top: auto !important;
@@ -1599,8 +1601,10 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
         overflow: hidden !important;
       }
       .top-content-wrap {
-        flex: 0 0 auto !important;
-        display: block !important;
+        flex: 1 1 auto !important;
+      display: flex !important;
+      flex-direction: column !important;
+      min-height: 0 !important;
       }
       .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
         margin-top: auto !important;
@@ -1731,6 +1735,13 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
 .items-main-table th, .items-main-table td, .items-table th, .items-table td, .items-table-wrapper th, .items-table-wrapper td {
  height: auto !important; padding: 5px 3px !important; line-height: 1.3 !important; font-size: 10px !important;
 }
+.invoice-container { min-height: 295mm !important; height: 295mm !important; }
+.invoice-container .top-content-wrap, .invoice-container .top-wrap { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; }
+.invoice-container .top-content-wrap > :not(.items-table-container):not(.items-table-wrapper):not(.items-main-table):not(.items-table) { flex-shrink: 0; }
+.invoice-container .items-table-container, .invoice-container .items-table-wrapper, .invoice-container .section:has(> table.items-table) { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; margin-top: 0 !important; }
+.invoice-container .items-main-table, .invoice-container table.items-table { height: 100% !important; flex: 1 1 auto !important; }
+.invoice-container .items-main-table thead, .invoice-container table.items-table thead { height: 1px; }
+.invoice-container > footer, .invoice-container > .bottom-wrap { margin-top: auto !important; flex-shrink: 0 !important; }
 </style>`;
     result = result.replace(/<\/head>/i, rowsStyle + '\n</head>');
   }

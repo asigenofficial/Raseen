@@ -298,10 +298,13 @@ func (s *Server) failPDF(kind, id string, revision int64, renderErr error) {
 		WHERE kind=? AND document_id=? AND revision=?`, renderErr.Error(), db.NowIso(), kind, id, revision)
 }
 
-// Invalidate older voucher PDFs once when their amount formatting changes.
+// Invalidate cached PDFs when their rendering rules change.
 func documentPDFStyleKey(kind, style string) string {
 	if kind == "voucher" {
 		return style + "|amount-grouping-v1"
+	}
+	if kind == "invoice" {
+		return style + "|invoice-table-fill-v1"
 	}
 	return style
 }

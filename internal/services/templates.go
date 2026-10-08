@@ -935,6 +935,14 @@ func normalizeInvoiceMeasurements(html string) string {
  height: auto !important; padding: 5px 3px !important; line-height: 1.3 !important; font-size: 10px !important;
 }
 
+.invoice-container { min-height: 295mm !important; height: 295mm !important; }
+.invoice-container .top-content-wrap, .invoice-container .top-wrap { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; }
+.invoice-container .top-content-wrap > :not(.items-table-container):not(.items-table-wrapper):not(.items-main-table):not(.items-table) { flex-shrink: 0; }
+.invoice-container .items-table-container, .invoice-container .items-table-wrapper, .invoice-container .section:has(> table.items-table) { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; margin-top: 0 !important; }
+.invoice-container .items-main-table, .invoice-container table.items-table { height: 100% !important; flex: 1 1 auto !important; }
+.invoice-container .items-main-table thead, .invoice-container table.items-table thead { height: 1px; }
+.invoice-container > footer, .invoice-container > .bottom-wrap { margin-top: auto !important; flex-shrink: 0 !important; }
+
 @media print { @page { size: A4 portrait; } }
 body { font-size: 11px; }
 .seller h2, .seller-ar .company-name, .seller-info .seller-title { font-size: 14.5px; }
