@@ -580,13 +580,29 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		for idx := int64(0); idx < rem; idx++ {
 			targetPerInv[idx]++
 		}
-		// Natural variation between invoices
-		if req.Count > 1 && req.DistributionMode != "uniform" {
-			for j := 0; j < req.Count-1; j += 2 {
-				jitter := int64(float64(targetPerInv[j]) * (rng.Float64()*0.25 - 0.125))
-				if targetPerInv[j]+jitter > 100 && targetPerInv[j+1]-jitter > 100 {
-					targetPerInv[j] += jitter
-					targetPerInv[j+1] -= jitter
+		// Move random amounts between random invoices, preserving the batch target.
+		// Explicit invoice bounds take precedence over the default wider spread.
+		lower, upper := max(int64(1), base*55/100), base*145/100
+		if req.MinInvoiceTotal > 0 {
+			lower = models.ToMinor(req.MinInvoiceTotal)
+		}
+		if req.MaxInvoiceTotal > 0 {
+			upper = models.ToMinor(req.MaxInvoiceTotal)
+		}
+		if base < lower || base > upper || (rem > 0 && base+1 > upper) {
+			return nil, errors.New("المبلغ المستهدف لا يتوافق مع عدد الفواتير وحدود مبلغ الفاتورة")
+		}
+		if req.Count > 1 && distMode != "uniform" {
+			for step := 0; step < req.Count*8; step++ {
+				a, b := rng.Intn(req.Count), rng.Intn(req.Count)
+				if a == b {
+					continue
+				}
+				room := min(targetPerInv[a]-lower, upper-targetPerInv[b])
+				if room > 0 {
+					transfer := rng.Int63n(room + 1)
+					targetPerInv[a] -= transfer
+					targetPerInv[b] += transfer
 				}
 			}
 		}
@@ -636,7 +652,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		invDate := dateTimes[i].DateStr
 		invTime := dateTimes[i].TimeStr
 
-		linesCount := maxItems
+		linesCount := minItems + rng.Intn(maxItems-minItems+1)
 
 		lines := make([]map[string]any, 0, linesCount)
 		var invSubtotal, invDiscount, invTax, invTotal float64
@@ -682,7 +698,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 				selected, minimumTotal = selected[:0], 0
 				for _, index := range perm {
 					cost := minimumCost(availableItems[index])
-					if len(selected) == maxItems || minimumTotal+cost > invTargetMinor {
+					if len(selected) == linesCount || minimumTotal+cost > invTargetMinor {
 						break
 					}
 					selected = append(selected, availableItems[index])
