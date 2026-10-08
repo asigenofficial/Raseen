@@ -586,9 +586,10 @@ func (s *VoucherService) CancelVoucher(id, actor, ip string) error {
 			newStatus = "CANCELLED"
 		}
 		_, err = tx.Exec(`
-			UPDATE invoices SET paid_amount = ?, remaining_amount = ?, status = ?, updated_at = ?
+			UPDATE invoices SET paid_amount = ?, remaining_amount = ?, status = ?, updated_at = ?,
+			payment_method = CASE WHEN payment_method = 'CASH' AND ? > 0 THEN 'CREDIT' ELSE payment_method END
 			WHERE id = ?
-		`, newPaid, newRem, newStatus, now, a.InvoiceID)
+		`, newPaid, newRem, newStatus, now, newRem, a.InvoiceID)
 		if err != nil {
 			return err
 		}
@@ -731,9 +732,10 @@ func (s *VoucherService) DeleteVoucher(id, actor, ip string) error {
 				newStatus = "CANCELLED"
 			}
 			_, err = tx.Exec(`
-				UPDATE invoices SET paid_amount = ?, remaining_amount = ?, status = ?, updated_at = ?
+				UPDATE invoices SET paid_amount = ?, remaining_amount = ?, status = ?, updated_at = ?,
+				payment_method = CASE WHEN payment_method = 'CASH' AND ? > 0 THEN 'CREDIT' ELSE payment_method END
 				WHERE id = ?
-			`, newPaid, newRem, newStatus, now, a.InvoiceID)
+			`, newPaid, newRem, newStatus, now, newRem, a.InvoiceID)
 			if err != nil {
 				return err
 			}

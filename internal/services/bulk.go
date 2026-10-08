@@ -268,6 +268,74 @@ type ItemCandidate struct {
 	TaxRate   float64
 }
 
+// Spread the target over every selected item, with random relative quantities.
+// Prices include each item's own tax rate; quantity limits apply to every line.
+func bulkTargetQuantities(items []ItemCandidate, target int64, minQty, maxQty float64, fractional bool, rng *rand.Rand) []float64 {
+	weights := make([]float64, len(items))
+	prices := make([]float64, len(items))
+	for i, it := range items {
+		weights[i] = 0.75 + rng.Float64()*0.5
+		price := it.SalePrice
+		if price <= 0 {
+			price = 100
+		}
+		prices[i] = price * (1 + it.TaxRate/100)
+	}
+	lo, hi := 0.0, maxQty/0.75
+	for step := 0; step < 60; step++ {
+		scale, total := (lo+hi)/2, 0.0
+		for i := range items {
+			total += math.Max(minQty, math.Min(maxQty, scale*weights[i])) * prices[i]
+		}
+		if total < models.ToMajor(target) {
+			lo = scale
+		} else {
+			hi = scale
+		}
+	}
+	quantities := make([]float64, len(items))
+	for i := range items {
+		qty := math.Max(minQty, math.Min(maxQty, (lo+hi)/2*weights[i]))
+		if fractional {
+			qty = math.Floor(qty*1000) / 1000
+		} else {
+			qty = math.Floor(qty)
+		}
+		quantities[i] = math.Max(minQty, math.Min(maxQty, qty))
+	}
+	lineTotal := func(i int, qty float64) int64 {
+		gross := models.MulQty(qty, models.ToMinor(prices[i]/(1+items[i].TaxRate/100)))
+		return gross + models.Pct(gross, items[i].TaxRate)
+	}
+	var total int64
+	for i, qty := range quantities {
+		total += lineTotal(i, qty)
+	}
+	stepSize := 1.0
+	if fractional {
+		stepSize = 0.001
+	}
+	// ponytail: bounded rounding refinement; exact combinations depend on catalog prices.
+	for step := 0; step < len(items)*2; step++ {
+		best, bestDelta, distance := -1, int64(0), math.Abs(float64(target-total))
+		for i, qty := range quantities {
+			if qty+stepSize > maxQty+1e-9 {
+				continue
+			}
+			delta := lineTotal(i, qty+stepSize) - lineTotal(i, qty)
+			if next := math.Abs(float64(target - total - delta)); delta > 0 && next < distance {
+				best, bestDelta, distance = i, delta, next
+			}
+		}
+		if best < 0 {
+			break
+		}
+		quantities[best] = math.Round((quantities[best]+stepSize)*1000) / 1000
+		total += bestDelta
+	}
+	return quantities
+}
+
 func parseInvoicePattern(pattern string, defaultPrefix string, defaultStartNo int64, defaultPad int) (prefix string, startNo int64, pad int) {
 	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {
@@ -568,10 +636,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		invDate := dateTimes[i].DateStr
 		invTime := dateTimes[i].TimeStr
 
-		linesCount := minItems
-		if maxItems > minItems {
-			linesCount = minItems + rng.Intn(maxItems-minItems+1)
-		}
+		linesCount := maxItems
 
 		lines := make([]map[string]any, 0, linesCount)
 		var invSubtotal, invDiscount, invTax, invTotal float64
@@ -582,30 +647,75 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 			if i == req.Count-1 {
 				// Last invoice gets exactly whatever is remaining to hit target
 				invTargetMinor = models.ToMinor(req.TargetTotal) - models.ToMinor(totalGrand)
-				if invTargetMinor < 100 {
-					invTargetMinor = targetPerInv[i]
-				}
 			} else {
 				invTargetMinor = targetPerInv[i]
 			}
 		}
 
-		for l := 0; l < linesCount; l++ {
-			var it ItemCandidate
+		selected := make([]ItemCandidate, linesCount)
+		for l := range selected {
 			if distMode == "sequential" {
-				it = availableItems[(i*linesCount+l)%len(availableItems)]
+				selected[l] = availableItems[(i*linesCount+l)%len(availableItems)]
 			} else {
-				it = availableItems[perm[l%len(availableItems)]]
+				selected[l] = availableItems[perm[l]]
 			}
+		}
+		var targetQuantities []float64
+		if invTargetMinor > 0 {
+			minimumCost := func(it ItemCandidate) int64 {
+				price := it.SalePrice
+				if price <= 0 {
+					price = 100
+				}
+				gross := models.MulQty(minQty, models.ToMinor(price))
+				return gross + models.Pct(gross, it.TaxRate)
+			}
+			var minimumTotal int64
+			for _, it := range selected {
+				minimumTotal += minimumCost(it)
+			}
+			if minimumTotal > invTargetMinor {
+				// Start with the cheapest items to fit as many distinct items as possible.
+				slices.SortStableFunc(perm, func(a, b int) int {
+					return int(minimumCost(availableItems[a]) - minimumCost(availableItems[b]))
+				})
+				selected, minimumTotal = selected[:0], 0
+				for _, index := range perm {
+					cost := minimumCost(availableItems[index])
+					if len(selected) == maxItems || minimumTotal+cost > invTargetMinor {
+						break
+					}
+					selected = append(selected, availableItems[index])
+					minimumTotal += cost
+				}
+				if len(selected) < minItems {
+					return nil, fmt.Errorf("مبلغ الفاتورة %d لا يكفي للحد الأدنى من الأصناف والكميات؛ خفّض الحدود أو ارفع المبلغ", i+1)
+				}
+				rng.Shuffle(len(selected), func(a, b int) { selected[a], selected[b] = selected[b], selected[a] })
+				linesCount = len(selected)
+			}
+			var maximumTotal float64
+			for _, it := range selected {
+				price := it.SalePrice
+				if price <= 0 {
+					price = 100
+				}
+				maximumTotal += maxQty * price * (1 + it.TaxRate/100) * (1 + req.PriceJitter/100)
+			}
+			if models.ToMajor(invTargetMinor) > maximumTotal+0.01 {
+				return nil, fmt.Errorf("مبلغ الفاتورة %d يتجاوز ما تسمح به أسعار الأصناف وحدود الكميات؛ ارفع الحد الأعلى للكميات أو عدد الأصناف", i+1)
+			}
+			targetQuantities = bulkTargetQuantities(selected, invTargetMinor, minQty, maxQty, req.FractionQty, rng)
+		} else if req.TargetTotal > 0 {
+			return nil, errors.New("المبلغ المستهدف لا يكفي لتوزيعه على الفواتير المحددة")
+		}
+		for l, it := range selected {
 
 			price := it.SalePrice
 			if price <= 0 {
 				price = 100.0
 			}
 			taxRate := it.TaxRate
-			if taxRate <= 0 {
-				taxRate = 15.0
-			}
 
 			var qty float64
 			isLastLine := (l == linesCount-1)
@@ -622,12 +732,13 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 						} else {
 							qty = math.Round(calcQty)
 						}
-						if qty < 1 {
-							qty = 1
-							price = math.Round(remTaxable*100) / 100
-						} else {
-							// Fine tune unit price so taxable hits remTaxable
-							price = math.Round((remTaxable/qty)*100) / 100
+						qty = math.Max(minQty, math.Min(maxQty, qty))
+						// Keep the existing target-price adjustment within quantity limits.
+						price = math.Round((remTaxable/qty)*100) / 100
+						if math.Abs(price-it.SalePrice) > it.SalePrice*req.PriceJitter/100+0.005 {
+							// Keep catalog prices when the target is not representable within the configured range.
+							price = it.SalePrice
+							qty = targetQuantities[l]
 						}
 					} else {
 						qty = minQty
@@ -636,10 +747,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 					qty = minQty
 				}
 			} else if invTargetMinor > 0 {
-				// Allocate approximate share for this line
-				lineShare := float64(invTargetMinor) / float64(linesCount) / 1.15 / 100.0
-				approxQty := math.Max(minQty, math.Min(maxQty, math.Round(lineShare/price)))
-				qty = approxQty
+				qty = targetQuantities[l]
 			} else {
 				qty = minQty
 				if maxQty > minQty {
@@ -688,32 +796,8 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		invDiscount = math.Round(invDiscount*100) / 100
 		invTax = math.Round(invTax*100) / 100
 		invTotal = math.Round(invTotal*100) / 100
-
-		// On the very last invoice, adjust the last line to exact minor penny match
-		if req.TargetTotal > 0 && i == req.Count-1 && len(lines) > 0 {
-			targetBatchMinor := models.ToMinor(req.TargetTotal)
-			currentBatchMinor := models.ToMinor(totalGrand) + models.ToMinor(invTotal)
-			minorDiff := targetBatchMinor - currentBatchMinor
-			if minorDiff != 0 {
-				lastIdx := len(lines) - 1
-				lastLine := lines[lastIdx]
-				curTotMinor := models.ToMinor(lastLine["total_line"].(float64))
-				newTotMinor := curTotMinor + minorDiff
-				if newTotMinor > 0 {
-					rate := lastLine["tax_rate"].(float64)
-					newTaxableMinor := int64(math.Round(float64(newTotMinor) / (1.0 + rate/100.0)))
-					newTaxMinor := newTotMinor - newTaxableMinor
-
-					lastLine["taxable"] = models.ToMajor(newTaxableMinor)
-					lastLine["tax_amount"] = models.ToMajor(newTaxMinor)
-					lastLine["total_line"] = models.ToMajor(newTotMinor)
-
-					invDiffMajor := models.ToMajor(minorDiff)
-					invTotal = math.Round((invTotal+invDiffMajor)*100) / 100
-					invTax = math.Round((invTax+models.ToMajor(newTaxMinor-models.ToMinor(lastLine["tax_amount"].(float64))))*100) / 100
-					invSubtotal = math.Round((invSubtotal+models.ToMajor(newTaxableMinor-models.ToMinor(lastLine["taxable"].(float64))))*100) / 100
-				}
-			}
+		if (req.MinInvoiceTotal > 0 && invTotal < req.MinInvoiceTotal) || (req.MaxInvoiceTotal > 0 && invTotal > req.MaxInvoiceTotal) {
+			return nil, fmt.Errorf("الفاتورة %d خارج حدود القيمة المحددة؛ عدّل الأصناف أو الكميات أو المبلغ المستهدف", i+1)
 		}
 
 		if i > 0 {

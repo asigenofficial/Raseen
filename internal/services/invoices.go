@@ -73,6 +73,19 @@ type CreateInvoiceInput struct {
 	Lines            []CreateInvoiceLineInput `json:"lines"`
 }
 
+func invoiceBuyerAddress(client models.Client) string {
+	if address := strings.TrimSpace(client.Address); address != "" {
+		return address
+	}
+	parts := []string{}
+	for _, part := range []string{client.City, client.District, client.Street, client.BuildingNo, client.PostalCode, client.Country} {
+		if part = strings.TrimSpace(part); part != "" {
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(parts, " - ")
+}
+
 var invoicePaymentLabels = map[string]string{
 	"CASH":     "نقداً",
 	"CARD":     "شبكة",
@@ -263,16 +276,7 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 	}
 	sellerAddr := strings.Join(sellerParts, " - ")
 
-	buyerParts := []string{}
-	for _, p := range []string{client.City, client.District, client.Street, client.BuildingNo, client.PostalCode, client.Country} {
-		if strings.TrimSpace(p) != "" {
-			buyerParts = append(buyerParts, strings.TrimSpace(p))
-		}
-	}
-	buyerAddr := strings.Join(buyerParts, " - ")
-	if buyerAddr == "" {
-		buyerAddr = client.Address
-	}
+	buyerAddr := invoiceBuyerAddress(client)
 
 	var ublLines []zatca.UblLineItem
 	for _, cl := range computedLines {
@@ -478,52 +482,10 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		return nil, fmt.Errorf("failed to post ledger entry: %w", err)
 	}
 
-	// If paid immediately via CASH, CARD, or TRANSFER with AutoReceipt
-	if input.AutoReceipt && paymentMethod != "CREDIT" && grandTotalMinor > 0 {
-		voucherNumber, _, errV := s.issuers.NextVoucherNumber(tx, issuer.ID)
-		if errV != nil {
-			return nil, errV
-		}
-		{
-			voucherID := crypto.UUID()
-			_, err = tx.Exec(`
-				INSERT INTO receipt_vouchers (
-					id, voucher_number, issuer_id, client_id, voucher_date,
-					total_amount, allocated_total, payment_type, reference_no, notes,
-					status, created_by, created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
-			`, voucherID, voucherNumber, issuer.ID, client.ID, issueDate, grandTotalMinor, grandTotalMinor, paymentMethod, invoiceNumber, "سند قبض تلقائي مع الفاتورة", actor, nowIso, nowIso)
-			if err != nil {
-				return nil, err
-			}
-
-			_, err = tx.Exec(`
-				INSERT INTO voucher_allocations (id, voucher_id, invoice_id, allocated_amount, created_at)
-				VALUES (?, ?, ?, ?, ?)
-			`, crypto.UUID(), voucherID, invoiceID, grandTotalMinor, nowIso)
-			if err != nil {
-				return nil, err
-			}
-
-			_, err = tx.Exec(`
-				UPDATE invoices SET paid_amount = ?, remaining_amount = 0, status = 'PAID', updated_at = ? WHERE id = ?
-			`, grandTotalMinor, nowIso, invoiceID)
-			if err != nil {
-				return nil, err
-			}
-
-			_, err = tx.Exec(`
-				INSERT INTO client_ledger (
-					id, client_id, issuer_id, doc_type, doc_id, doc_number,
-					transaction_date, debit, credit, description, created_at
-				) VALUES (?, ?, ?, 'RECEIPT', ?, ?, ?, 0, ?, ?, ?)
-			`, crypto.UUID(), client.ID, issuer.ID, voucherID, voucherNumber, issueDate, grandTotalMinor, fmt.Sprintf("سداد فاتورة رقم %s", invoiceNumber), nowIso)
-			if err != nil {
-				return nil, err
-			}
-			if err = db.AuditTx(tx, actor, "VOUCHER_CREATE", "voucher", voucherID, issuer.ID, map[string]any{"invoice_id": invoiceID, "amount": models.ToMajor(grandTotalMinor)}, ip); err != nil {
-				return nil, err
-			}
+	// Every invoice marked as paid needs an actual receipt and a matching ledger credit.
+	if (input.AutoReceipt || isCashInvoice) && paymentMethod != "CREDIT" && grandTotalMinor > 0 {
+		if err = s.createInvoiceReceiptTx(tx, models.Invoice{ID: invoiceID, IssuerID: issuer.ID, ClientID: client.ID, InvoiceNumber: invoiceNumber, IssueDate: issueDate, PaymentMethod: paymentMethod}, grandTotalMinor, actor); err != nil {
+			return nil, err
 		}
 	}
 
@@ -541,6 +503,31 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 }
 
 func mustJSON(v any) string { b, _ := json.Marshal(v); return string(b) }
+
+func (s *InvoiceService) createInvoiceReceiptTx(tx *sql.Tx, inv models.Invoice, amount int64, actor string) error {
+	number, _, err := s.issuers.NextVoucherNumber(tx, inv.IssuerID)
+	if err != nil {
+		return err
+	}
+	id, now := crypto.UUID(), db.NowIso()
+	if _, err = tx.Exec(`INSERT INTO receipt_vouchers
+		(id,voucher_number,issuer_id,client_id,voucher_date,total_amount,allocated_total,payment_type,reference_no,notes,status,created_by,created_at,updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,'ACTIVE',?,?,?)`, id, number, inv.IssuerID, inv.ClientID, inv.IssueDate, amount, amount, inv.PaymentMethod, inv.InvoiceNumber, "سند قبض تلقائي مع الفاتورة", actor, now, now); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("INSERT INTO voucher_allocations (id,voucher_id,invoice_id,allocated_amount,created_at) VALUES (?,?,?,?,?)", crypto.UUID(), id, inv.ID, amount, now); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("UPDATE invoices SET paid_amount=grand_total,remaining_amount=0,status='PAID',updated_at=? WHERE id=?", now, inv.ID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO client_ledger
+		(id,client_id,issuer_id,doc_type,doc_id,doc_number,transaction_date,debit,credit,description,created_at)
+		VALUES (?,?,?,'RECEIPT',?,?,?,0,?,?,?)`, crypto.UUID(), inv.ClientID, inv.IssuerID, id, number, inv.IssueDate, amount, fmt.Sprintf("سداد فاتورة رقم %s", inv.InvoiceNumber), now); err != nil {
+		return err
+	}
+	return db.AuditTx(tx, actor, "VOUCHER_CREATE", "voucher", id, inv.IssuerID, map[string]any{"invoice_id": inv.ID, "amount": models.ToMajor(amount)}, "")
+}
 
 func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 	var inv models.Invoice
@@ -1232,6 +1219,15 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	if clientID == "" {
 		clientID = inv.ClientID
 	}
+	if issuerID != inv.IssuerID || clientID != inv.ClientID {
+		var allocations int
+		if err := tx.QueryRow("SELECT COUNT(*) FROM voucher_allocations a JOIN receipt_vouchers v ON v.id = a.voucher_id WHERE a.invoice_id = ? AND v.status = 'ACTIVE'", id).Scan(&allocations); err != nil {
+			return nil, err
+		}
+		if allocations > 0 {
+			return nil, errors.New("ألغِ تخصيص السندات لهذه الفاتورة قبل تغيير المنشأة أو العميل")
+		}
+	}
 	var client models.Client
 	err = tx.QueryRow(`
 		SELECT id, client_code, name, COALESCE(tax_number,''), COALESCE(commercial_register,''),
@@ -1319,16 +1315,7 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	}
 	sellerAddr := strings.Join(sellerPartsUpdate, " - ")
 
-	buyerPartsUpdate := []string{}
-	for _, p := range []string{client.City, client.District, client.Street, client.BuildingNo, client.PostalCode, client.Country} {
-		if strings.TrimSpace(p) != "" {
-			buyerPartsUpdate = append(buyerPartsUpdate, strings.TrimSpace(p))
-		}
-	}
-	buyerAddr := strings.Join(buyerPartsUpdate, " - ")
-	if buyerAddr == "" {
-		buyerAddr = client.Address
-	}
+	buyerAddr := invoiceBuyerAddress(client)
 
 	var ublLines []zatca.UblLineItem
 	for _, cl := range computedLines {
@@ -1460,6 +1447,13 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	updatePaidMinor := int64(0)
 	updateRemMinor := grandTotalMinor
 	updateStatus := "UNPAID"
+	var allocatedVouchersSum int64
+	if err = tx.QueryRow(`SELECT COALESCE(SUM(a.allocated_amount), 0) FROM voucher_allocations a JOIN receipt_vouchers v ON v.id = a.voucher_id WHERE a.invoice_id = ? AND v.status = 'ACTIVE'`, id).Scan(&allocatedVouchersSum); err != nil {
+		return nil, err
+	}
+	if allocatedVouchersSum > grandTotalMinor {
+		return nil, errors.New("قيمة الفاتورة أقل من السندات المخصصة لها؛ ألغِ تخصيص السداد الزائد أولاً")
+	}
 
 	isCashUpdate := strings.Contains(paymentMethod, "نقد") || strings.EqualFold(paymentMethod, "CASH") || strings.Contains(strings.ToLower(paymentMethod), "cash")
 	if isCashUpdate {
@@ -1468,8 +1462,6 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		updateStatus = "PAID"
 	} else {
 		// إذا تم تغيير الفاتورة إلى آجل (CREDIT)، يتم التحقق من وجود أي سندات قبض مخصصة فعلياً
-		var allocatedVouchersSum int64
-		_ = tx.QueryRow(`SELECT COALESCE(SUM(allocated_amount), 0) FROM voucher_allocations WHERE invoice_id = ?`, id).Scan(&allocatedVouchersSum)
 		if allocatedVouchersSum > 0 {
 			updatePaidMinor = allocatedVouchersSum
 			updateRemMinor = grandTotalMinor - allocatedVouchersSum
@@ -1477,7 +1469,7 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 				updateRemMinor = 0
 				updateStatus = "PAID"
 			} else {
-				updateStatus = "PARTIALLY_PAID"
+				updateStatus = "PARTIAL"
 			}
 		} else {
 			updatePaidMinor = 0
@@ -1494,7 +1486,8 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	_, err = tx.Exec(`
 		UPDATE invoices SET
 			invoice_number = ?,
-			client_id = ?, invoice_type = ?, zatca_phase = ?,
+			issuer_id = ?, client_id = ?, invoice_type = ?, zatca_phase = ?,
+			batch_id = CASE WHEN ? THEN NULL ELSE batch_id END,
 			issue_date = ?, issue_time = ?, issue_datetime = ?,
 			subtotal = ?, discount_amount = ?, taxable_amount = ?, tax_amount = ?, grand_total = ?,
 			paid_amount = ?, remaining_amount = ?, status = ?, payment_method = ?,
@@ -1505,7 +1498,8 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		WHERE id = ?
 	`,
 		invoiceNumber,
-		client.ID, invoiceType, zatcaPhase,
+		issuer.ID, client.ID, invoiceType, zatcaPhase,
+		issuer.ID != inv.IssuerID || client.ID != inv.ClientID,
 		issueDate, issueTime, issueDatetime,
 		subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor,
 		updatePaidMinor, updateRemMinor, updateStatus, paymentMethod,
@@ -1518,7 +1512,7 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		return nil, fmt.Errorf("failed to update invoice: %w", err)
 	}
 
-	_, _ = tx.Exec(`
+	_, err = tx.Exec(`
 		INSERT INTO invoice_documents (invoice_id, xml, issuer_json, client_json)
 		VALUES (?, ?, ?, ?)
 		ON CONFLICT(invoice_id) DO UPDATE SET
@@ -1526,6 +1520,9 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 			issuer_json = excluded.issuer_json,
 			client_json = excluded.client_json
 	`, id, xml, mustJSON(issuer), mustJSON(client))
+	if err != nil {
+		return nil, fmt.Errorf("failed to update invoice document: %w", err)
+	}
 
 	if _, err := tx.Exec("DELETE FROM invoice_items WHERE invoice_id = ?", id); err != nil {
 		return nil, fmt.Errorf("failed to delete old invoice items: %w", err)
@@ -1559,11 +1556,16 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	// Update client ledger
 	_, err = tx.Exec(`
 		UPDATE client_ledger SET
-			client_id = ?, debit = ?, transaction_date = ?, description = ?
+			issuer_id = ?, client_id = ?, doc_number = ?, debit = ?, transaction_date = ?, description = ?
 		WHERE doc_id = ? AND doc_type = 'INVOICE'
-	`, client.ID, grandTotalMinor, issueDate, fmt.Sprintf("فاتورة رقم %s", inv.InvoiceNumber), id)
+	`, issuer.ID, client.ID, invoiceNumber, grandTotalMinor, issueDate, fmt.Sprintf("فاتورة رقم %s", invoiceNumber), id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update ledger: %w", err)
+	}
+	if (isCashUpdate || input.AutoReceipt) && paymentMethod != "CREDIT" && grandTotalMinor > allocatedVouchersSum {
+		if err = s.createInvoiceReceiptTx(tx, models.Invoice{ID: id, IssuerID: issuer.ID, ClientID: client.ID, InvoiceNumber: invoiceNumber, IssueDate: issueDate, PaymentMethod: paymentMethod}, grandTotalMinor-allocatedVouchersSum, actor); err != nil {
+			return nil, err
+		}
 	}
 
 	if inv.BatchID != nil && *inv.BatchID != "" {
@@ -1580,7 +1582,7 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	}
 
 	s.db.Audit(actor, "INVOICE_UPDATE", "invoice", id, issuer.ID, map[string]any{
-		"invoice_number": inv.InvoiceNumber,
+		"invoice_number": invoiceNumber,
 		"grand_total":    models.FmtMoney(grandTotalMinor),
 	}, ip)
 

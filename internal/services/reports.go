@@ -520,6 +520,9 @@ func (s *ReportService) SalesReport(issuerID, fromDate, toDate, clientID, groupB
 		args = append(args, toDate)
 	}
 
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM invoices i "+where, args...).Scan(&res.Totals.Count); err != nil {
+		return nil, err
+	}
 	var groupExpr string
 	switch groupBy {
 	case "month":
@@ -530,17 +533,22 @@ func (s *ReportService) SalesReport(issuerID, fromDate, toDate, clientID, groupB
 		groupExpr = "i.seller_name"
 	case "type":
 		groupExpr = "CASE WHEN i.invoice_type = 'SIMPLIFIED' THEN 'مبسطة (B2C)' ELSE 'ضريبية (B2B)' END"
-	case "item":
-		// Group by item from invoice_items
+	case "item", "category":
+		groupExpr = "ii.item_name"
+		if groupBy == "category" {
+			groupExpr = "COALESCE(cat.name, 'بدون مجموعة')"
+		}
 		q := fmt.Sprintf(`
-			SELECT ii.item_name, COUNT(DISTINCT i.id), COALESCE(SUM(ii.quantity), 0),
-			       COALESCE(SUM(ii.taxable), 0), COALESCE(SUM(ii.discount), 0), COALESCE(SUM(ii.tax_amount), 0), COALESCE(SUM(ii.total_line), 0)
+			SELECT %s, COUNT(DISTINCT i.id), COALESCE(SUM(ii.quantity), 0),
+			       COALESCE(SUM(ii.taxable + ii.discount), 0), COALESCE(SUM(ii.discount), 0), COALESCE(SUM(ii.tax_amount), 0), COALESCE(SUM(ii.total_line), 0)
 			FROM invoice_items ii
 			JOIN invoices i ON i.id = ii.invoice_id
+			LEFT JOIN items it ON it.id = ii.item_id
+			LEFT JOIN item_categories cat ON cat.id = it.category_id
 			%s
-			GROUP BY ii.item_name
+			GROUP BY %s
 			ORDER BY COALESCE(SUM(ii.total_line), 0) DESC
-		`, where)
+		`, groupExpr, where, groupExpr)
 		rows, err := s.db.Query(q, args...)
 		if err != nil {
 			return nil, err
@@ -565,7 +573,6 @@ func (s *ReportService) SalesReport(issuerID, fromDate, toDate, clientID, groupB
 					Tax:      taxM,
 					Total:    totM,
 				})
-				res.Totals.Count += count
 				res.Totals.Subtotal += subM
 				res.Totals.Discount += discM
 				res.Totals.Tax += taxM
@@ -613,7 +620,6 @@ func (s *ReportService) SalesReport(issuerID, fromDate, toDate, clientID, groupB
 				Tax:      taxM,
 				Total:    totM,
 			})
-			res.Totals.Count += count
 			res.Totals.Subtotal += subM
 			res.Totals.Discount += discM
 			res.Totals.Tax += taxM
@@ -767,7 +773,9 @@ func (s *ReportService) CollectionsReport(issuerID, fromDate, toDate, clientID, 
 		groupExpr = "substr(v.voucher_date, 1, 7)"
 	case "client":
 		groupExpr = "c.name"
-	case "type":
+	case "issuer":
+		groupExpr = "iss.name_ar"
+	case "type", "payment":
 		groupExpr = "CASE v.payment_type WHEN 'CASH' THEN 'نقداً' WHEN 'TRANSFER' THEN 'تحويل بنكي' WHEN 'CHEQUE' THEN 'شيك' WHEN 'CARD' THEN 'شبكة' ELSE v.payment_type END"
 	default:
 		groupExpr = "v.voucher_date"
@@ -778,6 +786,7 @@ func (s *ReportService) CollectionsReport(issuerID, fromDate, toDate, clientID, 
 		       COALESCE(SUM(v.total_amount), 0), COALESCE(SUM(v.allocated_total), 0)
 		FROM receipt_vouchers v
 		JOIN clients c ON c.id = v.client_id
+		JOIN issuers iss ON iss.id = v.issuer_id
 		%s
 		GROUP BY %s
 		ORDER BY %s ASC
@@ -868,12 +877,19 @@ func (s *ReportService) ProfitabilityReport(issuerID, fromDate, toDate, clientID
 		args = append(args, toDate)
 	}
 
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM invoices i "+where, args...).Scan(&res.Totals.Invoices); err != nil {
+		return nil, err
+	}
 	var groupExpr string
 	switch groupBy {
 	case "client":
 		groupExpr = "i.buyer_name"
 	case "month":
 		groupExpr = "substr(i.issue_date, 1, 7)"
+	case "issuer":
+		groupExpr = "i.seller_name"
+	case "category":
+		groupExpr = "COALESCE(cat.name, 'بدون مجموعة')"
 	default:
 		groupExpr = "ii.item_name"
 	}
@@ -885,6 +901,7 @@ func (s *ReportService) ProfitabilityReport(issuerID, fromDate, toDate, clientID
 		FROM invoice_items ii
 		JOIN invoices i ON i.id = ii.invoice_id
 		LEFT JOIN items it ON it.id = ii.item_id
+		LEFT JOIN item_categories cat ON cat.id = it.category_id
 		%s
 		GROUP BY %s
 		ORDER BY COALESCE(SUM(ii.taxable), 0) DESC
@@ -918,7 +935,6 @@ func (s *ReportService) ProfitabilityReport(issuerID, fromDate, toDate, clientID
 				Profit:   profitM,
 				Margin:   margin,
 			})
-			res.Totals.Invoices += invs
 			res.Totals.Revenue += revM
 			res.Totals.Cost += costM
 			res.Totals.Profit += profitM
@@ -963,9 +979,9 @@ func (s *ReportService) AgingDetailedReport(issuerID, asOf string) (*AgingDetail
 	if asOf == "" {
 		asOf = db.TodayIso()
 	}
-	where := "WHERE i.status IN ('UNPAID', 'PARTIAL')"
+	where := "WHERE i.status IN ('UNPAID', 'PARTIAL') AND i.issue_date <= ?"
 	var args []any
-	args = append(args, asOf, asOf, asOf, asOf)
+	args = append(args, asOf, asOf, asOf, asOf, asOf)
 	if issuerID != "" {
 		where += " AND i.issuer_id = ?"
 		args = append(args, issuerID)
@@ -1030,4 +1046,3 @@ func (s *ReportService) AgingDetailedReport(issuerID, asOf string) (*AgingDetail
 
 	return res, nil
 }
-
