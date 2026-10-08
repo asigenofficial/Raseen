@@ -99,7 +99,7 @@ export async function render(view, ctx) {
     payment_method: editInvoice.payment_method || 'CREDIT',
     invoice_number: editInvoice.invoice_number,
     notes: editInvoice.notes || '',
-    cheque_no: editInvoice.cheque_no || '', cheque_date: editInvoice.cheque_date || '', due_date: editInvoice.due_date || '',
+    cheque_no: editInvoice.cheque_no ?? '', cheque_date: editInvoice.cheque_date ?? '', due_date: editInvoice.due_date ?? '',
     auto_receipt: false,
     print_after: true,
     header_discount_percent: editInvoice.discount_percent || 0,
@@ -579,6 +579,9 @@ export async function render(view, ctx) {
     $('#issue_date', view).addEventListener('change', (e) => { state.issue_date = e.target.value; saveDraft(state); });
     $('#issue_time', view).addEventListener('change', (e) => { state.issue_time = e.target.value; saveDraft(state); });
     $('#payment_method', view).addEventListener('change', (e) => { state.payment_method = e.target.value; view.querySelectorAll('[data-cheque]').forEach(el => el.classList.toggle('hidden', state.payment_method !== 'CHEQUE')); saveDraft(state); });
+    $('#due_date', view)?.addEventListener('change', (e) => { state.due_date = e.target.value; saveDraft(state); });
+    $('#cheque_no', view)?.addEventListener('input', (e) => { state.cheque_no = e.target.value; saveDraft(state); });
+    $('#cheque_date', view)?.addEventListener('change', (e) => { state.cheque_date = e.target.value; saveDraft(state); });
     $('#invoice_number', view).addEventListener('input', (e) => { state.invoice_number = e.target.value; saveDraft(state); });
     $('#header_discount', view).addEventListener('input', (e) => { state.header_discount_percent = toNum(e.target.value); refreshLines(); });
     $('#notes', view).addEventListener('input', (e) => { state.notes = e.target.value; saveDraft(state); });
@@ -986,6 +989,9 @@ export async function render(view, ctx) {
 
     state.saving = true;
     $$('#save, #save2', view).forEach(b => { b.disabled = true; });
+    const dueDateVal = ($('#due_date', view)?.value ?? state.due_date ?? '').trim() || null;
+    const chequeNoVal = ($('#cheque_no', view)?.value ?? state.cheque_no ?? '').trim();
+    const chequeDateVal = ($('#cheque_date', view)?.value ?? state.cheque_date ?? '').trim() || null;
     try {
       if (state.is_edit) {
         const invoice = await api.put(`/api/invoices/${state.edit_id}`, {
@@ -993,6 +999,9 @@ export async function render(view, ctx) {
           client_id: state.client_id,
           issue_date: state.issue_date,
           issue_time: can('invoices.backdate') ? state.issue_time : undefined,
+          due_date: dueDateVal,
+          cheque_date: chequeDateVal,
+          cheque_no: chequeNoVal,
           invoice_type: state.invoice_type,
           zatca_phase: state.zatca_phase,
           payment_method: state.payment_method,
@@ -1014,6 +1023,9 @@ export async function render(view, ctx) {
         client_id: state.client_id,
         issue_date: state.issue_date,
         issue_time: can('invoices.backdate') ? state.issue_time : undefined,
+        due_date: dueDateVal,
+        cheque_date: chequeDateVal,
+        cheque_no: chequeNoVal,
         invoice_type: state.invoice_type,
         zatca_phase: state.zatca_phase,
         payment_method: state.payment_method,

@@ -380,6 +380,18 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		sellerAddressEn = formatNationalAddressEn(issuer.CityEn, issuer.DistrictEn, issuer.StreetEn, issuer.BuildingNo, issuer.PostalCode)
 	}
 
+	var dueDateVal *string
+	if input.DueDate != nil && strings.TrimSpace(*input.DueDate) != "" {
+		d := strings.TrimSpace(*input.DueDate)
+		dueDateVal = &d
+	}
+	var chequeDateVal *string
+	if input.ChequeDate != nil && strings.TrimSpace(*input.ChequeDate) != "" {
+		c := strings.TrimSpace(*input.ChequeDate)
+		chequeDateVal = &c
+	}
+	chequeNoVal := strings.TrimSpace(input.ChequeNo)
+
 	_, err = tx.Exec(`
 		INSERT INTO invoices (
 			id, issuer_id, client_id, invoice_number, sequence_no, invoice_type, zatca_phase,
@@ -407,7 +419,7 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 		invUUID, issueDate, issueTime, issueDatetime, issuer.Currency,
 		subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor,
 		initPaidMinor, initRemMinor, initStatus, paymentMethod,
-		input.DueDate, input.ChequeDate, input.ChequeNo, pricesIncInt,
+		dueDateVal, chequeDateVal, chequeNoVal, pricesIncInt,
 		issuer.NameAr, issuer.TaxNumber, issuer.CommercialRegister, sellerAddr, sellerAddressEn,
 		client.Name, client.TaxNumber, client.CommercialRegister, buyerAddr,
 		qrPayload, invHash, pih, signature, signatureMode,
@@ -1449,6 +1461,18 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		sellerAddressEn = formatNationalAddressEn(issuer.CityEn, issuer.DistrictEn, issuer.StreetEn, issuer.BuildingNo, issuer.PostalCode)
 	}
 
+	var dueDateVal *string
+	if input.DueDate != nil && strings.TrimSpace(*input.DueDate) != "" {
+		d := strings.TrimSpace(*input.DueDate)
+		dueDateVal = &d
+	}
+	var chequeDateVal *string
+	if input.ChequeDate != nil && strings.TrimSpace(*input.ChequeDate) != "" {
+		c := strings.TrimSpace(*input.ChequeDate)
+		chequeDateVal = &c
+	}
+	chequeNoVal := strings.TrimSpace(input.ChequeNo)
+
 	_, err = tx.Exec(`
 		UPDATE invoices SET
 			invoice_number = ?,
@@ -1469,7 +1493,7 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 		issueDate, issueTime, issueDatetime,
 		subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor,
 		updatePaidMinor, updateRemMinor, updateStatus, paymentMethod,
-		input.DueDate, input.ChequeDate, input.ChequeNo, pricesIncInt,
+		dueDateVal, chequeDateVal, chequeNoVal, pricesIncInt,
 		issuer.NameAr, issuer.TaxNumber, issuer.CommercialRegister, sellerAddr, sellerAddressEn,
 		client.Name, client.TaxNumber, client.CommercialRegister, buyerAddr,
 		qrPayload, invHash, inv.PreviousInvoiceHash, inv.SequenceNo, signature, signatureMode, input.Notes, nowIso, id,
