@@ -12,7 +12,7 @@
       if (!rows.length || rows.length > 15) continue;
       const page = table.closest('[data-invoice-page],.invoice-container,.invoice-frame');
       if (!page || tables.filter(t => page.contains(t)).length !== 1) continue;
-      const candidates = Array.from(page.querySelectorAll('.bottom-content-wrap,.bottom-wrap,.bottom-grid,.bottom-summary-grid,.bottom-layout,.bottom-layout-table,.summary-section,.summary,.totals-table,.totals-box-table'));
+      const candidates = Array.from(page.querySelectorAll('.bottom-content-wrap,.bottom-wrap,.bottom-grid,.bottom-summary-grid,.bottom-layout,.bottom-layout-table,.summary-section,.summary,.totals-table,.totals-box-table,.invoice-page-label'));
       const bottom = candidates.find(el => !el.contains(table) && !table.contains(el) && (table.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING));
       // Unknown structures are intentionally left untouched.
       if (!bottom) continue;
@@ -20,6 +20,9 @@
       while (layout && layout !== page && !layout.contains(bottom)) layout = layout.parentElement;
       if (!layout || !layout.contains(bottom)) continue;
       const set = (el, key, value) => el.style.setProperty(key, value, 'important');
+      for (const row of rows) {
+        for (const cell of row.cells) set(cell, 'vertical-align', 'top');
+      }
       set(page, 'display', 'flex');
       set(page, 'flex-direction', 'column');
       set(page, 'justify-content', 'flex-start');
@@ -51,7 +54,7 @@
       const tableRect = table.getBoundingClientRect();
       const bottomRect = bottomBranch.getBoundingClientRect();
       const gap = bottomRect.top - tableRect.bottom;
-      if (rows.length < 15 && gap > 1) set(table, 'height', (tableRect.height + gap) + 'px');
+      if (gap > 1) set(table, 'height', (tableRect.height + gap) + 'px');
       if (table.tHead) set(table.tHead, 'height', '1px');
       page.dataset.invoiceLayout = 'fitted';
     }

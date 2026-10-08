@@ -1718,6 +1718,7 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
 
   if (invoice) {
     const rowsStyle = `<style data-invoice-row-fit>
+.items-main-table tbody td, table.items-table tbody td, .items-table-wrapper > table > tbody > tr > td { vertical-align: top !important; }
 .invoice-container, .invoice-frame { display: flex !important; flex-direction: column !important; justify-content: flex-start !important; }
 .top-content-wrap { flex: 0 0 auto !important; }
 .invoice-container > .items-table-container, .invoice-container > .items-table-wrapper, .invoice-container > .items-main-table { flex: 0 0 auto !important; margin-top: 0 !important; }
