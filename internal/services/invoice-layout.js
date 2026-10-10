@@ -54,7 +54,7 @@
       const tableRect = table.getBoundingClientRect();
       const bottomRect = bottomBranch.getBoundingClientRect();
       const gap = bottomRect.top - tableRect.bottom;
-      if (gap > 1) set(table, 'height', (tableRect.height + gap) + 'px');
+      if (page.hasAttribute('data-invoice-page') && gap > 1) set(table, 'height', (tableRect.height + gap) + 'px');
       if (table.tHead) set(table.tHead, 'height', '1px');
       page.dataset.invoiceLayout = 'fitted';
     }

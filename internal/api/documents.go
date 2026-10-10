@@ -304,7 +304,7 @@ func documentPDFStyleKey(kind, style string) string {
 		return style + "|amount-grouping-v1"
 	}
 	if kind == "invoice" {
-		return style + "|invoice-table-fill-v7"
+		return style + "|invoice-table-fill-v8"
 	}
 	return style
 }
