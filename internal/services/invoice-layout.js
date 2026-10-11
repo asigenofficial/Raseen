@@ -1,6 +1,13 @@
 // Adjust only recognizable invoice layouts in the rendered DOM, never stored HTML.
 (() => {
   function fitInvoices() {
+    // Restore the approved tax template's original header QR, including stored copies.
+    const headers = document.querySelectorAll('.header-wrap:has(> .center-header)');
+    const misplacedQR = document.querySelectorAll('.bottom-content-wrap > .qr-frame');
+    if (headers.length && misplacedQR.length === 1 && Array.from(headers).every(header => !header.querySelector('.qr-frame'))) {
+      for (const header of headers) header.appendChild(misplacedQR[0].cloneNode(true));
+      misplacedQR[0].remove();
+    }
     const tables = Array.from(document.querySelectorAll('table')).filter(table => {
       if (table.closest('.totals,.totals-table,.totals-box-table')) return false;
       if (table.matches('.items-main-table,.items-table') || table.parentElement.matches('.items-table-wrapper,.items-table-container')) return true;

@@ -191,20 +191,22 @@ func (s *IssuerService) UpdateIssuer(id string, iss *models.Issuer) error {
 
 	_, err := s.db.Exec(`
 		UPDATE issuers SET
-			name_ar = ?, name_en = ?, tax_number = ?, commercial_register = ?,
+			code = COALESCE(NULLIF(?, ''), code), name_ar = ?, name_en = ?, tax_number = ?, commercial_register = ?,
 			street = ?, street_en = ?, building_no = ?, district = ?, district_en = ?,
 			city = ?, city_en = ?, address_en = ?, postal_code = ?, country = ?,
 			phone = ?, email = ?, website = ?, logo_data = ?, default_tax_rate = ?,
 			currency = ?, invoice_prefix = ?, invoice_pad = ?, voucher_prefix = ?,
+			invoice_next_no = MAX(invoice_next_no, ?), voucher_next_no = MAX(voucher_next_no, ?),
 			zatca_phase = ?, qr_settings = ?, print_settings = ?, bank_name = ?,
 			bank_iban = ?, footer_notes = ?, legal_terms = ?, is_active = ?, updated_at = ?
 		WHERE id = ?
 	`,
-		iss.NameAr, iss.NameEn, iss.TaxNumber, iss.CommercialRegister,
+		iss.Code, iss.NameAr, iss.NameEn, iss.TaxNumber, iss.CommercialRegister,
 		iss.Street, iss.StreetEn, iss.BuildingNo, iss.District, iss.DistrictEn,
 		iss.City, iss.CityEn, iss.AddressEn, iss.PostalCode, iss.Country,
 		iss.Phone, iss.Email, iss.Website, iss.LogoData, iss.DefaultTaxRate,
 		iss.Currency, iss.InvoicePrefix, iss.InvoicePad, iss.VoucherPrefix,
+		iss.InvoiceNextNo, iss.VoucherNextNo,
 		iss.ZatcaPhase, qrJSON, printJSON, iss.BankName,
 		iss.BankIban, iss.FooterNotes, iss.LegalTerms, iss.IsActive, now, id,
 	)
