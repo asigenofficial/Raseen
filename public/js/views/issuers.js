@@ -12,6 +12,10 @@ import {
 const CITIES = ['الرياض', 'جدة', 'مكة المكرمة', 'المدينة المنورة', 'الدمام', 'الخبر', 'الظهران', 'بريدة', 'أبها', 'تبوك', 'حائل', 'نجران', 'جيزان', 'الطائف', 'الأحساء', 'الجبيل', 'ينبع'];
 
 function issuerForm(data = {}) {
+  if (typeof data.qr_settings === 'string') {
+    try { data = { ...data, qr_settings: JSON.parse(data.qr_settings || '{}') }; }
+    catch { data = { ...data, qr_settings: {} }; }
+  }
   const v = (k, def = '') => (data[k] === undefined || data[k] === null ? def : data[k]);
   return html`
     <div class="tabs" id="iss-tabs">
@@ -182,6 +186,7 @@ function openIssuerModal(issuer, onSaved) {
     const values = formValues(m.body);
     if (!values.code || !values.name_ar) return toastErr('كود الشركة والاسم بالعربية مطلوبان');
     values.is_active = values.is_active ? 1 : 0;
+    values.print_settings = issuer?.print_settings || '{}';
     values.qr_settings = JSON.stringify({
       show_a4: $('#qr_show_a4', m.body) ? $('#qr_show_a4', m.body).checked : true,
       show_thermal: $('#qr_show_thermal', m.body) ? $('#qr_show_thermal', m.body).checked : true,

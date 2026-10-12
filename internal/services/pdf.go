@@ -20,10 +20,15 @@ var pdfMu sync.Mutex
 var ErrNoBrowser = errors.New("لم يتم العثور على متصفح Chromium أو Chrome لتحويل المستند إلى PDF")
 
 var documentFontData string
+var documentBoldFontData string
 
 // SetDocumentFont supplies the same bundled font used in HTML previews.
-func SetDocumentFont(font []byte) {
+func SetDocumentFont(font []byte, bold ...[]byte) {
 	documentFontData = base64.StdEncoding.EncodeToString(font)
+	documentBoldFontData = ""
+	if len(bold) > 0 {
+		documentBoldFontData = base64.StdEncoding.EncodeToString(bold[0])
+	}
 }
 
 // FindAvailableBrowser locates Edge, Chrome, or Chromium on the host system (Windows / Linux / Mac)
@@ -93,7 +98,12 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 	}
 	a4Style := `<style>@page { size: A4 ` + orientation + ` !important; }</style>`
 	if documentFontData != "" {
-		a4Style += `<style data-pdf-document-font>@font-face { font-family: 'Raseen Document'; src: url('data:font/ttf;base64,` + documentFontData + `') format('truetype'); font-weight: 100 900; } body, body * { font-family: 'Raseen Document', Tahoma, Arial, sans-serif !important; }</style>`
+		// Static faces let Chromium embed compact font subsets instead of Type3 glyph drawings.
+		a4Style += `<style data-pdf-document-font>@font-face { font-family: 'Raseen PDF'; src: url('data:font/ttf;base64,` + documentFontData + `') format('truetype'); font-weight: 100 500; }`
+		if documentBoldFontData != "" {
+			a4Style += `@font-face { font-family: 'Raseen PDF'; src: url('data:font/ttf;base64,` + documentBoldFontData + `') format('truetype'); font-weight: 600 900; }`
+		}
+		a4Style += `body, body * { font-family: 'Raseen PDF', Tahoma, Arial, sans-serif !important; }</style>`
 	}
 	if headEnd := strings.LastIndex(strings.ToLower(htmlContent), "</head>"); headEnd >= 0 {
 		htmlContent = htmlContent[:headEnd] + a4Style + "\n" + htmlContent[headEnd:]

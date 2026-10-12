@@ -239,14 +239,14 @@ func (s *ClientService) UpdateClient(id string, c *models.Client) error {
 
 	_, err = tx.Exec(`
 		UPDATE clients SET
-			name = ?, name_en = ?, phone = ?, mobile = ?, email = ?,
+			client_code = COALESCE(NULLIF(?, ''), client_code), name = ?, name_en = ?, phone = ?, mobile = ?, email = ?,
 			address = ?, building_no = ?, street = ?, district = ?,
 			city = ?, postal_code = ?, country = ?, tax_number = ?,
 			commercial_register = ?, client_type = ?, payment_terms_days = ?,
 			opening_balance = ?, credit_limit = ?, notes = ?, is_active = ?, updated_at = ?
 		WHERE id = ?
 	`,
-		c.Name, c.NameEn, c.Phone, c.Mobile, c.Email,
+		c.ClientCode, c.Name, c.NameEn, c.Phone, c.Mobile, c.Email,
 		c.Address, c.BuildingNo, c.Street, c.District,
 		c.City, c.PostalCode, c.Country, c.TaxNumber,
 		c.CommercialRegister, c.ClientType, c.PaymentTermsDays,

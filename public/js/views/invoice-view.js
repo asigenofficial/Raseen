@@ -154,9 +154,13 @@ export async function getInvoiceDocHtml({ invoice, issuer, client, printSettings
   return enforceLtrHeaderIcons(text);
 }
 
+const invoiceDownloadsInProgress = new Set();
+
 export async function downloadInvoicePdf({ invoice, issuer, client, printSettings = null, docHtml = null }) {
+  if (invoiceDownloadsInProgress.has(invoice.id)) return null;
   const invNum = (invoice.invoice_number || invoice.id || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
   const filename = clientPdfFilename('فاتورة', client?.name || invoice.client_name || invoice.buyer_name, invNum);
+  invoiceDownloadsInProgress.add(invoice.id);
   try {
     toastOk('جارٍ تجهيز نسخة PDF المحفوظة...');
     const cfg = printSettings || (typeof issuer?.print_settings === 'string'
@@ -169,6 +173,8 @@ export async function downloadInvoicePdf({ invoice, issuer, client, printSetting
     if (err?.name === 'AbortError') return null;
     toastErr(err.message || 'تعذر تجهيز PDF؛ تحقق من حالة PDF أعلى الفاتورة');
     return null;
+  } finally {
+    invoiceDownloadsInProgress.delete(invoice.id);
   }
 }
 
@@ -795,11 +801,13 @@ export async function render(view, ctx) {
     });
 
     $('#download-invoice', view).addEventListener('click', async (e) => {
-      e.target.disabled = true;
+      const btn = e.currentTarget;
+      if (btn.disabled) return;
+      btn.disabled = true;
       try {
         await downloadInvoicePdf({ invoice, issuer, client, printSettings: getPrintSettings(), docHtml: currentInvoiceDocHtml });
       } finally {
-        e.target.disabled = false;
+        btn.disabled = false;
       }
     });
 

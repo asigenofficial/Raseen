@@ -301,10 +301,10 @@ func (s *Server) failPDF(kind, id string, revision int64, renderErr error) {
 // Invalidate cached PDFs when their rendering rules change.
 func documentPDFStyleKey(kind, style string) string {
 	if kind == "voucher" {
-		return style + "|amount-grouping-v1"
+		return style + "|amount-grouping-v1|static-pdf-font-v1"
 	}
 	if kind == "invoice" {
-		return style + "|invoice-table-fill-v9"
+		return style + "|invoice-table-fill-v9|static-pdf-font-v1"
 	}
 	return style
 }

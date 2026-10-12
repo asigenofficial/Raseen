@@ -700,6 +700,7 @@ export async function render(view, ctx) {
     delegate(view, 'click', '[data-act]', async (e, btn) => {
       const id = btn.dataset.id;
       if (btn.dataset.act === 'download') {
+        if (btn.disabled) return;
         btn.disabled = true;
         try {
           const invoice = await api.get(`/api/invoices/${id}`);

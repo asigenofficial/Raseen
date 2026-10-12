@@ -128,7 +128,10 @@ func main() {
 			log.Fatalf("فشل تجهيز ملفات الواجهة: %v", subErr)
 		}
 	}
-	if font, err := fs.ReadFile(publicFS, "fonts/NotoSansArabic.ttf"); err == nil {
+	if font, err := fs.ReadFile(publicFS, "fonts/NotoSansArabic-Regular.ttf"); err == nil {
+		bold, _ := fs.ReadFile(publicFS, "fonts/NotoSansArabic-Bold.ttf")
+		services.SetDocumentFont(font, bold)
+	} else if font, err := fs.ReadFile(publicFS, "fonts/NotoSansArabic.ttf"); err == nil {
 		services.SetDocumentFont(font)
 	}
 
