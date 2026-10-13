@@ -43,7 +43,7 @@ tbody tr{break-inside:avoid}tfoot{display:table-footer-group}.footer{position:fi
       <tr><th rowspan="2">#</th><th rowspan="2">رقم المستند/قيد</th><th rowspan="2">التاريخ</th><th rowspan="2">النوع</th><th rowspan="2">البيان</th><th colspan="2">الحركة</th><th colspan="2">الرصيد</th></tr>
       <tr class="subhead"><th>مدين</th><th>دائن</th><th>مدين</th><th>دائن</th></tr>
     </thead>
-    <tbody>{{rows_html}}</tbody>
+    <tbody>{{rows_html}}</tbody><tfoot><tr class="statement-totals"><td colspan="5">الإجماليات والرصيد الختامي</td><td class="num">{{total_debit}}</td><td class="num">{{total_credit}}</td><td colspan="2" class="num">{{closing_balance}}</td></tr></tfoot>
   </table>
 </main>
 <footer class="footer">جوال: {{issuer_phone}} &nbsp; ــ &nbsp; {{issuer_address}} <span class="page-number"></span></footer>

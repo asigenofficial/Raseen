@@ -12,7 +12,14 @@ import {
 async function renderStatementFromStoredTemplate(statement, issuer, client) {
   let settings = issuer?.print_settings || {};
   if (typeof settings === 'string') { try { settings = JSON.parse(settings); } catch { settings = {}; } }
-  const template = await loadStoredTemplate('statements', settings.statement_template_style || '');
+  let template = await loadStoredTemplate('statements', settings.statement_template_style || '');
+  if (!template.includes('{{total_debit}}') && !template.includes('{{total_credit}}')) {
+    const tableEnd = template.lastIndexOf('</table>');
+    if (tableEnd >= 0) {
+      const totals = `<section class="statement-totals statement-summary">إجمالي المدين: {{total_debit}} — إجمالي الدائن: {{total_credit}} — الرصيد الختامي: {{closing_balance}}</section>`;
+      template = template.slice(0, tableEnd + 8) + totals + template.slice(tableEnd + 8);
+    }
+  }
   const opening = Number(statement.opening_balance_period || 0);
   const statementDate = (value) => String(value || '').slice(0, 10).replace(/-/g, '/');
   const openingRow = `<tr class="opening-row"><td></td><td></td><td>${esc(statementDate(statement.period?.from))}</td><td></td><td>الرصيد قبل</td><td>${esc(money(0))}</td><td>${esc(money(0))}</td><td>${esc(money(Math.max(0, opening)))}</td><td>${esc(money(Math.max(0, -opening)))}</td></tr>`;
@@ -26,7 +33,7 @@ async function renderStatementFromStoredTemplate(statement, issuer, client) {
     : `<div class="logo-placeholder">${esc(issuer?.name_ar || '')}</div>`;
   const issuerAddress = [issuer?.city, issuer?.district, issuer?.street, issuer?.building_no, issuer?.postal_code].filter(Boolean).join(' - ');
   const issuerAddressEn = issuer?.address_en || [issuer?.city_en, issuer?.district_en, issuer?.street_en, issuer?.building_no, issuer?.postal_code].filter(Boolean).join(' - ');
-  return fillStoredTemplate(template, {
+  const documentHtml = fillStoredTemplate(template, {
     issuer_name: issuer?.name_ar || '', client_name: client?.name || '',
     issuer_name_en: issuer?.name_en || '', issuer_tax: issuer?.tax_number || '',
     issuer_cr: issuer?.commercial_register || '', issuer_phone: issuer?.phone || '',
@@ -39,6 +46,22 @@ async function renderStatementFromStoredTemplate(statement, issuer, client) {
     total_debit: money(statement.totals?.debit || 0), total_credit: money(statement.totals?.credit || 0),
     closing_balance: money(statement.totals?.closing_balance || 0), rows_html: rows,
   }, ['rows_html', 'logo_html']);
+  const printStyle = `<style data-statement-print-layout>
+    @media print {
+      html, body, .sheet { height: auto !important; max-height: none !important; overflow: visible !important; }
+      .sheet { min-height: 0 !important; display: block !important; }
+      .company-head { position: static !important; break-inside: avoid; }
+      table { break-inside: auto; border-collapse: separate; border-spacing: 0; }
+      thead { display: table-header-group; }
+      thead th { position: static !important; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+      tfoot { display: table-row-group; break-inside: avoid; }
+      .footer { position: static !important; margin-top: 3mm; break-inside: avoid; }
+    }
+    .statement-totals { font-weight: bold; background: #edf3f6; }
+    .statement-summary { padding: 3mm; margin-top: 3mm; break-inside: avoid; }
+  </style>`;
+  return documentHtml.replace(/<\/head>/i, printStyle + '</head>');
 }
 
 export async function render(view, ctx) {
