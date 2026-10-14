@@ -176,7 +176,12 @@ func (s *IssuerService) CreateIssuer(iss *models.Issuer) error {
 	return err
 }
 
-func (s *IssuerService) UpdateIssuer(id string, iss *models.Issuer) error {
+func (s *IssuerService) UpdateIssuer(id string, iss *models.Issuer, refresh ...func(*sql.Tx) error) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	now := db.NowIso()
 	iss.UpdatedAt = now
 
@@ -189,7 +194,7 @@ func (s *IssuerService) UpdateIssuer(id string, iss *models.Issuer) error {
 		printJSON = "{}"
 	}
 
-	_, err := s.db.Exec(`
+	_, err = tx.Exec(`
 		UPDATE issuers SET
 			code = COALESCE(NULLIF(?, ''), code), name_ar = ?, name_en = ?, tax_number = ?, commercial_register = ?,
 			street = ?, street_en = ?, building_no = ?, district = ?, district_en = ?,
@@ -210,7 +215,15 @@ func (s *IssuerService) UpdateIssuer(id string, iss *models.Issuer) error {
 		iss.ZatcaPhase, qrJSON, printJSON, iss.BankName,
 		iss.BankIban, iss.FooterNotes, iss.LegalTerms, iss.IsActive, now, id,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	for _, update := range refresh {
+		if err = update(tx); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *IssuerService) DeleteIssuer(id string) error {

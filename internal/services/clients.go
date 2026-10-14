@@ -1,6 +1,7 @@
 package services
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"math"
@@ -227,7 +228,7 @@ func (s *ClientService) CreateClient(c *models.Client) error {
 	return tx.Commit()
 }
 
-func (s *ClientService) UpdateClient(id string, c *models.Client) error {
+func (s *ClientService) UpdateClient(id string, c *models.Client, refresh ...func(*sql.Tx) error) error {
 	now := db.NowIso()
 	c.UpdatedAt = now
 
@@ -278,6 +279,11 @@ func (s *ClientService) UpdateClient(id string, c *models.Client) error {
 		return err
 	}
 
+	for _, update := range refresh {
+		if err = update(tx); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 

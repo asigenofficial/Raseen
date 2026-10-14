@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"archive/zip"
 	"bytes"
 	"context"
@@ -716,11 +717,11 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, "بيانات المنشأة غير صالحة: "+err.Error())
 			return
 		}
-		if err := s.issuers.UpdateIssuer(id, &iss); err != nil {
+		if err := s.issuers.UpdateIssuer(id, &iss, func(tx *sql.Tx) error { return s.invoices.RefreshPartyInvoicesTx(tx, id, &iss, nil) }); err != nil {
 			s.err(w, 400, err.Error())
 			return
 		}
-		_ = s.dirtyIssuerDocuments(id)
+		s.wakePDFWorker()
 		s.json(w, 200, iss)
 	})
 
@@ -879,10 +880,11 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 400, "بيانات العميل غير صالحة: "+err.Error())
 			return
 		}
-		if err := s.clients.UpdateClient(id, &c); err != nil {
+		if err := s.clients.UpdateClient(id, &c, func(tx *sql.Tx) error { return s.invoices.RefreshPartyInvoicesTx(tx, id, nil, &c) }); err != nil {
 			s.err(w, 400, err.Error())
 			return
 		}
+		s.wakePDFWorker()
 		s.sync.Broadcast(services.SyncEvent{
 			Type:      "client:updated",
 			Entity:    "client",
