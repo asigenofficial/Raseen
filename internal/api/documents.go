@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -301,7 +302,7 @@ func (s *Server) failPDF(kind, id string, revision int64, renderErr error) {
 // Invalidate cached PDFs when their rendering rules change.
 func documentPDFStyleKey(kind, style string) string {
 	if kind == "voucher" {
-		return style + "|amount-grouping-v1|static-pdf-font-v1"
+		return style + "|amount-grouping-v2|static-pdf-font-v1"
 	}
 	if kind == "invoice" {
 		return style + "|invoice-table-fill-v9|static-pdf-font-v1"
@@ -350,6 +351,9 @@ func (s *Server) renderVoucherHTML(id, style string) (string, error) {
 		paidFor = "سداد فواتير رقم " + strings.Join(allocations, "، ")
 	}
 	amount := formatVoucherAmount(v.TotalAmount)
+	// Custom templates may use aliases or spaces around the monetary field.
+	amountTags := regexp.MustCompile(`(?i)\{\{\s*(amount|total_amount|grand_total|total|net_amount)\s*\}\}`)
+	tpl = amountTags.ReplaceAllStringFunc(tpl, func(string) string { return amount })
 	replacements := map[string]string{
 		"seller_name": issuer.NameAr, "seller_name_en": issuer.NameEn,
 		"seller_tax": issuer.TaxNumber, "seller_phone": issuer.Phone,
