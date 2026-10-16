@@ -646,6 +646,8 @@ export async function showVoucher(id, onChange) {
   let currentStyle = issuerPrintCfg.voucher_template_style || (availableTemplates[0]?.id || 'default');
 
   async function renderDoc(style) {
+    const rendered = await fetch(`/api/vouchers/${encodeURIComponent(voucher.id)}/render-html?style=${encodeURIComponent(style || '')}`, { credentials: 'same-origin', cache: 'no-store' });
+    if (rendered.ok) return rendered.text();
     let rawHtml = '';
     const targetTpl = availableTemplates.find((t) => t.id === style) || availableTemplates[0];
     if (targetTpl) {
@@ -1440,4 +1442,3 @@ export async function render(view, ctx) {
   draw();
   return () => { unsubSync(); };
 }
-

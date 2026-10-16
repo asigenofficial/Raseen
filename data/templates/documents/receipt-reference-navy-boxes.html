@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>سند قبض — شريط كحلي وخانات رسمية</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    * { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    html, body { margin: 0; padding: 0; background: #fff; color: #222; }
+    body { width: 190mm; margin: auto; font-family: Tahoma, Arial, sans-serif; font-size: 11px; }
+    .reference-voucher { border: 2px solid #d0d6dc; width: 100%; position: relative; padding: 0 3.5mm 10mm; break-inside: avoid; }
+    .navy-band { height: 8mm; margin: -2px calc(-3.5mm - 2px) 0; background: #203e60; }
+    .reference-head { display: grid; grid-template-columns: 1fr 30mm 1fr; gap: 5mm; min-height: 29mm; padding: 1mm 5mm 4mm; direction: rtl; border-bottom: 2px solid #d0d6dc; }
+    .seller-ar { text-align: right; font: 12px/1.7 'Times New Roman', serif; }
+    .seller-en { text-align: left; direction: ltr; font: 10px/1.7 Arial, sans-serif; }
+    .company-name { font-size: 14px; line-height: 1.5; margin-bottom: 1mm; overflow-wrap: anywhere; }
+    .seller-ar .company-name { font-size: 16px; }
+    .address { font-size: 9px; margin-bottom: 1.5mm; overflow-wrap: anywhere; }
+    .company-meta { font-size: 9px; margin-top: 1mm; }
+    .logo-slot { width: 30mm; height: 25mm; background: #fff; margin-top: -3mm; display: flex; align-items: center; justify-content: center; }
+    .logo-slot img, .logo-slot svg { width: auto !important; height: auto !important; max-width: 28mm !important; max-height: 24mm !important; object-fit: contain; }
+    .document-title { width: 66mm; margin: 2mm auto 4.5mm; padding: 2.5mm 0; background: #edf3fa; font: 17px/1.2 'Times New Roman', serif; text-align: center; }
+    .info-row { display: flex; justify-content: space-between; align-items: stretch; gap: 20mm; margin-bottom: 5.5mm; padding: 0 4mm 0 0; }
+    .document-meta { width: 70mm; border: 2px solid #d1d5dc; background: #f8f9fc; padding: 3mm 7mm; display: grid; grid-template-columns: 23mm 1fr; row-gap: 4mm; font: 12px/1.4 'Times New Roman', serif; align-content: center; }
+    .document-meta bdi { text-align: center; font: 11px/1.4 Arial, sans-serif; direction: ltr; }
+    .amount-box { width: 48mm; border: 2px solid #d1d5dc; background: #f8f9fc; }
+    .amount-label { height: 8mm; background: #e9f6ec; color: #54735c; font: 12px/8mm 'Times New Roman', serif; text-align: center; }
+    .amount-value { min-height: 15mm; padding: 3mm; display: flex; align-items: center; justify-content: space-around; gap: 2mm; font: 16px/1.4 Arial, sans-serif; }
+    .amount-value bdi { direction: ltr; white-space: nowrap; }
+    .sar-symbol { display: inline-flex; align-items: center; }
+    .sar-symbol svg { width: 5mm !important; height: 6mm !important; fill: currentColor; }
+    .detail-row { display: grid; grid-template-columns: 38mm 1fr; border: 2px solid #d1d5dc; background: #fcfcfd; margin: 0 4mm 2.5mm 0; min-height: 14mm; }
+    .detail-label { padding: 3.5mm 4mm; border-left: 2px solid #d1d5dc; text-align: center; font: 12px/1.5 'Times New Roman', serif; }
+    .detail-value { padding: 3.5mm 6mm; text-align: right; font: 13px/1.5 'Times New Roman', serif; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .words { min-height: 18mm; }
+    .words .detail-value { font-size: 11px; }
+    .reason { margin-top: 12mm; margin-bottom: 0; }
+    .signatures { display: flex; justify-content: space-between; gap: 25mm; padding: 0 16mm 0 10mm; margin-top: -6mm; position: relative; }
+    .signature { width: 56mm; padding: 2mm; border: 2px solid #d1d5dc; background: #f6f8fd; text-align: center; font: 12px/1.3 'Times New Roman', serif; }
+    @media screen { body { padding-top: 2mm; } }
+  </style>
+</head>
+<body>
+  <main class="reference-voucher">
+    <div class="navy-band"></div>
+    <header class="reference-head">
+      <div class="seller-ar">
+        <div class="company-name">{{seller_name}}</div>
+        <div class="address">{{seller_address}}</div>
+        <div class="company-meta">الرقم الضريبي: <bdi>{{seller_tax}}</bdi></div>
+        <div class="company-meta">السجل التجاري: <bdi>{{seller_cr}}</bdi></div>
+      </div>
+      <div class="logo-slot">{{logo}}</div>
+      <div class="seller-en" lang="en">
+        <div class="company-name">{{seller_name_en}}</div>
+        <div class="address">{{seller_meta_en}}</div>
+        <div class="company-meta">VAT: {{seller_tax}}</div>
+        <div class="company-meta">CR: {{seller_cr}}</div>
+      </div>
+    </header>
+    <h1 class="document-title">سند قبض</h1>
+    <div class="info-row">
+      <div class="document-meta"><span>رقم السند</span><bdi>{{voucher_number}}</bdi><span>التاريخ</span><bdi>{{voucher_date}}</bdi></div>
+      <div class="amount-box"><div class="amount-label">المبلغ</div><div class="amount-value"><bdi>{{total_amount}}</bdi><span class="sar-symbol">{{sar_symbol}}</span></div></div>
+    </div>
+    <div class="detail-row"><div class="detail-label">استلمنا من</div><div class="detail-value">{{buyer_name}}</div></div>
+    <div class="detail-row words"><div class="detail-label">مبلغ وقدره</div><div class="detail-value">{{amount_in_words}}</div></div>
+    <div class="detail-row reason"><div class="detail-label">وذلك مقابل</div><div class="detail-value">{{paid_for}}</div></div>
+    <div class="signatures"><div class="signature">المحاسب</div><div class="signature">أمين الصندوق</div></div>
+  </main>
+</body>
+</html>

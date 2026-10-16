@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>سند قبض — إطار مزدوج كلاسيكي</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    * { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    html, body { margin: 0; padding: 0; background: #fff; color: #111; }
+    body { width: 190mm; margin: auto; font-family: Tahoma, Arial, sans-serif; font-size: 11px; }
+    .reference-voucher { width: 100%; border: 3px double #383838; break-inside: avoid; }
+    .reference-head { height: 41mm; display: grid; grid-template-columns: 1fr 34mm 1fr; align-items: center; padding: 2mm 8mm; border-bottom: 4px double #383838; }
+    .seller { text-align: center; align-self: start; padding-top: 2mm; }
+    .seller-name { font: bold 23px/1.3 'Times New Roman', serif; margin-bottom: 2mm; overflow-wrap: anywhere; }
+    .seller-tax { font-weight: bold; direction: ltr; font-size: 12px; margin-bottom: 1mm; }
+    .seller-address { font: bold 12px/1.6 'Times New Roman', serif; overflow-wrap: anywhere; }
+    .serial { text-align: center; border: 1px solid #333; padding: 1mm 2mm; color: #c83732; font: bold 20px/1.25 Arial, sans-serif; direction: ltr; overflow-wrap: anywhere; }
+    .logo-slot { grid-column: 3; grid-row: 1; height: 32mm; width: 38mm; justify-self: end; display: flex; align-items: center; justify-content: center; }
+    .logo-slot img, .logo-slot svg { width: auto !important; height: auto !important; max-width: 35mm !important; max-height: 31mm !important; object-fit: contain; }
+    .voucher-content { padding: 5mm 3mm 4mm; }
+    .document-head { display: grid; grid-template-columns: 38mm 1fr 43mm; align-items: start; gap: 3mm; }
+    .amount-box { border: 2px solid #222; border-radius: 3mm; padding: 2mm 1mm; display: flex; justify-content: center; gap: 2mm; direction: rtl; white-space: nowrap; font: bold 16px/1.2 Arial, sans-serif; }
+    .amount-box bdi { direction: ltr; }
+    .document-title { text-align: center; padding-bottom: 1.5mm; border-bottom: 4px double #222; margin: 0 3mm; }
+    .document-title h1 { margin: 0; font: bold 20px/1.2 'Times New Roman', serif; }
+    .document-title div { font: bold 21px/1.25 Arial, sans-serif; white-space: nowrap; direction: ltr; }
+    .date { text-align: left; padding-top: 3mm; white-space: nowrap; font: bold 13px/1.4 Tahoma, sans-serif; }
+    .details { margin-top: 5mm; }
+    .detail-row { display: grid; grid-template-columns: 34mm 1fr; align-items: start; min-height: 7.7mm; gap: 4mm; font: bold 12px/1.6 'Times New Roman', serif; }
+    .detail-row .label { text-align: right; }
+    .detail-row .value { text-align: center; padding-inline: 5mm; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12mm; margin-top: 9mm; direction: rtl; }
+    .signature { text-align: center; }
+    .signature strong { display: block; font: bold 12px/1.1 'Times New Roman', serif; }
+    .signature span { display: block; font: bold 14px/1.1 Arial, sans-serif; direction: ltr; }
+    .signature-line { border-bottom: 1.5px solid #222; height: 11mm; margin: 0 3mm; }
+    .cashier { grid-column: 2; }
+    @media screen { body { padding-top: 2mm; } }
+  </style>
+</head>
+<body>
+  <main class="reference-voucher">
+    <header class="reference-head">
+      <div class="seller">
+        <div class="seller-name">{{seller_name}}</div>
+        <div class="seller-tax">{{seller_tax}}</div>
+        <div class="seller-address">{{seller_address}}</div>
+      </div>
+      <div class="serial"># {{voucher_number}}</div>
+      <div class="logo-slot">{{logo}}</div>
+    </header>
+    <section class="voucher-content">
+      <div class="document-head">
+        <div class="amount-box"><bdi>{{total_amount}}</bdi><span>ر.س</span></div>
+        <div class="document-title"><h1>ســنــد قــبــض</h1><div>Received Voucher</div></div>
+        <div class="date">التاريخ : <bdi>{{voucher_date}}</bdi></div>
+      </div>
+      <div class="details">
+        <div class="detail-row"><div class="label">استلمنا من</div><div class="value">{{buyer_name}}</div></div>
+        <div class="detail-row"><div class="label">مبلغًا وقدره</div><div class="value">{{amount_in_words}}</div></div>
+        <div class="detail-row"><div class="label">من خزينة / بنك</div><div class="value">{{payment_method}}</div></div>
+        <div class="detail-row"><div class="label">وذلك مقابل</div><div class="value">{{paid_for}}</div></div>
+      </div>
+      <div class="signatures">
+        <div class="signature"><strong>توقيع المستلم</strong><span>Received Sig.</span><div class="signature-line"></div></div>
+        <div class="signature cashier"><strong>أمين الصندوق</strong><span>Cashier Sig.</span><div class="signature-line"></div></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

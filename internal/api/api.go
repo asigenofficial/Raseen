@@ -1687,6 +1687,17 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write(pdfBytes)
 	})
 
+	mux.HandleFunc("GET /api/vouchers/{id}/render-html", func(w http.ResponseWriter, r *http.Request) {
+		htmlDoc, err := s.renderVoucherHTML(r.PathValue("id"), r.URL.Query().Get("style"))
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write([]byte(htmlDoc))
+	})
+
 	mux.HandleFunc("GET /api/vouchers/{id}/pdf", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		id := r.PathValue("id")
