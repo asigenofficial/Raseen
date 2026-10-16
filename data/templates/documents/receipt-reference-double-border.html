@@ -9,8 +9,8 @@
     html, body { margin: 0; padding: 0; background: #fff; color: #111; }
     body { width: 190mm; margin: auto; font-family: Tahoma, Arial, sans-serif; font-size: 11px; }
     .reference-voucher { width: 100%; border: 3px double #383838; break-inside: avoid; }
-    .reference-head { height: 41mm; display: grid; grid-template-columns: 1fr 34mm 1fr; align-items: center; padding: 2mm 8mm; border-bottom: 4px double #383838; }
-    .seller { text-align: center; align-self: start; padding-top: 2mm; }
+    .reference-head { min-height: 41mm; display: grid; grid-template-columns: 1fr 34mm 1fr; align-items: center; padding: 2mm 8mm; border-bottom: 4px double #383838; }
+    .seller { text-align: right; align-self: start; padding-top: 2mm; margin-right: -3mm; padding-left: 3mm; }
     .seller-name { font: bold 23px/1.3 'Times New Roman', serif; margin-bottom: 2mm; overflow-wrap: anywhere; }
     .seller-tax { font-weight: bold; direction: ltr; font-size: 12px; margin-bottom: 1mm; }
     .seller-address { font: bold 12px/1.6 'Times New Roman', serif; overflow-wrap: anywhere; }
@@ -30,13 +30,13 @@
     .details { margin-top: 5mm; }
     .detail-row { display: grid; grid-template-columns: 34mm 1fr; align-items: start; min-height: 7.7mm; gap: 4mm; font: bold 12px/1.6 'Times New Roman', serif; }
     .detail-row .label { text-align: right; }
-    .detail-row .value { text-align: center; padding-inline: 5mm; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .detail-row .value { text-align: right; padding-inline: 5mm; overflow-wrap: anywhere; white-space: pre-wrap; }
     .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12mm; margin-top: 9mm; direction: rtl; }
     .signature { text-align: center; }
     .signature strong { display: block; font: bold 12px/1.1 'Times New Roman', serif; }
     .signature span { display: block; font: bold 14px/1.1 Arial, sans-serif; direction: ltr; }
     .signature-line { border-bottom: 1.5px solid #222; height: 11mm; margin: 0 3mm; }
-    .cashier { grid-column: 2; }
+    .cashier { grid-column: 3; }
     @media screen { body { padding-top: 2mm; } }
   </style>
 </head>

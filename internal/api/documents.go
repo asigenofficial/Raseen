@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -218,6 +219,7 @@ func (s *Server) currentPDF(kind, id string, styleOverride ...string) ([]byte, e
 		requestedStyle = styleOverride[0]
 	}
 	expectedStyle := s.pdfStyle(kind, id, requestedStyle)
+	expectedKey := s.documentPDFStyleKey(kind, expectedStyle)
 	var revision, rendered int64
 	var pdf []byte
 	var storedStyle string
@@ -240,10 +242,10 @@ func (s *Server) currentPDF(kind, id string, styleOverride ...string) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	if rendered == revision && len(pdf) > 0 && storedStyle == documentPDFStyleKey(kind, expectedStyle) {
+	if rendered == revision && len(pdf) > 0 && storedStyle == expectedKey {
 		return pdf, nil
 	}
-	if rendered == revision && storedStyle != documentPDFStyleKey(kind, expectedStyle) {
+	if rendered == revision && storedStyle != expectedKey {
 		var issuerID string
 		_ = s.db.QueryRow("SELECT issuer_id FROM document_pdfs WHERE kind=? AND document_id=?", kind, id).Scan(&issuerID)
 		if err := s.dirtyDocument(kind, id, issuerID); err != nil {
@@ -260,6 +262,7 @@ func (s *Server) renderAndSavePDF(kind, id string, revision int64, suppliedHTML 
 		style = styleOverride[0]
 	}
 	style = s.pdfStyle(kind, id, style)
+	renderKey := s.documentPDFStyleKey(kind, style)
 	htmlDoc := suppliedHTML
 	var err error
 	if strings.TrimSpace(htmlDoc) == "" {
@@ -283,7 +286,7 @@ func (s *Server) renderAndSavePDF(kind, id string, revision int64, suppliedHTML 
 		return nil, err
 	}
 	result, err := s.db.Exec(`UPDATE document_pdfs SET pdf=?,rendered_revision=?,style=?,status='READY',error='',updated_at=?
-		WHERE kind=? AND document_id=? AND revision=?`, pdf, revision, documentPDFStyleKey(kind, style), db.NowIso(), kind, id, revision)
+		WHERE kind=? AND document_id=? AND revision=?`, pdf, revision, renderKey, db.NowIso(), kind, id, revision)
 	if err != nil {
 		return nil, err
 	}
@@ -300,9 +303,16 @@ func (s *Server) failPDF(kind, id string, revision int64, renderErr error) {
 }
 
 // Invalidate cached PDFs when their rendering rules change.
-func documentPDFStyleKey(kind, style string) string {
+func (s *Server) documentPDFStyleKey(kind, style string) string {
 	if kind == "voucher" {
-		return style + "|amount-grouping-v2|static-pdf-font-v1"
+		key := style + "|amount-grouping-v3|static-pdf-font-v1"
+		if s.templates != nil {
+			if template, err := s.templates.RenderTemplateHTML(style); err == nil {
+				checksum := sha256.Sum256([]byte(template))
+				key += fmt.Sprintf("|template-%x", checksum[:16])
+			}
+		}
+		return key
 	}
 	if kind == "invoice" {
 		return style + "|invoice-table-fill-v9|static-pdf-font-v1"

@@ -11,11 +11,11 @@
     .reference-voucher { border: 2px solid #d0d6dc; width: 100%; position: relative; padding: 0 3.5mm 10mm; break-inside: avoid; }
     .navy-band { height: 8mm; margin: -2px calc(-3.5mm - 2px) 0; background: #203e60; }
     .reference-head { display: grid; grid-template-columns: 1fr 30mm 1fr; gap: 5mm; min-height: 29mm; padding: 1mm 5mm 4mm; direction: rtl; border-bottom: 2px solid #d0d6dc; }
-    .seller-ar { text-align: right; font: 12px/1.7 'Times New Roman', serif; }
-    .seller-en { text-align: left; direction: ltr; font: 10px/1.7 Arial, sans-serif; }
+    .seller-ar { min-width: 0; text-align: right; font: 12px/1.7 'Times New Roman', serif; }
+    .seller-en { min-width: 0; text-align: left; direction: ltr; font: 10px/1.7 Arial, sans-serif; }
     .company-name { font-size: 14px; line-height: 1.5; margin-bottom: 1mm; overflow-wrap: anywhere; }
     .seller-ar .company-name { font-size: 16px; }
-    .address { font-size: 9px; margin-bottom: 1.5mm; overflow-wrap: anywhere; }
+    .address { font-size: 9px; margin-bottom: 1.5mm; white-space: normal; overflow-wrap: anywhere; word-break: normal; height: auto; max-height: none; overflow: visible; }
     .company-meta { font-size: 9px; margin-top: 1mm; }
     .logo-slot { width: 30mm; height: 25mm; background: #fff; margin-top: -3mm; display: flex; align-items: center; justify-content: center; }
     .logo-slot img, .logo-slot svg { width: auto !important; height: auto !important; max-width: 28mm !important; max-height: 24mm !important; object-fit: contain; }
@@ -53,7 +53,7 @@
       <div class="logo-slot">{{logo}}</div>
       <div class="seller-en" lang="en">
         <div class="company-name">{{seller_name_en}}</div>
-        <div class="address">{{seller_meta_en}}</div>
+        <div class="address">{{seller_address_en}}</div>
         <div class="company-meta">VAT: {{seller_tax}}</div>
         <div class="company-meta">CR: {{seller_cr}}</div>
       </div>
@@ -68,5 +68,11 @@
     <div class="detail-row reason"><div class="detail-label">وذلك مقابل</div><div class="detail-value">{{paid_for}}</div></div>
     <div class="signatures"><div class="signature">المحاسب</div><div class="signature">أمين الصندوق</div></div>
   </main>
+  <script>
+    // Leave the address empty when a renderer does not supply its field.
+    document.querySelectorAll('.address').forEach((address) => {
+      if (/^\s*\{\{/.test(address.textContent)) address.textContent = '';
+    });
+  </script>
 </body>
 </html>
