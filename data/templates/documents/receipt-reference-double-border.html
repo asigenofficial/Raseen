@@ -21,6 +21,8 @@
     .document-head { display: grid; grid-template-columns: 38mm 1fr 43mm; align-items: start; gap: 3mm; }
     .amount-box { border: 2px solid #222; border-radius: 3mm; padding: 2mm 1mm; display: flex; justify-content: center; gap: 2mm; direction: rtl; white-space: nowrap; font: bold 16px/1.2 Arial, sans-serif; }
     .amount-box bdi { direction: ltr; }
+    .amount-box .sar-symbol { display: inline-flex; align-items: center; }
+    .amount-box .sar-symbol svg { width: .85em !important; height: 1em !important; fill: currentColor; }
     .document-title { text-align: center; padding-bottom: 1.5mm; border-bottom: 4px double #222; margin: 0 3mm; }
     .document-title h1 { margin: 0; font: bold 20px/1.2 'Times New Roman', serif; }
     .document-title div { font: bold 21px/1.25 Arial, sans-serif; white-space: nowrap; direction: ltr; }
@@ -51,7 +53,7 @@
     </header>
     <section class="voucher-content">
       <div class="document-head">
-        <div class="amount-box"><bdi>{{total_amount}}</bdi><span>ر.س</span></div>
+        <div class="amount-box"><bdi>{{total_amount}}</bdi><span class="sar-symbol">{{sar_symbol}}</span></div>
         <div class="document-title"><h1>ســنــد قــبــض</h1><div>Received Voucher</div></div>
         <div class="date">التاريخ : <bdi>{{voucher_date}}</bdi></div>
       </div>
