@@ -305,7 +305,7 @@ func (s *Server) failPDF(kind, id string, revision int64, renderErr error) {
 // Invalidate cached PDFs when their rendering rules change.
 func (s *Server) documentPDFStyleKey(kind, style string) string {
 	if kind == "voucher" {
-		key := style + "|amount-grouping-v3|static-pdf-font-v1"
+		key := style + "|amount-grouping-v3|static-pdf-font-v1|address-v2"
 		if s.templates != nil {
 			if template, err := s.templates.RenderTemplateHTML(style); err == nil {
 				checksum := sha256.Sum256([]byte(template))
@@ -361,13 +361,30 @@ func (s *Server) renderVoucherHTML(id, style string) (string, error) {
 		paidFor = "سداد فواتير رقم " + strings.Join(allocations, "، ")
 	}
 	amount := formatVoucherAmount(v.TotalAmount)
+	addressParts := make([]string, 0, 5)
+	for _, part := range []string{issuer.City, issuer.District, issuer.Street, issuer.BuildingNo, issuer.PostalCode} {
+		if part = strings.TrimSpace(part); part != "" {
+			addressParts = append(addressParts, part)
+		}
+	}
+	addressEn := strings.TrimSpace(issuer.AddressEn)
+	if addressEn == "" {
+		parts := make([]string, 0, 5)
+		for _, part := range []string{issuer.CityEn, issuer.DistrictEn, issuer.StreetEn, issuer.BuildingNo, issuer.PostalCode} {
+			if part = strings.TrimSpace(part); part != "" {
+				parts = append(parts, part)
+			}
+		}
+		addressEn = strings.Join(parts, " - ")
+	}
 	// Custom templates may use aliases or spaces around the monetary field.
 	amountTags := regexp.MustCompile(`(?i)\{\{\s*(amount|total_amount|grand_total|total|net_amount)\s*\}\}`)
 	tpl = amountTags.ReplaceAllStringFunc(tpl, func(string) string { return amount })
 	replacements := map[string]string{
 		"seller_name": issuer.NameAr, "seller_name_en": issuer.NameEn,
 		"seller_tax": issuer.TaxNumber, "seller_phone": issuer.Phone,
-		"seller_cr": issuer.CommercialRegister, "seller_address": issuer.Street,
+		"seller_cr": issuer.CommercialRegister, "seller_address": strings.Join(addressParts, " - "),
+		"seller_address_en": addressEn,
 		"seller_meta_ar": issuer.NameAr, "seller_meta_en": issuer.NameEn,
 		"buyer_name": v.ClientName, "client_name": v.ClientName, "received_from": v.ClientName,
 		"voucher_number": v.VoucherNumber, "invoice_number": v.VoucherNumber,
