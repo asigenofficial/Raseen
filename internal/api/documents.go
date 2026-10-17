@@ -315,7 +315,7 @@ func (s *Server) documentPDFStyleKey(kind, style string) string {
 		return key
 	}
 	if kind == "invoice" {
-		return style + "|invoice-table-fill-v9|static-pdf-font-v1"
+		return style + "|invoice-table-fill-v10|static-pdf-font-v1"
 	}
 	return style
 }

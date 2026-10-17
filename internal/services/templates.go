@@ -981,6 +981,8 @@ svg.sar-sym-svg, svg.sar-sym, .sar-sym svg, .currency-symbol svg {
 }
 .items-main-table, .items-table, .items-table-wrapper table,
 .totals-table, .totals-box-table { font-size: 10.5px; }
+tr[data-invoice-filler], tr[data-invoice-filler] td { background: transparent !important; }
+tr[data-invoice-filler] td::before, tr[data-invoice-filler] td::after { content: none !important; display: none !important; }
 .footer-zone, .invoice-footer { font-size: 9.5px; }
 </style>`
 	if end := strings.LastIndex(strings.ToLower(html), "</head>"); end >= 0 {

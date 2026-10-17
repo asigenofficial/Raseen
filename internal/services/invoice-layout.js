@@ -15,9 +15,10 @@
       return headers.length >= 4 && headers.some(h => /الكمية|quantity|qty/.test(h)) && headers.some(h => /السعر|price/.test(h));
     });
     for (const table of tables) {
+      for (const oldFiller of table.querySelectorAll('tr[data-invoice-filler]')) oldFiller.remove();
       const rows = Array.from(table.tBodies).flatMap(body => Array.from(body.rows));
       if (!rows.length || rows.length > 15) continue;
-      const page = table.closest('[data-invoice-page],.invoice-container,.invoice-frame');
+      const page = table.closest('[data-invoice-page],.invoice-container,.invoice-frame,.sheet');
       if (!page || tables.filter(t => page.contains(t)).length !== 1) continue;
       const candidates = Array.from(page.querySelectorAll('.bottom-content-wrap,.bottom-wrap,.bottom-grid,.bottom-summary-grid,.bottom-layout,.bottom-layout-table,.summary-section,.summary,.totals-table,.totals-box-table,.invoice-page-label'));
       const bottom = candidates.find(el => !el.contains(table) && !table.contains(el) && (table.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING));
@@ -28,7 +29,11 @@
       if (!layout || !layout.contains(bottom)) continue;
       const set = (el, key, value) => el.style.setProperty(key, value, 'important');
       for (const row of rows) {
-        for (const cell of row.cells) set(cell, 'vertical-align', 'top');
+        set(row, 'height', 'auto');
+        for (const cell of row.cells) {
+          set(cell, 'vertical-align', 'top');
+          set(cell, 'height', 'auto');
+        }
       }
       set(page, 'display', 'flex');
       set(page, 'flex-direction', 'column');
@@ -47,6 +52,7 @@
         set(parent, 'flex-direction', 'column');
         set(parent, 'min-height', '0');
         set(branch, 'flex', '1 1 auto');
+        if (branch !== table) set(branch, 'margin-bottom', '0');
         for (const sibling of parent.children) {
           if (sibling !== branch) set(sibling, 'flex-shrink', '0');
         }
@@ -58,11 +64,40 @@
       set(bottomBranch, 'flex-shrink', '0');
       set(table, 'height', 'auto');
       set(table, 'flex', '0 0 auto');
+      set(table, 'margin-bottom', '0');
+      if (table.tHead) set(table.tHead, 'height', 'auto');
       const tableRect = table.getBoundingClientRect();
       const bottomRect = bottomBranch.getBoundingClientRect();
-      const gap = bottomRect.top - tableRect.bottom;
-      if (page.hasAttribute('data-invoice-page') && gap > 1) set(table, 'height', (tableRect.height + gap) + 'px');
-      if (table.tHead) set(table.tHead, 'height', '1px');
+      const gap = Math.floor(bottomRect.top - tableRect.bottom);
+      if (gap > 1) {
+        const lastRow = rows[rows.length - 1];
+        const tbody = lastRow.parentElement;
+        const colCount = lastRow.cells.length || (table.tHead && table.tHead.rows[0] ? table.tHead.rows[0].cells.length : 1);
+        const filler = document.createElement('tr');
+        filler.setAttribute('data-invoice-filler', '1');
+        set(filler, 'height', gap + 'px');
+        set(filler, 'background', 'transparent');
+        for (let i = 0; i < colCount; i++) {
+          const td = document.createElement('td');
+          const refCell = lastRow.cells[i];
+          if (refCell) {
+            const cs = getComputedStyle(refCell);
+            if (cs.borderLeftWidth !== '0px' && cs.borderLeftStyle !== 'none') {
+              set(td, 'border-left', `${cs.borderLeftWidth} ${cs.borderLeftStyle} ${cs.borderLeftColor}`);
+            }
+            if (cs.borderRightWidth !== '0px' && cs.borderRightStyle !== 'none') {
+              set(td, 'border-right', `${cs.borderRightWidth} ${cs.borderRightStyle} ${cs.borderRightColor}`);
+            }
+          }
+          set(td, 'border-top', 'none');
+          set(td, 'padding-top', '0');
+          set(td, 'padding-bottom', '0');
+          set(td, 'height', gap + 'px');
+          set(td, 'background', 'transparent');
+          filler.appendChild(td);
+        }
+        tbody.appendChild(filler);
+      }
       page.dataset.invoiceLayout = 'fitted';
     }
   }
