@@ -7,7 +7,7 @@ import * as router from '../core/router.js';
 
 const syncNotify = (entity, action, payload) => (typeof store.syncNotify === 'function' ? store.syncNotify(entity, action, payload) : null);
 import {
-  html, raw, esc, money, toNum, today, nowTime, toastOk, toastErr,
+  html, raw, esc, money, toNum, today, nowTime, roundDec4, roundHalfUp2, toastOk, toastErr,
   $, $$, delegate, modal, formValues, confirmDialog, icon, generateNextItemCode,
 } from '../core/util.js';
 
@@ -18,11 +18,13 @@ const emptyLine = () => ({
 });
 
 function lineTotals(line, percent = 0) {
-  const gross = Math.round(line.quantity * line.unit_price * 100) / 100;
-  const discount = line.discount || Math.round(gross * percent) / 100;
-  const taxable = Math.max(0, Math.round((gross - discount) * 100) / 100);
-  const tax = Math.round(taxable * (line.tax_rate / 100) * 100) / 100;
-  return { gross, taxable, tax, total: Math.round((taxable + tax) * 100) / 100 };
+  const gross = roundHalfUp2(line.quantity * line.unit_price);
+  const discount = line.discount || roundHalfUp2(gross * (percent / 100));
+  const taxable = Math.max(0, roundHalfUp2(gross - discount));
+  // احتساب ضريبة الصنف بدقة Decimal(4) بدون تقريب داخلي، وتجميعها للمجموع النهائي
+  const taxDec4 = roundDec4(taxable * (line.tax_rate / 100));
+  const tax = roundHalfUp2(taxDec4);
+  return { gross, taxable, taxDec4, tax, total: roundHalfUp2(taxable + tax) };
 }
 
 const DRAFT_KEY = 'zs.invoice_draft';
@@ -194,16 +196,24 @@ export async function render(view, ctx) {
   if (state.lines[0].tax_rate === undefined) state.lines[0].tax_rate = defaultRate();
 
   const totals = () => {
-    let subtotal = 0; let discount = 0; let taxable = 0; let tax = 0;
+    let subtotal = 0; let discount = 0; let taxable = 0; let taxDec4 = 0;
     for (const l of state.lines) {
       const t = lineTotals(l, state.header_discount_percent);
       subtotal += t.gross;
       discount += t.gross - t.taxable;
       taxable += t.taxable;
-      tax += t.tax;
+      taxDec4 += t.taxDec4;
     }
-    const round = (n) => Math.round(n * 100) / 100;
-    return { subtotal: round(subtotal), discount: round(discount), taxable: round(taxable), tax: round(tax), grand: round(taxable + tax) };
+    const taxableRounded = roundHalfUp2(taxable);
+    // التقريب الرياضي الطبيعي (Round Half Up) إلى خانتين عشريتين فقط عند عرض المجموع النهائي للضريبة
+    const taxRounded = roundHalfUp2(roundDec4(taxDec4));
+    return {
+      subtotal: roundHalfUp2(subtotal),
+      discount: roundHalfUp2(discount),
+      taxable: taxableRounded,
+      tax: taxRounded,
+      grand: roundHalfUp2(taxableRounded + taxRounded),
+    };
   };
 
   const linesHtml = () => state.lines.map((l, i) => {

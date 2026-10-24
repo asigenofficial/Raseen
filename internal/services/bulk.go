@@ -216,6 +216,7 @@ func (s *BulkService) DeleteDraft(id string) error {
 }
 
 type CustomItemInput struct {
+	ID        *string `json:"id,omitempty"`
 	NameAr    string  `json:"name_ar"`
 	ItemCode  string  `json:"item_code"`
 	Unit      string  `json:"unit"`
@@ -463,6 +464,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 				autoCodeIdx++
 			}
 			availableItems = append(availableItems, ItemCandidate{
+				ID:        ci.ID,
 				NameAr:    ci.NameAr,
 				ItemCode:  code,
 				Unit:      ci.Unit,
@@ -510,6 +512,12 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		return nil, errors.New("حدود عدد البنود غير صالحة أو تتجاوز حجم الدفعة المسموح")
 	}
 	maxItems = min(maxItems, len(availableItems))
+	minRequiredItems := minItems
+	if req.MinItems == 4 && req.MaxItems == 6 && req.Count > 0 && len(availableItems) > req.Count*maxItems {
+		neededPerInv := (len(availableItems) + req.Count - 1) / req.Count
+		maxItems = min(15, min(len(availableItems), max(maxItems, neededPerInv+1)))
+		minItems = min(maxItems, max(minItems, neededPerInv-1))
+	}
 
 	minQty := req.MinQty
 	if minQty <= 0 {
@@ -622,7 +630,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 	dateTimes := make([]invDateTime, req.Count)
 	for i := 0; i < req.Count; i++ {
 		var dayIndex int
-		if req.DistributionMode == "uniform" || req.DistributionMode == "balanced" {
+		if distMode == "uniform" || distMode == "balanced" {
 			dayIndex = i * len(days) / req.Count
 		} else {
 			dayIndex = rng.Intn(len(days))
@@ -653,16 +661,61 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 	invoices := make([]map[string]any, 0, req.Count)
 	var totalSubtotal, totalDiscount, totalTax, totalGrand float64
 
+	usageCount := make([]int, len(availableItems))
+	seqCursor := 0
+
+	minimumCost := func(it ItemCandidate) int64 {
+		price := it.SalePrice
+		if price <= 0 {
+			price = 100
+		}
+		gross := models.MulQty(minQty, models.ToMinor(price))
+		return gross + models.Pct(gross, it.TaxRate)
+	}
+	maxLineCost := func(it ItemCandidate) float64 {
+		price := it.SalePrice
+		if price <= 0 {
+			price = 100
+		}
+		return maxQty * price * (1 + it.TaxRate/100) * (1 + req.PriceJitter/100)
+	}
+
 	for i := 0; i < req.Count; i++ {
 		invDate := dateTimes[i].DateStr
 		invTime := dateTimes[i].TimeStr
 
-		linesCount := minItems + rng.Intn(maxItems-minItems+1)
+		unusedCount := 0
+		for _, u := range usageCount {
+			if u == 0 {
+				unusedCount++
+			}
+		}
+		remInvoices := req.Count - i
+		effectiveMin := minItems
+		if unusedCount > 0 && remInvoices > 0 {
+			needed := (unusedCount + remInvoices - 1) / remInvoices
+			if needed > effectiveMin {
+				effectiveMin = min(maxItems, needed)
+			}
+		}
+		linesCount := effectiveMin + rng.Intn(maxItems-effectiveMin+1)
 
 		lines := make([]map[string]any, 0, linesCount)
 		var invSubtotal, invDiscount, invTax, invTotal float64
+		var invSubtotalMinor, invDiscountMinor, invTaxableMinor, invTaxDec4 int64
 
-		perm := rng.Perm(len(availableItems))
+		order := make([]int, len(availableItems))
+		if distMode == "sequential" {
+			for k := range order {
+				order[k] = (seqCursor + k) % len(availableItems)
+			}
+		} else {
+			order = rng.Perm(len(availableItems))
+		}
+		slices.SortStableFunc(order, func(a, b int) int {
+			return usageCount[a] - usageCount[b]
+		})
+
 		invTargetMinor := int64(0)
 		if req.TargetTotal > 0 {
 			if i == req.Count-1 {
@@ -673,62 +726,201 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 			}
 		}
 
-		selected := make([]ItemCandidate, linesCount)
-		for l := range selected {
-			if distMode == "sequential" {
-				selected[l] = availableItems[(i*linesCount+l)%len(availableItems)]
-			} else {
-				selected[l] = availableItems[perm[l]]
-			}
-		}
+		var selected []ItemCandidate
 		var targetQuantities []float64
 		if invTargetMinor > 0 {
-			minimumCost := func(it ItemCandidate) int64 {
-				price := it.SalePrice
-				if price <= 0 {
-					price = 100
-				}
-				gross := models.MulQty(minQty, models.ToMinor(price))
-				return gross + models.Pct(gross, it.TaxRate)
-			}
+			selectedIdx := make([]int, 0, linesCount)
+			inSelected := make([]bool, len(availableItems))
 			var minimumTotal int64
-			for _, it := range selected {
-				minimumTotal += minimumCost(it)
+
+			for _, idx := range order {
+				if len(selectedIdx) == linesCount {
+					break
+				}
+				cost := minimumCost(availableItems[idx])
+				if cost > invTargetMinor {
+					continue
+				}
+				selectedIdx = append(selectedIdx, idx)
+				inSelected[idx] = true
+				minimumTotal += cost
 			}
-			if minimumTotal > invTargetMinor {
-				// Start with the cheapest items to fit as many distinct items as possible.
-				slices.SortStableFunc(perm, func(a, b int) int {
-					return int(minimumCost(availableItems[a]) - minimumCost(availableItems[b]))
-				})
-				selected, minimumTotal = selected[:0], 0
-				for _, index := range perm {
-					cost := minimumCost(availableItems[index])
-					if len(selected) == linesCount || minimumTotal+cost > invTargetMinor {
+
+			for minimumTotal > invTargetMinor && len(selectedIdx) > 0 {
+				maxPos := 0
+				maxCost := minimumCost(availableItems[selectedIdx[0]])
+				for pos := 1; pos < len(selectedIdx); pos++ {
+					if c := minimumCost(availableItems[selectedIdx[pos]]); c > maxCost {
+						maxCost = c
+						maxPos = pos
+					}
+				}
+				excess := minimumTotal - invTargetMinor
+				curUsage := usageCount[selectedIdx[maxPos]]
+				allowHigherUsage := len(selectedIdx) <= minRequiredItems
+
+				bestCand := -1
+				for _, candIdx := range order {
+					if inSelected[candIdx] {
+						continue
+					}
+					if !allowHigherUsage && usageCount[candIdx] > curUsage {
 						break
 					}
-					selected = append(selected, availableItems[index])
-					minimumTotal += cost
+					candCost := minimumCost(availableItems[candIdx])
+					if candCost >= maxCost {
+						continue
+					}
+					if maxCost-candCost >= excess {
+						bestCand = candIdx
+						break
+					}
 				}
-				if len(selected) < minItems {
-					return nil, fmt.Errorf("مبلغ الفاتورة %d لا يكفي للحد الأدنى من الأصناف والكميات؛ خفّض الحدود أو ارفع المبلغ", i+1)
+
+				if bestCand < 0 {
+					var bestCost int64
+					bestUsage := int(^uint(0) >> 1)
+					for _, candIdx := range order {
+						if inSelected[candIdx] {
+							continue
+						}
+						if !allowHigherUsage && usageCount[candIdx] > curUsage {
+							break
+						}
+						candCost := minimumCost(availableItems[candIdx])
+						if candCost >= maxCost {
+							continue
+						}
+						u := usageCount[candIdx]
+						if bestCand < 0 || u < bestUsage || (u == bestUsage && candCost < bestCost) {
+							bestCand = candIdx
+							bestUsage = u
+							bestCost = candCost
+						}
+					}
 				}
-				rng.Shuffle(len(selected), func(a, b int) { selected[a], selected[b] = selected[b], selected[a] })
-				linesCount = len(selected)
+
+				if bestCand >= 0 {
+					oldIdx := selectedIdx[maxPos]
+					inSelected[oldIdx] = false
+					inSelected[bestCand] = true
+					selectedIdx[maxPos] = bestCand
+					minimumTotal += minimumCost(availableItems[bestCand]) - maxCost
+				} else {
+					oldIdx := selectedIdx[maxPos]
+					inSelected[oldIdx] = false
+					minimumTotal -= maxCost
+					selectedIdx = slices.Delete(selectedIdx, maxPos, maxPos+1)
+				}
 			}
-			var maximumTotal float64
-			for _, it := range selected {
-				price := it.SalePrice
-				if price <= 0 {
-					price = 100
+
+			// Top up with additional unused/least-used items that fit in remaining budget
+			if len(selectedIdx) < linesCount && minimumTotal < invTargetMinor {
+				for _, candIdx := range order {
+					if len(selectedIdx) == linesCount {
+						break
+					}
+					if inSelected[candIdx] {
+						continue
+					}
+					candCost := minimumCost(availableItems[candIdx])
+					if minimumTotal+candCost <= invTargetMinor {
+						selectedIdx = append(selectedIdx, candIdx)
+						inSelected[candIdx] = true
+						minimumTotal += candCost
+					}
 				}
-				maximumTotal += maxQty * price * (1 + it.TaxRate/100) * (1 + req.PriceJitter/100)
+			}
+
+			if len(selectedIdx) < minRequiredItems {
+				return nil, fmt.Errorf("مبلغ الفاتورة %d لا يكفي للحد الأدنى من الأصناف والكميات؛ خفّض الحدود أو ارفع المبلغ", i+1)
+			}
+
+			var maximumTotal float64
+			for _, idx := range selectedIdx {
+				maximumTotal += maxLineCost(availableItems[idx])
+			}
+			for models.ToMajor(invTargetMinor) > maximumTotal+0.01 && len(selectedIdx) < maxItems {
+				added := false
+				for _, candIdx := range order {
+					if inSelected[candIdx] {
+						continue
+					}
+					candCost := minimumCost(availableItems[candIdx])
+					if minimumTotal+candCost <= invTargetMinor {
+						selectedIdx = append(selectedIdx, candIdx)
+						inSelected[candIdx] = true
+						minimumTotal += candCost
+						maximumTotal += maxLineCost(availableItems[candIdx])
+						added = true
+						break
+					}
+				}
+				if !added {
+					break
+				}
+			}
+			for models.ToMajor(invTargetMinor) > maximumTotal+0.01 && len(selectedIdx) > 0 {
+				minPos := 0
+				minMaxLine := maxLineCost(availableItems[selectedIdx[0]])
+				for pos := 1; pos < len(selectedIdx); pos++ {
+					if m := maxLineCost(availableItems[selectedIdx[pos]]); m < minMaxLine {
+						minMaxLine = m
+						minPos = pos
+					}
+				}
+				oldIdx := selectedIdx[minPos]
+				oldMinCost := minimumCost(availableItems[oldIdx])
+				bestCand := -1
+				for _, candIdx := range order {
+					if inSelected[candIdx] {
+						continue
+					}
+					if maxLineCost(availableItems[candIdx]) <= minMaxLine {
+						continue
+					}
+					if minimumTotal-oldMinCost+minimumCost(availableItems[candIdx]) <= invTargetMinor {
+						bestCand = candIdx
+						break
+					}
+				}
+				if bestCand < 0 {
+					break
+				}
+				inSelected[oldIdx] = false
+				inSelected[bestCand] = true
+				selectedIdx[minPos] = bestCand
+				minimumTotal += minimumCost(availableItems[bestCand]) - oldMinCost
+				maximumTotal += maxLineCost(availableItems[bestCand]) - minMaxLine
 			}
 			if models.ToMajor(invTargetMinor) > maximumTotal+0.01 {
 				return nil, fmt.Errorf("مبلغ الفاتورة %d يتجاوز ما تسمح به أسعار الأصناف وحدود الكميات؛ ارفع الحد الأعلى للكميات أو عدد الأصناف", i+1)
 			}
+
+			selected = make([]ItemCandidate, len(selectedIdx))
+			for l, idx := range selectedIdx {
+				selected[l] = availableItems[idx]
+				usageCount[idx]++
+			}
+			if distMode == "sequential" {
+				seqCursor = (seqCursor + len(selectedIdx)) % len(availableItems)
+			} else {
+				rng.Shuffle(len(selected), func(a, b int) { selected[a], selected[b] = selected[b], selected[a] })
+			}
+			linesCount = len(selected)
 			targetQuantities = bulkTargetQuantities(selected, invTargetMinor, minQty, maxQty, req.FractionQty, rng)
 		} else if req.TargetTotal > 0 {
 			return nil, errors.New("المبلغ المستهدف لا يكفي لتوزيعه على الفواتير المحددة")
+		} else {
+			selectedIdx := order[:linesCount]
+			selected = make([]ItemCandidate, len(selectedIdx))
+			for l, idx := range selectedIdx {
+				selected[l] = availableItems[idx]
+				usageCount[idx]++
+			}
+			if distMode == "sequential" {
+				seqCursor = (seqCursor + len(selectedIdx)) % len(availableItems)
+			}
 		}
 		for l, it := range selected {
 
@@ -743,7 +935,8 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 
 			if invTargetMinor > 0 && isLastLine {
 				// Balance the final line so invoice approaches invTargetMinor
-				remainingInvMinor := invTargetMinor - models.ToMinor(invTotal)
+				prevTotalMinor := invTaxableMinor + models.RoundDec4ToMinor(invTaxDec4)
+				remainingInvMinor := invTargetMinor - prevTotalMinor
 				if remainingInvMinor > 0 {
 					remTaxable := float64(remainingInvMinor) / (1.0 + taxRate/100.0) / 100.0
 					if remTaxable > 0 {
@@ -755,7 +948,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 						}
 						qty = math.Max(minQty, math.Min(maxQty, qty))
 						// Keep the existing target-price adjustment within quantity limits.
-						price = math.Round((remTaxable/qty)*100) / 100
+						price = models.RoundMajor2(remTaxable / qty)
 						if math.Abs(price-it.SalePrice) > it.SalePrice*req.PriceJitter/100+0.005 {
 							// Keep catalog prices when the target is not representable within the configured range.
 							price = it.SalePrice
@@ -778,7 +971,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 					}
 				}
 				if req.PriceJitter > 0 {
-					price = math.Round(price*(1+(rng.Float64()*2-1)*req.PriceJitter/100)*100) / 100
+					price = models.RoundMajor2(price * (1 + (rng.Float64()*2-1)*req.PriceJitter/100))
 				}
 			}
 
@@ -789,34 +982,42 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 				discount = models.Pct(gross, req.DiscountMin+rng.Float64()*(req.DiscountMax-req.DiscountMin))
 			}
 			taxable := gross - discount
+			// احتساب ضريبة الصنف بدقة Decimal(4) بدون تقريب داخلي، وتجميعها للمجموع النهائي
+			lineTaxDec4 := models.PctDec4(taxable, taxRate)
+			lineTaxMinor := models.RoundDec4ToMinor(lineTaxDec4)
 			lineSub := models.ToMajor(taxable)
-			lineTax := models.ToMajor(models.Pct(taxable, taxRate))
-			lineTot := models.ToMajor(taxable + models.Pct(taxable, taxRate))
+			lineTax := models.ToMajor(lineTaxMinor)
+			lineTot := models.ToMajor(taxable + lineTaxMinor)
 
 			lines = append(lines, map[string]any{
-				"item_id":    it.ID,
-				"item_name":  it.NameAr,
-				"item_code":  it.ItemCode,
-				"unit":       it.Unit,
-				"quantity":   qty,
-				"unit_price": price,
-				"discount":   models.ToMajor(discount),
-				"tax_rate":   taxRate,
-				"taxable":    lineSub,
-				"tax_amount": lineTax,
-				"total_line": lineTot,
+				"item_id":         it.ID,
+				"item_name":       it.NameAr,
+				"item_code":       it.ItemCode,
+				"unit":            it.Unit,
+				"quantity":        qty,
+				"unit_price":      price,
+				"discount":        models.ToMajor(discount),
+				"tax_rate":        taxRate,
+				"taxable":         lineSub,
+				"tax_amount_dec4": models.ToMajor4(lineTaxDec4),
+				"tax_amount":      lineTax,
+				"total_line":      lineTot,
 			})
 
-			invSubtotal += models.ToMajor(gross)
-			invDiscount += models.ToMajor(discount)
-			invTax += lineTax
-			invTotal += lineTot
+			invSubtotalMinor += gross
+			invDiscountMinor += discount
+			invTaxableMinor += taxable
+			invTaxDec4 += lineTaxDec4
 		}
 
-		invSubtotal = math.Round(invSubtotal*100) / 100
-		invDiscount = math.Round(invDiscount*100) / 100
-		invTax = math.Round(invTax*100) / 100
-		invTotal = math.Round(invTotal*100) / 100
+		// التقريب الرياضي الطبيعي (Round Half Up) إلى خانتين عشريتين فقط عند المجموع النهائي للضريبة
+		invTaxMinor := models.RoundDec4ToMinor(invTaxDec4)
+		invTotalMinor := invTaxableMinor + invTaxMinor
+		invSubtotal = models.ToMajor(invSubtotalMinor)
+		invDiscount = models.ToMajor(invDiscountMinor)
+		invTaxable := models.ToMajor(invTaxableMinor)
+		invTax = models.ToMajor(invTaxMinor)
+		invTotal = models.ToMajor(invTotalMinor)
 		if (req.MinInvoiceTotal > 0 && invTotal < req.MinInvoiceTotal) || (req.MaxInvoiceTotal > 0 && invTotal > req.MaxInvoiceTotal) {
 			return nil, fmt.Errorf("الفاتورة %d خارج حدود القيمة المحددة؛ عدّل الأصناف أو الكميات أو المبلغ المستهدف", i+1)
 		}
@@ -874,7 +1075,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 			"buyer_code":      clientCode,
 			"subtotal":        invSubtotal,
 			"discount_amount": invDiscount,
-			"taxable_amount":  math.Round((invSubtotal-invDiscount)*100) / 100,
+			"taxable_amount":  invTaxable,
 			"tax_amount":      invTax,
 			"grand_total":     invTotal,
 			"items":           lines,
@@ -889,11 +1090,11 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 
 	summary := map[string]any{
 		"count":       req.Count,
-		"subtotal":    math.Round(totalSubtotal*100) / 100,
-		"discount":    math.Round(totalDiscount*100) / 100,
-		"taxable":     math.Round((totalSubtotal-totalDiscount)*100) / 100,
-		"tax":         math.Round(totalTax*100) / 100,
-		"grand_total": math.Round(totalGrand*100) / 100,
+		"subtotal":    models.RoundMajor2(totalSubtotal),
+		"discount":    models.RoundMajor2(totalDiscount),
+		"taxable":     models.RoundMajor2(totalSubtotal - totalDiscount),
+		"tax":         models.RoundMajor2(totalTax),
+		"grand_total": models.RoundMajor2(totalGrand),
 	}
 
 	return map[string]any{

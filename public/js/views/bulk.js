@@ -6,7 +6,7 @@ import { api } from '../core/api.js';
 import { store, loadClients, loadItems, loadCategories, currencyLabel } from '../core/store.js';
 import * as router from '../core/router.js';
 import {
-  html, raw, esc, money, num, timeToMinutes, toNum, today,
+  html, raw, esc, money, num, timeToMinutes, toNum, today, roundDec4, roundHalfUp2,
   toastOk, toastErr, $, delegate, confirmDialog, promptDialog, exportCsv, exportExcel,
   modal, printDoc, icon, generateNextItemCode, downloadPdfFromUrl, renderStoredVoucher, loadStoredTemplate, fillStoredTemplate,
 } from '../core/util.js';
@@ -21,10 +21,12 @@ function calcLine(l) {
   const qty = Number(l.quantity) || 0;
   const price = Number(l.unit_price) || 0;
   const disc = Math.min(Number(l.discount) || 0, qty * price);
-  const taxRate = Number(l.tax_rate) !== undefined ? Number(l.tax_rate) : 15;
-  const taxable = (qty * price) - disc;
-  const tax = Math.round((taxable * (taxRate / 100)) * 100) / 100;
-  const total = Math.round((taxable + tax) * 100) / 100;
+  const taxRate = Number(l.tax_rate) !== undefined && !isNaN(Number(l.tax_rate)) ? Number(l.tax_rate) : 15;
+  const taxable = roundHalfUp2((qty * price) - disc);
+  // احتساب ضريبة الصنف بدقة Decimal(4) بدون تقريب داخلي، وتجميعها للمجموع النهائي
+  const taxDec4 = roundDec4(taxable * (taxRate / 100));
+  const tax = roundHalfUp2(taxDec4);
+  const total = roundHalfUp2(taxable + tax);
   return {
     ...l,
     item_code: l.item_code || '',
@@ -33,8 +35,12 @@ function calcLine(l) {
     quantity: qty,
     unit_price: price,
     discount: disc,
+    tax_rate: taxRate,
+    taxable: taxable,
     taxable_amount: taxable,
+    tax_amount_dec4: taxDec4,
     tax_amount: tax,
+    total_line: total,
     grand_total: total,
   };
 }
@@ -42,11 +48,13 @@ function calcLine(l) {
 function recalcInvoice(inv) {
   const rawLines = inv.lines || inv.items || [];
   const lines = rawLines.map(calcLine);
-  const taxable = Math.round(lines.reduce((s, l) => s + (l.taxable_amount || 0), 0) * 100) / 100;
-  const discount = Math.round(lines.reduce((s, l) => s + (l.discount || 0), 0) * 100) / 100;
-  const subtotal = Math.round((taxable + discount) * 100) / 100;
-  const tax = Math.round(lines.reduce((s, l) => s + (l.tax_amount || 0), 0) * 100) / 100;
-  const grand = Math.round((taxable + tax) * 100) / 100;
+  const taxable = roundHalfUp2(lines.reduce((s, l) => s + (l.taxable_amount || 0), 0));
+  const discount = roundHalfUp2(lines.reduce((s, l) => s + (l.discount || 0), 0));
+  const subtotal = roundHalfUp2(taxable + discount);
+  // تجميع الضريبة بدقة Decimal(4) والتقريب الرياضي الطبيعي (Round Half Up) فقط عند المجموع النهائي
+  const taxDec4Total = roundDec4(lines.reduce((s, l) => s + (l.tax_amount_dec4 ?? roundDec4((l.taxable_amount || 0) * ((l.tax_rate ?? 15) / 100))), 0));
+  const tax = roundHalfUp2(taxDec4Total);
+  const grand = roundHalfUp2(taxable + tax);
   return {
     ...inv,
     lines,
@@ -143,6 +151,29 @@ export async function render(view) {
     busy: false,
     activeEditIndex: null,
   };
+
+  let manualItemBounds = false;
+  const syncItemCountBounds = () => {
+    if (manualItemBounds) return;
+    const poolCount = state.custom_items.length > 0
+      ? state.custom_items.length
+      : store.items.filter((it) => it.is_active !== false).length;
+    const invCount = Math.max(1, toNum(state.count, 25));
+    if (poolCount <= 0) return;
+    const neededPerInv = Math.ceil(poolCount / invCount);
+    if (neededPerInv > 6) {
+      state.max_items = Math.min(15, Math.min(poolCount, Math.max(6, neededPerInv + 1)));
+      state.min_items = Math.min(state.max_items, Math.max(4, neededPerInv - 1));
+    } else {
+      state.min_items = Math.min(4, poolCount);
+      state.max_items = Math.min(6, poolCount);
+    }
+    const minEl = $('#min_items', view);
+    const maxEl = $('#max_items', view);
+    if (minEl) minEl.value = state.min_items;
+    if (maxEl) maxEl.value = state.max_items;
+  };
+  syncItemCountBounds();
 
   const buildTemplateOptions = (selectedId) => {
     const excelGroup = availableTemplates.length ? `
@@ -868,6 +899,11 @@ export async function render(view) {
       state[id] = id === 'discount_probability' && value !== ''
         ? Math.max(0, Math.min(100, Number(value))) / 100
         : value;
+      if (id === 'min_items' || id === 'max_items') {
+        manualItemBounds = true;
+      } else if (id === 'count') {
+        syncItemCountBounds();
+      }
     });
   });
 
@@ -945,6 +981,7 @@ export async function render(view) {
     if (autoSaveCheck) autoSaveCheck.addEventListener('change', (e) => { state.auto_save_draft = e.target.checked; });
 
     const refreshCustomItemsArea = () => {
+      syncItemCountBounds();
       const container = $('#custom-items-container', view);
       if (container) container.innerHTML = customItemsTableHtml();
       const badge = $('#custom-items-count-badge', view);
@@ -1629,8 +1666,8 @@ export async function render(view) {
         subtotal: defaultItem.sale_price,
         discount_amount: 0,
         taxable_amount: defaultItem.sale_price,
-        tax_amount: Math.round(defaultItem.sale_price * 0.15 * 100) / 100,
-        grand_total: Math.round(defaultItem.sale_price * 1.15 * 100) / 100,
+        tax_amount: roundHalfUp2(roundDec4(defaultItem.sale_price * 0.15)),
+        grand_total: roundHalfUp2(defaultItem.sale_price + roundHalfUp2(roundDec4(defaultItem.sale_price * 0.15))),
       };
       state.preview.invoices.push(newInv);
       state.activeEditIndex = state.preview.invoices.length - 1;

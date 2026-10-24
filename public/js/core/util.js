@@ -52,12 +52,29 @@ export { sarSvg };
 const nf2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const nf0 = new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 });
 
+/** تقريب رقمي بدقة 4 خانات عشرية Decimal(4) للحسابات الضريبية الداخلية بدون تقريب مبكر لخانتين */
+export function roundDec4(value) {
+  const n = Number(value) || 0;
+  if (!Number.isFinite(n)) return 0;
+  const sign = n < 0 ? -1 : 1;
+  return (sign * Math.floor(Math.abs(n) * 10000 + 0.5 + 1e-9)) / 10000;
+}
+
+/** تقريب رياضي طبيعي لنصف الخانة (Round Half Up) إلى خانتين عشريتين فقط Decimal(2) */
+export function roundHalfUp2(value) {
+  const n = Number(value) || 0;
+  if (!Number.isFinite(n)) return 0;
+  const sign = n < 0 ? -1 : 1;
+  const dec4 = Math.floor(Math.abs(n) * 10000 + 0.5 + 1e-9);
+  return (sign * Math.floor((dec4 + 50) / 100)) / 100;
+}
+
 /** مبلغ بمنزلتين وفواصل آلاف - يعيد 0.00 بدلاً من NaN */
 export function money(value) {
   if (value === '' || value === undefined || value === null) return '0.00';
   const n = Number(String(value).replace(/,/g, '').trim());
   if (isNaN(n) || !Number.isFinite(n)) return '0.00';
-  return nf2.format(n);
+  return nf2.format(roundHalfUp2(n));
 }
 
 /** رقم عام (كميات، أعداد) - يعيد 0 بدلاً من NaN */
@@ -1012,14 +1029,14 @@ function generateSmartRowsJS(htmlSnippet, rawLines, offset = 0) {
 
     const rawVat = Number(String(l.tax_amount ?? '').replace(/,/g, '').trim());
     const vatNum = (!isNaN(rawVat) && Number.isFinite(rawVat) && l.tax_amount !== undefined && l.tax_amount !== '')
-      ? rawVat
-      : (taxableNum * 0.15);
+      ? roundHalfUp2(rawVat)
+      : roundHalfUp2(roundDec4(taxableNum * 0.15));
     const vatStr = vatNum.toFixed(2);
 
     const rawTotal = Number(String(l.total_line ?? '').replace(/,/g, '').trim());
     const totalNum = (!isNaN(rawTotal) && Number.isFinite(rawTotal) && l.total_line !== undefined && l.total_line !== '')
-      ? rawTotal
-      : (taxableNum + vatNum);
+      ? roundHalfUp2(rawTotal)
+      : roundHalfUp2(taxableNum + vatNum);
     const totalStr = totalNum.toFixed(2);
 
     const itemName = l.item_name || l.name || 'اسم الصنف أو الخدمة';

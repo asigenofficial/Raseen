@@ -1537,7 +1537,7 @@ func (s *Server) Handler() http.Handler {
 			}
 		}
 
-		var calcSubtotal, calcDiscount, calcTaxable, calcTax, calcGrand float64
+		var calcSubtotalMinor, calcDiscountMinor, calcTaxableMinor, calcTaxDec4 int64
 		for i, l := range req.Invoice.Lines {
 			lineNo := l.LineNo
 			if lineNo <= 0 {
@@ -1551,20 +1551,24 @@ func (s *Server) Handler() http.Handler {
 			if taxable == 0 && l.Quantity > 0 {
 				taxable = (l.Quantity * l.UnitPrice) - l.Discount
 			}
+			taxableMinor := models.ToMinor(taxable)
+			lineTaxDec4 := models.PctDec4(taxableMinor, taxRate)
+			lineTaxMinor := models.RoundDec4ToMinor(lineTaxDec4)
 			taxAmt := l.TaxAmount
 			if taxAmt == 0 {
-				taxAmt = taxable * (taxRate / 100.0)
+				taxAmt = models.ToMajor(lineTaxMinor)
 			}
 			tot := l.GrandTotal
 			if tot == 0 {
-				tot = taxable + taxAmt
+				tot = models.ToMajor(taxableMinor + models.ToMinor(taxAmt))
 			}
 
-			calcSubtotal += l.Quantity * l.UnitPrice
-			calcDiscount += l.Discount
-			calcTaxable += taxable
-			calcTax += taxAmt
-			calcGrand += tot
+			grossMinor := models.MulQty(l.Quantity, models.ToMinor(l.UnitPrice))
+			discMinor := models.ToMinor(l.Discount)
+			calcSubtotalMinor += grossMinor
+			calcDiscountMinor += discMinor
+			calcTaxableMinor += taxableMinor
+			calcTaxDec4 += lineTaxDec4
 
 			iv := services.InvoiceItemView{
 				InvoiceItem: models.InvoiceItem{
@@ -1574,33 +1578,35 @@ func (s *Server) Handler() http.Handler {
 					Unit:      l.Unit,
 					Quantity:  l.Quantity,
 					UnitPrice: models.ToMinor(l.UnitPrice),
-					Discount:  models.ToMinor(l.Discount),
+					Discount:  discMinor,
 					TaxRate:   taxRate,
-					Taxable:   models.ToMinor(taxable),
+					Taxable:   taxableMinor,
 					TaxAmount: models.ToMinor(taxAmt),
 					TotalLine: models.ToMinor(tot),
 				},
 				UnitPriceMajor: l.UnitPrice,
 				DiscountMajor:  l.Discount,
-				TaxableMajor:   taxable,
-				TaxAmountMajor: taxAmt,
-				TotalLineMajor: tot,
+				TaxableMajor:   models.ToMajor(taxableMinor),
+				TaxAmountMajor: models.ToMajor(models.ToMinor(taxAmt)),
+				TotalLineMajor: models.ToMajor(models.ToMinor(tot)),
 			}
 			invView.Lines = append(invView.Lines, iv)
 		}
 		invView.Items = invView.Lines
 
 		if invView.GrandTotalMajor == 0 && len(invView.Lines) > 0 {
-			invView.SubtotalMajor = calcSubtotal
-			invView.DiscountAmountMajor = calcDiscount
-			invView.TaxableAmountMajor = calcTaxable
-			invView.TaxAmountMajor = calcTax
-			invView.GrandTotalMajor = calcGrand
-			invView.Subtotal = models.ToMinor(calcSubtotal)
-			invView.DiscountAmount = models.ToMinor(calcDiscount)
-			invView.TaxableAmount = models.ToMinor(calcTaxable)
-			invView.TaxAmount = models.ToMinor(calcTax)
-			invView.GrandTotal = models.ToMinor(calcGrand)
+			calcTaxMinor := models.RoundDec4ToMinor(calcTaxDec4)
+			calcGrandMinor := calcTaxableMinor + calcTaxMinor
+			invView.Subtotal = calcSubtotalMinor
+			invView.DiscountAmount = calcDiscountMinor
+			invView.TaxableAmount = calcTaxableMinor
+			invView.TaxAmount = calcTaxMinor
+			invView.GrandTotal = calcGrandMinor
+			invView.SubtotalMajor = models.ToMajor(calcSubtotalMinor)
+			invView.DiscountAmountMajor = models.ToMajor(calcDiscountMinor)
+			invView.TaxableAmountMajor = models.ToMajor(calcTaxableMinor)
+			invView.TaxAmountMajor = models.ToMajor(calcTaxMinor)
+			invView.GrandTotalMajor = models.ToMajor(calcGrandMinor)
 		}
 
 		style := req.Style

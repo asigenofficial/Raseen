@@ -1102,7 +1102,7 @@ type computedInvoiceLine struct {
 
 func computeInvoiceLines(lines []CreateInvoiceLineInput, pricesIncludeTax bool, defaultTaxRate float64) ([]computedInvoiceLine, int64, int64, int64, int64, int64, error) {
 	var computedLines []computedInvoiceLine
-	var subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor int64
+	var subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalDec4 int64
 
 	for idx, l := range lines {
 		qty := l.Quantity
@@ -1135,13 +1135,15 @@ func computeInvoiceLines(lines []CreateInvoiceLineInput, pricesIncludeTax bool, 
 		}
 
 		taxable := gross - discountMinor
-		taxAmount := models.Pct(taxable, taxRate)
+		// احتساب ضريبة الصنف بدقة Decimal(4) بدون تقريب داخلي، وتجميعها للمجموع النهائي
+		lineTaxDec4 := models.PctDec4(taxable, taxRate)
+		taxAmount := models.RoundDec4ToMinor(lineTaxDec4)
 		totalLine := taxable + taxAmount
 
 		subtotalMinor += gross
 		discountTotalMinor += discountMinor
 		taxableTotalMinor += taxable
-		taxTotalMinor += taxAmount
+		taxTotalDec4 += lineTaxDec4
 
 		unit := l.Unit
 		if unit == "" {
@@ -1178,6 +1180,8 @@ func computeInvoiceLines(lines []CreateInvoiceLineInput, pricesIncludeTax bool, 
 		computedLines = append(computedLines, cl)
 	}
 
+	// التقريب الرياضي الطبيعي (Round Half Up) إلى خانتين عشريتين فقط عند المجموع النهائي للضريبة
+	taxTotalMinor := models.RoundDec4ToMinor(taxTotalDec4)
 	grandTotalMinor := taxableTotalMinor + taxTotalMinor
 	return computedLines, subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor, nil
 }
