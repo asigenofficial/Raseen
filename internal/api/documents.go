@@ -315,7 +315,14 @@ func (s *Server) documentPDFStyleKey(kind, style string) string {
 		return key
 	}
 	if kind == "invoice" {
-		return style + "|invoice-table-fill-v10|static-pdf-font-v1"
+		key := style + "|invoice-table-fill-v11|static-pdf-font-v1"
+		if s.templates != nil {
+			if template, err := s.templates.RenderTemplateHTML(style); err == nil {
+				checksum := sha256.Sum256([]byte(template))
+				key += fmt.Sprintf("|template-%x", checksum[:16])
+			}
+		}
+		return key
 	}
 	return style
 }

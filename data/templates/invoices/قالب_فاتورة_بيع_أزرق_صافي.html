@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-exact-invoice-layout="1" data-qty-two-decimals="1">
+
+<head>
+  <meta charset="utf-8" />
+  <title>فاتورة بيع ضريبية — أزرق صافي (MDB)</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    html,
+    body {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 0;
+      background: #f7f7f7;
+      color: #1f2428;
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 11px;
+      direction: rtl;
+    }
+
+    /* الصفحة الخارجية (الهامش المحيط بالإطار الأزرق) */
+    .invoice-container {
+      width: 210mm;
+      height: 297mm;
+      min-height: 297mm;
+      max-height: 297mm;
+      padding: 6.5mm 7mm 6.5mm 7mm;
+      background: #f7f7f7;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    /* الإطار الأزرق الرئيسي والخلفية السماوية المطابقة للصورة بالضبط (#EFF6FF) */
+    .blue-main-border {
+      flex: 1 1 auto;
+      border: 2px solid #5a798f;
+      padding: 14px 16px 8px 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: #eff6ff;
+      min-height: 0;
+    }
+
+    .top-content-wrap {
+      flex: 0 0 auto;
+    }
+
+    /* ── الترويسة العلوية (يمين عربي - وسط شعار اختياري - يسار إنجليزي) ── */
+    .header-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 18px;
+    }
+
+    .header-table td {
+      vertical-align: top;
+      padding: 0;
+    }
+
+    .seller-ar {
+      width: 39%;
+      text-align: right;
+      direction: rtl;
+      color: #1f2428;
+    }
+
+    .seller-ar .company-name {
+      font-size: 16.5px;
+      font-weight: 800;
+      line-height: 1.28;
+      color: #1f2428;
+      margin-bottom: 8px;
+    }
+
+    .seller-ar .meta-line {
+      font-size: 10.5px;
+      font-weight: 700;
+      line-height: 1.48;
+      color: #22262a;
+    }
+
+    /* الشعار في المنتصف: يظهر بشكل أنيق عند وجوده، ويختفي تماماً بدون أي نص عند عدم وجوده */
+    .seller-logo-center {
+      width: 22%;
+      text-align: center;
+      vertical-align: middle !important;
+      padding: 0 8px !important;
+    }
+
+    .logo-slot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto;
+    }
+
+    .logo-slot:empty {
+      display: none !important;
+    }
+
+    .logo-slot img,
+    .logo-slot svg {
+      max-height: 76px !important;
+      max-width: 145px !important;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+    }
+
+    /* إخفاء أي نص بديل للشعار في حال تم حقنه من أي مكان */
+    .logo-slot span,
+    .logo-slot .doc-logo-placeholder,
+    .logo-slot .logo-fallback {
+      display: none !important;
+    }
+
+    .seller-en {
+      width: 39%;
+      text-align: left !important;
+      direction: ltr !important;
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      color: #1f2428;
+    }
+
+    .seller-en .company-name-en {
+      font-size: 15.5px;
+      font-weight: 800;
+      line-height: 1.24;
+      color: #1f2428;
+      margin-bottom: 8px;
+      text-align: left !important;
+      direction: ltr !important;
+    }
+
+    .seller-en .meta-line-en {
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.45;
+      color: #22262a;
+      text-align: left !important;
+      direction: ltr !important;
+    }
+
+    /* ── صف بيانات العميل (يمين) وبيانات الفاتورة (يسار) ── */
+    .meta-split-row {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: stretch;
+      gap: 22px;
+      margin-bottom: 14px;
+    }
+
+    /* جدول العميل (على اليمين - أعرض) */
+    .client-box-wrap {
+      width: 63.5%;
+    }
+
+    .client-table {
+      width: 100%;
+      height: 100%;
+      border-collapse: collapse;
+      border: 1px solid #9a9ea4;
+      table-layout: fixed;
+    }
+
+    .client-table th.box-header {
+      background: #ffffff;
+      color: #1f2428;
+      font-size: 12px;
+      font-weight: 800;
+      text-align: center;
+      padding: 4px 8px;
+      border-bottom: 1px solid #9a9ea4;
+      height: 25px;
+    }
+
+    .client-table td {
+      border-bottom: 1px solid #9a9ea4;
+      padding: 3.5px 8px;
+      font-size: 10.5px;
+      vertical-align: middle;
+      height: 23px;
+    }
+
+    .client-table tr:last-child td {
+      border-bottom: 1px solid #9a9ea4;
+    }
+
+    .client-table td.c-lbl {
+      width: 38%;
+      text-align: center;
+      font-weight: 800;
+      color: #1f2428;
+      border-left: 1px solid #9a9ea4;
+      background: #ffffff;
+      white-space: nowrap;
+    }
+
+    .client-table td.c-val {
+      width: 62%;
+      text-align: center;
+      font-weight: 600;
+      color: #2c3237;
+      background: #f7faff;
+      overflow-wrap: anywhere;
+    }
+
+    /* جدول الفاتورة (على اليسار) */
+    .invoice-meta-wrap {
+      width: 33%;
+    }
+
+    .invoice-meta-table {
+      width: 100%;
+      border-collapse: collapse;
+      border-top: 1px solid #9a9ea4;
+      border-left: 1px solid #9a9ea4;
+      border-right: 1px solid #9a9ea4;
+      table-layout: fixed;
+    }
+
+    .invoice-meta-table th.inv-box-title {
+      background: #f8fbff;
+      color: #1f2428;
+      font-size: 13.5px;
+      font-weight: 800;
+      text-align: center;
+      padding: 4px 6px;
+      border-bottom: 1px solid #9a9ea4;
+      height: 27px;
+    }
+
+    .invoice-meta-table td {
+      padding: 4px 6px;
+      font-size: 10.5px;
+      vertical-align: middle;
+      border-bottom: 1px solid #c5c9cc;
+      height: 23px;
+      background: #f7faff;
+    }
+
+    .invoice-meta-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .invoice-meta-table td.i-lbl {
+      width: 58%;
+      text-align: right;
+      font-weight: 600;
+      color: #2c3237;
+      white-space: nowrap;
+      padding-right: 6px;
+    }
+
+    .invoice-meta-table td.i-val {
+      width: 42%;
+      text-align: left;
+      direction: ltr;
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-weight: 800;
+      font-size: 10.8px;
+      color: #1f2428;
+      padding-left: 4px;
+    }
+
+    /* ── جدول الأصناف والبنود ── */
+    .items-table-wrapper {
+      width: 100%;
+      margin-bottom: 12px;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1.3px solid #3a3f45;
+      table-layout: fixed;
+    }
+
+    .items-table thead th {
+      background: #d0e8fe !important;
+      color: #1f2428 !important;
+      border: 1px solid #3a3f45 !important;
+      padding: 5px 4px !important;
+      font-size: 9.8px !important;
+      font-weight: 800 !important;
+      text-align: center !important;
+      vertical-align: middle !important;
+      line-height: 1.25 !important;
+    }
+
+    .items-table tbody tr {
+      background: #ffffff !important;
+    }
+
+    .items-table tbody tr:nth-child(even) {
+      background: #ffffff !important;
+    }
+
+    .items-table tbody td {
+      border: 1px solid #55595e !important;
+      padding: 9px 5px !important;
+      font-size: 10.2px !important;
+      color: #1f2428 !important;
+      text-align: center !important;
+      vertical-align: middle !important;
+      background: #ffffff !important;
+    }
+
+    /* تنسيق أعمدة الأرقام في جدول الأصناف */
+    .items-table tbody td:nth-child(1),
+    .items-table tbody td:nth-child(4),
+    .items-table tbody td:nth-child(5),
+    .items-table tbody td:nth-child(6),
+    .items-table tbody td:nth-child(7),
+    .items-table tbody td:nth-child(8) {
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif !important;
+      direction: ltr !important;
+      unicode-bidi: isolate !important;
+      font-weight: 600 !important;
+    }
+
+    .items-table tbody td:nth-child(2) {
+      font-weight: 600 !important;
+    }
+
+    /* ── القسم السفلي داخل الإطار الأزرق (QR يمين - ملاحظات وسط - إجماليات يسار) ── */
+    .bottom-content-wrap {
+      margin-top: auto;
+      padding-top: 10px;
+      flex-shrink: 0;
+    }
+
+    .bottom-three-cols {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+      width: 100%;
+    }
+
+    /* 1. صندوق رمز الاستجابة السريع QR (أقصى اليمين) */
+    .qr-outer-box {
+      width: 160px;
+      height: 156px;
+      border: 1px solid #7c8086;
+      background: #eef7ff;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .qr-outer-box img,
+    .qr-outer-box svg {
+      width: 134px !important;
+      height: 134px !important;
+      max-width: 134px !important;
+      max-height: 134px !important;
+      display: block !important;
+      margin: 0 auto !important;
+      background: #ffffff;
+      padding: 4px;
+    }
+
+    /* 2. جدول الملاحظات وعدد الأصناف (الوسط) */
+    .notes-center-box {
+      width: 34.5%;
+      border: 1px solid #7c8086;
+      background: #f7faff;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .notes-box-header {
+      text-align: center;
+      font-weight: 800;
+      font-size: 11px;
+      color: #1f2428;
+      background: #eff6ff;
+      padding: 4px 8px;
+      border-bottom: 1px solid #7c8086;
+      height: 25px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .notes-box-body {
+      min-height: 83px;
+      height: 83px;
+      padding: 6px 8px;
+      font-size: 10px;
+      color: #2c3237;
+      background: #f7faff;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      border-bottom: 1px solid #7c8086;
+    }
+
+    .notes-box-footer {
+      text-align: center;
+      font-weight: 800;
+      font-size: 10.5px;
+      color: #1f2428;
+      background: #eff6ff;
+      padding: 4px 8px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* 3. جدول الإجماليات المالية (أقصى اليسار) */
+    .totals-left-wrap {
+      width: 40.5%;
+      flex-shrink: 0;
+    }
+
+    .totals-box-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #7c8086;
+      table-layout: fixed;
+    }
+
+    .totals-box-table td {
+      border: 1px solid #7c8086;
+      padding: 3.5px 8px;
+      vertical-align: middle;
+      height: 25px;
+      background: #ffffff;
+    }
+
+    .totals-box-table td.t-lbl {
+      width: 54%;
+      text-align: right;
+      font-size: 10px;
+      font-weight: 800;
+      color: #1f2428;
+      line-height: 1.22;
+      background: #f2f8ff;
+    }
+
+    .totals-box-table td.t-val {
+      width: 46%;
+      text-align: center;
+      direction: ltr;
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 11px;
+      font-weight: 800;
+      color: #1f2428;
+      background: #ffffff;
+      white-space: nowrap;
+    }
+
+    .totals-val-inner {
+      display: inline-flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      direction: ltr;
+    }
+
+    .totals-val-inner .sar-icon-wrap {
+      display: inline-flex;
+      align-items: center;
+      color: #1f2428;
+    }
+
+    .totals-val-inner .sar-icon-wrap svg {
+      width: 11px !important;
+      height: 12px !important;
+      fill: currentColor !important;
+    }
+
+    /* ── التذييل السفلي داخل الإطار السماوي وأسفل الخط الفاصل ── */
+    .outside-footer {
+      flex: 0 0 auto;
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px solid #656c76;
+      text-align: center;
+      color: #1f2428;
+      line-height: 1.45;
+      background: #eff6ff;
+    }
+
+    .outside-footer .footer-addr {
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .outside-footer .footer-page-code {
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 10px;
+      font-weight: 800;
+      direction: ltr;
+      unicode-bidi: isolate;
+      margin-top: 1px;
+    }
+
+    .num {
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      direction: ltr;
+      unicode-bidi: embed;
+    }
+
+    @media print {
+      html,
+      body {
+        width: 210mm !important;
+        height: 297mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #f7f7f7 !important;
+      }
+
+      .invoice-container {
+        width: 210mm !important;
+        height: 297mm !important;
+        min-height: 297mm !important;
+        max-height: 297mm !important;
+        margin: 0 !important;
+        background: #f7f7f7 !important;
+        box-shadow: none !important;
+      }
+
+      .blue-main-border {
+        background: #eff6ff !important;
+      }
+    }
+  </style>
+  <style data-invoice-pagination>
+    @media print {
+      [data-invoice-page] {
+        break-after: page;
+        page-break-after: always;
+      }
+      [data-invoice-page]:last-child {
+        break-after: auto;
+        page-break-after: auto;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="invoice-container">
+    <div class="blue-main-border">
+      <div class="top-content-wrap">
+        <!-- ── الترويسة العلوية ── -->
+        <table class="header-table">
+          <tr>
+            <!-- اليمين: بيانات المنشأة بالعربية -->
+            <td class="seller-ar">
+              <div class="company-name">{{seller_name}}</div>
+              <div class="meta-line">{{seller_address}}</div>
+              <div class="meta-line">الرقم الضريبي: <span class="num">{{seller_tax}}</span></div>
+              <div class="meta-line">السجل التجاري: <span class="num">{{seller_cr}}</span></div>
+              <div class="meta-line">جوال: <span class="num">{{seller_phone}}</span></div>
+            </td>
+
+            <!-- المنتصف: الشعار (يظهر إذا وجد، ويختفي تماماً بدون طباعة كلمة شعار إذا لم يوجد) -->
+            <td class="seller-logo-center">
+              <div class="logo-slot">{{logo}}</div>
+            </td>
+
+            <!-- اليسار: بيانات المنشأة بالإنجليزية -->
+            <td class="seller-en" dir="ltr" lang="en">
+              <div class="company-name-en">{{seller_name_en}}</div>
+              <div class="meta-line-en">{{seller_address_en}}</div>
+              <div class="meta-line-en">TAX NO.: <span class="num">{{seller_tax}}</span></div>
+              <div class="meta-line-en">Commercial Record No : <span class="num">{{seller_cr}}</span></div>
+              <div class="meta-line-en">PHONE: <span class="num">{{seller_phone}}</span></div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ── قسم العميل (يمين) وبيانات الفاتورة (يسار) ── -->
+        <div class="meta-split-row">
+          <!-- جدول العميل (يمين) -->
+          <div class="client-box-wrap">
+            <table class="client-table">
+              <thead>
+                <tr>
+                  <th colspan="2" class="box-header">العميل / Client</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="c-lbl">الاسم / Name</td>
+                  <td class="c-val">{{buyer_name}}</td>
+                </tr>
+                <tr>
+                  <td class="c-lbl">الرقم الضريبي / Tax No</td>
+                  <td class="c-val num">{{buyer_tax}}</td>
+                </tr>
+                <tr>
+                  <td class="c-lbl">العنوان / Address</td>
+                  <td class="c-val">{{buyer_address}}</td>
+                </tr>
+                <tr>
+                  <td class="c-lbl">الهاتف / Phone</td>
+                  <td class="c-val num">{{buyer_phone}}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- جدول بيانات الفاتورة (يسار) -->
+          <div class="invoice-meta-wrap">
+            <table class="invoice-meta-table">
+              <thead>
+                <tr>
+                  <th colspan="2" class="inv-box-title">فاتورة ضريبية - فاتورة بيع</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="i-lbl">Inv.No / رقم الفاتورة</td>
+                  <td class="i-val">{{invoice_number}}</td>
+                </tr>
+                <tr>
+                  <td class="i-lbl">Inv.Date / تاريخ الفاتورة</td>
+                  <td class="i-val">{{issue_date}}</td>
+                </tr>
+                <tr>
+                  <td class="i-lbl">Inv.type / نوع الفاتورة</td>
+                  <td class="i-val">{{payment_method_en}}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── جدول الأصناف والبنود ── -->
+        <div class="items-table-wrapper">
+          <table class="items-table" data-no-filler="1">
+            <thead>
+              <tr>
+                <th style="width: 5%;">#</th>
+                <th style="width: 35%;">Description / الوصف</th>
+                <th style="width: 7%;">الوحدة<br>Unit /</th>
+                <th style="width: 8%;">الكمية /<br>Qty</th>
+                <th style="width: 11%;">سعر الوحدة<br>Unit Price /</th>
+                <th style="width: 11%;">المبلغ الخاضع /<br>Taxable</th>
+                <th style="width: 10%;">الضريبة /<br>VAT</th>
+                <th style="width: 13%;">الإجمالي شامل<br>الضريبة / Total<br>with VAT</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{items_rows}}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── القسم السفلي (QR يمين + ملاحظات وسط + إجماليات يسار) ── -->
+      <div class="bottom-content-wrap">
+        <div class="bottom-three-cols">
+          <!-- يمين: رمز QR -->
+          <div class="qr-outer-box">
+            {{qr_code}}
+          </div>
+
+          <!-- وسط: الملاحظات وعدد الأصناف -->
+          <div class="notes-center-box">
+            <div class="notes-box-header">ملاحظات / Notes</div>
+            <div class="notes-box-body">{{notes}}</div>
+            <div class="notes-box-footer">عدد الأصناف: {{items_count}} / Items Count</div>
+          </div>
+
+          <!-- يسار: جدول الإجماليات -->
+          <div class="totals-left-wrap">
+            <table class="totals-box-table">
+              <tbody>
+                <tr>
+                  <td class="t-lbl">Sub Total / الإجمالي قبل<br>الخصم</td>
+                  <td class="t-val">
+                    <span class="totals-val-inner">
+                      <span class="sar-icon-wrap">{{sar_symbol}}</span>
+                      <span>{{subtotal}}</span>
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="t-lbl">Discount / الخصم / التسوية</td>
+                  <td class="t-val">
+                    <span class="totals-val-inner">
+                      <span class="sar-icon-wrap">{{sar_symbol}}</span>
+                      <span>{{discount}}</span>
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="t-lbl">VAT (%15.00)</td>
+                  <td class="t-val">
+                    <span class="totals-val-inner">
+                      <span class="sar-icon-wrap">{{sar_symbol}}</span>
+                      <span>{{tax_amount}}</span>
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="t-lbl">Total After VAT / الإجمالي<br>شامل الضريبة</td>
+                  <td class="t-val">
+                    <span class="totals-val-inner">
+                      <span class="sar-icon-wrap">{{sar_symbol}}</span>
+                      <span>{{grand_total}}</span>
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="t-lbl">Paid / مدفوع</td>
+                  <td class="t-val">
+                    <span class="totals-val-inner">
+                      <span class="sar-icon-wrap">{{sar_symbol}}</span>
+                      <span>{{paid_amount}}</span>
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="t-lbl">Due Amount / الرصيد<br>المستحق</td>
+                  <td class="t-val">
+                    <span class="totals-val-inner">
+                      <span class="sar-icon-wrap">{{sar_symbol}}</span>
+                      <span>{{remaining_amount}}</span>
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── التذييل السفلي داخل الإطار السماوي ── -->
+        <footer class="outside-footer">
+          <div class="footer-addr">{{seller_address}} - {{seller_phone}}</div>
+          <div class="footer-page-code">MDB | 1 - 1</div>
+        </footer>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>

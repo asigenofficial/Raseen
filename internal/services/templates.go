@@ -917,6 +917,9 @@ func (s *TemplateService) RenderInvoiceHTML(inv *InvoiceView, style string) (str
 var invoiceLayoutScript string
 
 func normalizeInvoiceMeasurements(html string) string {
+	if strings.Contains(html, "data-exact-invoice-layout") {
+		return html
+	}
 	if !strings.Contains(html, "data-invoice-layout-runtime") {
 		html = injectTemplateStyle(html, `<script data-invoice-layout-runtime>`+invoiceLayoutScript+`</script>`)
 	}
@@ -1165,6 +1168,19 @@ func formatNationalAddressEn(cityEn, districtEn, streetEn, buildingNo, postalCod
 	return strings.Join(parts, " - ")
 }
 
+func formatCommaMoney(amount float64) string {
+	parts := strings.SplitN(fmt.Sprintf("%.2f", amount), ".", 2)
+	whole := parts[0]
+	sign := ""
+	if strings.HasPrefix(whole, "-") {
+		sign, whole = "-", whole[1:]
+	}
+	for i := len(whole) - 3; i > 0; i -= 3 {
+		whole = whole[:i] + "," + whole[i:]
+	}
+	return sign + whole + "." + parts[1]
+}
+
 // ─── Tag Substitution Engine ──────────────────────────────────────────────────
 
 func (s *TemplateService) SubstituteInvoiceTags(tpl string, inv *InvoiceView) string {
@@ -1280,9 +1296,7 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 			}
 		}
 	}
-	if sellerLogoHtml == "" {
-		sellerLogoHtml = `<span style="font-size:26px;font-weight:900;color:#94a3b8;">شعار</span>`
-	}
+	// Note: If no logo is set, sellerLogoHtml remains empty so no placeholder text ("شعار") is printed.
 
 	qrB64 := ""
 	payload := inv.QrPayload
@@ -1404,21 +1418,28 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 	amountInWords := tafqeetArabic(inv.GrandTotalMajor)
 
 	paymentMethodAr := "نقداً"
+	paymentMethodEn := "Cash"
 	if inv.PaymentMethod != "" {
 		pm := strings.ToUpper(strings.TrimSpace(inv.PaymentMethod))
 		switch pm {
-		case "CREDIT":
+		case "CREDIT", "آجلة", "آجل":
 			paymentMethodAr = "آجلة"
-		case "CASH":
+			paymentMethodEn = "Credit"
+		case "CASH", "نقداً", "نقدي":
 			paymentMethodAr = "نقداً"
-		case "CARD", "POS", "MADA":
+			paymentMethodEn = "Cash"
+		case "CARD", "POS", "MADA", "شبكة":
 			paymentMethodAr = "شبكة"
-		case "TRANSFER", "BANK":
+			paymentMethodEn = "Card"
+		case "TRANSFER", "BANK", "تحويل بنكي":
 			paymentMethodAr = "تحويل بنكي"
-		case "CHEQUE", "CHECK":
+			paymentMethodEn = "Bank Transfer"
+		case "CHEQUE", "CHECK", "شيك":
 			paymentMethodAr = "شيك"
+			paymentMethodEn = "Cheque"
 		default:
 			paymentMethodAr = inv.PaymentMethod
+			paymentMethodEn = inv.PaymentMethod
 		}
 	}
 
@@ -1457,6 +1478,7 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 		}(),
 		"{{issue_time}}", inv.IssueTime,
 		"{{payment_method}}", paymentMethodAr,
+		"{{payment_method_en}}", paymentMethodEn,
 		"{{payment_method_label}}", paymentMethodAr,
 		"{{payment_label}}", paymentMethodAr,
 		"{{payment_type}}", paymentMethodAr,
@@ -1498,12 +1520,12 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 		"{{buyer_phone}}", buyerPhone,
 
 		// ─── المبالغ والإجماليات والعملة ───
-		"{{subtotal}}", fmt.Sprintf("%.2f", inv.SubtotalMajor),
-		"{{discount}}", fmt.Sprintf("%.2f", inv.DiscountAmountMajor),
-		"{{tax_amount}}", fmt.Sprintf("%.2f", inv.TaxAmountMajor),
-		"{{grand_total}}", fmt.Sprintf("%.2f", inv.GrandTotalMajor),
-		"{{paid_amount}}", fmt.Sprintf("%.2f", paidAmount),
-		"{{remaining_amount}}", fmt.Sprintf("%.2f", remainingAmount),
+		"{{subtotal}}", formatCommaMoney(inv.SubtotalMajor),
+		"{{discount}}", formatCommaMoney(inv.DiscountAmountMajor),
+		"{{tax_amount}}", formatCommaMoney(inv.TaxAmountMajor),
+		"{{grand_total}}", formatCommaMoney(inv.GrandTotalMajor),
+		"{{paid_amount}}", formatCommaMoney(paidAmount),
+		"{{remaining_amount}}", formatCommaMoney(remainingAmount),
 		"{{amount_in_words}}", amountInWords,
 		"{{tafqeet}}", amountInWords,
 		"{{total_qty}}", func() string {
@@ -1512,6 +1534,7 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 			}
 			return fmt.Sprintf("%.2f", totalQty)
 		}(),
+		"{{items_count}}", fmt.Sprintf("%d", len(inv.Lines)),
 		"{{currency}}", "SAR",
 		"{{sar_symbol}}", s.sarSymbolSVG,
 		"{{currency_symbol}}", s.sarSymbolSVG,
@@ -1848,23 +1871,25 @@ func (s *TemplateService) generateSmartRowsSlice(tpl string, lines []InvoiceItem
 					value = "حبة"
 				}
 			case colPrice:
-				value = fmt.Sprintf("%.2f", item.UnitPriceMajor)
+				value = formatCommaMoney(item.UnitPriceMajor)
 			case colQty:
-				if item.Quantity == float64(int64(item.Quantity)) {
+				if strings.Contains(tpl, "data-qty-two-decimals") {
+					value = fmt.Sprintf("%.2f", item.Quantity)
+				} else if item.Quantity == float64(int64(item.Quantity)) {
 					value = fmt.Sprintf("%.0f", item.Quantity)
 				} else {
 					value = fmt.Sprintf("%.2f", item.Quantity)
 				}
 			case colTaxable:
-				value = fmt.Sprintf("%.2f", item.TaxableMajor)
+				value = formatCommaMoney(item.TaxableMajor)
 			case colDiscount:
-				value = fmt.Sprintf("%.2f", item.DiscountMajor)
+				value = formatCommaMoney(item.DiscountMajor)
 			case colTaxRate:
 				value = "15%"
 			case colTaxAmount:
-				value = fmt.Sprintf("%.2f", item.TaxAmountMajor)
+				value = formatCommaMoney(item.TaxAmountMajor)
 			case colTotal:
-				value = fmt.Sprintf("%.2f", item.TotalLineMajor)
+				value = formatCommaMoney(item.TotalLineMajor)
 			case colNotes:
 				value = ""
 			default:

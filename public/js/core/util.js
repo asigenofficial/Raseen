@@ -1008,36 +1008,39 @@ function generateSmartRowsJS(htmlSnippet, rawLines, offset = 0) {
     ];
   }
 
+  const fmtComma2 = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const forceQtyTwoDec = htmlSnippet.includes('data-qty-two-decimals');
+
   const filledRows = lines.map((l, idx) => {
     const rawQty = Number(String(l.quantity ?? '').replace(/,/g, '').trim());
     const qtyNum = (!isNaN(rawQty) && Number.isFinite(rawQty)) ? rawQty : 0;
-    const qtyStr = qtyNum % 1 === 0 ? String(qtyNum) : qtyNum.toFixed(2);
+    const qtyStr = forceQtyTwoDec ? qtyNum.toFixed(2) : (qtyNum % 1 === 0 ? String(qtyNum) : qtyNum.toFixed(2));
 
     const rawPrice = Number(String(l.unit_price ?? '').replace(/,/g, '').trim());
     const priceNum = (!isNaN(rawPrice) && Number.isFinite(rawPrice)) ? rawPrice : 0;
-    const priceStr = priceNum.toFixed(2);
+    const priceStr = fmtComma2(priceNum);
 
     const rawDisc = Number(String(l.discount ?? '').replace(/,/g, '').trim());
     const discNum = (!isNaN(rawDisc) && Number.isFinite(rawDisc) && rawDisc > 0) ? rawDisc : 0;
-    const discStr = discNum.toFixed(2);
+    const discStr = fmtComma2(discNum);
 
     const rawTaxable = Number(String(l.taxable ?? '').replace(/,/g, '').trim());
     const taxableNum = (!isNaN(rawTaxable) && Number.isFinite(rawTaxable) && l.taxable !== undefined && l.taxable !== '')
       ? rawTaxable
       : Math.max(0, qtyNum * priceNum - discNum);
-    const taxableStr = taxableNum.toFixed(2);
+    const taxableStr = fmtComma2(taxableNum);
 
     const rawVat = Number(String(l.tax_amount ?? '').replace(/,/g, '').trim());
     const vatNum = (!isNaN(rawVat) && Number.isFinite(rawVat) && l.tax_amount !== undefined && l.tax_amount !== '')
       ? roundHalfUp2(rawVat)
       : roundHalfUp2(roundDec4(taxableNum * 0.15));
-    const vatStr = vatNum.toFixed(2);
+    const vatStr = fmtComma2(vatNum);
 
     const rawTotal = Number(String(l.total_line ?? '').replace(/,/g, '').trim());
     const totalNum = (!isNaN(rawTotal) && Number.isFinite(rawTotal) && l.total_line !== undefined && l.total_line !== '')
       ? roundHalfUp2(rawTotal)
       : roundHalfUp2(taxableNum + vatNum);
-    const totalStr = totalNum.toFixed(2);
+    const totalStr = fmtComma2(totalNum);
 
     const itemName = l.item_name || l.name || 'اسم الصنف أو الخدمة';
     const itemCode = l.item_code || l.code || '—';
@@ -1467,6 +1470,29 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       const p = (voucher?.payment_type || voucher?.payment_label || invoice?.payment_method || '').toLowerCase();
       return (p.includes('card') || p.includes('pos') || p.includes('شبكة') || p.includes('مدى')) ? '✓' : '';
     }
+    if (k === 'payment_method_en') {
+      const rawVal = voucher?.payment_type || invoice?.payment_method || voucher?.payment_label || invoice?.payment_label || '';
+      const upper = String(rawVal).trim().toUpperCase();
+      const payEnMap = {
+        'CREDIT': 'Credit',
+        'آجلة': 'Credit',
+        'آجل': 'Credit',
+        'CASH': 'Cash',
+        'نقداً': 'Cash',
+        'نقدي': 'Cash',
+        'CARD': 'Card',
+        'POS': 'Card',
+        'MADA': 'Card',
+        'شبكة': 'Card',
+        'TRANSFER': 'Bank Transfer',
+        'BANK': 'Bank Transfer',
+        'تحويل بنكي': 'Bank Transfer',
+        'CHEQUE': 'Cheque',
+        'CHECK': 'Cheque',
+        'شيك': 'Cheque'
+      };
+      return payEnMap[upper] || rawVal || 'Credit';
+    }
     if (k === 'payment_method' || k === 'payment_type' || k === 'payment_label' || k === 'payment_mode') {
       const rawVal = voucher?.payment_label || voucher?.payment_type || invoice?.payment_label || invoice?.payment_method || '';
       const upper = String(rawVal).trim().toUpperCase();
@@ -1506,7 +1532,7 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       if (logoSrc) {
         return `<img src="${logoSrc}" alt="شعار المنشأة" class="doc-logo-img" style="max-height:75px; max-width:200px; object-fit:contain; display:block;" />`;
       }
-      return `<div class="doc-logo-placeholder" style="display:inline-flex; align-items:center; justify-content:center; padding:8px 16px; border:1.5px dashed #94a3b8; border-radius:6px; font-weight:700; color:#64748b; font-size:12px;">شعار المنشأة</div>`;
+      return '';
     }
 
     if (k === 'qr_code' || k === 'barcode' || k === 'qr' || k === 'zatca_qr') {
@@ -1548,6 +1574,10 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       const lines = invoice?.lines || [];
       const sum = lines.reduce((acc, l) => acc + Number(l.quantity || 0), 0);
       return sum > 0 ? (sum % 1 === 0 ? String(sum) : sum.toFixed(2)) : '0.00';
+    }
+    if (k === 'items_count' || k === 'lines_count' || k === 'count_items') {
+      const lines = invoice?.lines || (Array.isArray(invoice?.items) ? invoice.items : []);
+      return String(lines.length || 0);
     }
 
     // 8. صفوف وجداول الأصناف الذكية التلقائية لأي قالب
@@ -1600,7 +1630,7 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
   const lines = invoice?.lines || (Array.isArray(invoice?.items) ? invoice.items : []);
   if (lines.length > 15) {
     result = paginateInvoiceHtmlJS(result, { ...invoice, lines }, 15);
-  } else {
+  } else if (!result.includes('data-exact-invoice-layout')) {
     const singleAnchorStyle = `<style>
       @page { size: A4 portrait; margin: 0 !important; }
       .invoice-container, .invoice-frame, .page, [data-invoice-page] {
