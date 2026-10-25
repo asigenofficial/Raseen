@@ -1388,7 +1388,14 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       const val = (!isNaN(n) && Number.isFinite(n)) ? n : 0;
       return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    if (k === 'subtotal' || k === 'taxable' || k === 'taxable_amount') {
+    if (k === 'taxable_amount' || k === 'taxable') {
+      const sub = invoice?.subtotal ?? docTotal;
+      const disc = invoice?.discount_amount ?? invoice?.discount ?? 0;
+      const n = Math.max(0, Number(String(sub ?? '').replace(/,/g, '').trim()) - Number(String(disc ?? '').replace(/,/g, '').trim()));
+      const val = (!isNaN(n) && Number.isFinite(n)) ? n : 0;
+      return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (k === 'subtotal') {
       const sub = invoice?.subtotal ?? docTotal;
       const n = Number(String(sub ?? '').replace(/,/g, '').trim());
       const val = (!isNaN(n) && Number.isFinite(n)) ? n : 0;
@@ -1513,8 +1520,13 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       const it = (invoice?.invoice_type || '').toUpperCase();
       return it === 'SIMPLIFIED' ? 'فاتورة ضريبية مبسطة' : 'فاتورة ضريبية';
     }
-    if (k === 'notes' || k === 'paid_for' || k === 'description' || k === 'memo' || k === 'statement') {
-      return doc.notes || '';
+    if (k === 'paid_for') {
+      if (doc?.notes && String(doc.notes).trim()) return String(doc.notes).trim();
+      if (voucher?.reference_no) return `سداد فاتورة رقم ${voucher.reference_no}`;
+      return doc?.notes || (voucher ? 'سداد حساب' : '');
+    }
+    if (k === 'notes' || k === 'description' || k === 'memo' || k === 'statement') {
+      return doc?.notes || '';
     }
     if (k === 'reference_no' || k === 'cheque_no' || k === 'ref_no' || k === 'check_number') {
       return voucher?.reference_no || '';

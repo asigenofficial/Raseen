@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>سند قبض أخضر كلاسيكي — مواد البناء</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 12mm 10mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f1f5f9;
+      color: #0f172a;
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 12px;
+      direction: rtl;
+    }
+
+    /* ── الحاوية الرئيسية لصفحة السند ── */
+    .receipt-page {
+      width: 100%;
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 10mm 12mm;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      min-height: 276mm;
+    }
+
+    /* ── كرت السند ذو الحواف الدائرية والإطار الأخضر المميز ── */
+    .receipt-card {
+      width: 100%;
+      background: #ffffff;
+      border: 1.5px solid #285343;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      box-sizing: border-box;
+      margin-bottom: 8px;
+    }
+
+    /* شريط العنوان العلوي الأخضر الداكن */
+    .receipt-banner {
+      background: #285343;
+      color: #ffffff;
+      text-align: center;
+      font-size: 21px;
+      font-weight: 900;
+      padding: 12px 16px;
+      letter-spacing: 0.5px;
+    }
+
+    /* صف بيانات المنشأة والسند */
+    .receipt-info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 14px 22px;
+      gap: 16px;
+      background: #ffffff;
+    }
+
+    /* بيانات المؤسسة (اليمين) */
+    .seller-info-col {
+      text-align: right;
+    }
+
+    .seller-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 3px;
+    }
+
+    .seller-title:empty::before {
+      content: "مؤسسة حياة دخيل الحربي لمواد البناء";
+    }
+
+    .seller-meta {
+      font-size: 12px;
+      font-weight: 700;
+      color: #334155;
+    }
+
+    .seller-meta .num {
+      font-family: Tahoma, Arial, sans-serif;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    /* بيانات السند (اليسار) */
+    .voucher-info-col {
+      text-align: left;
+      direction: ltr;
+    }
+
+    .voucher-field {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 3px;
+      text-align: right;
+      direction: rtl;
+    }
+
+    .voucher-field .num {
+      font-family: Tahoma, Arial, sans-serif;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .voucher-field-sub {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #334155;
+      text-align: right;
+      direction: rtl;
+    }
+
+    .voucher-field-sub .num {
+      font-family: Tahoma, Arial, sans-serif;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    /* الخط الفاصل تحت بيانات الرأس */
+    .receipt-divider {
+      border-bottom: 1px solid #7c9f8d;
+      width: 100%;
+    }
+
+    /* صندوق نص استلام السند بإطار متقطع */
+    .receipt-statement-box {
+      border: 1.5px dashed #7a9d8c;
+      border-radius: 8px;
+      margin: 22px 20px;
+      padding: 22px 26px;
+      text-align: center;
+      background: #ffffff;
+      box-sizing: border-box;
+    }
+
+    .statement-line {
+      font-size: 13.5px;
+      line-height: 2.1;
+      color: #1e293b;
+    }
+
+    .statement-line strong {
+      color: #0f172a;
+      font-weight: 800;
+    }
+
+    .amount-highlight {
+      font-family: Tahoma, Arial, sans-serif;
+      font-size: 14.5px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .sar-sym {
+      display: inline-block;
+      vertical-align: middle;
+      margin: 0 3px;
+    }
+
+    .sar-sym svg {
+      width: 14px;
+      height: 14px;
+      fill: #1e3d30;
+      vertical-align: middle;
+      display: inline-block;
+    }
+
+    .client-highlight {
+      font-size: 14px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .tafqeet-line {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-top: 16px;
+      line-height: 1.8;
+    }
+
+    /* منطقة التواقيع والختم الثلاثية */
+    .signatures-row {
+      display: flex;
+      justify-content: space-around;
+      align-items: flex-start;
+      padding: 28px 24px 38px 24px;
+      text-align: center;
+    }
+
+    .sig-col {
+      width: 150px;
+      text-align: center;
+    }
+
+    .sig-line {
+      width: 140px;
+      border-top: 1.5px solid #0f172a;
+      margin: 0 auto 10px auto;
+    }
+
+    .sig-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+
+    /* ── تنسيق الطباعة وتصدير PDF ── */
+    @media print {
+      html,
+      body {
+        background: #ffffff;
+        margin: 0;
+        padding: 0;
+        height: auto;
+      }
+
+      .receipt-page {
+        padding: 10mm 12mm;
+        margin: 0 auto;
+        min-height: 276mm;
+      }
+
+      .receipt-card {
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="receipt-page receipt-container">
+    <div class="receipt-card">
+
+      <!-- 1. شريط العنوان الأخضر الداكن -->
+      <div class="receipt-banner">
+        سند قبض
+      </div>
+
+      <!-- 2. صف بيانات المنشأة والسند -->
+      <div class="receipt-info-row">
+        <!-- اليمين: بيانات المنشأة -->
+        <div class="seller-info-col">
+          <div class="seller-title">{{seller_name}}</div>
+          <div class="seller-meta">الرقم الضريبي: <span class="num">{{seller_tax}}</span></div>
+        </div>
+
+        <!-- اليسار: بيانات السند -->
+        <div class="voucher-info-col">
+          <div class="voucher-field">رقم السند: <span class="num">{{voucher_number}}</span></div>
+          <div class="voucher-field-sub">التاريخ: <span class="num">{{voucher_date}}</span></div>
+        </div>
+      </div>
+
+      <!-- 3. الخط الفاصل الأفقي -->
+      <div class="receipt-divider"></div>
+
+      <!-- 4. صندوق الإقرار واستلام المبلغ (إطار متقطع) -->
+      <div class="receipt-statement-box">
+        <div class="statement-line">
+          تم استلام مبلغ <strong class="amount-highlight">{{amount}}</strong> <span class="sar-sym">{{sar_symbol}}</span> من العميل <strong class="client-highlight">{{client_name}}</strong> مقابل {{paid_for}}.
+        </div>
+
+        <div class="tafqeet-line">
+          فقط مبلغ وقدره {{tafqeet}} لا غير
+        </div>
+      </div>
+
+      <!-- 5. التواقيع والختم (توقيع المستلم - الختم - توقيع العميل) -->
+      <div class="signatures-row">
+        <!-- يمين -->
+        <div class="sig-col">
+          <div class="sig-line"></div>
+          <div class="sig-title">توقيع المستلم</div>
+        </div>
+
+        <!-- وسط -->
+        <div class="sig-col">
+          <div class="sig-line"></div>
+          <div class="sig-title">الختم</div>
+        </div>
+
+        <!-- يسار -->
+        <div class="sig-col">
+          <div class="sig-line"></div>
+          <div class="sig-title">توقيع العميل</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</body>
+
+</html>

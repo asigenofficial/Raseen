@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>فاتورة ضريبية خضراء مؤطرة — مواد البناء</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f1f5f9;
+      color: #0f172a;
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 11px;
+      direction: rtl;
+    }
+
+    /* ── الصفحة وحاوية الفاتورة A4 ── */
+    .invoice-container {
+      width: 210mm;
+      min-height: 295.5mm;
+      margin: 0 auto;
+      padding: 8mm 8mm;
+      background: #ffffff;
+      box-shadow: 0 4px 25px rgba(0, 0, 0, 0.08);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      box-sizing: border-box;
+    }
+
+    /* ── الإطار المزدوج الأخضر المميز (نفس النموذج تماماً) ── */
+    .invoice-outer-frame {
+      border: 2px solid #285343;
+      padding: 3.5px;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      box-sizing: border-box;
+    }
+
+    .invoice-inner-frame {
+      border: 1px solid #285343;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      flex: 1;
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    .top-content-wrap {
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .bottom-content-wrap {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    /* ── الترويسة العلوية الثلاثية (عربي - شعار - إنجليزي) ── */
+    .header-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    /* بيانات البائع بالعربية (اليمين) */
+    .seller-ar {
+      width: 36%;
+      text-align: right;
+    }
+
+    .seller-name-ar {
+      font-size: 15px;
+      font-weight: 800;
+      color: #1e3d30;
+      line-height: 1.35;
+      margin-bottom: 2px;
+    }
+
+    .seller-name-ar:empty::before {
+      content: "مؤسسة حياة دخيل الحربي لمواد البناء";
+    }
+
+    .seller-sub-ar {
+      font-size: 13px;
+      font-weight: 800;
+      color: #1e3d30;
+      margin-bottom: 3px;
+    }
+
+    .seller-field {
+      font-size: 10.5px;
+      color: #334155;
+      line-height: 1.5;
+      font-weight: 600;
+    }
+
+    .seller-field .num {
+      font-family: Tahoma, Arial, sans-serif;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    /* الشعار في المنتصف (مربع الشعار) */
+    .logo-area {
+      width: 28%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .logo-box {
+      width: 95px;
+      height: 95px;
+      min-width: 95px;
+      min-height: 95px;
+      border: 1px solid #7c9f8d;
+      border-radius: 4px;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      margin: 0 auto;
+      overflow: hidden;
+      box-sizing: border-box;
+      padding: 4px;
+    }
+
+    .logo-box img {
+      max-height: 100%;
+      max-width: 100%;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+    }
+
+    .logo-box svg {
+      max-height: 100%;
+      max-width: 100%;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+    }
+
+    /* بيانات البائع بالإنجليزية (اليسار) */
+    .seller-en {
+      width: 36%;
+      direction: ltr !important;
+      text-align: left !important;
+      unicode-bidi: isolate;
+    }
+
+    .seller-name-en {
+      font-size: 13px;
+      font-weight: 800;
+      color: #1e3d30;
+      line-height: 1.25;
+      margin-bottom: 2px;
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      direction: ltr;
+      text-align: left;
+    }
+
+    .seller-name-en:empty::before {
+      content: "Hayat Dakhil Al-Harbi Building Materials Establishment";
+    }
+
+    .seller-field-en {
+      font-size: 10px;
+      color: #334155;
+      line-height: 1.45;
+      font-weight: 600;
+      direction: ltr;
+      text-align: left;
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+    }
+
+    .seller-field-en .num {
+      font-family: Tahoma, Arial, sans-serif;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    /* ── الفاصل الأفقي وعنوان الفاتورة ── */
+    .header-divider-line {
+      border-bottom: 1.5px solid #285343;
+      margin-top: 6px;
+      margin-bottom: 10px;
+    }
+
+    .invoice-main-title {
+      text-align: center;
+      font-size: 22px;
+      font-weight: 800;
+      color: #244b3c;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    /* ── كرتي بيانات الفاتورة وبيانات العميل المتجاورين ── */
+    .meta-cards-row {
+      display: flex;
+      flex-direction: row;
+      gap: 14px;
+      margin-bottom: 14px;
+      align-items: stretch;
+    }
+
+    .meta-card {
+      border: 1.5px solid #6b8f7d;
+      border-radius: 8px;
+      background: #ffffff;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* كرت بيانات الفاتورة (يمين) */
+    .invoice-card {
+      width: 220px;
+      flex-shrink: 0;
+    }
+
+    /* كرت بيانات العميل (يسار) */
+    .client-card {
+      flex: 1;
+    }
+
+    .card-head {
+      background: #d9e6dc;
+      color: #1e3d30;
+      font-weight: 800;
+      font-size: 12px;
+      text-align: center;
+      padding: 5px 8px;
+      border-bottom: 1.5px solid #6b8f7d;
+    }
+
+    .card-body {
+      padding: 8px 12px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .invoice-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+      font-size: 11px;
+    }
+
+    .invoice-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .invoice-row .lbl {
+      color: #1e293b;
+      font-weight: 700;
+    }
+
+    .invoice-row .val {
+      color: #0f172a;
+      font-weight: 700;
+    }
+
+    .client-body {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 6px 12px;
+    }
+
+    .client-name {
+      font-size: 15px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .client-tax {
+      font-size: 11px;
+      font-weight: 700;
+      color: #334155;
+    }
+
+    .client-addr {
+      font-size: 10.5px;
+      color: #475569;
+      font-weight: 600;
+    }
+
+    /* ── جدول الأصناف والبنود ── */
+    .items-table-frame {
+      border: 1.5px solid #6b8f7d;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 14px;
+      background: #ffffff;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      text-align: center;
+    }
+
+    .items-table thead {
+      background: #d9e6dc;
+    }
+
+    .items-table th {
+      border: 1px solid #7c9f8d;
+      color: #1b3b2f;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 6px 4px;
+      text-align: center;
+    }
+
+    .items-table th:nth-child(2) {
+      text-align: right;
+      padding-right: 10px;
+    }
+
+    .items-table td {
+      border: 1px solid #7c9f8d;
+      padding: 6px 6px;
+      color: #0f172a;
+      vertical-align: middle;
+      background: #ffffff;
+    }
+
+    .items-table td:nth-child(1) {
+      text-align: center;
+      font-family: Tahoma, Arial, sans-serif;
+      font-weight: 600;
+    }
+
+    .items-table td:nth-child(2) {
+      text-align: right;
+      font-weight: 700;
+      padding-right: 10px;
+    }
+
+    .items-table td:nth-child(3) {
+      text-align: center;
+    }
+
+    .items-table td:nth-child(4),
+    .items-table td:nth-child(5),
+    .items-table td:nth-child(6),
+    .items-table td:nth-child(7) {
+      text-align: center;
+      font-family: Tahoma, Arial, sans-serif;
+    }
+
+    .items-table td:nth-child(7) {
+      font-weight: 700;
+    }
+
+    /* ── القسم السفلي الثلاثي (الإجماليات - التفقيط - الباركود) ── */
+    .bottom-summary-row {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: stretch;
+      gap: 14px;
+      margin-top: auto;
+    }
+
+    /* كرت رمز الاستجابة السريع ZATCA (يمين في العرض العربي) */
+    .qr-card-wrap {
+      width: 140px;
+      height: 140px;
+      border: 1.5px solid #285343;
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-sizing: border-box;
+    }
+
+    .qr-card-wrap svg,
+    .qr-card-wrap img,
+    .qr-card-wrap .zatca-qr-container svg {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 126px;
+      max-height: 126px;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+    }
+
+    /* كرت التفقيط والمبلغ كتابة بالوسط (بإطار متقطع) */
+    .tafqeet-card-wrap {
+      flex: 1;
+      border: 1.5px dashed #7a9d8c;
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      background: #ffffff;
+      min-height: 140px;
+      box-sizing: border-box;
+    }
+
+    .tafqeet-text-box {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #1e293b;
+      line-height: 2;
+    }
+
+    /* جدول الإجماليات المالية (يسار في العرض العربي) */
+    .totals-card-wrap {
+      width: 295px;
+      flex-shrink: 0;
+    }
+
+    .totals-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1.5px solid #7c9f8d;
+      height: 100%;
+    }
+
+    .totals-table td {
+      border: 1px solid #7c9f8d;
+      padding: 5px 8px;
+      font-size: 11px;
+    }
+
+    .tot-lbl {
+      background: #ffffff;
+      color: #1e293b;
+      font-weight: 700;
+      text-align: right;
+      width: 155px;
+    }
+
+    .tot-val {
+      background: #ffffff;
+      text-align: left;
+      direction: ltr;
+    }
+
+    .final-row td {
+      background: #d9e6dc !important;
+      color: #1b3b2f;
+      font-weight: 900;
+    }
+
+    .final-val {
+      font-size: 12.5px;
+      font-weight: 900;
+    }
+
+    .money {
+      display: inline-flex;
+      direction: ltr;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+      font-family: Tahoma, Arial, sans-serif;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .money svg,
+    .money .sar-sym {
+      width: 13px;
+      height: 13px;
+      fill: #1b3b2f;
+      flex-shrink: 0;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+
+    /* ── تنسيق الطباعة ── */
+    @media print {
+      html,
+      body {
+        background: #ffffff;
+        margin: 0;
+        padding: 0;
+        height: 297mm;
+      }
+
+      .invoice-container {
+        box-shadow: none;
+        width: 100%;
+        min-height: 295.5mm;
+        height: 295.5mm;
+        margin: 0;
+        padding: 7mm 7mm;
+      }
+    }
+  </style>
+  <style data-invoice-pagination>
+    @media print {
+      [data-invoice-page] {
+        break-after: page;
+        page-break-after: always;
+      }
+      [data-invoice-page]:last-child {
+        break-after: auto;
+        page-break-after: auto;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="invoice-container invoice-frame">
+    <div class="invoice-outer-frame">
+      <div class="invoice-inner-frame">
+
+        <div class="top-content-wrap">
+          <!-- ── الترويسة العلوية ── -->
+          <header class="header-section">
+            <!-- اليمين: بيانات البائع بالعربية -->
+            <div class="seller-ar">
+              <div class="seller-name-ar">{{seller_name}}</div>
+              <div class="seller-field">العنوان: <span>{{seller_address}}</span></div>
+              <div class="seller-field">السجل التجاري: <span class="num">{{seller_cr}}</span></div>
+              <div class="seller-field">الرقم الضريبي: <span class="num">{{seller_tax}}</span></div>
+            </div>
+
+            <!-- الوسط: مربع الشعار -->
+            <div class="logo-area">
+              <div class="logo-box">
+                {{logo}}
+              </div>
+            </div>
+
+            <!-- اليسار: بيانات البائع بالإنجليزية -->
+            <div class="seller-en" dir="ltr">
+              <div class="seller-name-en">{{seller_name_en}}</div>
+              <div class="seller-field-en">Address: <span>{{seller_address_en}}</span></div>
+              <div class="seller-field-en">CR NO. <span class="num">{{seller_cr}}</span></div>
+              <div class="seller-field-en">TAX NO. <span class="num">{{seller_tax}}</span></div>
+            </div>
+          </header>
+
+          <!-- خط الفاصل وعنوان الفاتورة -->
+          <div class="header-divider-line"></div>
+          <div class="invoice-main-title">فاتورة ضريبية</div>
+
+          <!-- كرتي بيانات الفاتورة وبيانات العميل -->
+          <div class="meta-cards-row">
+            <!-- كرت بيانات الفاتورة (يمين) -->
+            <div class="meta-card invoice-card">
+              <div class="card-head">بيانات الفاتورة</div>
+              <div class="card-body">
+                <div class="invoice-row">
+                  <span class="lbl">رقم الفاتورة:</span>
+                  <span class="val num">{{invoice_number}}</span>
+                </div>
+                <div class="invoice-row">
+                  <span class="lbl">التاريخ:</span>
+                  <span class="val num">{{issue_date}}</span>
+                </div>
+                <div class="invoice-row">
+                  <span class="lbl">نوع الفاتورة:</span>
+                  <span class="val">{{payment_method}}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- كرت بيانات العميل (يسار) -->
+            <div class="meta-card client-card">
+              <div class="card-head">بيانات العميل</div>
+              <div class="card-body client-body">
+                <div class="client-name">{{buyer_name}}</div>
+                <div class="client-tax">الرقم الضريبي: <span class="num">{{buyer_tax}}</span></div>
+                <div class="client-addr">{{buyer_address}}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- جدول الأصناف والبنود -->
+          <div class="items-table-frame">
+            <table class="items-table" data-qty-two-decimals>
+              <thead>
+                <tr>
+                  <th style="width: 4%;">م</th>
+                  <th style="width: 41%;">الوصف</th>
+                  <th style="width: 8%;">الوحدة</th>
+                  <th style="width: 9%;">الكمية</th>
+                  <th style="width: 11%;">سعر الوحدة</th>
+                  <th style="width: 13%;">الإجمالي</th>
+                  <th style="width: 14%;">الإجمالي شامل الضريبة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{items_rows}}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bottom-content-wrap">
+          <!-- ── القسم السفلي (الباركود - التفقيط - الإجماليات) ── -->
+          <div class="bottom-summary-row">
+            <!-- يمين: باركود ZATCA في صندوق بحواف دائرية -->
+            <div class="qr-card-wrap">
+              {{qr_code}}
+            </div>
+
+            <!-- وسط: صندوق التفقيط بإطار متقطع -->
+            <div class="tafqeet-card-wrap">
+              <div class="tafqeet-text-box">
+                فقط مبلغ وقدره {{tafqeet}}
+              </div>
+            </div>
+
+            <!-- يسار: جدول الإجماليات المالية -->
+            <div class="totals-card-wrap">
+              <table class="totals-table">
+                <tr>
+                  <td class="tot-lbl">الإجمالي قبل الخصم</td>
+                  <td class="tot-val">
+                    <span class="money"><span>{{sar_symbol}}</span><bdi>{{subtotal}}</bdi></span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="tot-lbl">الخصم</td>
+                  <td class="tot-val">
+                    <span class="money"><span>{{sar_symbol}}</span><bdi>{{discount}}</bdi></span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="tot-lbl">المبلغ الخاضع للضريبة</td>
+                  <td class="tot-val">
+                    <span class="money"><span>{{sar_symbol}}</span><bdi>{{taxable_amount}}</bdi></span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="tot-lbl">ضريبة القيمة المضافة</td>
+                  <td class="tot-val">
+                    <span class="money"><span>{{sar_symbol}}</span><bdi>{{tax_amount}}</bdi></span>
+                  </td>
+                </tr>
+                <tr class="final-row">
+                  <td class="tot-lbl">الإجمالي النهائي</td>
+                  <td class="tot-val">
+                    <span class="money final-val"><span>{{sar_symbol}}</span><bdi>{{grand_total}}</bdi></span>
+                  </td>
+                </tr>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>

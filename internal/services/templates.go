@@ -1521,6 +1521,7 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 
 		// ─── المبالغ والإجماليات والعملة ───
 		"{{subtotal}}", formatCommaMoney(inv.SubtotalMajor),
+		"{{taxable_amount}}", formatCommaMoney(inv.SubtotalMajor - inv.DiscountAmountMajor),
 		"{{discount}}", formatCommaMoney(inv.DiscountAmountMajor),
 		"{{tax_amount}}", formatCommaMoney(inv.TaxAmountMajor),
 		"{{grand_total}}", formatCommaMoney(inv.GrandTotalMajor),
