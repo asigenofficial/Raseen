@@ -387,12 +387,60 @@ func (s *Server) renderVoucherHTML(id, style string) (string, error) {
 	// Custom templates may use aliases or spaces around the monetary field.
 	amountTags := regexp.MustCompile(`(?i)\{\{\s*(amount|total_amount|grand_total|total|net_amount)\s*\}\}`)
 	tpl = amountTags.ReplaceAllStringFunc(tpl, func(string) string { return amount })
+	sellerMetaArParts := make([]string, 0, 3)
+	if tax := strings.TrimSpace(issuer.TaxNumber); tax != "" {
+		if strings.Contains(tax, "ضريب") {
+			sellerMetaArParts = append(sellerMetaArParts, tax)
+		} else {
+			sellerMetaArParts = append(sellerMetaArParts, "الرقم الضريبي: "+tax)
+		}
+	}
+	if cr := strings.TrimSpace(issuer.CommercialRegister); cr != "" {
+		if strings.Contains(cr, "سجل") || strings.Contains(cr, "س.ت") {
+			sellerMetaArParts = append(sellerMetaArParts, cr)
+		} else {
+			sellerMetaArParts = append(sellerMetaArParts, "س.ت: "+cr)
+		}
+	}
+	if phone := strings.TrimSpace(issuer.Phone); phone != "" {
+		if strings.Contains(phone, "هاتف") || strings.Contains(phone, "جوال") {
+			sellerMetaArParts = append(sellerMetaArParts, phone)
+		} else {
+			sellerMetaArParts = append(sellerMetaArParts, "هاتف: "+phone)
+		}
+	}
+	sellerMetaAr := strings.Join(sellerMetaArParts, " | ")
+
+	sellerMetaEnParts := make([]string, 0, 3)
+	if tax := strings.TrimSpace(issuer.TaxNumber); tax != "" {
+		if strings.Contains(strings.ToUpper(tax), "VAT") || strings.Contains(strings.ToUpper(tax), "TAX") {
+			sellerMetaEnParts = append(sellerMetaEnParts, tax)
+		} else {
+			sellerMetaEnParts = append(sellerMetaEnParts, "VAT: "+tax)
+		}
+	}
+	if cr := strings.TrimSpace(issuer.CommercialRegister); cr != "" {
+		if strings.Contains(strings.ToUpper(cr), "CR") || strings.Contains(strings.ToUpper(cr), "C.R.") {
+			sellerMetaEnParts = append(sellerMetaEnParts, cr)
+		} else {
+			sellerMetaEnParts = append(sellerMetaEnParts, "C.R.: "+cr)
+		}
+	}
+	if phone := strings.TrimSpace(issuer.Phone); phone != "" {
+		if strings.Contains(strings.ToUpper(phone), "TEL") || strings.Contains(strings.ToUpper(phone), "PHONE") {
+			sellerMetaEnParts = append(sellerMetaEnParts, phone)
+		} else {
+			sellerMetaEnParts = append(sellerMetaEnParts, "Tel: "+phone)
+		}
+	}
+	sellerMetaEn := strings.Join(sellerMetaEnParts, " | ")
+
 	replacements := map[string]string{
 		"seller_name": issuer.NameAr, "seller_name_en": issuer.NameEn,
 		"seller_tax": issuer.TaxNumber, "seller_phone": issuer.Phone,
 		"seller_cr": issuer.CommercialRegister, "seller_address": strings.Join(addressParts, " - "),
 		"seller_address_en": addressEn,
-		"seller_meta_ar": issuer.NameAr, "seller_meta_en": issuer.NameEn,
+		"seller_meta_ar": sellerMetaAr, "seller_meta_en": sellerMetaEn,
 		"buyer_name": v.ClientName, "client_name": v.ClientName, "received_from": v.ClientName,
 		"voucher_number": v.VoucherNumber, "invoice_number": v.VoucherNumber,
 		"voucher_date": v.VoucherDate, "issue_date": v.VoucherDate,
