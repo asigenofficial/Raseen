@@ -435,15 +435,6 @@ function registerRoutes() {
   });
 }
 
-function preloadViews() {
-  const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 300));
-  idle(() => {
-    Object.values(VIEWS).forEach((loader) => {
-      try { loader().catch(() => { }); } catch { /* ignore */ }
-    });
-  });
-}
-
 // -------------------------------------------------------------------- البدء
 async function boot() {
   await loadMeta();
@@ -453,14 +444,19 @@ async function boot() {
     return;
   }
   await loadIssuers(true);
-  loadLookups().catch(() => { });
   renderShell();
   registerRoutes();
   if (!store.issuers.length && can('issuers.write')) {
     location.hash = '#/issuers';
   }
   router.start();
-  preloadViews();
+
+  // تحميل البيانات المرجعية بهدوء في الخلفية بعد رسم الصفحة لتسريع فتح النظام فوراً
+  const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 600));
+  idle(() => {
+    loadLookups().catch(() => { });
+  });
+
   startSync();
 
   const viewEl = document.getElementById('view');

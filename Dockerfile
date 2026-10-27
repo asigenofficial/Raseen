@@ -1,5 +1,5 @@
 # ─── مرحلة البناء ─────────────────────────────────────────────────────────────
-FROM golang:1.26-bookworm AS builder
+FROM golang:bookworm AS builder
 ENV GOTOOLCHAIN=auto
 
 WORKDIR /app

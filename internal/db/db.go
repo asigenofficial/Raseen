@@ -43,7 +43,7 @@ func Open(cfg *config.Config) (*DB, error) {
 	}
 
 	// Reserve the writer before reading, so concurrent saves wait instead of failing a WAL snapshot upgrade.
-	dsn := fmt.Sprintf("%s?_txlock=immediate&_pragma=busy_timeout(15000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-128000)&_pragma=mmap_size(268435456)&_pragma=temp_store(MEMORY)&_pragma=wal_autocheckpoint(1000)", cfg.DbFile)
+	dsn := fmt.Sprintf("%s?_txlock=immediate&_pragma=busy_timeout(15000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=cache_size(-128000)&_pragma=mmap_size(268435456)&_pragma=temp_store(MEMORY)&_pragma=wal_autocheckpoint(1000)&_pragma=auto_vacuum(INCREMENTAL)", cfg.DbFile)
 	sqldb, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open sqlite: %w", err)
@@ -204,8 +204,8 @@ func (d *DB) CreateBackup() (*BackupResult, error) {
 		return nil, fmt.Errorf("failed to back up encryption key: %w", err)
 	}
 
-	// Keep latest 5 backups to prevent disk overflow while ensuring safety
-	pruneOldBackups(d.cfg.BackupDir, 5)
+	// Keep latest 3 backups to prevent disk overflow while ensuring safety
+	pruneOldBackups(d.cfg.BackupDir, 3)
 
 	return &BackupResult{
 		Filename:  filename,
@@ -223,7 +223,7 @@ func pruneOldBackups(dir string, keepCount int) {
 
 	var backupFiles []string
 	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "raseen_backup_") && strings.HasSuffix(entry.Name(), ".db") {
+		if !entry.IsDir() && (strings.HasPrefix(entry.Name(), "raseen_backup_") || strings.HasPrefix(entry.Name(), "zsystem_backup_")) && strings.HasSuffix(entry.Name(), ".db") {
 			backupFiles = append(backupFiles, entry.Name())
 		}
 	}
