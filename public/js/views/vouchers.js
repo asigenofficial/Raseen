@@ -131,6 +131,32 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
 
   let open = [];
   const alloc = new Map();
+  let notesUserEdited = false;
+
+  const notesInp = $('input[name="notes"]', m.body);
+  if (notesInp) {
+    notesInp.addEventListener('input', () => {
+      notesUserEdited = true;
+    });
+  }
+
+  const updateDefaultNotes = () => {
+    if (batchMode || installMode || notesUserEdited || !notesInp) return;
+    if (alloc.size === 0) {
+      if (notesInp.value.startsWith('وذلك مقابل سداد')) notesInp.value = '';
+      return;
+    }
+    const invNumbers = [];
+    for (const invId of alloc.keys()) {
+      const inv = open.find((x) => x.id === invId);
+      if (inv && inv.invoice_number) invNumbers.push(inv.invoice_number);
+    }
+    if (invNumbers.length === 1) {
+      notesInp.value = `وذلك مقابل سداد فاتورة رقم ${invNumbers[0]}`;
+    } else if (invNumbers.length > 1) {
+      notesInp.value = `وذلك مقابل سداد فواتير رقم ${invNumbers.join('، ')}`;
+    }
+  };
 
   // ── أدوات مساعدة ─────────────────────────────────────────────────────────
   const setActiveBtn = (btnEl, active) => {
@@ -310,13 +336,8 @@ export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', o
       if (v > 0) alloc.set(id, v); else alloc.delete(id);
       renderOpen();
     }));
-    if (!batchMode && alloc.size === 1) {
-      const invId = Array.from(alloc.keys())[0];
-      const singleInv = open.find((x) => x.id === invId);
-      const notesInp = $('input[name="notes"]', m.body);
-      if (singleInv && notesInp && (!notesInp.value || notesInp.value.startsWith('وذلك مقابل سداد فاتورة رقم '))) {
-        notesInp.value = `وذلك مقابل سداد فاتورة رقم ${singleInv.invoice_number}`;
-      }
+    if (!batchMode) {
+      updateDefaultNotes();
     }
   };
 

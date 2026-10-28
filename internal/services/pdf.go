@@ -96,7 +96,7 @@ func RenderHTMLToPDF(htmlContent string) ([]byte, error) {
 	if regexp.MustCompile(`(?is)@page[^{}]*\{[^}]*size\s*:\s*[^;}]*\blandscape\b`).MatchString(htmlContent) {
 		orientation = "landscape"
 	}
-	a4Style := `<style>@page { size: A4 ` + orientation + ` !important; }</style>`
+	a4Style := `<style>@page { size: A4 ` + orientation + ` !important; margin: 0 !important; } html, body { margin: 0 !important; padding: 0 !important; }</style>`
 	if documentFontData != "" {
 		// Static faces let Chromium embed compact font subsets instead of Type3 glyph drawings.
 		a4Style += `<style data-pdf-document-font>@font-face { font-family: 'Raseen PDF'; src: url('data:font/ttf;base64,` + documentFontData + `') format('truetype'); font-weight: 100 500; }`

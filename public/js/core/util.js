@@ -415,31 +415,31 @@ export function parseSpreadsheetText(content, filename = '') {
  */
 function applyVoucherPageStyle(html) {
   const style = `<style data-voucher-page>
-@page { size: A4 portrait !important; margin: 10mm !important; }
-html { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; }
-body {
-  width: 190mm !important; max-width: 190mm !important;
-  height: auto !important; min-height: 276mm !important; max-height: none !important;
-  margin: 0 auto !important; padding: 0 !important; box-sizing: border-box !important; overflow: visible !important;
+@page { size: A4 portrait !important; margin: 0 !important; }
+html, body {
+  height: 297mm !important; max-height: 297mm !important; min-height: 0 !important;
+  margin: 0 !important; padding: 0 !important; box-sizing: border-box !important;
+  overflow: hidden !important; background: #fff !important;
 }
-body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page {
-  width: 190mm !important; max-width: 190mm !important;
-  height: auto !important; min-height: 276mm !important; max-height: none !important;
-  margin: 0 !important; box-sizing: border-box !important;
-  display: flex !important; flex-direction: column !important; justify-content: flex-start !important;
-  overflow: visible !important; break-inside: avoid !important; page-break-inside: avoid !important;
+body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page, body > .sheet, body > main, .voucher-container {
+  width: 210mm !important; max-width: 210mm !important;
+  height: 297mm !important; max-height: 297mm !important; min-height: 0 !important;
+  margin: 0 auto !important; padding: 10mm 12mm !important; box-sizing: border-box !important;
+  display: flex !important; flex-direction: column !important; justify-content: space-between !important;
+  overflow: hidden !important; break-inside: avoid !important; page-break-inside: avoid !important;
+  break-after: avoid !important; page-break-after: avoid !important;
 }
-body > .receipt-card > .head, body > .receipt-container > .head, body > .receipt-page > .head { margin-bottom: 4mm !important; }
-body > .receipt-card > .receipt-box, body > .receipt-container > .receipt-box { margin-top: 0 !important; }
-body > .receipt-card > footer, body > .receipt-container > footer, body > .receipt-container > .foot, body > .receipt-page > footer { margin-top: auto !important; }
+body > .receipt-card > .head, body > .receipt-container > .head, body > .receipt-page > .head, body > main > .header, body > .sheet > .header { margin-bottom: 4mm !important; flex-shrink: 0 !important; }
+body > .receipt-card > .receipt-box, body > .receipt-container > .receipt-box { margin-top: 0 !important; flex-shrink: 0 !important; }
+body > .receipt-card > footer, body > .receipt-container > footer, body > .receipt-container > .foot, body > .receipt-page > footer, body > main > footer, body > .sheet > footer, body > .sheet > .voucher-footer { margin-top: auto !important; flex-shrink: 0 !important; }
 body > .receipt-page > .document-heading { margin-top: 4mm !important; margin-bottom: 4mm !important; }
 body > .receipt-page > .amount-card { margin-top: 4mm !important; margin-bottom: 4mm !important; }
 body > .receipt-page > .ornament { margin-top: 4mm !important; margin-bottom: 4mm !important; }
 body > .receipt-page > .bottom-rule { margin-top: 4mm !important; }
-body > .receipt-card > *, body > .receipt-container > *, body > .receipt-page > *, body > .receipt > *, body > .page > * { flex-shrink: 0; }
+body > .receipt-card > *, body > .receipt-container > *, body > .receipt-page > *, body > .receipt > *, body > .page > *, body > main > *, body > .sheet > * { flex-shrink: 0; }
 @media print {
   body { margin: 0 !important; background: #fff !important; }
-  body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page { box-shadow: none !important; }
+  body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page, body > main, body > .sheet { box-shadow: none !important; }
 }
 </style>`;
   return /<\/head>/i.test(html) ? html.replace(/<\/head>/i, style + "\n</head>") : style + "\n" + html;
@@ -457,7 +457,7 @@ export function printDoc(docHtml, { flowing = false } = {}) {
 
   const printFixStyle = flowing ? `<style>@media print { html, body { height: auto !important; max-height: none !important; overflow: visible !important; } thead { display: table-header-group; } tr { break-inside: avoid; } }</style>` : `<style>
     @page { size: A4 portrait; margin: 0 !important; }
-    .invoice-container, .invoice-frame, .page, [data-invoice-page] {
+    .invoice-container, .invoice-frame, .page, [data-invoice-page], .sheet, .receipt-card, .receipt-container, .receipt-page, .receipt, .voucher-container {
       width: 210mm !important;
       max-width: 210mm !important;
       min-height: 297mm !important;
@@ -470,6 +470,8 @@ export function printDoc(docHtml, { flowing = false } = {}) {
       margin: 0 auto !important;
       position: relative !important;
       overflow: hidden !important;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
     }
     .top-content-wrap {
       flex: 1 1 auto !important;
@@ -477,7 +479,7 @@ export function printDoc(docHtml, { flowing = false } = {}) {
       flex-direction: column !important;
       min-height: 0 !important;
     }
-    .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
+    .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone, .sheet > .voucher-footer, .sheet > footer {
       margin-top: auto !important;
       flex-shrink: 0 !important;
       page-break-inside: avoid !important;
@@ -491,8 +493,9 @@ export function printDoc(docHtml, { flowing = false } = {}) {
         margin: 0 !important;
         padding: 0 !important;
         overflow: hidden !important;
+        background: #fff !important;
       }
-      .invoice-container, .invoice-frame, .page, [data-invoice-page] {
+      .invoice-container, .invoice-frame, .page, [data-invoice-page], .sheet, .receipt-card, .receipt-container, .receipt-page, .receipt, .voucher-container {
         width: 210mm !important;
         max-width: 210mm !important;
         height: 297mm !important;
@@ -504,11 +507,15 @@ export function printDoc(docHtml, { flowing = false } = {}) {
         box-sizing: border-box !important;
         margin: 0 auto !important;
         overflow: hidden !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
       }
       .top-content-wrap {
         flex: 0 0 auto !important;
       }
-      .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone {
+      .bottom-content-wrap, .bottom, .invoice-container > .summary-section, .invoice-container > .totals, .invoice-container > footer, .invoice-container > .footer-zone, .sheet > .voucher-footer, .sheet > footer {
         margin-top: auto !important;
         flex-shrink: 0 !important;
         page-break-inside: avoid !important;

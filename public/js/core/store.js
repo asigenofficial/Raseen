@@ -99,8 +99,27 @@ export async function loadCategories(force = false) {
   return store.categories;
 }
 
+export async function loadTemplates(type = 'invoices', force = false) {
+  if (!store.templates) store.templates = {};
+  if (store.loaded['templates_' + type] && !force && store.templates[type]) {
+    return store.templates[type];
+  }
+  const res = await api.get(qs('/api/invoices/templates', { type }));
+  const arr = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
+  store.templates[type] = arr;
+  store.loaded['templates_' + type] = true;
+  return arr;
+}
+
 export async function loadLookups(force = false) {
-  await Promise.all([loadIssuers(force), loadClients(force), loadItems(force), loadCategories(force)]);
+  await Promise.all([
+    loadIssuers(force),
+    loadClients(force),
+    loadItems(force),
+    loadCategories(force),
+    loadTemplates('invoices', force),
+    loadTemplates('documents', force),
+  ]);
 }
 
 export function invalidate(key) {

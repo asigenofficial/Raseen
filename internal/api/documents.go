@@ -130,7 +130,7 @@ func (s *Server) pdfStatus(w http.ResponseWriter, kind, id string) {
 		s.err(w, 500, err.Error())
 		return
 	}
-	if status == "FAILED" {
+	if status == "FAILED" && revision > rendered {
 		// Automatically recover from temporary failures by transitioning back to PENDING and waking worker
 		_, _ = s.db.Exec(`UPDATE document_pdfs SET status='PENDING',error='',updated_at=?
 			WHERE kind=? AND document_id=?`, db.NowIso(), kind, id)
@@ -150,6 +150,10 @@ func (s *Server) wakePDFWorker() {
 
 func (s *Server) startPDFWorker() {
 	go func() {
+		// Clean up orphaned records whose parent documents were deleted
+		_, _ = s.db.Exec(`DELETE FROM document_pdfs WHERE
+			(kind='invoice' AND document_id NOT IN (SELECT id FROM invoices)) OR
+			(kind='voucher' AND document_id NOT IN (SELECT id FROM receipt_vouchers))`)
 		// Re-queue any previously failed PDFs on startup so they re-render cleanly
 		_, _ = s.db.Exec("UPDATE document_pdfs SET status='PENDING' WHERE status='FAILED'")
 		ticker := time.NewTicker(5 * time.Second)
@@ -363,9 +367,15 @@ func (s *Server) renderVoucherHTML(id, style string) (string, error) {
 	for _, a := range v.Allocations {
 		allocations = append(allocations, a.InvoiceNumber)
 	}
-	paidFor := v.Notes
-	if len(allocations) > 0 {
-		paidFor = "سداد فواتير رقم " + strings.Join(allocations, "، ")
+	paidFor := strings.TrimSpace(v.Notes)
+	if paidFor == "" && len(allocations) > 0 {
+		if len(allocations) == 1 {
+			paidFor = "سداد فاتورة رقم " + allocations[0]
+		} else {
+			paidFor = "سداد فواتير رقم " + strings.Join(allocations, "، ")
+		}
+	} else if paidFor == "" {
+		paidFor = "سداد حساب"
 	}
 	amount := formatVoucherAmount(v.TotalAmount)
 	addressParts := make([]string, 0, 5)
@@ -466,31 +476,31 @@ func (s *Server) renderVoucherHTML(id, style string) (string, error) {
 
 func injectVoucherPrintStyle(template string) string {
 	style := `<style data-voucher-page>
-@page { size: A4 portrait !important; margin: 10mm !important; }
-html { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; }
-body {
-  width: 190mm !important; max-width: 190mm !important;
-  height: auto !important; min-height: 276mm !important; max-height: none !important;
-  margin: 0 auto !important; padding: 0 !important; box-sizing: border-box !important; overflow: visible !important;
+@page { size: A4 portrait !important; margin: 0 !important; }
+html, body {
+  height: 297mm !important; max-height: 297mm !important; min-height: 0 !important;
+  margin: 0 !important; padding: 0 !important; box-sizing: border-box !important;
+  overflow: hidden !important; background: #fff !important;
 }
-body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page {
-  width: 190mm !important; max-width: 190mm !important;
-  height: auto !important; min-height: 276mm !important; max-height: none !important;
-  margin: 0 !important; box-sizing: border-box !important;
-  display: flex !important; flex-direction: column !important; justify-content: flex-start !important;
-  overflow: visible !important; break-inside: avoid !important; page-break-inside: avoid !important;
+body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page, body > .sheet, body > main, .voucher-container {
+  width: 210mm !important; max-width: 210mm !important;
+  height: 297mm !important; max-height: 297mm !important; min-height: 0 !important;
+  margin: 0 auto !important; padding: 10mm 12mm !important; box-sizing: border-box !important;
+  display: flex !important; flex-direction: column !important; justify-content: space-between !important;
+  overflow: hidden !important; break-inside: avoid !important; page-break-inside: avoid !important;
+  break-after: avoid !important; page-break-after: avoid !important;
 }
-body > .receipt-card > .head, body > .receipt-container > .head, body > .receipt-page > .head { margin-bottom: 5px !important; flex-shrink: 0 !important; }
+body > .receipt-card > .head, body > .receipt-container > .head, body > .receipt-page > .head, body > main > .header, body > .sheet > .header { margin-bottom: 5px !important; flex-shrink: 0 !important; }
 body > .receipt-card > .receipt-box, body > .receipt-container > .receipt-box { margin-top: 0 !important; flex-shrink: 0 !important; }
-body > .receipt-card > footer, body > .receipt-container > footer, body > .receipt-container > .foot, body > .receipt-page > footer { margin-top: auto !important; flex-shrink: 0 !important; }
+body > .receipt-card > footer, body > .receipt-container > footer, body > .receipt-container > .foot, body > .receipt-page > footer, body > main > footer, body > .sheet > footer, body > .sheet > .voucher-footer { margin-top: auto !important; flex-shrink: 0 !important; }
 body > .receipt-page > .document-heading { margin-top: 4mm !important; margin-bottom: 4mm !important; }
 body > .receipt-page > .amount-card { margin-top: 4mm !important; margin-bottom: 4mm !important; }
 body > .receipt-page > .ornament { margin-top: 4mm !important; margin-bottom: 4mm !important; }
 body > .receipt-page > .bottom-rule { margin-top: 4mm !important; }
-body > .receipt-card > *, body > .receipt-container > *, body > .receipt-page > *, body > .receipt > *, body > .page > * { flex-shrink: 0; }
+body > .receipt-card > *, body > .receipt-container > *, body > .receipt-page > *, body > .receipt > *, body > .page > *, body > main > *, body > .sheet > * { flex-shrink: 0; }
 @media print {
   body { margin: 0 !important; background: #fff !important; }
-  body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page { box-shadow: none !important; }
+  body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page, body > main, body > .sheet { box-shadow: none !important; }
 }
 </style>`
 	if headEnd := strings.LastIndex(strings.ToLower(template), "</head>"); headEnd >= 0 {

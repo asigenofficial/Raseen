@@ -413,15 +413,20 @@ function registerRoutes() {
         if (seq !== navSeq) return undefined;
 
         // تجهيز حاوية نظيفة وخالية من مستمعات الأحداث القديمة
-        const view = currentView.cloneNode(false);
-        view.className = 'content view-switching';
-        currentView.parentNode.replaceChild(view, currentView);
+        const view = document.createElement('main');
+        view.id = 'view';
+        view.className = 'content';
 
         const cleanup = await mod.render(view, ctx);
         if (seq !== navSeq) {
           if (typeof cleanup === 'function') cleanup();
           queueMicrotask(() => router.render());
           return undefined;
+        }
+
+        const activeCurrentView = $('#view') || currentView;
+        if (activeCurrentView && activeCurrentView.parentNode) {
+          activeCurrentView.parentNode.replaceChild(view, activeCurrentView);
         }
 
         initialBootDone = true;

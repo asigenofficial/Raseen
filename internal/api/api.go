@@ -3111,8 +3111,8 @@ func (s *Server) Handler() http.Handler {
 		fileServer.ServeHTTP(w, r)
 	})
 
-	// Wrap with standard security and authorization middleware
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Wrap with standard security, gzip compression, and authorization middleware
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		w.Header().Set("Referrer-Policy", "same-origin")
@@ -3121,6 +3121,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		mux.ServeHTTP(w, r)
 	})
+	return gzipMiddleware(handler)
 }
 
 // ─── إدارة النظام: تصدير واستيراد الحزمة الشاملة وقاعدة البيانات ─────────
