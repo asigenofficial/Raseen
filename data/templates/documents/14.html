@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-receipt-layout="1">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>14</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    html,
+    body {
+      width: 210mm;
+      height: 297mm;
+      min-height: 297mm;
+      max-height: 297mm;
+      margin: 0 auto;
+      padding: 0;
+      background: #f1f5f9;
+      color: #111827;
+      font-family: 'Noto Sans Arabic', 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 11px;
+      direction: rtl;
+    }
+
+    /* ── الحاوية الرئيسية A4 ── */
+    .voucher-container {
+      width: 210mm;
+      height: 297mm;
+      min-height: 297mm;
+      max-height: 297mm;
+      padding: 6mm 7mm;
+      background: #f1f5f9;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    /* ── الإطار الخارجي الأخضر المميز والخلفية الفاتحة المطابقة للأصل ── */
+    .green-main-frame {
+      flex: 1 1 auto;
+      border: 2px solid #3f6859;
+      background: #ebfaf5;
+      padding: 12px 14px 10px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-sizing: border-box;
+      min-height: 0;
+    }
+
+    /* ── الترويسة العلوية ── */
+    .header-wrap {
+      width: 100%;
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      flex-shrink: 0;
+    }
+
+    .seller-ar {
+      width: 44%;
+      text-align: right;
+      direction: rtl;
+    }
+
+    .seller-ar .company-name {
+      font-size: 16px;
+      font-weight: 800;
+      color: #111827;
+      margin-bottom: 5px;
+      line-height: 1.3;
+    }
+
+    .seller-ar .info-line {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #1f2937;
+      line-height: 1.45;
+    }
+
+    .seller-logo-center {
+      width: 12%;
+      text-align: center;
+      padding: 0 4px;
+      align-self: center;
+    }
+
+    .logo-slot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto;
+    }
+
+    .logo-slot:empty {
+      display: none !important;
+    }
+
+    .logo-slot img,
+    .logo-slot svg {
+      max-height: 65px !important;
+      max-width: 110px !important;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+    }
+
+    .seller-en {
+      width: 44%;
+      text-align: left !important;
+      direction: ltr !important;
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+    }
+
+    .seller-en .company-name-en {
+      font-size: 15px;
+      font-weight: 800;
+      color: #111827;
+      line-height: 1.22;
+      text-align: left !important;
+    }
+
+    .seller-en .company-sub-en {
+      font-size: 15px;
+      font-weight: 800;
+      color: #111827;
+      margin-bottom: 5px;
+      line-height: 1.22;
+      text-align: left !important;
+    }
+
+    .seller-en .info-line-en {
+      font-size: 10px;
+      font-weight: 700;
+      color: #1f2937;
+      line-height: 1.45;
+      text-align: left !important;
+      direction: ltr !important;
+    }
+
+    /* ── الصندوق الأول: ملخص السند (رقم، تاريخ، عميل، مبلغ) ── */
+    .summary-card {
+      border: 1.5px solid #8cb3a5;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.45);
+      padding: 12px 14px 14px 14px;
+      margin-bottom: 12px;
+      flex-shrink: 0;
+      box-sizing: border-box;
+    }
+
+    .summary-card-header {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .slip-title-wrap {
+      text-align: right;
+    }
+
+    .slip-type-en {
+      font-size: 10px;
+      font-weight: 700;
+      color: #4b5563;
+      direction: ltr;
+      display: inline-block;
+    }
+
+    .slip-title-ar {
+      font-size: 18px;
+      font-weight: 900;
+      color: #111827;
+      margin-top: 1px;
+    }
+
+    .receipt-badge {
+      border: 1px solid #7ea899;
+      border-radius: 8px;
+      padding: 5px 14px;
+      font-size: 10.5px;
+      font-weight: 800;
+      color: #111827;
+      background: #ffffff;
+      letter-spacing: 0.5px;
+      direction: ltr;
+    }
+
+    /* صف البطاقات الأربع */
+    .stat-cards-grid {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .stat-card {
+      background: #ffffff;
+      border: 1px solid #a8c8bd;
+      border-radius: 10px;
+      padding: 8px 6px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 48px;
+      box-sizing: border-box;
+    }
+
+    .card-amount-wrap {
+      width: 25%;
+    }
+
+    .card-num-wrap {
+      width: 22%;
+    }
+
+    .card-date-wrap {
+      width: 23%;
+    }
+
+    .card-client-wrap {
+      width: 30%;
+    }
+
+    .stat-card .card-lbl {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #4b5563;
+      margin-bottom: 3px;
+    }
+
+    .stat-card .card-val {
+      font-size: 11px;
+      font-weight: 800;
+      color: #111827;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+
+    .stat-card .client-val {
+      font-size: 10px;
+      line-height: 1.25;
+      white-space: normal;
+    }
+
+    .amount-val-inner {
+      display: inline-flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      direction: ltr;
+      font-family: Tahoma, 'Segoe UI', Arial, sans-serif;
+      font-size: 11.5px;
+      font-weight: 800;
+    }
+
+    .amount-val-inner .sar-icon-wrap {
+      display: inline-flex;
+      align-items: center;
+      color: #111827;
+    }
+
+    .amount-val-inner .sar-icon-wrap svg,
+    .sar-sym-svg {
+      width: 11px !important;
+      height: 12px !important;
+      fill: currentColor !important;
+      vertical-align: -1px;
+    }
+
+    /* بطاقة التفقيط (فقط مبلغ وقدره ...) */
+    .tafqeet-card {
+      background: #ffffff;
+      border: 1px solid #a8c8bd;
+      border-radius: 10px;
+      padding: 9px 14px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: #111827;
+      line-height: 1.4;
+      box-sizing: border-box;
+    }
+
+    /* ── الصندوق الثاني: بيان السند ── */
+    .details-card {
+      border: 1.5px solid #8cb3a5;
+      border-radius: 14px;
+      background: #ffffff;
+      padding: 14px 18px 12px 18px;
+      margin-bottom: 12px;
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+    }
+
+    .details-title {
+      font-size: 13.5px;
+      font-weight: 900;
+      color: #111827;
+      text-align: right;
+      margin-bottom: 12px;
+    }
+
+    .detail-row {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px dashed #b0d0c4;
+      padding-top: 9px;
+      padding-bottom: 2px;
+      margin-bottom: 10px;
+      min-height: 24px;
+      box-sizing: border-box;
+    }
+
+    .detail-label {
+      width: 130px;
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 800;
+      color: #111827;
+      text-align: right;
+    }
+
+    .detail-value {
+      flex: 1;
+      font-size: 11px;
+      font-weight: 800;
+      color: #111827;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      direction: rtl;
+    }
+
+    .detail-value.val-left {
+      justify-content: flex-start;
+    }
+
+    /* ── الصندوق الثالث: التواقيع (الصندوق - توقيع المحاسب - توقيع وختم) ── */
+    .signatures-row {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      flex-shrink: 0;
+    }
+
+    .sig-box {
+      flex: 1;
+      border: 1px dashed #8cb3a5;
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 10px 12px 14px 12px;
+      text-align: center;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 60px;
+    }
+
+    .sig-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: #111827;
+      margin-bottom: 14px;
+    }
+
+    .sig-dots {
+      font-size: 10px;
+      font-weight: bold;
+      color: #94a3b8;
+      letter-spacing: 1.5px;
+      direction: ltr;
+      user-select: none;
+    }
+
+    /* ── التذييل السفلي ── */
+    .footer-zone {
+      border-top: 1px dashed #8cb3a5;
+      padding-top: 8px;
+      text-align: center;
+      color: #162e27;
+      line-height: 1.4;
+      flex-shrink: 0;
+    }
+
+    .footer-zone .footer-addr {
+      font-size: 10.5px;
+      font-weight: 800;
+    }
+
+    .footer-zone .footer-page {
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 10px;
+      font-weight: 800;
+      direction: ltr;
+      unicode-bidi: isolate;
+      margin-top: 1px;
+    }
+
+    .num {
+      font-family: Tahoma, 'Segoe UI', Arial, sans-serif;
+      direction: ltr;
+      unicode-bidi: embed;
+    }
+
+    /* ── نصوص احتياطية مطابقة للنموذج الأصلي في المعاينة المجردة ── */
+    .seller-name-ar:empty::before { content: "مؤسسة مناير المهد للتجارة"; }
+    .seller-address-ar:empty::before { content: "جدة- مهد الذهب-ابو بكر الصديق"; }
+    .seller-tax-val:empty::before { content: "311435985100003"; }
+    .seller-cr-val:empty::before { content: "7025466421"; }
+
+    .seller-name-en:empty::before { content: "Manayer Al Mahd Trading"; }
+    .seller-address-en:empty::before { content: "Jeddah - Mahd Al-Dhahab - Abu Bakr Al-Siddiq"; }
+
+    .voucher-num-val:empty::before { content: "1073"; }
+    .voucher-date-val:empty::before { content: "2026-01-15"; }
+    .buyer-name-val:empty::before { content: "مؤسسة جمشيد رامين للمواد الغذائية"; }
+    .amount-val-txt:empty::before, .amount-val-txt bdi:empty::before { content: "198,375.00"; }
+    .tafqeet-val:empty::before { content: "فقط مبلغ وقدره مائة وثمانية وتسعون ألف وثلاثة مائة وخمسة وسبعون ريال سعودي لا غير"; }
+    .notes-val:empty::before { content: "فقط مبلغ وقدره 198,375 ريال سعودي لا غير"; }
+    .footer-addr-val:empty::before { content: "جدة- مهد الذهب-ابو بكر الصديق -"; }
+
+    @media print {
+      html,
+      body {
+        width: 210mm !important;
+        height: 297mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+      }
+
+      .voucher-container {
+        width: 210mm !important;
+        height: 297mm !important;
+        min-height: 297mm !important;
+        max-height: 297mm !important;
+        margin: 0 !important;
+        padding: 6mm 7mm !important;
+        box-shadow: none !important;
+        background: transparent !important;
+      }
+
+      .green-main-frame {
+        background: #ebfaf5 !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="voucher-container">
+    <div class="green-main-frame">
+      <!-- ── الترويسة العلوية ── -->
+      <div class="header-wrap">
+        <!-- اليمين: بيانات المنشأة بالعربية -->
+        <div class="seller-ar">
+          <div class="company-name"><span class="seller-name-ar">{{seller_name}}</span></div>
+          <div class="info-line"><span class="seller-address-ar">{{seller_address}}</span></div>
+          <div class="info-line">الرقم الضريبي: <span class="num seller-tax-val">{{seller_tax}}</span></div>
+          <div class="info-line">السجل التجاري: <span class="num seller-cr-val">{{seller_cr}}</span></div>
+          <div class="info-line">جوال: <span class="num">{{seller_phone}}</span></div>
+        </div>
+
+        <!-- المنتصف: الشعار -->
+        <div class="seller-logo-center">
+          <div class="logo-slot">{{logo}}</div>
+        </div>
+
+        <!-- اليسار: بيانات المنشأة بالإنجليزية -->
+        <div class="seller-en" dir="ltr" lang="en">
+          <div class="company-name-en"><span class="seller-name-en">{{seller_name_en}}</span></div>
+          <div class="company-sub-en">Establishment</div>
+          <div class="info-line-en"><span class="seller-address-en">{{seller_address_en}}</span></div>
+          <div class="info-line-en">TAX NO.: <span class="num seller-tax-val">{{seller_tax}}</span></div>
+          <div class="info-line-en">Commercial Record No : <span class="num seller-cr-val">{{seller_cr}}</span></div>
+          <div class="info-line-en">:PHONE <span class="num">{{seller_phone}}</span></div>
+        </div>
+      </div>
+
+      <!-- ── الصندوق الأول: ملخص السند ── -->
+      <div class="summary-card">
+        <div class="summary-card-header">
+          <!-- يمين: عنوان السند والنوع -->
+          <div class="slip-title-wrap">
+            <div class="slip-type-en">Payment Slip / قسيمة تحصيل</div>
+            <div class="slip-title-ar">سند قبض</div>
+          </div>
+          <!-- يسار: شارة RECEIPT -->
+          <div class="receipt-badge">RECEIPT</div>
+        </div>
+
+        <!-- صف البطاقات الأربع -->
+        <div class="stat-cards-grid">
+          <!-- البطاقة 1: المبلغ المحصل (يمين) -->
+          <div class="stat-card card-amount-wrap">
+            <div class="card-lbl">المبلغ المحصل</div>
+            <div class="card-val">
+              <div class="amount-val-inner">
+                <span class="sar-icon-wrap">{{sar_symbol}}</span>
+                <span class="amount-val-txt"><bdi>{{amount}}</bdi></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- البطاقة 2: رقم السند -->
+          <div class="stat-card card-num-wrap">
+            <div class="card-lbl">رقم السند</div>
+            <div class="card-val num"><span class="voucher-num-val">{{voucher_number}}</span></div>
+          </div>
+
+          <!-- البطاقة 3: تاريخ السند -->
+          <div class="stat-card card-date-wrap">
+            <div class="card-lbl">تاريخ السند</div>
+            <div class="card-val num"><span class="voucher-date-val">{{voucher_date}}</span></div>
+          </div>
+
+          <!-- البطاقة 4: العميل (يسار) -->
+          <div class="stat-card card-client-wrap">
+            <div class="card-lbl">العميل</div>
+            <div class="card-val client-val"><span class="buyer-name-val">{{buyer_name}}</span></div>
+          </div>
+        </div>
+
+        <!-- بطاقة التفقيط (فقط مبلغ وقدره ...) -->
+        <div class="tafqeet-card">
+          <span class="tafqeet-val">{{amount_in_words}}</span>
+        </div>
+      </div>
+
+      <!-- ── الصندوق الثاني: بيان السند ── -->
+      <div class="details-card">
+        <div class="details-title">بيان السند</div>
+
+        <!-- خط فاصل أعلى صف 1: استلمنا من -->
+        <div class="detail-row">
+          <div class="detail-label">استلمنا من</div>
+          <div class="detail-value"><span class="buyer-name-val">{{buyer_name}}</span></div>
+        </div>
+
+        <!-- خط فاصل أعلى صف 2: العملة -->
+        <div class="detail-row">
+          <div class="detail-label">العملة</div>
+          <div class="detail-value">ريال سعودي</div>
+        </div>
+
+        <!-- خط فاصل أعلى صف 3: المبلغ -->
+        <div class="detail-row">
+          <div class="detail-label">المبلغ</div>
+          <div class="detail-value">
+            <div class="amount-val-inner">
+              <span class="sar-icon-wrap">{{sar_symbol}}</span>
+              <span class="amount-val-txt"><bdi>{{amount}}</bdi></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- خط فاصل أعلى صف 4: ملاحظات السند -->
+        <div class="detail-row">
+          <div class="detail-label">ملاحظات السند</div>
+          <div class="detail-value"><span class="notes-val">{{paid_for}}</span></div>
+        </div>
+      </div>
+
+      <!-- ── الصندوق الثالث: التواقيع ── -->
+      <div class="signatures-row">
+        <!-- يمين: الصندوق -->
+        <div class="sig-box">
+          <div class="sig-title">الصندوق</div>
+          <div class="sig-dots">...................................</div>
+        </div>
+
+        <!-- وسط: توقيع المحاسب -->
+        <div class="sig-box">
+          <div class="sig-title">توقيع المحاسب</div>
+          <div class="sig-dots">...................................</div>
+        </div>
+
+        <!-- يسار: توقيع وختم -->
+        <div class="sig-box">
+          <div class="sig-title">توقيع وختم</div>
+          <div class="sig-dots">...................................</div>
+        </div>
+      </div>
+
+      <!-- ── التذييل السفلي ── -->
+      <footer class="footer-zone">
+        <div class="footer-addr"><span class="footer-addr-val">{{seller_address}} -</span></div>
+        <div class="footer-page">EMR | RECEIPT CARD</div>
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      function fillReceiptDefaults() {
+        var sarWraps = document.querySelectorAll('.sar-icon-wrap');
+        var defaultSarSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1124.14 1256.39" class="sar-sym-svg"><path d="M1124.14 972.39L699.61 1062.67V792.27L1124.14 702V972.39ZM1124.14 531.6L699.61 621.88V351.48L1124.14 261.21V531.6ZM1124.14 90.81L699.61 181.09V0L1124.14 90.81ZM567.36 1090.78L142.83 1181.06V910.66L567.36 820.38V1090.78ZM567.36 649.99L142.83 740.27V469.87L567.36 379.59V649.99ZM567.36 209.2L142.83 299.48V118.39L567.36 28.11V209.2ZM0 1256.39L0 149.98L132.25 121.87V271.85L13.3 297.02V1226.39L0 1256.39Z"/></svg>';
+        sarWraps.forEach(function (w) {
+          if (w.textContent.trim() === '{{sar_symbol}}' || w.innerHTML.trim() === '') {
+            w.innerHTML = defaultSarSvg;
+          }
+        });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', fillReceiptDefaults);
+      } else {
+        fillReceiptDefaults();
+      }
+    })();
+  </script>
+</body>
+
+</html>
