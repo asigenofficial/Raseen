@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"archive/zip"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -3087,11 +3086,12 @@ func (s *Server) Handler() http.Handler {
 				return
 			}
 			defer fIndex.Close()
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 			_, _ = io.Copy(w, fIndex)
 			return
 		}
-		defer f.Close()
+		_ = f.Close()
 
 		// Set smart caching headers
 		ext := strings.ToLower(filepath.Ext(path))
@@ -3099,19 +3099,20 @@ func (s *Server) Handler() http.Handler {
 		case ".ttf", ".woff", ".woff2", ".otf", ".svg", ".png", ".jpg", ".ico", ".webp":
 			w.Header().Set("Cache-Control", "public, max-age=2592000, immutable")
 		case ".js", ".css":
-			w.Header().Set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400")
+			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 			if ext == ".js" {
 				w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 			}
 		case ".html":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 		}
 
 		fileServer.ServeHTTP(w, r)
 	})
 
-	// Wrap with standard middleware and gzip compression
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Wrap with standard security and authorization middleware
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		w.Header().Set("Referrer-Policy", "same-origin")
@@ -3119,78 +3120,6 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		mux.ServeHTTP(w, r)
-	})
-
-	return gzipMiddleware(handler)
-}
-
-type gzipResponseWriter struct {
-	http.ResponseWriter
-	writer     *gzip.Writer
-	headerSent bool
-}
-
-func (w *gzipResponseWriter) WriteHeader(code int) {
-	if w.headerSent {
-		return
-	}
-	w.headerSent = true
-	if code == http.StatusNotModified || code == http.StatusNoContent {
-		w.ResponseWriter.WriteHeader(code)
-		return
-	}
-	w.Header().Del("Content-Length")
-	w.Header().Set("Content-Encoding", "gzip")
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *gzipResponseWriter) Write(b []byte) (int, error) {
-	if !w.headerSent {
-		w.WriteHeader(http.StatusOK)
-	}
-	if w.writer != nil {
-		return w.writer.Write(b)
-	}
-	return w.ResponseWriter.Write(b)
-}
-
-func (w *gzipResponseWriter) Flush() {
-	if w.writer != nil {
-		_ = w.writer.Flush()
-	}
-	if f, ok := w.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-func gzipMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Do not compress SSE streams (e.g. /api/sync/stream)
-		if strings.HasPrefix(r.URL.Path, "/api/sync/") || strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		ext := strings.ToLower(filepath.Ext(r.URL.Path))
-		if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp" || ext == ".pdf" || ext == ".zip" || ext == ".db" || ext == ".gz" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		w.Header().Add("Vary", "Accept-Encoding")
-		gz := gzip.NewWriter(w)
-		defer gz.Close()
-
-		gzw := &gzipResponseWriter{
-			ResponseWriter: w,
-			writer:         gz,
-		}
-		next.ServeHTTP(gzw, r)
 	})
 }
 

@@ -336,6 +336,7 @@ const ROUTE_PERMS = {
 };
 
 let navSeq = 0;
+let initialBootDone = false;
 
 function startRouteProgress() {
   const bar = $('#route-progress');
@@ -353,25 +354,43 @@ function finishRouteProgress() {
   }, 220);
 }
 
+function preloadViews() {
+  const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 100));
+  idle(() => {
+    Object.values(VIEWS).forEach((loader) => {
+      try { loader().catch(() => { }); } catch { /* ignore */ }
+    });
+  });
+}
+
 function registerRoutes() {
+  // تسريع التنقل الاستباقي: تحميل الشاشة فور تمرير مؤشر الفأرة على عنصر القائمة قبل الضغط عليه
+  delegate(document, 'pointerenter', '.nav-item', (e, target) => {
+    const href = target.getAttribute('href');
+    if (href && href.startsWith('#/')) {
+      const name = href.slice(2).split('?')[0];
+      if (VIEWS[name]) {
+        try { VIEWS[name]().catch(() => { }); } catch { /* ignore */ }
+      }
+    }
+  });
+
   Object.keys(VIEWS).forEach((name) => {
     router.route(name, async (ctx) => {
       const seq = ++navSeq;
       refreshNav();
-      const oldView = $('#view');
-      if (!oldView) return undefined;
-      const view = oldView.cloneNode(false);
-      oldView.parentNode.replaceChild(view, oldView);
+      const currentView = $('#view');
+      if (!currentView) return undefined;
       if (!guard(ROUTE_PERMS[name])) {
         finishRouteProgress();
         return undefined;
       }
 
       startRouteProgress();
-      const isInitial = !view.firstElementChild || view.querySelector('.boot-skeleton');
 
-      if (isInitial) {
-        view.innerHTML = html`
+      // الهيكل الشبحي يظهر فقط عند أول فتح للنظام، أما التنقل بين الشاشات فيكون فورياً وسلساً
+      if (!initialBootDone) {
+        currentView.innerHTML = html`
           <div class="skeleton-view boot-skeleton">
             <div class="skeleton-head">
               <div class="skeleton-title"></div>
@@ -386,12 +405,17 @@ function registerRoutes() {
             <div class="skeleton-table mt"></div>
           </div>`;
       } else {
-        view.classList.add('view-switching');
+        currentView.classList.add('view-switching');
       }
 
       try {
         const mod = await VIEWS[name]();
         if (seq !== navSeq) return undefined;
+
+        // تجهيز حاوية نظيفة وخالية من مستمعات الأحداث القديمة
+        const view = currentView.cloneNode(false);
+        view.className = 'content view-switching';
+        currentView.parentNode.replaceChild(view, currentView);
 
         const cleanup = await mod.render(view, ctx);
         if (seq !== navSeq) {
@@ -400,6 +424,7 @@ function registerRoutes() {
           return undefined;
         }
 
+        initialBootDone = true;
         view.classList.remove('view-switching');
         view.classList.remove('view-enter');
         void view.offsetWidth;
@@ -412,12 +437,16 @@ function registerRoutes() {
       } catch (err) {
         if (seq !== navSeq) return undefined;
         console.error(err);
-        view.classList.remove('view-switching');
+        const errView = $('#view');
+        if (errView) errView.classList.remove('view-switching');
         finishRouteProgress();
-        view.innerHTML = html`<div class="card"><div class="alert alert-danger" style="display:flex;flex-direction:column;gap:6px;">
-          <div style="font-weight:700;">تعذر تحميل الشاشة: ${err.message || err}</div>
-          ${raw(err.stack ? `<details style="opacity:0.8;font-size:0.75rem;"><summary style="cursor:pointer;">تفاصيل الخطأ التقني</summary><pre class="mono" style="margin-top:6px;padding:8px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:0.72rem;overflow-x:auto;direction:ltr;text-align:left;">${esc(err.stack)}</pre></details>` : '')}
-        </div></div>`;
+        const v = $('#view');
+        if (v) {
+          v.innerHTML = html`<div class="card"><div class="alert alert-danger" style="display:flex;flex-direction:column;gap:6px;">
+            <div style="font-weight:700;">تعذر تحميل الشاشة: ${err.message || err}</div>
+            ${raw(err.stack ? `<details style="opacity:0.8;font-size:0.75rem;"><summary style="cursor:pointer;">تفاصيل الخطأ التقني</summary><pre class="mono" style="margin-top:6px;padding:8px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:0.72rem;overflow-x:auto;direction:ltr;text-align:left;">${esc(err.stack)}</pre></details>` : '')}
+          </div></div>`;
+        }
         return undefined;
       }
     });
@@ -451,11 +480,9 @@ async function boot() {
   }
   router.start();
 
-  // تحميل البيانات المرجعية بهدوء في الخلفية بعد رسم الصفحة لتسريع فتح النظام فوراً
-  const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 600));
-  idle(() => {
-    loadLookups().catch(() => { });
-  });
+  // التحميل الاستباقي لكل الشاشات والبيانات المرجعية في الخلفية لفتح أي صفحة فوراً
+  loadLookups().catch(() => { });
+  preloadViews();
 
   startSync();
 
