@@ -97,6 +97,9 @@ func (d *DB) initSchema() error {
 	_, _ = d.Exec("ALTER TABLE sessions ADD COLUMN user_agent TEXT DEFAULT ''")
 	_, _ = d.Exec("ALTER TABLE sessions ADD COLUMN current_view TEXT DEFAULT ''")
 	_, _ = d.Exec("ALTER TABLE sessions ADD COLUMN last_active_at TEXT DEFAULT ''")
+	// Performance indexes for large datasets
+	_, _ = d.Exec("CREATE INDEX IF NOT EXISTS idx_invoices_client_status ON invoices(client_id, status, grand_total, paid_amount)")
+	_, _ = d.Exec("CREATE INDEX IF NOT EXISTS idx_invoices_month_stats ON invoices(issuer_id, status, issue_date, grand_total)")
 	return nil
 }
 
@@ -213,6 +216,40 @@ func (d *DB) CreateBackup() (*BackupResult, error) {
 		SizeBytes: stat.Size(),
 		CreatedAt: NowIso(),
 	}, nil
+}
+
+// Vacuum checkpoints WAL, reclaims unallocated space, and shrinks the database file.
+// Returns the size in bytes before and after vacuum.
+func (d *DB) Vacuum() (int64, int64, error) {
+	d.writeMu.Lock()
+	defer d.writeMu.Unlock()
+
+	var beforeSize int64
+	if stat, err := os.Stat(d.cfg.DbFile); err == nil {
+		beforeSize = stat.Size()
+	}
+
+	// Force WAL checkpoint before vacuum to consolidate changes
+	_, _ = d.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+
+	// Execute VACUUM to rebuild database file and reclaim all free pages
+	if _, err := d.Exec("VACUUM"); err != nil {
+		return beforeSize, beforeSize, err
+	}
+
+	var afterSize int64
+	if stat, err := os.Stat(d.cfg.DbFile); err == nil {
+		afterSize = stat.Size()
+	}
+
+	return beforeSize, afterSize, nil
+}
+
+func (d *DB) FileSize() int64 {
+	if stat, err := os.Stat(d.cfg.DbFile); err == nil {
+		return stat.Size()
+	}
+	return 0
 }
 
 func pruneOldBackups(dir string, keepCount int) {

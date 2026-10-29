@@ -7,7 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -16,9 +19,44 @@ import (
 	"raseen/internal/services"
 )
 
+func (s *Server) pdfStoragePath(kind, id string) string {
+	return filepath.Join(s.cfg.DataDir, "storage", "pdfs", kind, id+".pdf")
+}
+
+func (s *Server) readStoredPDF(kind, id string) ([]byte, error) {
+	path := s.pdfStoragePath(kind, id)
+	if data, err := os.ReadFile(path); err == nil && len(data) > 0 {
+		return data, nil
+	}
+	// Fallback to SQLite BLOB if not on disk yet (for backward compatibility during migration)
+	var pdf []byte
+	err := s.db.QueryRow("SELECT pdf FROM document_pdfs WHERE kind=? AND document_id=?", kind, id).Scan(&pdf)
+	if err == nil && len(pdf) > 0 {
+		_ = s.saveStoredPDF(kind, id, pdf)
+		go func() {
+			_, _ = s.db.Exec("UPDATE document_pdfs SET pdf=NULL WHERE kind=? AND document_id=?", kind, id)
+		}()
+		return pdf, nil
+	}
+	return nil, err
+}
+
+func (s *Server) saveStoredPDF(kind, id string, data []byte) error {
+	path := s.pdfStoragePath(kind, id)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+func (s *Server) deleteStoredPDF(kind, id string) {
+	_ = os.Remove(s.pdfStoragePath(kind, id))
+}
+
 // PDF bytes are a replaceable rendering of the current document, not its accounting record.
 // A revision check prevents a slow renderer from overwriting a newer edit.
 func (s *Server) dirtyDocument(kind, id, issuerID string) error {
+	s.deleteStoredPDF(kind, id)
 	_, err := s.db.Exec(`INSERT INTO document_pdfs(kind, document_id, issuer_id, updated_at)
 		VALUES(?,?,?,?) ON CONFLICT(kind, document_id) DO UPDATE SET
 		issuer_id=excluded.issuer_id, revision=revision+1, pdf=NULL,
@@ -54,7 +92,8 @@ func (s *Server) enqueueMissingPDFs() {
 func (s *Server) dirtyAllCachedDocuments() {
 	_, _ = s.db.Exec(`UPDATE document_pdfs SET revision=revision+1,pdf=NULL,status='PENDING',
 		error='',updated_at=?`, db.NowIso())
-	s.wakePDFWorker()
+	// Note: We do NOT wake worker to churn thousands of historic PDFs in background.
+	// Documents will render cleanly on-demand when requested.
 }
 
 func (s *Server) dirtyBatchDocuments(batchID string) {
@@ -114,6 +153,7 @@ func (s *Server) dirtyInvoicesByID(ids []string) {
 }
 
 func (s *Server) deleteDocumentPDF(kind, id string) {
+	s.deleteStoredPDF(kind, id)
 	_, _ = s.db.Exec("DELETE FROM document_pdfs WHERE kind=? AND document_id=?", kind, id)
 }
 
@@ -150,13 +190,18 @@ func (s *Server) wakePDFWorker() {
 
 func (s *Server) startPDFWorker() {
 	go func() {
+		// Allow server to boot and serve initial HTTP requests first
+		time.Sleep(3 * time.Second)
+
+		// Migrate any legacy SQLite PDF blobs to disk storage in background
+		s.migrateLegacyPDFBlobs()
+
 		// Clean up orphaned records whose parent documents were deleted
 		_, _ = s.db.Exec(`DELETE FROM document_pdfs WHERE
 			(kind='invoice' AND document_id NOT IN (SELECT id FROM invoices)) OR
 			(kind='voucher' AND document_id NOT IN (SELECT id FROM receipt_vouchers))`)
-		// Re-queue any previously failed PDFs on startup so they re-render cleanly
-		_, _ = s.db.Exec("UPDATE document_pdfs SET status='PENDING' WHERE status='FAILED'")
-		ticker := time.NewTicker(5 * time.Second)
+
+		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
 		for {
 			s.processPendingPDFs()
@@ -168,16 +213,47 @@ func (s *Server) startPDFWorker() {
 	}()
 }
 
+func (s *Server) migrateLegacyPDFBlobs() {
+	rows, err := s.db.Query("SELECT kind, document_id, pdf FROM document_pdfs WHERE pdf IS NOT NULL AND length(pdf) > 0 LIMIT 5000")
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	migrated := 0
+	for rows.Next() {
+		var kind, id string
+		var data []byte
+		if err := rows.Scan(&kind, &id, &data); err == nil && len(data) > 0 {
+			if err := s.saveStoredPDF(kind, id, data); err == nil {
+				_, _ = s.db.Exec("UPDATE document_pdfs SET pdf=NULL WHERE kind=? AND document_id=?", kind, id)
+				migrated++
+			}
+		}
+	}
+	if migrated > 0 {
+		log.Printf("[Storage] Migrated %d legacy PDF files to disk. Running vacuum...", migrated)
+		if before, after, err := s.db.Vacuum(); err == nil {
+			log.Printf("[Storage] Vacuum completed: %d MB -> %d MB", before/(1024*1024), after/(1024*1024))
+		}
+	}
+}
+
 func (s *Server) processPendingPDFs() {
-	for {
+	// Process at most 5 pending documents per cycle to prevent pegging CPU and monopolizing DB write locks
+	for i := 0; i < 5; i++ {
 		var kind, id string
 		var revision int64
+		// Only auto-render recently created or modified documents (last 48 hours).
+		// Historic documents render on-demand when viewed or downloaded.
 		err := s.db.QueryRow(`SELECT kind,document_id,revision FROM document_pdfs
-			WHERE status='PENDING' ORDER BY updated_at LIMIT 1`).Scan(&kind, &id, &revision)
+			WHERE status='PENDING' AND updated_at >= datetime('now', '-48 hours')
+			ORDER BY updated_at DESC LIMIT 1`).Scan(&kind, &id, &revision)
 		if err != nil {
 			return
 		}
 		_, _ = s.renderAndSavePDF(kind, id, revision, "")
+		time.Sleep(200 * time.Millisecond)
 	}
 }
 
@@ -225,10 +301,9 @@ func (s *Server) currentPDF(kind, id string, styleOverride ...string) ([]byte, e
 	expectedStyle := s.pdfStyle(kind, id, requestedStyle)
 	expectedKey := s.documentPDFStyleKey(kind, expectedStyle)
 	var revision, rendered int64
-	var pdf []byte
 	var storedStyle string
-	err := s.db.QueryRow(`SELECT revision,rendered_revision,pdf,style FROM document_pdfs
-		WHERE kind=? AND document_id=?`, kind, id).Scan(&revision, &rendered, &pdf, &storedStyle)
+	err := s.db.QueryRow(`SELECT revision,rendered_revision,style FROM document_pdfs
+		WHERE kind=? AND document_id=?`, kind, id).Scan(&revision, &rendered, &storedStyle)
 	if errors.Is(err, sql.ErrNoRows) {
 		var issuerID string
 		table := "invoices"
@@ -246,8 +321,10 @@ func (s *Server) currentPDF(kind, id string, styleOverride ...string) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	if rendered == revision && len(pdf) > 0 && storedStyle == expectedKey {
-		return pdf, nil
+	if rendered == revision && storedStyle == expectedKey {
+		if pdfBytes, readErr := s.readStoredPDF(kind, id); readErr == nil && len(pdfBytes) > 0 {
+			return pdfBytes, nil
+		}
 	}
 	if rendered == revision && storedStyle != expectedKey {
 		var issuerID string
@@ -289,8 +366,13 @@ func (s *Server) renderAndSavePDF(kind, id string, revision int64, suppliedHTML 
 		s.failPDF(kind, id, revision, err)
 		return nil, err
 	}
-	result, err := s.db.Exec(`UPDATE document_pdfs SET pdf=?,rendered_revision=?,style=?,status='READY',error='',updated_at=?
-		WHERE kind=? AND document_id=? AND revision=?`, pdf, revision, renderKey, db.NowIso(), kind, id, revision)
+	// Persist the binary PDF to disk storage outside of SQLite
+	if err := s.saveStoredPDF(kind, id, pdf); err != nil {
+		s.failPDF(kind, id, revision, err)
+		return nil, err
+	}
+	result, err := s.db.Exec(`UPDATE document_pdfs SET pdf=NULL,rendered_revision=?,style=?,status='READY',error='',updated_at=?
+		WHERE kind=? AND document_id=? AND revision=?`, revision, renderKey, db.NowIso(), kind, id, revision)
 	if err != nil {
 		return nil, err
 	}

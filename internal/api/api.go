@@ -223,6 +223,47 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/system/import-package", s.handleImportSystemPackage)
 	mux.HandleFunc("POST /api/system/import-db", s.handleImportSystemPackage)
 
+	// تنظيف وضغط قاعدة البيانات وتحرير المساحة المحجوزة على القرص (Vacuum)
+	mux.HandleFunc("POST /api/system/vacuum", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil || u.Role != "ADMIN" {
+			s.err(w, 403, "تنظيف قاعدة البيانات محصور بمدير النظام")
+			return
+		}
+		s.migrateLegacyPDFBlobs()
+		before, after, err := s.db.Vacuum()
+		if err != nil {
+			s.err(w, 500, "فشل ضغط قاعدة البيانات: "+err.Error())
+			return
+		}
+		s.db.Audit(u.Username, "DATABASE_VACUUM", "system", "", "", map[string]any{
+			"before_bytes": before,
+			"after_bytes":  after,
+		}, s.clientIP(r))
+		s.json(w, 200, map[string]any{
+			"ok":           true,
+			"before_bytes": before,
+			"after_bytes":  after,
+			"saved_bytes":  before - after,
+			"before_mb":    fmt.Sprintf("%.2f MB", float64(before)/(1024*1024)),
+			"after_mb":     fmt.Sprintf("%.2f MB", float64(after)/(1024*1024)),
+			"saved_mb":     fmt.Sprintf("%.2f MB", float64(before-after)/(1024*1024)),
+		})
+	})
+
+	mux.HandleFunc("GET /api/system/db-info", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		if u == nil {
+			s.err(w, 401, "غير مصرح")
+			return
+		}
+		size := s.db.FileSize()
+		s.json(w, 200, map[string]any{
+			"db_size_bytes": size,
+			"db_size_mb":    fmt.Sprintf("%.2f MB", float64(size)/(1024*1024)),
+		})
+	})
+
 	// ---------------------------------------------------- المصادقة
 	mux.HandleFunc("POST /api/auth/login", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -817,10 +858,11 @@ func (s *Server) Handler() http.Handler {
 	// ---------------------------------------------------- العملاء
 	mux.HandleFunc("GET /api/clients", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
+		withBalances := q.Get("with_balances") == "1" || q.Get("with_balances") == "true"
 		list, err := s.clients.ListClients(services.ListClientsFilter{
 			Search:       q.Get("q"),
 			ActiveOnly:   q.Get("active_only") == "1" || q.Get("active_only") == "true",
-			WithBalances: true,
+			WithBalances: withBalances,
 			IssuerID:     q.Get("issuer_id"),
 			ClientType:   q.Get("client_type"),
 			City:         q.Get("city"),

@@ -41,28 +41,6 @@ type ClientListItem struct {
 }
 
 func (s *ClientService) ListClients(f ListClientsFilter) ([]ClientListItem, error) {
-	query := `
-		SELECT c.id, c.client_code, c.name, c.name_en, c.phone, c.mobile, c.email,
-		       c.address, c.building_no, c.street, c.district, c.city, c.postal_code,
-		       c.country, c.tax_number, c.commercial_register, c.client_type,
-		       c.payment_terms_days, c.opening_balance, c.credit_limit, c.notes,
-		       c.is_active, c.created_at, c.updated_at,
-		       (SELECT COUNT(*) FROM invoices i WHERE i.client_id = c.id AND i.status <> 'CANCELLED'
-		           AND (? = '' OR i.issuer_id = ?)) AS invoices_count,
-		       (SELECT COALESCE(SUM(i.grand_total), 0) FROM invoices i WHERE i.client_id = c.id AND i.status <> 'CANCELLED'
-		           AND (? = '' OR i.issuer_id = ?)) AS total_invoiced,
-		       (SELECT COALESCE(SUM(i.paid_amount), 0) FROM invoices i WHERE i.client_id = c.id AND i.status <> 'CANCELLED'
-		           AND (? = '' OR i.issuer_id = ?)) AS total_paid
-		FROM clients c
-		WHERE (? = 0 OR c.is_active = 1)
-		  AND (? = '' OR c.client_type = ?)
-		  AND (? = '' OR c.city LIKE ?)
-		  AND (? = '' OR c.name LIKE ? OR c.client_code LIKE ? OR c.phone LIKE ?
-		       OR c.mobile LIKE ? OR c.tax_number LIKE ? OR c.commercial_register LIKE ?
-		       OR c.email LIKE ? OR c.address LIKE ?)
-		ORDER BY c.name ASC
-	`
-
 	activeParam := 0
 	if f.ActiveOnly {
 		activeParam = 1
@@ -70,17 +48,79 @@ func (s *ClientService) ListClients(f ListClientsFilter) ([]ClientListItem, erro
 	likeSearch := "%" + f.Search + "%"
 	cityLike := "%" + f.City + "%"
 
-	rows, err := s.db.Query(query,
-		f.IssuerID, f.IssuerID,
-		f.IssuerID, f.IssuerID,
-		f.IssuerID, f.IssuerID,
-		activeParam,
-		f.ClientType, f.ClientType,
-		f.City, cityLike,
-		f.Search, likeSearch, likeSearch, likeSearch,
-		likeSearch, likeSearch, likeSearch,
-		likeSearch, likeSearch,
-	)
+	var query string
+	var args []any
+
+	if f.WithBalances {
+		// Single LEFT JOIN with aggregated invoices (much faster than 3 correlated subqueries per row)
+		query = `
+			SELECT c.id, c.client_code, c.name, c.name_en, c.phone, c.mobile, c.email,
+			       c.address, c.building_no, c.street, c.district, c.city, c.postal_code,
+			       c.country, c.tax_number, c.commercial_register, c.client_type,
+			       c.payment_terms_days, c.opening_balance, c.credit_limit, c.notes,
+			       c.is_active, c.created_at, c.updated_at,
+			       COALESCE(inv.cnt, 0) AS invoices_count,
+			       COALESCE(inv.total_inv, 0) AS total_invoiced,
+			       COALESCE(inv.total_pd, 0) AS total_paid
+			FROM clients c
+			LEFT JOIN (
+				SELECT client_id,
+				       COUNT(*) AS cnt,
+				       SUM(grand_total) AS total_inv,
+				       SUM(paid_amount) AS total_pd
+				FROM invoices
+				WHERE status <> 'CANCELLED'
+				  AND (? = '' OR issuer_id = ?)
+				GROUP BY client_id
+			) inv ON inv.client_id = c.id
+			WHERE (? = 0 OR c.is_active = 1)
+			  AND (? = '' OR c.client_type = ?)
+			  AND (? = '' OR c.city LIKE ?)
+			  AND (? = '' OR c.name LIKE ? OR c.client_code LIKE ? OR c.phone LIKE ?
+			       OR c.mobile LIKE ? OR c.tax_number LIKE ? OR c.commercial_register LIKE ?
+			       OR c.email LIKE ? OR c.address LIKE ?)
+			ORDER BY c.name ASC
+		`
+		args = []any{
+			f.IssuerID, f.IssuerID,
+			activeParam,
+			f.ClientType, f.ClientType,
+			f.City, cityLike,
+			f.Search, likeSearch, likeSearch, likeSearch,
+			likeSearch, likeSearch, likeSearch,
+			likeSearch, likeSearch,
+		}
+	} else {
+		// Zero invoice subqueries when balances are not requested (e.g. dropdown lookups)
+		query = `
+			SELECT c.id, c.client_code, c.name, c.name_en, c.phone, c.mobile, c.email,
+			       c.address, c.building_no, c.street, c.district, c.city, c.postal_code,
+			       c.country, c.tax_number, c.commercial_register, c.client_type,
+			       c.payment_terms_days, c.opening_balance, c.credit_limit, c.notes,
+			       c.is_active, c.created_at, c.updated_at,
+			       0 AS invoices_count,
+			       0 AS total_invoiced,
+			       0 AS total_paid
+			FROM clients c
+			WHERE (? = 0 OR c.is_active = 1)
+			  AND (? = '' OR c.client_type = ?)
+			  AND (? = '' OR c.city LIKE ?)
+			  AND (? = '' OR c.name LIKE ? OR c.client_code LIKE ? OR c.phone LIKE ?
+			       OR c.mobile LIKE ? OR c.tax_number LIKE ? OR c.commercial_register LIKE ?
+			       OR c.email LIKE ? OR c.address LIKE ?)
+			ORDER BY c.name ASC
+		`
+		args = []any{
+			activeParam,
+			f.ClientType, f.ClientType,
+			f.City, cityLike,
+			f.Search, likeSearch, likeSearch, likeSearch,
+			likeSearch, likeSearch, likeSearch,
+			likeSearch, likeSearch,
+		}
+	}
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -127,16 +167,45 @@ func (s *ClientService) ListClients(f ListClientsFilter) ([]ClientListItem, erro
 }
 
 func (s *ClientService) GetClient(id string) (*ClientListItem, error) {
-	list, err := s.ListClients(ListClientsFilter{Search: "", WithBalances: true})
+	query := `
+		SELECT c.id, c.client_code, c.name, c.name_en, c.phone, c.mobile, c.email,
+		       c.address, c.building_no, c.street, c.district, c.city, c.postal_code,
+		       c.country, c.tax_number, c.commercial_register, c.client_type,
+		       c.payment_terms_days, c.opening_balance, c.credit_limit, c.notes,
+		       c.is_active, c.created_at, c.updated_at,
+		       (SELECT COUNT(*) FROM invoices i WHERE i.client_id = c.id AND i.status <> 'CANCELLED') AS invoices_count,
+		       (SELECT COALESCE(SUM(i.grand_total), 0) FROM invoices i WHERE i.client_id = c.id AND i.status <> 'CANCELLED') AS total_invoiced,
+		       (SELECT COALESCE(SUM(i.paid_amount), 0) FROM invoices i WHERE i.client_id = c.id AND i.status <> 'CANCELLED') AS total_paid
+		FROM clients c
+		WHERE c.id = ?
+		LIMIT 1
+	`
+	var item ClientListItem
+	var totalInvoicedMinor, totalPaidMinor int64
+
+	err := s.db.QueryRow(query, id).Scan(
+		&item.ID, &item.ClientCode, &item.Name, &item.NameEn, &item.Phone, &item.Mobile, &item.Email,
+		&item.Address, &item.BuildingNo, &item.Street, &item.District, &item.City, &item.PostalCode,
+		&item.Country, &item.TaxNumber, &item.CommercialRegister, &item.ClientType,
+		&item.PaymentTermsDays, &item.OpeningBalance, &item.CreditLimit, &item.Notes,
+		&item.IsActive, &item.CreatedAt, &item.UpdatedAt,
+		&item.InvoicesCount, &totalInvoicedMinor, &totalPaidMinor,
+	)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("العميل غير موجود")
+		}
 		return nil, err
 	}
-	for _, c := range list {
-		if c.ID == id {
-			return &c, nil
-		}
-	}
-	return nil, errors.New("العميل غير موجود")
+
+	item.OpeningBalanceMajor = models.ToMajor(item.OpeningBalance)
+	item.CreditLimitMajor = models.ToMajor(item.CreditLimit)
+	item.TotalInvoicedMajor = models.ToMajor(totalInvoicedMinor)
+	item.TotalPaidMajor = models.ToMajor(totalPaidMinor)
+	balanceMinor := item.OpeningBalance + totalInvoicedMinor - totalPaidMinor
+	item.BalanceMajor = models.ToMajor(balanceMinor)
+
+	return &item, nil
 }
 
 func (s *ClientService) nextClientCode() string {

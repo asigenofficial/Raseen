@@ -166,6 +166,28 @@ export async function render(view) {
               استيراد واستعادة الحزمة / القوالب (.zip / .db)
             </button>
           </div>
+
+          <!-- بطاقة صيانة وضغط قاعدة البيانات -->
+          <div style="background:var(--bg-subtle, rgba(255,255,255,0.02)); border:1px solid var(--border-color, #334155); border-radius:10px; padding:18px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <div style="width:38px; height:38px; border-radius:8px; background:rgba(14,165,233,0.15); color:#0ea5e9; display:flex; align-items:center; justify-content:center;">
+                  ${icon.refresh({ size: 20 })}
+                </div>
+                <div>
+                  <h4 style="margin:0; font-size:15px; font-weight:700; color:#0ea5e9;">تنظيف وضغط قاعدة البيانات (Vacuum)</h4>
+                  <span style="font-size:12px; color:var(--text-muted, #64748b);">تحرير المساحة وتسريع الاستعلامات</span>
+                </div>
+              </div>
+              <p style="margin:0 0 16px 0; font-size:13px; color:var(--text-muted, #64748b); line-height:1.6;">
+                نقل ملفات PDF من قاعدة البيانات إلى التخزين المنفصل، واسترجاع المساحات المحجوزة غير المستخدمة فوراً على القرص وإعادة ترتيب الفهارس لتقليل الضغط وتسريع فتح الموقع.
+              </p>
+            </div>
+            <button type="button" class="btn btn-outline" id="btn-vacuum-db" style="width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;">
+              ${icon.refresh({ size: 16 })}
+              ضغط وتنظيف قاعدة البيانات الآن
+            </button>
+          </div>
         </div>
       </div>
     ` : '')}
@@ -228,6 +250,31 @@ export async function render(view) {
       } finally {
         btn.disabled = false;
         btn.innerHTML = `${icon.refresh({ size: 16, style: 'vertical-align:text-bottom; margin-left:4px;' })} نسخة سريعة`;
+      }
+    });
+
+    // زر تنظيف وضغط قاعدة البيانات
+    $('#btn-vacuum-db', view)?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const ok = await confirmModal({
+        title: 'تنظيف وضغط قاعدة البيانات (Vacuum)',
+        message: 'سيقوم النظام بترحيل أي ملفات PDF متبقية في قاعدة البيانات إلى التخزين المنفصل، واستعادة المساحة غير المستخدمة على القرص فوراً، وتحسين سرعة استعلامات السيرفر. هل تريد المتابعة الآن؟',
+        okText: 'بدء التنظيف والضغط',
+        cancelText: 'إلغاء',
+      });
+      if (!ok) return;
+
+      btn.disabled = true;
+      const origHtml = btn.innerHTML;
+      btn.textContent = 'جارٍ الضغط واسترجاع المساحة...';
+      try {
+        const res = await api.post('/api/system/vacuum');
+        toastOk(`تم ضغط قاعدة البيانات بنجاح! الحجم الحالي: ${res.after_mb} (تم تحرير ${res.saved_mb})`);
+      } catch (err) {
+        toastErr(err.message || 'فشل ضغط قاعدة البيانات');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
       }
     });
 

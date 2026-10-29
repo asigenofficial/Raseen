@@ -130,13 +130,21 @@ func (s *ReportService) DashboardStats(issuerID string) (*DashboardData, error) 
 		Remaining: models.ToMajor(allRem),
 	}
 
-	// 2. Month summary
+	// 2. Month summary (sargable range query to utilize indexes instead of full table strftime scans)
 	var mTotal int64
 	var mCount int
-	mArgs := append(argsBase, curMonth)
+	startOfMonth := curMonth + "-01"
+	tMonth, errParse := time.Parse("2006-01-02", startOfMonth)
+	var endOfMonth string
+	if errParse == nil {
+		endOfMonth = tMonth.AddDate(0, 1, 0).Format("2006-01-02")
+	} else {
+		endOfMonth = curMonth + "-32"
+	}
+	mArgs := append(append([]any{}, argsBase...), startOfMonth, endOfMonth)
 	_ = s.db.QueryRow(fmt.Sprintf(`
 		SELECT COUNT(*), COALESCE(SUM(grand_total), 0)
-		FROM invoices %s AND status <> 'CANCELLED' AND strftime('%%Y-%%m', issue_date) = ?
+		FROM invoices %s AND status <> 'CANCELLED' AND issue_date >= ? AND issue_date < ?
 	`, whereBase), mArgs...).Scan(&mCount, &mTotal)
 
 	data.Month = DashboardSummary{
@@ -226,19 +234,20 @@ func (s *ReportService) DashboardStats(issuerID string) (*DashboardData, error) 
 	}
 
 	// 7. Top Clients
-	tcRows, err := s.db.Query(fmt.Sprintf(`
+	var tcArgs []any
+	tcWhere := "WHERE i.status <> 'CANCELLED'"
+	if issuerID != "" {
+		tcWhere += " AND i.issuer_id = ?"
+		tcArgs = append(tcArgs, issuerID)
+	}
+	tcRows, err := s.db.Query(`
 		SELECT c.id, c.name, c.client_code, COUNT(i.id), COALESCE(SUM(i.grand_total), 0), COALESCE(SUM(i.remaining_amount), 0)
 		FROM clients c
 		JOIN invoices i ON i.client_id = c.id
-		%s AND i.status <> 'CANCELLED'
+		`+tcWhere+`
 		GROUP BY c.id
 		ORDER BY SUM(i.grand_total) DESC LIMIT 5
-	`, func() string {
-		if issuerID != "" {
-			return "WHERE i.issuer_id = '" + issuerID + "'"
-		}
-		return "WHERE 1=1"
-	}()))
+	`, tcArgs...)
 	if err == nil {
 		defer tcRows.Close()
 		for tcRows.Next() {
