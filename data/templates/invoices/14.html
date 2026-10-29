@@ -137,16 +137,8 @@
       font-size: 15px;
       font-weight: 800;
       color: #111827;
-      line-height: 1.22;
-      text-align: left !important;
-    }
-
-    .seller-en .company-sub-en {
-      font-size: 15px;
-      font-weight: 800;
-      color: #111827;
       margin-bottom: 5px;
-      line-height: 1.22;
+      line-height: 1.3;
       text-align: left !important;
     }
 
@@ -564,32 +556,6 @@
       unicode-bidi: embed;
     }
 
-    /* ── نصوص احتياطية مطابقة للنموذج الأصلي في المعاينة المجردة ── */
-    .seller-name-ar:empty::before { content: "مؤسسة مناير المهد للتجارة"; }
-    .seller-address-ar:empty::before { content: "جدة- مهد الذهب -ابو بكر الصديق"; }
-    .seller-tax-val:empty::before { content: "311435985100003"; }
-    .seller-cr-val:empty::before { content: "7025466421"; }
-
-    .seller-name-en:empty::before { content: "Manayer Al Mahd Trading"; }
-    .seller-address-en:empty::before { content: "Jeddah - Mahd Al-Dhahab - Abu Bakr Al-Siddiq"; }
-
-    .invoice-num:empty::before { content: "100083"; }
-    .invoice-date:empty::before { content: "2026-01-05"; }
-    .invoice-type-en:empty::before { content: "Credit"; }
-
-    .buyer-name-val:empty::before { content: "مؤسسة جمشيد رامين للمواد الغذائية"; }
-    .buyer-tax-val:empty::before { content: "310421503300003"; }
-    .buyer-address-val:empty::before { content: "جدة- شارع سعيد بن عبدالله-حي النزهه"; }
-
-    .subtotal-val:empty::before, .subtotal-val bdi:empty::before { content: "172,500.00"; }
-    .discount-val:empty::before, .discount-val bdi:empty::before { content: "0.00"; }
-    .tax-val:empty::before, .tax-val bdi:empty::before { content: "25,875.00"; }
-    .total-val:empty::before, .total-val bdi:empty::before { content: "198,375.00"; }
-    .paid-val:empty::before, .paid-val bdi:empty::before { content: "198,375.00"; }
-    .due-val:empty::before, .due-val bdi:empty::before { content: "0.00"; }
-
-    .items-count-val:empty::before { content: "3"; }
-    .footer-addr-val:empty::before { content: "جدة- مهد الذهب-ابو بكر الصديق -"; }
 
     @media print {
       html,
@@ -654,11 +620,10 @@
           <!-- اليسار: بيانات المنشأة بالإنجليزية -->
           <div class="seller-en" dir="ltr" lang="en">
             <div class="company-name-en"><span class="seller-name-en">{{seller_name_en}}</span></div>
-            <div class="company-sub-en">Establishment</div>
             <div class="info-line-en"><span class="seller-address-en">{{seller_address_en}}</span></div>
             <div class="info-line-en">TAX NO.: <span class="num seller-tax-val">{{seller_tax}}</span></div>
             <div class="info-line-en">Commercial Record No : <span class="num seller-cr-val">{{seller_cr}}</span></div>
-            <div class="info-line-en">:PHONE <span class="num">{{seller_phone}}</span></div>
+            <div class="info-line-en">Phone: <span class="num">{{seller_phone}}</span></div>
           </div>
         </div>
 
