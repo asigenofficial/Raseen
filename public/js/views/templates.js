@@ -2,11 +2,11 @@
 //  Raseen — مركز واجهة قوالب وتقارير المستندات (Document Templates & Reports Hub)
 //  إدارة وتوليد تقارير المستندات وقوالب Excel المعتمدة للفواتير والسندات والتقارير
 // ==========================================================================
-import { api } from '../core/api.js';
-import { store, can } from '../core/store.js';
+import { api, qs } from '../core/api.js';
+import { store, can, loadIssuers } from '../core/store.js';
 import {
   html, raw, esc, printDoc, modal, toastOk, toastErr, $, $$, exportExcel, downloadPdfFromHtml,
-  fillDynamicTemplateHtml, fillStoredTemplate, renderPager, bindPager,
+  fillDynamicTemplateHtml, fillStoredTemplate, renderPager, bindPager, debounce,
 } from '../core/util.js';
 
 import { PRESET_LOGOS } from '../print/logos.js';
@@ -116,8 +116,7 @@ function formatBytes(bytes) {
 }
 
 export async function render(view) {
-  const rawIssuers = await api.get('/api/issuers');
-  const issuers = Array.isArray(rawIssuers) ? rawIssuers : (rawIssuers?.data || []);
+  const issuers = await loadIssuers();
   if (!issuers.length) {
     view.innerHTML = html`
       <div class="card"><div class="empty">
@@ -131,43 +130,58 @@ export async function render(view) {
   let activeIssuerId = store.activeIssuerId || issuers[0].id;
   let activeIssuer = issuers.find((i) => i.id === activeIssuerId) || issuers[0];
 
+  // فحص علامة التبويب من الرابط
+  const hash = window.location.hash || '';
+  let activeHubTab = 'invoices'; // افتراضياً فواتير المبيعات
+  if (hash.includes('tab=reports')) activeHubTab = 'reports';
+  else if (hash.includes('tab=statements')) activeHubTab = 'statements';
+  else if (hash.includes('tab=vouchers')) activeHubTab = 'vouchers';
+  else activeHubTab = 'invoices';
+
+  let printSubTab = 'branding';
+  let zoomLevel = 62;
+  let activeZatcaPhase = activeIssuer.zatca_phase || 'PHASE1';
+  let invoiceState = 'normal';
+  let tplOffset = 0;
+  let tplLimit = 6;
+  let activeTotalTemplates = 0;
+  let searchQuery = '';
+  let tplCounts = { invoices: 0, vouchers: 0, statements: 0, reports: 0 };
+  let tplNames = {};
+
   let excelTemplates = [];
   async function loadTemplates() {
     try {
-      const res = await api.get('/api/invoices/templates?type=all');
-      excelTemplates = Array.isArray(res) ? res : (res?.data || []);
+      const tabParam = activeHubTab === 'print' ? 'invoices' : activeHubTab;
+      const res = await api.get(qs('/api/invoices/templates', {
+        paged: 1,
+        tab: tabParam,
+        q: searchQuery,
+        limit: tplLimit,
+        offset: tplOffset,
+      }));
+      if (res && Array.isArray(res.items)) {
+        excelTemplates = res.items;
+        activeTotalTemplates = Number(res.total_count ?? excelTemplates.length);
+        if (typeof res.offset === 'number') tplOffset = res.offset;
+        if (res.counts) tplCounts = { ...tplCounts, ...res.counts };
+        if (res.names) tplNames = res.names;
+      } else {
+        excelTemplates = Array.isArray(res) ? res : (res?.data || []);
+        activeTotalTemplates = excelTemplates.length;
+      }
     } catch {
       excelTemplates = [];
-    }
-  }
-
-  // جلب فواتير وعملاء وسندات حقيقية للمنشأة لتكون المعاينة ديناميكية بالكامل بدون أي بيانات ثابتة
-  let liveClients = [];
-  let liveInvoices = [];
-  let liveVouchers = [];
-  async function loadIssuerData() {
-    try {
-      const [invRes, cliRes, vouRes] = await Promise.all([
-        api.get(`/api/invoices?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=5`),
-        api.get(`/api/clients?issuer_id=${encodeURIComponent(activeIssuer.id)}&paged=1&limit=5`),
-        api.get(`/api/vouchers?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=5`),
-      ]);
-      liveInvoices = Array.isArray(invRes) ? invRes : (invRes?.items || invRes?.data || []);
-      liveClients = Array.isArray(cliRes) ? cliRes : (cliRes?.items || cliRes?.data || []);
-      liveVouchers = Array.isArray(vouRes) ? vouRes : (vouRes?.items || vouRes?.data || []);
-    } catch {
-      liveInvoices = [];
-      liveClients = [];
-      liveVouchers = [];
+      activeTotalTemplates = 0;
     }
   }
 
   await Promise.all([
     api.get(`/api/issuers/${activeIssuer.id}`).then((rawActive) => {
       if (rawActive && rawActive.id) activeIssuer = rawActive;
+      activeZatcaPhase = activeIssuer.zatca_phase || 'PHASE1';
     }).catch(() => {}),
     loadTemplates(),
-    loadIssuerData(),
   ]);
 
   let issuerPrintSettings = {};
@@ -220,9 +234,12 @@ export async function render(view) {
     settings.template_selection_modes = { ...(settings.template_selection_modes || {}) };
     for (const { key, mode, names } of categories) {
       const templates = excelTemplates.filter((tpl) => names.includes(tpl.category));
-      if (!templates.some((tpl) => tpl.id === settings[key])) {
-        settings[key] = templates[0]?.id || '';
-        settings.template_selection_modes[mode] = 'auto';
+      const hasKnownId = settings[key] && (tplNames[settings[key]] || templates.some((tpl) => tpl.id === settings[key]));
+      if (!hasKnownId) {
+        if (templates.length) {
+          settings[key] = templates[0]?.id || '';
+          settings.template_selection_modes[mode] = 'auto';
+        }
       } else if (!settings.template_selection_modes[mode]) {
         // Existing saved selections predate the mode flag and are treated as user-confirmed.
         settings.template_selection_modes[mode] = 'manual';
@@ -265,31 +282,14 @@ export async function render(view) {
     ...issuerQrSettings,
   };
 
-  // فحص علامة التبويب من الرابط
-  const hash = window.location.hash || '';
-  let activeHubTab = 'invoices'; // افتراضياً فواتير المبيعات
-  if (hash.includes('tab=reports')) activeHubTab = 'reports';
-  else if (hash.includes('tab=statements')) activeHubTab = 'statements';
-  else if (hash.includes('tab=vouchers')) activeHubTab = 'vouchers';
-  else activeHubTab = 'invoices';
-
-  let printSubTab = 'branding';
-  let zoomLevel = 62;
-  let activeZatcaPhase = activeIssuer.zatca_phase || 'PHASE1';
-  let invoiceState = 'normal';
-  let tplOffset = 0;
-  let tplLimit = 8;
-  let activeTotalTemplates = 0;
-
   function getDynamicPreviewInvoice() {
     return buildMockInvoice(activeIssuer, activeZatcaPhase);
   }
 
   let currentInvoice = getDynamicPreviewInvoice();
-  let searchQuery = '';
 
   // ------------------------------------------------------------- مولدات الأقسام
-  function renderKpisHtml(invoiceTemplates, voucherTemplates, currentTpl, activeZatcaPhase) {
+  function renderKpisHtml(invCount, vouCount, currentTplName, activeZatcaPhase) {
     return `
       <div class="doc-tpl-kpis">
         <div class="doc-tpl-kpi-card">
@@ -297,7 +297,7 @@ export async function render(view) {
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
           </div>
           <div class="doc-tpl-kpi-info">
-            <span class="doc-tpl-kpi-val">${invoiceTemplates.length}</span>
+            <span class="doc-tpl-kpi-val">${invCount}</span>
             <span class="doc-tpl-kpi-label">قوالب فواتير المبيعات</span>
           </div>
         </div>
@@ -306,7 +306,7 @@ export async function render(view) {
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
           </div>
           <div class="doc-tpl-kpi-info">
-            <span class="doc-tpl-kpi-val">${voucherTemplates.length}</span>
+            <span class="doc-tpl-kpi-val">${vouCount}</span>
             <span class="doc-tpl-kpi-label">قوالب سندات ومستندات</span>
           </div>
         </div>
@@ -315,7 +315,7 @@ export async function render(view) {
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           </div>
           <div class="doc-tpl-kpi-info">
-            <span class="doc-tpl-kpi-val" style="font-size:1.05rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;">${esc(currentTpl?.name_ar || currentTpl?.name || 'لم يُعتمد قالب بعد')}</span>
+            <span class="doc-tpl-kpi-val" style="font-size:1.05rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;">${esc(currentTplName || 'لم يُعتمد قالب بعد')}</span>
             <span class="doc-tpl-kpi-label">قالب الفاتورة المعتمد</span>
           </div>
         </div>
@@ -829,39 +829,16 @@ export async function render(view) {
   }
 
   function renderView() {
-    const currentTpl = excelTemplates.find((t) => t.id === printCfg.template_style)
-      || excelTemplates.find((t) => t.category === 'invoices') || null;
+    const currentTpl = excelTemplates.find((t) => t.id === printCfg.template_style) || null;
+    const currentTplName = currentTpl?.name_ar || currentTpl?.name || tplNames[printCfg.template_style] || printCfg.template_title || '';
 
-    const invoiceTemplates = excelTemplates.filter((t) => t.category === 'invoices' || t.category === 'custom' || t.category === 'custom_invoices');
-    const voucherTemplates = excelTemplates.filter((t) => t.category === 'documents' || t.category === 'vouchers' || t.category === 'custom_vouchers');
-
-    const filterList = (list) => {
-      if (!searchQuery) return list;
-      const q = searchQuery.toLowerCase();
-      return list.filter((t) =>
-        (t.name_ar && t.name_ar.toLowerCase().includes(q)) ||
-        (t.name_en && t.name_en.toLowerCase().includes(q)) ||
-        (t.id && t.id.toLowerCase().includes(q)) ||
-        (t.description && t.description.toLowerCase().includes(q)) ||
-        ((t.headers || []).some((h) => String(h).toLowerCase().includes(q)))
-      );
-    };
-
-    const filteredInvoices = filterList(invoiceTemplates);
-    const filteredVouchers = filterList(voucherTemplates);
-
-    const kpiHtml = renderKpisHtml(invoiceTemplates, voucherTemplates, currentTpl, activeZatcaPhase);
+    const kpiHtml = renderKpisHtml(tplCounts.invoices || 0, tplCounts.vouchers || 0, currentTplName, activeZatcaPhase);
     const searchBarHtml = activeHubTab !== 'print' ? renderSearchBarHtml(activeHubTab) : '';
 
     let contentHtml = '';
     if (activeHubTab === 'reports' || activeHubTab === 'statements') {
       const settingKey = activeHubTab === 'reports' ? 'report_template_style' : 'statement_template_style';
-      const matched = filterList(excelTemplates.filter((tpl) => tpl.category === activeHubTab));
-      activeTotalTemplates = matched.length;
-      if (tplOffset >= activeTotalTemplates && tplOffset > 0) {
-        tplOffset = Math.max(0, Math.floor((activeTotalTemplates - 1) / tplLimit) * tplLimit);
-      }
-      const pagedMatched = matched.slice(tplOffset, tplOffset + tplLimit);
+      const pagedMatched = excelTemplates;
       contentHtml = pagedMatched.length ? `<div class="doc-tpl-grid">${pagedMatched.map((tpl) => `<div class="doc-tpl-card" style="padding:1rem">
         <strong>${esc(tpl.name_ar || tpl.name)}</strong><p class="muted">${esc(tpl.description || 'قالب HTML قابل للتخصيص')}</p>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
@@ -869,24 +846,13 @@ export async function render(view) {
           <button class="btn btn-sm ${printCfg[settingKey] === tpl.id && !isAutomaticTemplate(settingKey) ? 'btn-tpl-active-state' : 'btn-primary'}" type="button" data-select-data-template="${esc(tpl.id)}" data-setting-key="${settingKey}" title="اعتماد هذا القالب لهذه الفئة" ${printCfg[settingKey] === tpl.id && !isAutomaticTemplate(settingKey) ? 'disabled' : ''}>${printCfg[settingKey] === tpl.id && !isAutomaticTemplate(settingKey) ? 'معتمد ✓' : 'اعتماد للمنشأة'}</button>
           <button class="btn btn-sm btn-danger" type="button" data-file-delete="${esc(tpl.id)}">حذف</button>
         </div></div>`).join('')}</div>
-        ${renderPager({ idPrefix: 'tpl', offset: tplOffset, limit: tplLimit, total: activeTotalTemplates, sizes: [4, 8, 12, 24], standalone: true, label: 'قالب' })}` : '<div class="doc-tpl-empty">لا توجد قوالب في هذه الفئة. ارفع ملف HTML لإضافتها.</div>';
+        ${renderPager({ idPrefix: 'tpl', offset: tplOffset, limit: tplLimit, total: activeTotalTemplates, sizes: [4, 6, 12, 24], standalone: true, label: 'قالب' })}` : '<div class="doc-tpl-empty">لا توجد قوالب في هذه الفئة. ارفع ملف HTML لإضافتها.</div>';
     } else if (activeHubTab === 'vouchers') {
-      activeTotalTemplates = filteredVouchers.length;
-      if (tplOffset >= activeTotalTemplates && tplOffset > 0) {
-        tplOffset = Math.max(0, Math.floor((activeTotalTemplates - 1) / tplLimit) * tplLimit);
-      }
-      const pagedVouchers = filteredVouchers.slice(tplOffset, tplOffset + tplLimit);
-      contentHtml = renderVouchersGridHtml(pagedVouchers) + (activeTotalTemplates > 0 ? renderPager({ idPrefix: 'tpl', offset: tplOffset, limit: tplLimit, total: activeTotalTemplates, sizes: [4, 8, 12, 24], standalone: true, label: 'قالب' }) : '');
+      contentHtml = renderVouchersGridHtml(excelTemplates) + (activeTotalTemplates > 0 ? renderPager({ idPrefix: 'tpl', offset: tplOffset, limit: tplLimit, total: activeTotalTemplates, sizes: [4, 6, 12, 24], standalone: true, label: 'قالب' }) : '');
     } else if (activeHubTab === 'print') {
-      activeTotalTemplates = 0;
       contentHtml = renderPrintStudioHtml(printSubTab, printCfg, qrCfg, activeIssuer, activeZatcaPhase, zoomLevel);
     } else {
-      activeTotalTemplates = filteredInvoices.length;
-      if (tplOffset >= activeTotalTemplates && tplOffset > 0) {
-        tplOffset = Math.max(0, Math.floor((activeTotalTemplates - 1) / tplLimit) * tplLimit);
-      }
-      const pagedInvoices = filteredInvoices.slice(tplOffset, tplOffset + tplLimit);
-      contentHtml = renderInvoicesGridHtml(pagedInvoices, printCfg.template_style, activeIssuer) + (activeTotalTemplates > 0 ? renderPager({ idPrefix: 'tpl', offset: tplOffset, limit: tplLimit, total: activeTotalTemplates, sizes: [4, 8, 12, 24], standalone: true, label: 'قالب' }) : '');
+      contentHtml = renderInvoicesGridHtml(excelTemplates, printCfg.template_style, activeIssuer) + (activeTotalTemplates > 0 ? renderPager({ idPrefix: 'tpl', offset: tplOffset, limit: tplLimit, total: activeTotalTemplates, sizes: [4, 6, 12, 24], standalone: true, label: 'قالب' }) : '');
     }
 
     view.innerHTML = html`
@@ -919,14 +885,14 @@ export async function render(view) {
         <div class="doc-tpl-nav">
           <button type="button" class="doc-tpl-tab-btn ${activeHubTab === 'invoices' ? 'active' : ''}" data-hub-tab="invoices">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="9" x2="9" y1="3" y2="21"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/></svg>
-            قوالب فواتير المبيعات (${invoiceTemplates.length})
+            قوالب فواتير المبيعات (${tplCounts.invoices || 0})
           </button>
           <button type="button" class="doc-tpl-tab-btn ${activeHubTab === 'vouchers' || activeHubTab === 'documents' ? 'active' : ''}" data-hub-tab="vouchers">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-            قوالب المستندات والسندات (${voucherTemplates.length})
+            قوالب المستندات والسندات (${tplCounts.vouchers || 0})
           </button>
-          <button type="button" class="doc-tpl-tab-btn ${activeHubTab === 'statements' ? 'active' : ''}" data-hub-tab="statements">قوالب كشف الحساب (${excelTemplates.filter((tpl) => tpl.category === 'statements').length})</button>
-          <button type="button" class="doc-tpl-tab-btn ${activeHubTab === 'reports' ? 'active' : ''}" data-hub-tab="reports">قوالب التقارير المالية (${excelTemplates.filter((tpl) => tpl.category === 'reports').length})</button>
+          <button type="button" class="doc-tpl-tab-btn ${activeHubTab === 'statements' ? 'active' : ''}" data-hub-tab="statements">قوالب كشف الحساب (${tplCounts.statements || 0})</button>
+          <button type="button" class="doc-tpl-tab-btn ${activeHubTab === 'reports' ? 'active' : ''}" data-hub-tab="reports">قوالب التقارير المالية (${tplCounts.reports || 0})</button>
         </div>
 
         <!-- شريط البحث السريع والرفع -->
@@ -1089,6 +1055,16 @@ export async function render(view) {
   }
 
   const templateHtmlCache = new Map();
+  const debouncedHubSearch = debounce(async () => {
+    tplOffset = 0;
+    await loadTemplates();
+    renderView();
+    const newInp = $('#inp-hub-search', view);
+    if (newInp) {
+      newInp.focus();
+      newInp.setSelectionRange(newInp.value.length, newInp.value.length);
+    }
+  }, 260);
 
   function getTemplateLoadingHtml(title = 'جارٍ تحميل وتجهيز قالب الفاتورة...') {
     return `<!DOCTYPE html>
@@ -2443,10 +2419,11 @@ export async function render(view) {
     }));
     // تبديل تبويبات المركز
     $$('.doc-tpl-tab-btn', view).forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         activeHubTab = btn.dataset.hubTab;
         tplOffset = 0;
-        window.location.hash = `#/templates?tab=${activeHubTab}`;
+        history.replaceState(null, '', `#/templates?tab=${activeHubTab}`);
+        await loadTemplates();
         renderView();
       });
     });
@@ -2456,13 +2433,7 @@ export async function render(view) {
     if (searchInp) {
       searchInp.addEventListener('input', (e) => {
         searchQuery = e.target.value.trim();
-        tplOffset = 0;
-        renderView();
-        const newInp = $('#inp-hub-search', view);
-        if (newInp) {
-          newInp.focus();
-          newInp.setSelectionRange(newInp.value.length, newInp.value.length);
-        }
+        debouncedHubSearch();
       });
     }
 
@@ -2471,9 +2442,10 @@ export async function render(view) {
       offset: tplOffset,
       limit: tplLimit,
       total: activeTotalTemplates,
-      onChange: (newOffset, newLimit) => {
+      onChange: async (newOffset, newLimit) => {
         tplOffset = newOffset;
         tplLimit = newLimit;
+        await loadTemplates();
         renderView();
       },
     });
@@ -2725,7 +2697,6 @@ export async function render(view) {
           thermal_scale: 3,
           ...selectedQrSettings,
         };
-        await loadIssuerData();
         currentInvoice = getDynamicPreviewInvoice();
         renderView();
         toastOk(`تم تحميل بيانات: ${activeIssuer.name_ar}`);
@@ -2971,5 +2942,8 @@ export async function render(view) {
   document.addEventListener('visibilitychange', onFocusOrVisible);
 
   renderView();
-  return undefined;
+  return () => {
+    window.removeEventListener('focus', onFocusOrVisible);
+    document.removeEventListener('visibilitychange', onFocusOrVisible);
+  };
 }

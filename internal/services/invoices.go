@@ -774,6 +774,11 @@ func (s *InvoiceService) ListInvoices(f ListInvoicesFilter) (*ListInvoicesResult
 		return nil, err
 	}
 
+	if offset >= totalCount && totalCount > 0 {
+		offset = ((totalCount - 1) / limit) * limit
+		f.Page = (offset / limit) + 1
+	}
+
 	// Query rows
 	query := fmt.Sprintf(`
 		SELECT i.id, i.issuer_id, i.client_id, i.invoice_number, i.sequence_no, i.invoice_type, i.zatca_phase,

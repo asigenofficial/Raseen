@@ -90,6 +90,10 @@ export async function render(view, ctx) {
     }));
     state.data = res || { items: [], totals: {}, total_count: 0 };
     if (!Array.isArray(state.data.items)) state.data.items = [];
+    if (res && typeof res.page === 'number' && res.page > 0) {
+      state.offset = (res.page - 1) * (state.limit || PAGE);
+      saveState();
+    }
   };
 
   const reload = async () => {
@@ -817,11 +821,21 @@ export async function render(view, ctx) {
   });
 
   await Promise.all([
-    loadClients().catch(() => {}),
-    loadTemplates('invoices').then((tpls) => { availableTemplates = tpls || []; }).catch(() => {}),
+    state.client_id ? loadClients().catch(() => {}) : Promise.resolve(),
+    state.batch_id ? loadTemplates('invoices').then((tpls) => { availableTemplates = tpls || []; }).catch(() => {}) : Promise.resolve(),
     load(),
   ]);
   draw();
+  view.addEventListener('focusin', async (e) => {
+    if (e.target && e.target.id === 'client_id' && !store.loaded.clients) {
+      await loadClients().catch(() => {});
+      const sel = $('#client_id', view);
+      if (sel) {
+        sel.innerHTML = `<option value="">كل العملاء</option>` +
+          store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+      }
+    }
+  });
   return () => { unsubSync(); };
 }
 

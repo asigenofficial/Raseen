@@ -1100,6 +1100,10 @@ export async function render(view, ctx) {
     state.data = res || { items: [], totals: {}, total_count: 0 };
     if (!Array.isArray(state.data.items)) state.data.items = [];
     if (!state.data.totals) state.data.totals = {};
+    if (res && typeof res.page === 'number' && res.page > 0) {
+      state.offset = (res.page - 1) * (state.limit || PAGE);
+      saveState();
+    }
   };
 
   const reload = async () => { await load(); draw(); };
@@ -1282,32 +1286,41 @@ export async function render(view, ctx) {
 
     const newBtn = $('#new-v', view);
     if (newBtn) {
-      newBtn.addEventListener('click', () => voucherWizard({
-        clientId: state.client_id,
-        issuerId: state.issuer_id || store.activeIssuerId,
-        mode: 'single',
-        onDone: reload,
-      }));
+      newBtn.addEventListener('click', async () => {
+        if (!store.loaded.clients) await loadClients().catch(() => {});
+        voucherWizard({
+          clientId: state.client_id,
+          issuerId: state.issuer_id || store.activeIssuerId,
+          mode: 'single',
+          onDone: reload,
+        });
+      });
     }
 
     const newInstallBtn = $('#new-v-install', view);
     if (newInstallBtn) {
-      newInstallBtn.addEventListener('click', () => voucherWizard({
-        clientId: state.client_id,
-        issuerId: state.issuer_id || store.activeIssuerId,
-        mode: 'install',
-        onDone: reload,
-      }));
+      newInstallBtn.addEventListener('click', async () => {
+        if (!store.loaded.clients) await loadClients().catch(() => {});
+        voucherWizard({
+          clientId: state.client_id,
+          issuerId: state.issuer_id || store.activeIssuerId,
+          mode: 'install',
+          onDone: reload,
+        });
+      });
     }
 
     const newBatchBtn = $('#new-v-batch', view);
     if (newBatchBtn) {
-      newBatchBtn.addEventListener('click', () => voucherWizard({
-        clientId: state.client_id,
-        issuerId: state.issuer_id || store.activeIssuerId,
-        mode: 'batch',
-        onDone: reload,
-      }));
+      newBatchBtn.addEventListener('click', async () => {
+        if (!store.loaded.clients) await loadClients().catch(() => {});
+        voucherWizard({
+          clientId: state.client_id,
+          issuerId: state.issuer_id || store.activeIssuerId,
+          mode: 'batch',
+          onDone: reload,
+        });
+      });
     }
 
     if (q0.mode === 'install' || q0.action === 'install') {
@@ -1475,9 +1488,19 @@ export async function render(view, ctx) {
   });
 
   await Promise.all([
-    loadClients().catch(() => {}),
+    state.client_id ? loadClients().catch(() => {}) : Promise.resolve(),
     load(),
   ]);
   draw();
+  view.addEventListener('focusin', async (e) => {
+    if (e.target && e.target.id === 'client_id' && !store.loaded.clients) {
+      await loadClients().catch(() => {});
+      const sel = $('#client_id', view);
+      if (sel) {
+        sel.innerHTML = `<option value="">كل العملاء</option>` +
+          store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+      }
+    }
+  });
   return () => { unsubSync(); };
 }

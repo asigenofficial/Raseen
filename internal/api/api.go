@@ -656,10 +656,60 @@ func (s *Server) Handler() http.Handler {
 
 	// ---------------------------------------------------- الشركات المصدرة
 	mux.HandleFunc("GET /api/issuers", func(w http.ResponseWriter, r *http.Request) {
-		activeOnly := r.URL.Query().Get("active_only") == "1" || r.URL.Query().Get("active_only") == "true"
+		q := r.URL.Query()
+		activeOnly := q.Get("active_only") == "1" || q.Get("active_only") == "true"
 		list, err := s.issuers.ListIssuers(activeOnly)
 		if err != nil {
 			s.err(w, 500, err.Error())
+			return
+		}
+		if q.Get("brief") == "1" || q.Get("brief") == "true" {
+			briefList := make([]models.Issuer, len(list))
+			for i, iss := range list {
+				iss.LogoData = nil
+				iss.FooterNotes = ""
+				iss.LegalTerms = ""
+				briefList[i] = iss
+			}
+			list = briefList
+		}
+		if search := strings.TrimSpace(strings.ToLower(q.Get("q"))); search != "" {
+			filtered := make([]models.Issuer, 0, len(list))
+			for _, iss := range list {
+				hay := strings.ToLower(iss.NameAr + " " + iss.NameEn + " " + iss.Code + " " + iss.TaxNumber + " " + iss.CommercialRegister + " " + iss.City + " " + iss.CityEn)
+				if strings.Contains(hay, search) {
+					filtered = append(filtered, iss)
+				}
+			}
+			list = filtered
+		}
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		offset, _ := strconv.Atoi(q.Get("offset"))
+		if q.Get("paged") == "1" || q.Get("paged") == "true" {
+			totalCount := len(list)
+			if limit <= 0 {
+				limit = 8
+			}
+			if offset < 0 {
+				offset = 0
+			}
+			if offset >= totalCount && totalCount > 0 {
+				offset = ((totalCount - 1) / limit) * limit
+			}
+			pagedItems := []models.Issuer{}
+			if offset < totalCount {
+				end := offset + limit
+				if end > totalCount {
+					end = totalCount
+				}
+				pagedItems = list[offset:end]
+			}
+			s.json(w, 200, map[string]any{
+				"items":       pagedItems,
+				"total_count": totalCount,
+				"offset":      offset,
+				"limit":       limit,
+			})
 			return
 		}
 		s.json(w, 200, list)
@@ -888,6 +938,9 @@ func (s *Server) Handler() http.Handler {
 			if offset < 0 {
 				offset = 0
 			}
+			if offset >= totalCount && totalCount > 0 {
+				offset = ((totalCount - 1) / limit) * limit
+			}
 			pagedItems := []services.ClientListItem{}
 			if offset < totalCount {
 				end := offset + limit
@@ -899,6 +952,8 @@ func (s *Server) Handler() http.Handler {
 			s.json(w, 200, map[string]any{
 				"items":       pagedItems,
 				"total_count": totalCount,
+				"offset":      offset,
+				"limit":       limit,
 				"totals": map[string]any{
 					"invoiced": totInv,
 					"paid":     totPaid,
@@ -1079,9 +1134,39 @@ func (s *Server) Handler() http.Handler {
 
 	// ---------------------------------------------------- الأصناف والمجموعات
 	mux.HandleFunc("GET /api/categories", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
 		list, err := s.items.ListCategories()
 		if err != nil {
 			s.err(w, 500, err.Error())
+			return
+		}
+		if q.Get("paged") == "1" || q.Get("paged") == "true" {
+			totalCount := len(list)
+			limit, _ := strconv.Atoi(q.Get("limit"))
+			offset, _ := strconv.Atoi(q.Get("offset"))
+			if limit <= 0 {
+				limit = 20
+			}
+			if offset < 0 {
+				offset = 0
+			}
+			if offset >= totalCount && totalCount > 0 {
+				offset = ((totalCount - 1) / limit) * limit
+			}
+			pagedItems := []models.ItemCategory{}
+			if offset < totalCount {
+				end := offset + limit
+				if end > totalCount {
+					end = totalCount
+				}
+				pagedItems = list[offset:end]
+			}
+			s.json(w, 200, map[string]any{
+				"items":       pagedItems,
+				"total_count": totalCount,
+				"offset":      offset,
+				"limit":       limit,
+			})
 			return
 		}
 		s.json(w, 200, list)
@@ -1160,6 +1245,9 @@ func (s *Server) Handler() http.Handler {
 			if offset < 0 {
 				offset = 0
 			}
+			if offset >= totalCount && totalCount > 0 {
+				offset = ((totalCount - 1) / limit) * limit
+			}
 			pagedItems := []services.ItemListItem{}
 			if offset < totalCount {
 				end := offset + limit
@@ -1171,6 +1259,8 @@ func (s *Server) Handler() http.Handler {
 			s.json(w, 200, map[string]any{
 				"items":       pagedItems,
 				"total_count": totalCount,
+				"offset":      offset,
+				"limit":       limit,
 			})
 			return
 		}
@@ -2206,6 +2296,94 @@ func (s *Server) Handler() http.Handler {
 	// ---------------------------------------------------- قوالب الفواتير والمستندات
 	mux.HandleFunc("GET /api/invoices/templates", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
+		if q.Get("paged") == "1" || q.Get("paged") == "true" {
+			allList, err := s.templates.List("all", "")
+			if err != nil {
+				s.err(w, 500, err.Error())
+				return
+			}
+			counts := map[string]int{
+				"invoices":   0,
+				"vouchers":   0,
+				"statements": 0,
+				"reports":    0,
+			}
+			namesMap := make(map[string]string, len(allList))
+			for _, tpl := range allList {
+				namesMap[tpl.ID] = tpl.NameAr
+				switch tpl.Category {
+				case "invoices", "custom", "custom_invoices":
+					counts["invoices"]++
+				case "documents", "vouchers", "custom_vouchers":
+					counts["vouchers"]++
+				case "statements":
+					counts["statements"]++
+				case "reports":
+					counts["reports"]++
+				}
+			}
+
+			tabFilter := q.Get("tab")
+			if tabFilter == "" {
+				tabFilter = q.Get("category")
+			}
+			if tabFilter == "" {
+				tabFilter = q.Get("type")
+			}
+			search := strings.TrimSpace(strings.ToLower(q.Get("q")))
+
+			filtered := make([]services.TemplateCatalogItem, 0, len(allList))
+			for _, tpl := range allList {
+				if tabFilter != "" && tabFilter != "all" {
+					if (tabFilter == "invoices" || tabFilter == "print") && tpl.Category != "invoices" && tpl.Category != "custom" && tpl.Category != "custom_invoices" {
+						continue
+					}
+					if (tabFilter == "vouchers" || tabFilter == "documents") && tpl.Category != "vouchers" && tpl.Category != "documents" && tpl.Category != "custom_vouchers" {
+						continue
+					}
+					if (tabFilter == "statements" || tabFilter == "reports") && tpl.Category != tabFilter {
+						continue
+					}
+				}
+				if search != "" {
+					hay := strings.ToLower(tpl.NameAr + " " + tpl.NameEn + " " + tpl.ID + " " + tpl.Description + " " + tpl.Badge + " " + strings.Join(tpl.Headers, " "))
+					if !strings.Contains(hay, search) {
+						continue
+					}
+				}
+				filtered = append(filtered, tpl)
+			}
+
+			totalCount := len(filtered)
+			limit, _ := strconv.Atoi(q.Get("limit"))
+			offset, _ := strconv.Atoi(q.Get("offset"))
+			if limit <= 0 {
+				limit = 6
+			}
+			if offset < 0 {
+				offset = 0
+			}
+			if offset >= totalCount && totalCount > 0 {
+				offset = ((totalCount - 1) / limit) * limit
+			}
+			pagedItems := []services.TemplateCatalogItem{}
+			if offset < totalCount {
+				end := offset + limit
+				if end > totalCount {
+					end = totalCount
+				}
+				pagedItems = filtered[offset:end]
+			}
+			s.json(w, 200, map[string]any{
+				"items":       pagedItems,
+				"total_count": totalCount,
+				"offset":      offset,
+				"limit":       limit,
+				"counts":      counts,
+				"names":       namesMap,
+			})
+			return
+		}
 		list, err := s.templates.List(q.Get("type"), q.Get("category"))
 		if err != nil {
 			s.err(w, 500, err.Error())

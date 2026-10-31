@@ -1,12 +1,12 @@
 // ==========================================================================
 //  إدارة الشركات / المنشآت المصدرة (Multi-Issuer)
 // ==========================================================================
-import { api } from '../core/api.js';
+import { api, qs } from '../core/api.js';
 import { store, loadIssuers, invalidate, can, setActiveIssuer } from '../core/store.js';
 import {
   html, raw, esc, modal, formValues, toastOk, toastErr,
   confirmDialog, $, $$, delegate, dateTimeAr, icon,
-  exportExcel, exportCsv, renderPager, bindPager,
+  exportExcel, exportCsv, renderPager, bindPager, debounce,
 } from '../core/util.js';
 
 const CITIES = ['الرياض', 'جدة', 'مكة المكرمة', 'المدينة المنورة', 'الدمام', 'الخبر', 'الظهران', 'بريدة', 'أبها', 'تبوك', 'حائل', 'نجران', 'جيزان', 'الطائف', 'الأحساء', 'الجبيل', 'ينبع'];
@@ -444,13 +444,26 @@ function openIssuerImportModal(onSuccess) {
 export async function render(view) {
   let searchQ = '';
   let pageOffset = 0;
-  let pageLimit = 12;
+  let pageLimit = 8;
   let issuers = [];
+  let totalIssuers = 0;
 
   const load = async () => {
-    const rawIssuers = await api.get('/api/issuers');
-    issuers = Array.isArray(rawIssuers) ? rawIssuers : (rawIssuers?.data || []);
-    store.issuers = issuers;
+    const res = await api.get(qs('/api/issuers', {
+      paged: 1,
+      q: searchQ,
+      limit: pageLimit,
+      offset: pageOffset,
+    }));
+    if (res && Array.isArray(res.items)) {
+      issuers = res.items;
+      totalIssuers = Number(res.total_count ?? issuers.length);
+      if (typeof res.offset === 'number') pageOffset = res.offset;
+    } else {
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      issuers = list;
+      totalIssuers = list.length;
+    }
   };
 
   const reload = async () => {
@@ -458,22 +471,18 @@ export async function render(view) {
     draw();
   };
 
+  const debouncedSearch = debounce(async () => {
+    pageOffset = 0;
+    await reload();
+    const el = $('#issuers-search', view);
+    if (el) {
+      el.focus();
+      el.setSelectionRange(searchQ.length, searchQ.length);
+    }
+  }, 260);
+
   const draw = () => {
     const writable = can('issuers.write');
-
-    const filterIssuers = (q) => {
-      if (!q) return issuers;
-      const term = q.trim().toLowerCase();
-      return issuers.filter((i) => {
-        return (i.name_ar && i.name_ar.toLowerCase().includes(term)) ||
-          (i.name_en && i.name_en.toLowerCase().includes(term)) ||
-          (i.code && i.code.toLowerCase().includes(term)) ||
-          (i.tax_number && i.tax_number.toLowerCase().includes(term)) ||
-          (i.commercial_register && i.commercial_register.toLowerCase().includes(term)) ||
-          (i.city && i.city.toLowerCase().includes(term)) ||
-          (i.city_en && i.city_en.toLowerCase().includes(term));
-      });
-    };
 
     const cardHtml = (i) => `
       <div class="card" style="padding:0.65rem 0.85rem; border-radius:8px; border:1px solid ${i.id === store.activeIssuerId ? 'var(--primary, #06b6d4)' : 'var(--line)'}; background:${i.id === store.activeIssuerId ? 'rgba(6,182,212,0.04)' : 'var(--surface)'}; display:flex; flex-direction:column; justify-content:space-between; gap:0.45rem;">
@@ -514,11 +523,7 @@ export async function render(view) {
         </div>
       </div>`;
 
-    const filteredList = filterIssuers(searchQ);
-    if (pageOffset >= filteredList.length && pageOffset > 0) {
-      pageOffset = Math.max(0, Math.floor((filteredList.length - 1) / pageLimit) * pageLimit);
-    }
-    const pagedList = filteredList.slice(pageOffset, pageOffset + pageLimit);
+    const hasAnyIssuers = totalIssuers > 0 || Boolean(searchQ);
 
     const renderGrid = (list) => {
       if (!list.length) {
@@ -541,18 +546,18 @@ export async function render(view) {
         </div>
       </div>
 
-      ${raw(issuers.length > 0 ? `
+      ${raw(hasAnyIssuers ? `
         <div class="card" style="margin-bottom:0.75rem;padding:0.65rem 1rem">
           <div class="row items-center" style="gap:1rem;flex-wrap:wrap">
             <div class="field" style="flex:1;min-width:240px;margin:0">
               <input type="search" id="issuers-search" value="${esc(searchQ)}" placeholder="بحث في الشركات (الاسم، الكود، الرقم الضريبي، السجل، المدينة…)…" autocomplete="off" />
             </div>
-            <span class="tiny muted" id="issuers-count">${searchQ ? `${filteredList.length} مطابقة من أصل ` : ''}${issuers.length} شركة</span>
+            <span class="tiny muted" id="issuers-count">${totalIssuers} شركة</span>
           </div>
         </div>
       ` : '')}
 
-      ${raw(!issuers.length ? `<div class="card"><div class="empty">
+      ${raw(!hasAnyIssuers ? `<div class="card"><div class="empty">
         <h3>لا توجد شركات مصدرة بعد</h3>
         <p class="muted">أضف أول شركة لتتمكن من إصدار الفواتير وسندات القبض.</p>
         <div class="row gap mt justify-center">
@@ -561,15 +566,15 @@ export async function render(view) {
         </div>
       </div></div>` : '')}
 
-      ${raw(issuers.length ? `<div id="issuers-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:0.65rem;">
-        ${renderGrid(pagedList)}
+      ${raw(hasAnyIssuers ? `<div id="issuers-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:0.65rem;">
+        ${renderGrid(issuers)}
       </div>
       ${renderPager({
         idPrefix: 'iss',
         offset: pageOffset,
         limit: pageLimit,
-        total: filteredList.length,
-        sizes: [6, 12, 24, 48],
+        total: totalIssuers,
+        sizes: [4, 8, 12, 24],
         standalone: true,
         label: 'شركة',
       })}` : '')}`;
@@ -578,13 +583,7 @@ export async function render(view) {
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         searchQ = e.target.value;
-        pageOffset = 0;
-        draw();
-        const el = $('#issuers-search', view);
-        if (el) {
-          el.focus();
-          el.setSelectionRange(searchQ.length, searchQ.length);
-        }
+        debouncedSearch();
       });
     }
 
@@ -592,11 +591,11 @@ export async function render(view) {
       idPrefix: 'iss',
       offset: pageOffset,
       limit: pageLimit,
-      total: filteredList.length,
-      onChange: (newOffset, newLimit) => {
+      total: totalIssuers,
+      onChange: async (newOffset, newLimit) => {
         pageOffset = newOffset;
         pageLimit = newLimit;
-        draw();
+        await reload();
       },
     });
 

@@ -295,6 +295,10 @@ export async function render(view) {
     } else {
       state.rows = res.items || [];
       state.total_count = res.total_count || 0;
+      if (typeof res.offset === 'number') {
+        state.offset = res.offset;
+        saveState();
+      }
       state.totals = res.totals || { invoiced: 0, paid: 0, balance: 0, count: 0 };
     }
   };

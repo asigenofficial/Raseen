@@ -59,7 +59,7 @@ export async function loadSession() {
 
 export async function loadIssuers(force = false) {
   if (store.loaded.issuers && !force) return store.issuers;
-  const res = await api.get('/api/issuers');
+  const res = await api.get('/api/issuers?brief=1');
   store.issuers = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
   store.loaded.issuers = true;
   if (store.activeIssuerId && !store.issuers.some((i) => i.id === store.activeIssuerId)) {

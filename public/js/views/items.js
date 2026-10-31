@@ -307,13 +307,30 @@ export async function render(view, ctx) {
     items: [],
     total_items: 0,
     categories: [],
+    pagedCategories: [],
+    total_categories: 0,
   };
   const writable = can('items.write');
 
   const load = async () => {
     try {
-      const catsRes = await api.get('/api/categories');
+      const [catsRes, pagedCatsRes] = await Promise.all([
+        api.get('/api/categories'),
+        api.get(qs('/api/categories', {
+          paged: 1,
+          limit: state.catLimit || PAGE,
+          offset: state.catOffset || 0,
+        })),
+      ]);
       state.categories = Array.isArray(catsRes) ? catsRes : [];
+      if (pagedCatsRes && Array.isArray(pagedCatsRes.items)) {
+        state.pagedCategories = pagedCatsRes.items;
+        state.total_categories = Number(pagedCatsRes.total_count ?? state.categories.length);
+        if (typeof pagedCatsRes.offset === 'number') state.catOffset = pagedCatsRes.offset;
+      } else {
+        state.pagedCategories = state.categories.slice(state.catOffset, state.catOffset + (state.catLimit || PAGE));
+        state.total_categories = state.categories.length;
+      }
       if (state.categoryId && !state.categories.some((c) => c.id === state.categoryId)) {
         state.categoryId = '';
       }
@@ -332,11 +349,14 @@ export async function render(view, ctx) {
       } else {
         state.items = Array.isArray(itemsRes?.items) ? itemsRes.items : [];
         state.total_items = itemsRes?.total_count || 0;
+        if (typeof itemsRes?.offset === 'number') state.offset = itemsRes.offset;
       }
     } catch {
       state.items = [];
       state.total_items = 0;
       state.categories = [];
+      state.pagedCategories = [];
+      state.total_categories = 0;
     }
     store.categories = state.categories;
     setFilterState('items', {
@@ -387,8 +407,7 @@ export async function render(view, ctx) {
   };
 
   const catRows = () => {
-    const allList = Array.isArray(state.categories) ? state.categories : [];
-    const list = allList.slice(state.catOffset, state.catOffset + (state.catLimit || PAGE));
+    const list = Array.isArray(state.pagedCategories) ? state.pagedCategories : [];
     if (!list.length) return '<tr><td colspan="6" class="text-center muted" style="padding:1.5rem">لا توجد مجموعات</td></tr>';
     return list.map((c) => `<tr>
       <td class="mono tiny nowrap" style="white-space:nowrap;font-weight:700">
@@ -503,7 +522,7 @@ export async function render(view, ctx) {
             idPrefix: 'cat',
             offset: state.catOffset,
             limit: state.catLimit || PAGE,
-            total: catList.length,
+            total: state.total_categories || catList.length,
             sizes: [10, 20, 50, 100],
             label: 'مجموعة',
           })}
@@ -569,10 +588,11 @@ export async function render(view, ctx) {
         idPrefix: 'cat',
         offset: state.catOffset,
         limit: state.catLimit || PAGE,
-        total: catList.length,
-        onChange: (newOffset, newLimit) => {
+        total: state.total_categories || catList.length,
+        onChange: async (newOffset, newLimit) => {
           state.catOffset = newOffset;
           state.catLimit = newLimit;
+          await load();
           draw();
         },
       });

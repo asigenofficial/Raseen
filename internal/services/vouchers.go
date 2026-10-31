@@ -449,6 +449,11 @@ func (s *VoucherService) ListVouchers(f ListVouchersFilter) (*ListVouchersResult
 	var sumTotalMinor, sumAllocMinor int64
 	_ = s.db.QueryRow(totalsQuery, args...).Scan(&totalCount, &sumTotalMinor, &sumAllocMinor)
 
+	if offset >= totalCount && totalCount > 0 {
+		offset = ((totalCount - 1) / limit) * limit
+		f.Page = (offset / limit) + 1
+	}
+
 	sumTotal := models.ToMajor(sumTotalMinor)
 	sumAlloc := models.ToMajor(sumAllocMinor)
 	sumUnalloc := models.ToMajor(sumTotalMinor - sumAllocMinor)
