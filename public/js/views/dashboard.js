@@ -4,8 +4,8 @@
 import { api, qs } from '../core/api.js';
 import { store, activeIssuer, currencyLabel } from '../core/store.js';
 
-const onSync = (cb) => (typeof store.onSync === 'function' ? store.onSync(cb) : () => {});
-import { html, raw, esc, money, num, dateAr, statusBadge, icon, amount, sarSvg } from '../core/util.js';
+const onSync = (cb) => (typeof store.onSync === 'function' ? store.onSync(cb) : () => { });
+import { html, raw, esc, money, num, dateAr, statusBadge, icon, amount, sarSvg, renderPager, bindPager } from '../core/util.js';
 
 function stat(iconContent, cls, value, label, sub) {
   return html`<div class="stat">
@@ -22,8 +22,8 @@ function barChart(monthly) {
   const max = Math.max(1, ...monthly.map((m) => m.total));
   return html`<div class="bar-chart" style="margin-top:.8rem">
     ${raw(monthly.map((m) => {
-      const pct = Math.max(4, Math.round((m.total / max) * 100));
-      return `
+    const pct = Math.max(4, Math.round((m.total / max) * 100));
+    return `
       <div class="bar">
         <div class="bar-track">
           <div class="tip">${money(m.total)} ر.س</div>
@@ -31,7 +31,7 @@ function barChart(monthly) {
         </div>
         <span>${esc(m.month.slice(5))}/${esc(m.month.slice(2, 4))}</span>
       </div>`;
-    }))}
+  }))}
   </div>`;
 }
 
@@ -56,7 +56,16 @@ export async function render(view) {
   const statusMap = new Map(data.by_status.map((s) => [s.status, s]));
   const g = (k) => statusMap.get(k) || { count: 0, total: 0 };
 
-  view.innerHTML = html`
+  let issOffset = 0;
+  let issLimit = 5;
+  let recOffset = 0;
+  let recLimit = 5;
+
+  const draw = () => {
+    const pagedIssuers = data.by_issuer.slice(issOffset, issOffset + issLimit);
+    const pagedRecent = data.recent_invoices.slice(recOffset, recOffset + recLimit);
+
+    view.innerHTML = html`
     <div class="page-head">
       <div class="titles">
         <h1>لوحة المعلومات</h1>
@@ -153,16 +162,24 @@ export async function render(view) {
         <table class="tbl">
           <thead><tr><th>الشركة</th><th>الكود</th><th class="text-end">فواتير</th><th class="text-end">الإجمالي</th><th class="text-end">المتبقي</th></tr></thead>
           <tbody>
-            ${data.by_issuer.map((i) => raw(`<tr>
+            ${pagedIssuers.length ? pagedIssuers.map((i) => raw(`<tr>
                 <td>${esc(i.name)}</td>
                 <td class="mono tiny">${esc(i.code)}</td>
                 <td class="text-end num">${num(i.invoices)}</td>
                 <td class="text-end num">${money(i.total)}</td>
                 <td class="text-end num">${money(i.remaining)}</td>
-              </tr>`))}
+              </tr>`)) : raw('<tr><td colspan="5" class="text-center muted">لا توجد بيانات</td></tr>')}
           </tbody>
         </table>
       </div>
+      ${raw(renderPager({
+      idPrefix: 'dash-iss',
+      offset: issOffset,
+      limit: issLimit,
+      total: data.by_issuer.length,
+      sizes: [5, 10, 20],
+      label: 'شركة',
+    }))}
     </div>
 
     <div class="card pad0 mt">
@@ -175,7 +192,7 @@ export async function render(view) {
         <table class="tbl">
           <thead><tr><th>الرقم</th><th>التاريخ</th><th>العميل</th><th>الشركة</th><th class="text-end">الإجمالي</th><th>الحالة</th></tr></thead>
           <tbody>
-            ${data.recent_invoices.length ? data.recent_invoices.map((i) => raw(`<tr class="clickable" onclick="location.hash='#/invoice-view/${esc(i.id)}'">
+            ${pagedRecent.length ? pagedRecent.map((i) => raw(`<tr class="clickable" onclick="location.hash='#/invoice-view/${esc(i.id)}'">
                 <td class="mono">${esc(i.invoice_number)}</td>
                 <td class="nowrap tiny">${esc(dateAr(i.issue_date))}</td>
                 <td>${esc(i.client_name)}</td>
@@ -186,7 +203,42 @@ export async function render(view) {
           </tbody>
         </table>
       </div>
+      ${raw(renderPager({
+      idPrefix: 'dash-rec',
+      offset: recOffset,
+      limit: recLimit,
+      total: data.recent_invoices.length,
+      sizes: [5, 10, 20],
+      label: 'فاتورة',
+    }))}
     </div>`;
+
+    bindPager(view, {
+      idPrefix: 'dash-iss',
+      offset: issOffset,
+      limit: issLimit,
+      total: data.by_issuer.length,
+      onChange: (newOffset, newLimit) => {
+        issOffset = newOffset;
+        issLimit = newLimit;
+        draw();
+      },
+    });
+
+    bindPager(view, {
+      idPrefix: 'dash-rec',
+      offset: recOffset,
+      limit: recLimit,
+      total: data.recent_invoices.length,
+      onChange: (newOffset, newLimit) => {
+        recOffset = newOffset;
+        recLimit = newLimit;
+        draw();
+      },
+    });
+  };
+
+  draw();
 
   const unsubSync = onSync((ev) => {
     if (ev.entity === 'invoices' || ev.entity === 'vouchers' || ev.entity === 'issuers') {

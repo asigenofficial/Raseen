@@ -6,7 +6,7 @@ import { api } from '../core/api.js';
 import { store, can } from '../core/store.js';
 import {
   html, raw, esc, printDoc, modal, toastOk, toastErr, $, $$, exportExcel, downloadPdfFromHtml,
-  fillDynamicTemplateHtml, fillStoredTemplate,
+  fillDynamicTemplateHtml, fillStoredTemplate, renderPager, bindPager,
 } from '../core/util.js';
 
 import { PRESET_LOGOS } from '../print/logos.js';
@@ -131,11 +131,6 @@ export async function render(view) {
   let activeIssuerId = store.activeIssuerId || issuers[0].id;
   let activeIssuer = issuers.find((i) => i.id === activeIssuerId) || issuers[0];
 
-  try {
-    const rawActive = await api.get(`/api/issuers/${activeIssuer.id}`);
-    if (rawActive && rawActive.id) activeIssuer = rawActive;
-  } catch { /* التراجع للمنشأة المتاحة */ }
-
   let excelTemplates = [];
   async function loadTemplates() {
     try {
@@ -145,7 +140,6 @@ export async function render(view) {
       excelTemplates = [];
     }
   }
-  await loadTemplates();
 
   // جلب فواتير وعملاء وسندات حقيقية للمنشأة لتكون المعاينة ديناميكية بالكامل بدون أي بيانات ثابتة
   let liveClients = [];
@@ -154,9 +148,9 @@ export async function render(view) {
   async function loadIssuerData() {
     try {
       const [invRes, cliRes, vouRes] = await Promise.all([
-        api.get(`/api/invoices?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=10`),
-        api.get(`/api/clients?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=10`),
-        api.get(`/api/vouchers?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=10`),
+        api.get(`/api/invoices?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=5`),
+        api.get(`/api/clients?issuer_id=${encodeURIComponent(activeIssuer.id)}&paged=1&limit=5`),
+        api.get(`/api/vouchers?issuer_id=${encodeURIComponent(activeIssuer.id)}&limit=5`),
       ]);
       liveInvoices = Array.isArray(invRes) ? invRes : (invRes?.items || invRes?.data || []);
       liveClients = Array.isArray(cliRes) ? cliRes : (cliRes?.items || cliRes?.data || []);
@@ -167,7 +161,14 @@ export async function render(view) {
       liveVouchers = [];
     }
   }
-  await loadIssuerData();
+
+  await Promise.all([
+    api.get(`/api/issuers/${activeIssuer.id}`).then((rawActive) => {
+      if (rawActive && rawActive.id) activeIssuer = rawActive;
+    }).catch(() => {}),
+    loadTemplates(),
+    loadIssuerData(),
+  ]);
 
   let issuerPrintSettings = {};
   try {
@@ -276,6 +277,9 @@ export async function render(view) {
   let zoomLevel = 62;
   let activeZatcaPhase = activeIssuer.zatca_phase || 'PHASE1';
   let invoiceState = 'normal';
+  let tplOffset = 0;
+  let tplLimit = 8;
+  let activeTotalTemplates = 0;
 
   function getDynamicPreviewInvoice() {
     return buildMockInvoice(activeIssuer, activeZatcaPhase);
@@ -853,19 +857,36 @@ export async function render(view) {
     if (activeHubTab === 'reports' || activeHubTab === 'statements') {
       const settingKey = activeHubTab === 'reports' ? 'report_template_style' : 'statement_template_style';
       const matched = filterList(excelTemplates.filter((tpl) => tpl.category === activeHubTab));
-      contentHtml = matched.length ? `<div class="doc-tpl-grid">${matched.map((tpl) => `<div class="doc-tpl-card" style="padding:1rem">
+      activeTotalTemplates = matched.length;
+      if (tplOffset >= activeTotalTemplates && tplOffset > 0) {
+        tplOffset = Math.max(0, Math.floor((activeTotalTemplates - 1) / tplLimit) * tplLimit);
+      }
+      const pagedMatched = matched.slice(tplOffset, tplOffset + tplLimit);
+      contentHtml = pagedMatched.length ? `<div class="doc-tpl-grid">${pagedMatched.map((tpl) => `<div class="doc-tpl-card" style="padding:1rem">
         <strong>${esc(tpl.name_ar || tpl.name)}</strong><p class="muted">${esc(tpl.description || 'قالب HTML قابل للتخصيص')}</p>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button class="btn btn-sm" type="button" data-file-preview="${esc(tpl.id)}">معاينة</button>
           <button class="btn btn-sm ${printCfg[settingKey] === tpl.id && !isAutomaticTemplate(settingKey) ? 'btn-tpl-active-state' : 'btn-primary'}" type="button" data-select-data-template="${esc(tpl.id)}" data-setting-key="${settingKey}" title="اعتماد هذا القالب لهذه الفئة" ${printCfg[settingKey] === tpl.id && !isAutomaticTemplate(settingKey) ? 'disabled' : ''}>${printCfg[settingKey] === tpl.id && !isAutomaticTemplate(settingKey) ? 'معتمد ✓' : 'اعتماد للمنشأة'}</button>
           <button class="btn btn-sm btn-danger" type="button" data-file-delete="${esc(tpl.id)}">حذف</button>
-        </div></div>`).join('')}</div>` : '<div class="doc-tpl-empty">لا توجد قوالب في هذه الفئة. ارفع ملف HTML لإضافتها.</div>';
+        </div></div>`).join('')}</div>
+        ${renderPager({ idPrefix: 'tpl', offset: tplOffset, limit: tplLimit, total: activeTotalTemplates, sizes: [4, 8, 12, 24], standalone: true, label: 'قالب' })}` : '<div class="doc-tpl-empty">لا توجد قوالب في هذه الفئة. ارفع ملف HTML لإضافتها.</div>';
     } else if (activeHubTab === 'vouchers') {
-      contentHtml = renderVouchersGridHtml(filteredVouchers);
+      activeTotalTemplates = filteredVouchers.length;
+      if (tplOffset >= activeTotalTemplates && tplOffset > 0) {
+        tplOffset = Math.max(0, Math.floor((activeTotalTemplates - 1) / tplLimit) * tplLimit);
+      }
+      const pagedVouchers = filteredVouchers.slice(tplOffset, tplOffset + tplLimit);
+      contentHtml = renderVouchersGridHtml(pagedVouchers) + (activeTotalTemplates > 0 ? renderPager({ idPrefix: 'tpl', offset: tplOffset, limit: tplLimit, total: activeTotalTemplates, sizes: [4, 8, 12, 24], standalone: true, label: 'قالب' }) : '');
     } else if (activeHubTab === 'print') {
+      activeTotalTemplates = 0;
       contentHtml = renderPrintStudioHtml(printSubTab, printCfg, qrCfg, activeIssuer, activeZatcaPhase, zoomLevel);
     } else {
-      contentHtml = renderInvoicesGridHtml(filteredInvoices, printCfg.template_style, activeIssuer);
+      activeTotalTemplates = filteredInvoices.length;
+      if (tplOffset >= activeTotalTemplates && tplOffset > 0) {
+        tplOffset = Math.max(0, Math.floor((activeTotalTemplates - 1) / tplLimit) * tplLimit);
+      }
+      const pagedInvoices = filteredInvoices.slice(tplOffset, tplOffset + tplLimit);
+      contentHtml = renderInvoicesGridHtml(pagedInvoices, printCfg.template_style, activeIssuer) + (activeTotalTemplates > 0 ? renderPager({ idPrefix: 'tpl', offset: tplOffset, limit: tplLimit, total: activeTotalTemplates, sizes: [4, 8, 12, 24], standalone: true, label: 'قالب' }) : '');
     }
 
     view.innerHTML = html`
@@ -2424,6 +2445,7 @@ export async function render(view) {
     $$('.doc-tpl-tab-btn', view).forEach((btn) => {
       btn.addEventListener('click', () => {
         activeHubTab = btn.dataset.hubTab;
+        tplOffset = 0;
         window.location.hash = `#/templates?tab=${activeHubTab}`;
         renderView();
       });
@@ -2434,6 +2456,7 @@ export async function render(view) {
     if (searchInp) {
       searchInp.addEventListener('input', (e) => {
         searchQuery = e.target.value.trim();
+        tplOffset = 0;
         renderView();
         const newInp = $('#inp-hub-search', view);
         if (newInp) {
@@ -2442,6 +2465,18 @@ export async function render(view) {
         }
       });
     }
+
+    bindPager(view, {
+      idPrefix: 'tpl',
+      offset: tplOffset,
+      limit: tplLimit,
+      total: activeTotalTemplates,
+      onChange: (newOffset, newLimit) => {
+        tplOffset = newOffset;
+        tplLimit = newLimit;
+        renderView();
+      },
+    });
 
     // رفع القالب العام
     $('#file-upload-global', view)?.addEventListener('change', (e) => {

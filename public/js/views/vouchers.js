@@ -10,12 +10,12 @@ import {
   html, raw, esc, money, num, dateAr, dateTimeAr, today, monthStart, toastOk, toastErr,
   $, $$, delegate, debounce, modal, formValues, confirmDialog, exportCsv, exportExcel, printDoc, toNum,
   icon, downloadPdfFromHtml, downloadPdfFromUrl, amount, sarSvg, shareDocument, renderStoredVoucher, clientPdfFilename,
-  loadStoredTemplate, fillStoredTemplate,
+  loadStoredTemplate, fillStoredTemplate, renderPager, bindPager,
 } from '../core/util.js';
 import * as _coreUtil from '../core/util.js';
 const fillDynamicTemplateHtml = _coreUtil.fillDynamicTemplateHtml || ((html) => html);
 
-const PAGE = 50;
+const PAGE = 20;
 
 /** نافذة سند القبض المجمّع أو المنفصل (سند لكل فاتورة) مع تأخير التاريخ وفجوة التسلسل. */
 export function voucherWizard({ clientId = '', issuerId = '', mode = 'single', onDone }) {
@@ -1042,7 +1042,6 @@ export async function shareVoucherDirectPdf(voucherId) {
 }
 
 export async function render(view, ctx) {
-  await loadClients();
   const q0 = (ctx && ctx.query) || {};
   const defaults = {
     issuer_id: store.activeIssuerId,
@@ -1054,12 +1053,14 @@ export async function render(view, ctx) {
     min_amount: '',
     max_amount: '',
     q: '',
+    limit: PAGE,
     offset: 0,
   };
   const cached = getFilterState('vouchers', defaults);
   const state = {
     ...cached,
     ...q0,
+    limit: Number(q0.limit || cached.limit) || PAGE,
     offset: q0.offset !== undefined ? Number(q0.offset) : (cached.offset || 0),
     data: { items: [], totals: {}, total_count: 0 },
   };
@@ -1076,6 +1077,7 @@ export async function render(view, ctx) {
       min_amount: state.min_amount,
       max_amount: state.max_amount,
       q: state.q,
+      limit: state.limit,
       offset: state.offset,
     });
   };
@@ -1092,13 +1094,15 @@ export async function render(view, ctx) {
       min_amount: state.min_amount,
       max_amount: state.max_amount,
       q: state.q,
-      limit: PAGE,
+      limit: state.limit,
       offset: state.offset,
     }));
     state.data = res || { items: [], totals: {}, total_count: 0 };
     if (!Array.isArray(state.data.items)) state.data.items = [];
     if (!state.data.totals) state.data.totals = {};
   };
+
+  const reload = async () => { await load(); draw(); };
 
   const draw = () => {
     const pageTo = Math.min(state.offset + PAGE, state.data.total_count);
@@ -1232,14 +1236,16 @@ export async function render(view, ctx) {
             </tbody>
           </table>
         </div>
-        <div class="pager">
-          <button class="btn btn-sm" id="prev" ${raw(state.offset === 0 ? 'disabled' : '')} type="button">${raw(icon.arrowRight({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}السابق</button>
-          <span class="tiny muted">${state.data.total_count ? state.offset + 1 : 0} — ${pageTo} من ${num(state.data.total_count)}</span>
-          <button class="btn btn-sm" id="next" ${raw(pageTo >= state.data.total_count ? 'disabled' : '')} type="button">التالي${raw(icon.arrowLeft({ size: 14, style: 'vertical-align:text-bottom;margin-right:3px' }))}</button>
-        </div>
+        ${raw(renderPager({
+          idPrefix: 'vch',
+          offset: state.offset,
+          limit: state.limit || PAGE,
+          total: state.data.total_count || 0,
+          sizes: [10, 20, 50, 100],
+          label: 'سند',
+        }))}
       </div>`;
 
-    const reload = async () => { await load(); draw(); };
     $('#q', view).addEventListener('input', debounce(async (e) => { state.q = e.target.value; state.offset = 0; await reload(); }, 350));
     ['issuer_id', 'client_id', 'status', 'payment_type', 'from', 'to'].forEach((id) => {
       const el = $(`#${id}`, view);
@@ -1262,8 +1268,17 @@ export async function render(view, ctx) {
       await reload();
     });
 
-    $('#prev', view).addEventListener('click', async () => { state.offset = Math.max(0, state.offset - PAGE); await reload(); });
-    $('#next', view).addEventListener('click', async () => { state.offset += PAGE; await reload(); });
+    bindPager(view, {
+      idPrefix: 'vch',
+      offset: state.offset,
+      limit: state.limit || PAGE,
+      total: state.data.total_count || 0,
+      onChange: async (newOffset, newLimit) => {
+        state.offset = newOffset;
+        state.limit = newLimit;
+        await reload();
+      },
+    });
 
     const newBtn = $('#new-v', view);
     if (newBtn) {
@@ -1459,7 +1474,10 @@ export async function render(view, ctx) {
     }
   });
 
-  await load();
+  await Promise.all([
+    loadClients().catch(() => {}),
+    load(),
+  ]);
   draw();
   return () => { unsubSync(); };
 }

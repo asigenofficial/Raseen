@@ -4,9 +4,12 @@
 import { api, qs } from '../core/api.js';
 import { store, loadClients, invalidate, can, currencyLabel, getFilterState, setFilterState, clearFilterState } from '../core/store.js';
 import {
-  html, raw, esc, money, modal, formValues, toastOk, toastErr, confirmDialog,
+  html, raw, esc, money, num, modal, formValues, toastOk, toastErr, confirmDialog,
   $, delegate, debounce, exportCsv, exportExcel, dateAr, icon, amount, sarSvg,
+  renderPager, bindPager,
 } from '../core/util.js';
+
+const PAGE = 20;
 
 function clientForm(data = {}) {
   const v = (k, def = '') => (data[k] === undefined || data[k] === null ? def : data[k]);
@@ -251,9 +254,16 @@ function openClientImportModal(onSuccess) {
 }
 
 export async function render(view) {
-  const defaults = { q: '', client_type: '', onlyDebtors: false, scope: 'ALL' };
+  const defaults = { q: '', client_type: '', onlyDebtors: false, scope: 'ALL', offset: 0, limit: PAGE };
   const cached = getFilterState('clients', defaults);
-  const state = { ...cached, rows: [] };
+  const state = {
+    ...cached,
+    limit: cached.limit || PAGE,
+    offset: cached.offset || 0,
+    rows: [],
+    total_count: 0,
+    totals: { invoiced: 0, paid: 0, balance: 0, count: 0 },
+  };
   const cur = currencyLabel();
 
   const saveState = () => {
@@ -262,22 +272,40 @@ export async function render(view) {
       client_type: state.client_type,
       onlyDebtors: state.onlyDebtors,
       scope: state.scope,
+      offset: state.offset,
+      limit: state.limit,
     });
   };
 
   const load = async () => {
     saveState();
-    state.rows = await api.get(qs('/api/clients', {
+    const res = await api.get(qs('/api/clients', {
       with_balances: true,
+      paged: 1,
       q: state.q,
       client_type: state.client_type,
+      only_debtors: state.onlyDebtors ? '1' : '',
       issuer_id: state.scope === 'ISSUER' ? store.activeIssuerId : '',
+      limit: state.limit || PAGE,
+      offset: state.offset,
     }));
+    if (Array.isArray(res)) {
+      state.rows = res;
+      state.total_count = res.length;
+    } else {
+      state.rows = res.items || [];
+      state.total_count = res.total_count || 0;
+      state.totals = res.totals || { invoiced: 0, paid: 0, balance: 0, count: 0 };
+    }
+  };
+
+  const reload = async () => {
+    await load();
+    draw();
   };
 
   const rowsHtml = () => {
-    let rows = state.rows;
-    if (state.onlyDebtors) rows = rows.filter((c) => c.balance > 0.004);
+    const rows = state.rows;
     if (!rows.length) return '<tr><td colspan="8" class="text-center muted" style="padding:1.5rem">لا توجد نتائج</td></tr>';
     return rows.map((c) => {
       const addrBadges = [
@@ -328,16 +356,7 @@ export async function render(view) {
     }).join('');
   };
 
-  const totals = () => {
-    let rows = state.rows;
-    if (state.onlyDebtors) rows = rows.filter((c) => c.balance > 0.004);
-    return rows.reduce((acc, c) => ({
-      invoiced: acc.invoiced + c.total_invoiced,
-      paid: acc.paid + c.total_paid,
-      balance: acc.balance + c.balance,
-      count: acc.count + 1,
-    }), { invoiced: 0, paid: 0, balance: 0, count: 0 });
-  };
+  const totals = () => state.totals || { invoiced: 0, paid: 0, balance: 0, count: state.total_count || 0 };
 
   const draw = () => {
     const t = totals();
@@ -379,7 +398,7 @@ export async function render(view) {
       </div>
 
       <div class="grid grid-4">
-        <div class="stat"><div style="min-width:0"><div class="stat-val num">${t.count}</div><div class="stat-lab">عميل</div></div></div>
+        <div class="stat"><div style="min-width:0"><div class="stat-val num">${num(t.count)}</div><div class="stat-lab">عميل</div></div></div>
         <div class="stat"><div style="min-width:0"><div class="stat-val num">${amount(t.invoiced)}</div><div class="stat-lab">إجمالي المفوتر</div></div></div>
         <div class="stat"><div style="min-width:0"><div class="stat-val num">${amount(t.paid)}</div><div class="stat-lab">إجمالي المسدد</div></div></div>
         <div class="stat"><div style="min-width:0"><div class="stat-val num">${amount(t.balance)}</div><div class="stat-lab">صافي الأرصدة</div></div></div>
@@ -401,38 +420,57 @@ export async function render(view) {
             <tbody id="rows">${raw(rowsHtml())}</tbody>
           </table>
         </div>
+        ${raw(renderPager({
+          idPrefix: 'cli',
+          offset: state.offset,
+          limit: state.limit || PAGE,
+          total: state.total_count || 0,
+          sizes: [10, 20, 50, 100],
+          label: 'عميل',
+        }))}
       </div>`;
 
     const addBtn = $('#add', view);
-    if (addBtn) addBtn.addEventListener('click', () => openClientModal(null, async () => { await load(); draw(); }));
+    if (addBtn) addBtn.addEventListener('click', () => openClientModal(null, reload));
     const importClientsBtn = $('#import-clients-btn', view);
-    if (importClientsBtn) importClientsBtn.addEventListener('click', () => openClientImportModal(async () => { await load(); draw(); }));
+    if (importClientsBtn) importClientsBtn.addEventListener('click', () => openClientImportModal(reload));
 
     $('#q', view).addEventListener('input', debounce(async (e) => {
       state.q = e.target.value;
-      await load();
-      $('#rows', view).innerHTML = rowsHtml();
+      state.offset = 0;
+      await reload();
     }, 300));
     $('#client_type', view).addEventListener('change', async (e) => {
       state.client_type = e.target.value;
-      await load();
-      draw();
+      state.offset = 0;
+      await reload();
     });
     $('#scope', view).addEventListener('change', async (e) => {
       state.scope = e.target.value;
-      await load();
-      draw();
+      state.offset = 0;
+      await reload();
     });
-    $('#debtors', view).addEventListener('change', (e) => {
+    $('#debtors', view).addEventListener('change', async (e) => {
       state.onlyDebtors = e.target.checked;
-      saveState();
-      draw();
+      state.offset = 0;
+      await reload();
     });
     $('#clear-filters', view).addEventListener('click', async () => {
       clearFilterState('clients');
       Object.assign(state, defaults);
-      await load();
-      draw();
+      await reload();
+    });
+
+    bindPager(view, {
+      idPrefix: 'cli',
+      offset: state.offset,
+      limit: state.limit || PAGE,
+      total: state.total_count || 0,
+      onChange: async (newOffset, newLimit) => {
+        state.offset = newOffset;
+        state.limit = newLimit;
+        await reload();
+      },
     });
 
     const headers = ['الكود', 'العميل', 'النوع', 'الرقم الضريبي', 'الجوال', 'المدينة', 'الحي', 'الشارع', 'رقم المبنى', 'الرمز البريدي', 'المفوتر', 'المسدد', 'الرصيد'];

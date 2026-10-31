@@ -5,7 +5,7 @@ import { api } from '../core/api.js';
 import { store } from '../core/store.js';
 import {
   html, raw, esc, dateTimeAr, initials, toastOk, toastErr,
-  $, $$, delegate, modal, formValues, confirmDialog, icon,
+  $, $$, delegate, modal, formValues, confirmDialog, icon, renderPager, bindPager,
 } from '../core/util.js';
 
 const ROLE_TONE = { ADMIN: 'red', ACCOUNTANT: 'blue', VIEWER: 'gray' };
@@ -87,6 +87,10 @@ export async function render(view) {
   let users = [];
   let rolesList = [];
   let userSearchQ = '';
+  let usersOffset = 0;
+  let usersLimit = 15;
+  let syncOffset = 0;
+  let syncLimit = 15;
   const isAdmin = store.user && (store.user.role === 'ADMIN');
   let currentTab = new URLSearchParams(location.hash.split('?')[1] || '').get('tab') || 'users';
   let activeSessions = [];
@@ -850,6 +854,14 @@ export async function render(view) {
     const admins = users.filter((u) => u.role === 'ADMIN' && u.is_active).length;
     const onlineCount = activeSessions.filter((s) => s.is_online).length || 1;
     const filteredUsers = filterUsers(userSearchQ);
+    if (usersOffset >= filteredUsers.length && usersOffset > 0) {
+      usersOffset = Math.max(0, Math.floor((filteredUsers.length - 1) / usersLimit) * usersLimit);
+    }
+    const pagedUsers = filteredUsers.slice(usersOffset, usersOffset + usersLimit);
+    if (syncOffset >= syncHistory.length && syncOffset > 0) {
+      syncOffset = Math.max(0, Math.floor((syncHistory.length - 1) / syncLimit) * syncLimit);
+    }
+    const pagedSyncHistory = syncHistory.slice(syncOffset, syncOffset + syncLimit);
 
     view.innerHTML = html`
       <div class="page-head">
@@ -971,7 +983,7 @@ export async function render(view) {
             </div>
             <span class="badge blue tiny">${syncHistory.length} حدث مسجل</span>
           </div>
-          <div class="table-wrap users-table-wrap" style="max-height:360px;overflow-y:auto">
+          <div class="table-wrap users-table-wrap">
             <table class="tbl">
               <thead>
                 <tr>
@@ -982,7 +994,7 @@ export async function render(view) {
                 </tr>
               </thead>
               <tbody>
-                ${raw(syncHistory.length ? syncHistory.map((ev) => `
+                ${raw(pagedSyncHistory.length ? pagedSyncHistory.map((ev) => `
                   <tr>
                     <td>
                       <span class="badge ${ev.entity === 'invoice' ? 'blue' : ev.entity === 'voucher' ? 'teal' : ev.action === 'alert' ? 'amber' : 'gray'} tiny">
@@ -1001,6 +1013,14 @@ export async function render(view) {
               </tbody>
             </table>
           </div>
+          ${renderPager({
+            idPrefix: 'sync',
+            offset: syncOffset,
+            limit: syncLimit,
+            total: syncHistory.length,
+            sizes: [10, 15, 30, 50],
+            label: 'حدث',
+          })}
         </div>
       ` : `
         ${raw(users.some((u) => u.username === 'admin')
@@ -1024,10 +1044,18 @@ export async function render(view) {
               <thead><tr><th>المستخدم</th><th>الدور</th><th>الحالة</th><th>الصلاحيات الفعالة</th>
                 <th>آخر دخول</th><th>تاريخ الإنشاء</th><th></th></tr></thead>
               <tbody id="users-rows">
-                ${raw(renderUsersRows(filteredUsers))}
+                ${raw(renderUsersRows(pagedUsers))}
               </tbody>
             </table>
           </div>
+          ${renderPager({
+            idPrefix: 'usr',
+            offset: usersOffset,
+            limit: usersLimit,
+            total: filteredUsers.length,
+            sizes: [10, 15, 30, 50],
+            label: 'مستخدم',
+          })}
         </div>
 
         <!-- بطاقات الأدوار وإدارتها وتحديد صلاحياتها -->
@@ -1126,6 +1154,18 @@ export async function render(view) {
           broadcastAlertModal(session);
         }
       });
+
+      bindPager(view, {
+        idPrefix: 'sync',
+        offset: syncOffset,
+        limit: syncLimit,
+        total: syncHistory.length,
+        onChange: (newOffset, newLimit) => {
+          syncOffset = newOffset;
+          syncLimit = newLimit;
+          draw();
+        },
+      });
     } else {
       // أحداث المستخدمين
       $('#new-u', view)?.addEventListener('click', () => userForm(null));
@@ -1134,15 +1174,27 @@ export async function render(view) {
       if (searchInput) {
         searchInput.addEventListener('input', (e) => {
           userSearchQ = e.target.value;
-          const filtered = filterUsers(userSearchQ);
-          const tbody = $('#users-rows', view);
-          if (tbody) tbody.innerHTML = renderUsersRows(filtered);
-          const countEl = $('#users-count', view);
-          if (countEl) {
-            countEl.textContent = userSearchQ.trim() ? `${filtered.length} مطابقة من أصل ${users.length} مستخدم` : `${users.length} مستخدم`;
+          usersOffset = 0;
+          draw();
+          const el = $('#users-search', view);
+          if (el) {
+            el.focus();
+            el.setSelectionRange(userSearchQ.length, userSearchQ.length);
           }
         });
       }
+
+      bindPager(view, {
+        idPrefix: 'usr',
+        offset: usersOffset,
+        limit: usersLimit,
+        total: filteredUsers.length,
+        onChange: (newOffset, newLimit) => {
+          usersOffset = newOffset;
+          usersLimit = newLimit;
+          draw();
+        },
+      });
 
       delegate(view, 'click', '[data-act]', async (e, btn) => {
         const user = users.find((u) => u.id === btn.dataset.id);

@@ -6,7 +6,7 @@ import { store, loadClients, currencyLabel } from '../core/store.js';
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, monthStart, today,
   $, delegate, exportCsv, exportExcel, printDoc, icon, downloadPdfFromHtml, clientPdfFilename, toastErr, toastOk, confirmDialog,
-  amount, modal, loadStoredTemplate, fillStoredTemplate,
+  amount, modal, loadStoredTemplate, fillStoredTemplate, renderPager, bindPager,
 } from '../core/util.js';
 import { sarSvg } from '../core/icons.js';
 
@@ -50,7 +50,32 @@ export async function render(view, ctx) {
     as_of: today(),
     only_debtors: false,
     search_q: '',
+    offset: 0,
+    limit: 20,
     data: null,
+  };
+
+  let activeReportTotal = 0;
+  const paginateList = (list) => {
+    const arr = Array.isArray(list) ? list : [];
+    const q = (state.search_q || '').trim().toLowerCase();
+    const filtered = !q ? arr : arr.filter((item) => Object.values(item || {}).some((v) => String(v ?? '').toLowerCase().includes(q)));
+    activeReportTotal = filtered.length;
+    if (state.offset >= activeReportTotal && state.offset > 0) {
+      state.offset = Math.max(0, Math.floor((activeReportTotal - 1) / state.limit) * state.limit);
+    }
+    return {
+      filtered,
+      paged: filtered.slice(state.offset, state.offset + state.limit),
+      pagerHtml: renderPager({
+        idPrefix: 'rep',
+        offset: state.offset,
+        limit: state.limit,
+        total: activeReportTotal,
+        sizes: [10, 20, 50, 100],
+        label: 'سجل',
+      }),
+    };
   };
 
   const load = async () => {
@@ -79,6 +104,7 @@ export async function render(view, ctx) {
   const salesBody = () => {
     const d = state.data;
     const max = Math.max(1, ...d.items.map((i) => i.total));
+    const { paged, pagerHtml } = paginateList(d.items);
     return `
       <div class="grid grid-4">
         <div class="stat"><div style="min-width:0"><div class="stat-val num">${num(d.totals.count)}</div><div class="stat-lab">عدد الفواتير</div></div></div>
@@ -94,7 +120,7 @@ export async function render(view, ctx) {
             <th class="text-end">الخصم <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
             <th class="text-end">الضريبة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
             <th class="text-end">الإجمالي <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th style="width:130px">النسبة</th></tr></thead>
-          <tbody>${d.items.length ? d.items.map((r) => `<tr>
+          <tbody>${paged.length ? paged.map((r) => `<tr>
             <td><b>${esc(r.label)}</b></td>
             <td class="text-end num">${num(r.count)}</td>
             ${r.quantity !== undefined ? `<td class="text-end num">${num(r.quantity)}</td>` : ''}
@@ -109,11 +135,13 @@ export async function render(view, ctx) {
             <td class="text-end num">${amount(d.totals.subtotal)}</td><td class="text-end num">${amount(d.totals.discount)}</td>
             <td class="text-end num">${amount(d.totals.tax)}</td><td class="text-end num">${amount(d.totals.total)}</td><td></td></tr></tfoot>
         </table></div>
+        ${pagerHtml}
       </div>`;
   };
 
   const vatBody = () => {
     const d = state.data;
+    const { paged, pagerHtml } = paginateList(d.items);
     return `
       <div class="grid grid-4">
         <div class="stat"><div style="min-width:0"><div class="stat-val num">${num(d.totals.invoices)}</div><div class="stat-lab">عدد الفواتير</div></div></div>
@@ -127,7 +155,7 @@ export async function render(view, ctx) {
             <th class="text-end">الوعاء الخاضع <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
             <th class="text-end">الضريبة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
             <th class="text-end">الإجمالي <span class="cur-sym">${sarSvg({ size: 11 })}</span></th></tr></thead>
-          <tbody>${d.items.length ? d.items.map((r) => `<tr>
+          <tbody>${paged.length ? paged.map((r) => `<tr>
             <td><b>${esc(r.issuer_name)}</b></td><td class="mono tiny">${esc(r.tax_number || '—')}</td>
             <td class="text-end num">${num(r.invoices)}</td><td class="text-end num">${amount(r.taxable)}</td>
             <td class="text-end num"><b>${amount(r.tax)}</b></td><td class="text-end num">${amount(r.total)}</td>
@@ -136,12 +164,14 @@ export async function render(view, ctx) {
             <td class="text-end num">${amount(d.totals.taxable)}</td><td class="text-end num">${amount(d.totals.tax)}</td>
             <td class="text-end num">${amount(d.totals.total)}</td></tr></tfoot>
         </table></div>
+        ${pagerHtml}
       </div>
       <div class="alert alert-info tiny">هذا التقرير يعرض ضريبة المخرجات من الفواتير غير الملغاة فقط، مجمّعة لكل شركة مصدرة بشكل مستقل — وهو الأساس لإعداد إقرار كل منشأة على حدة.</div>`;
   };
 
   const collectionsBody = () => {
     const d = state.data;
+    const { paged, pagerHtml } = paginateList(d.items);
     return `
       <div class="grid grid-4">
         <div class="stat"><div><div class="stat-val num">${num(d.totals.count)}</div><div class="stat-lab">عدد السندات</div></div></div>
@@ -154,13 +184,16 @@ export async function render(view, ctx) {
           <th class="text-end">المبلغ <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
           <th class="text-end">المخصص <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
           <th class="text-end">غير المخصص <span class="cur-sym">${sarSvg({ size: 11 })}</span></th></tr></thead>
-        <tbody>${d.items.length ? d.items.map((r)=>`<tr><td><b>${esc(r.label)}</b></td><td class="text-end num">${num(r.count)}</td><td class="text-end num">${amount(r.amount)}</td><td class="text-end num">${amount(r.allocated)}</td><td class="text-end num">${amount(r.unallocated)}</td></tr>`).join('') : '<tr><td colspan="5" class="text-center muted" style="padding:2rem">لا توجد تحصيلات في الفترة</td></tr>'}</tbody>
+        <tbody>${paged.length ? paged.map((r) => `<tr><td><b>${esc(r.label)}</b></td><td class="text-end num">${num(r.count)}</td><td class="text-end num">${amount(r.amount)}</td><td class="text-end num">${amount(r.allocated)}</td><td class="text-end num">${amount(r.unallocated)}</td></tr>`).join('') : '<tr><td colspan="5" class="text-center muted" style="padding:2rem">لا توجد تحصيلات في الفترة</td></tr>'}</tbody>
         <tfoot><tr><td>الإجمالي</td><td class="text-end num">${num(d.totals.count)}</td><td class="text-end num">${amount(d.totals.amount)}</td><td class="text-end num">${amount(d.totals.allocated)}</td><td class="text-end num">${amount(d.totals.unallocated)}</td></tr></tfoot>
-      </table></div></div>`;
+      </table></div>
+      ${pagerHtml}
+      </div>`;
   };
 
   const profitabilityBody = () => {
     const d = state.data;
+    const { paged, pagerHtml } = paginateList(d.items);
     return `
       <div class="grid grid-4">
         <div class="stat"><div><div class="stat-val num">${amount(d.totals.revenue, 'SAR', { size: 16 })}</div><div class="stat-lab">صافي المبيعات</div></div></div>
@@ -173,13 +206,16 @@ export async function render(view, ctx) {
           <th class="text-end">المبيعات <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
           <th class="text-end">التكلفة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
           <th class="text-end">الربح <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th class="text-end">الهامش</th></tr></thead>
-        <tbody>${d.items.length ? d.items.map((r)=>`<tr><td><b>${esc(r.label)}</b></td><td class="text-end num">${num(r.invoices)}</td><td class="text-end num">${num(r.quantity)}</td><td class="text-end num">${amount(r.revenue)}</td><td class="text-end num">${amount(r.cost)}</td><td class="text-end num"><b>${amount(r.profit)}</b></td><td class="text-end num">${num(r.margin)}%</td></tr>`).join('') : '<tr><td colspan="7" class="text-center muted" style="padding:2rem">لا توجد بيانات في الفترة</td></tr>'}</tbody>
+        <tbody>${paged.length ? paged.map((r) => `<tr><td><b>${esc(r.label)}</b></td><td class="text-end num">${num(r.invoices)}</td><td class="text-end num">${num(r.quantity)}</td><td class="text-end num">${amount(r.revenue)}</td><td class="text-end num">${amount(r.cost)}</td><td class="text-end num"><b>${amount(r.profit)}</b></td><td class="text-end num">${num(r.margin)}%</td></tr>`).join('') : '<tr><td colspan="7" class="text-center muted" style="padding:2rem">لا توجد بيانات في الفترة</td></tr>'}</tbody>
         <tfoot><tr><td>الإجمالي</td><td class="text-end num">${num(d.totals.invoices)}</td><td></td><td class="text-end num">${amount(d.totals.revenue)}</td><td class="text-end num">${amount(d.totals.cost)}</td><td class="text-end num">${amount(d.totals.profit)}</td><td class="text-end num">${num(d.totals.margin)}%</td></tr></tfoot>
-      </table></div></div><div class="alert alert-info tiny">${esc(d.note || '')}</div>`;
+      </table></div>
+      ${pagerHtml}
+      </div><div class="alert alert-info tiny">${esc(d.note || '')}</div>`;
   };
 
   const agingBody = () => {
     const d = state.data;
+    const { paged, pagerHtml } = paginateList(d.items);
     return `
       <div class="grid grid-4">
         <div class="stat"><div style="min-width:0"><div class="stat-val num">${amount(d.totals.b0_30, 'SAR', { size: 16 })}</div><div class="stat-lab">1 — 30 يوم</div></div></div>
@@ -195,7 +231,7 @@ export async function render(view, ctx) {
             <th class="text-end">61-90 <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
             <th class="text-end">+90 <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
             <th class="text-end">الإجمالي المستحق <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th></th></tr></thead>
-          <tbody>${d.items.length ? d.items.map((r) => `<tr>
+          <tbody>${paged.length ? paged.map((r) => `<tr>
             <td><b>${esc(r.name)}</b></td><td class="mono tiny">${esc(r.code)}</td>
             <td class="text-end num">${r.b0_30 ? amount(r.b0_30) : '—'}</td>
             <td class="text-end num">${r.b31_60 ? amount(r.b31_60) : '—'}</td>
@@ -208,11 +244,13 @@ export async function render(view, ctx) {
             <td class="text-end num">${amount(d.totals.b31_60)}</td><td class="text-end num">${amount(d.totals.b61_90)}</td>
             <td class="text-end num">${amount(d.totals.b90_plus)}</td><td class="text-end num">${amount(d.totals.total)}</td><td></td></tr></tfoot>
         </table></div>
+        ${pagerHtml}
       </div>`;
   };
 
   const balancesBody = () => {
     const d = state.data;
+    const { paged, pagerHtml } = paginateList(d.items);
     return `
       <div class="grid grid-4">
         <div class="stat"><div style="min-width:0"><div class="stat-val num">${amount(d.totals.debit)}</div><div class="stat-lab">إجمالي المدين</div></div></div>
@@ -224,28 +262,30 @@ export async function render(view, ctx) {
         <div class="table-wrap reports-table-wrap"><table class="tbl">
           <thead><tr><th>العميل</th><th>الكود</th><th>الجوال</th><th class="text-end">مدين <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
             <th class="text-end">دائن <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th class="text-end">الرصيد <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th class="text-end">حد الائتمان <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th></th></tr></thead>
-          <tbody>${d.items.map((r) => `<tr class="${r.over_limit ? 'row-warn' : ''}">
+          <tbody>${paged.length ? paged.map((r) => `<tr class="${r.over_limit ? 'row-warn' : ''}">
             <td><b>${esc(r.name)}</b>${r.over_limit ? ' <span class="badge red tiny">تجاوز حد الائتمان</span>' : ''}</td>
             <td class="mono tiny">${esc(r.client_code)}</td><td class="mono tiny">${esc(r.phone || '—')}</td>
             <td class="text-end num">${amount(r.debit)}</td><td class="text-end num">${amount(r.credit)}</td>
             <td class="text-end num" style="color:${r.balance > 0 ? 'var(--danger)' : r.balance < 0 ? 'var(--success)' : 'inherit'}"><b>${amount(r.balance)}</b></td>
             <td class="text-end num tiny">${r.credit_limit ? amount(r.credit_limit) : '—'}</td>
             <td class="actions"><a class="btn btn-sm" href="#/statement/${esc(r.client_id)}">كشف</a></td>
-          </tr>`).join('')}</tbody>
+          </tr>`).join('') : '<tr><td colspan="8" class="text-center muted" style="padding:2rem">لا توجد نتائج مطابقة</td></tr>'}</tbody>
           <tfoot><tr><td colspan="3">الإجمالي</td><td class="text-end num">${amount(d.totals.debit)}</td>
             <td class="text-end num">${amount(d.totals.credit)}</td><td class="text-end num">${amount(d.totals.balance)}</td>
             <td colspan="2"></td></tr></tfoot>
         </table></div>
+        ${pagerHtml}
       </div>`;
   };
 
   const batchesBody = () => {
     const items = state.data.items || state.data;
+    const { paged, pagerHtml } = paginateList(items);
     return `<div class="card pad0">
       <div class="table-wrap reports-table-wrap"><table class="tbl">
         <thead><tr><th>التاريخ</th><th>الشركة</th><th>العميل</th><th class="text-end">عدد الفواتير</th>
           <th class="text-end">الإجمالي <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th>المستخدم</th><th>معايير التوليد</th><th></th></tr></thead>
-        <tbody>${items.length ? items.map((b) => `<tr>
+        <tbody>${paged.length ? paged.map((b) => `<tr>
           <td class="tiny nowrap">${esc(dateTimeAr(b.created_at))}</td>
           <td class="tiny">${esc(b.issuer_name || '')}</td>
           <td>${esc(b.client_name || '')}</td>
@@ -261,6 +301,7 @@ export async function render(view, ctx) {
           </td>
         </tr>`).join('') : '<tr><td colspan="8" class="text-center muted" style="padding:2rem">لا توجد دفعات توليد محفوظة</td></tr>'}</tbody>
       </table></div>
+      ${pagerHtml}
     </div>`;
   };
 
@@ -296,10 +337,10 @@ export async function render(view, ctx) {
       };
     }
     if (state.tab === 'collections') {
-      return { name:'تقرير-التحصيلات', title:'تقرير التحصيلات', headers:['البيان','عدد السندات','المبلغ','المخصص','غير المخصص'], rows:d.items.map((r)=>[r.label,r.count,r.amount,r.allocated,r.unallocated]), footer:['الإجمالي',d.totals.count,d.totals.amount,d.totals.allocated,d.totals.unallocated] };
+      return { name: 'تقرير-التحصيلات', title: 'تقرير التحصيلات', headers: ['البيان', 'عدد السندات', 'المبلغ', 'المخصص', 'غير المخصص'], rows: d.items.map((r) => [r.label, r.count, r.amount, r.allocated, r.unallocated]), footer: ['الإجمالي', d.totals.count, d.totals.amount, d.totals.allocated, d.totals.unallocated] };
     }
     if (state.tab === 'profitability') {
-      return { name:'تقرير-الربحية', title:'تقرير الربحية الإجمالية', headers:['البيان','الفواتير','الكمية','المبيعات','التكلفة','الربح','الهامش %'], rows:d.items.map((r)=>[r.label,r.invoices,r.quantity,r.revenue,r.cost,r.profit,r.margin]), footer:['الإجمالي',d.totals.invoices,'',d.totals.revenue,d.totals.cost,d.totals.profit,d.totals.margin] };
+      return { name: 'تقرير-الربحية', title: 'تقرير الربحية الإجمالية', headers: ['البيان', 'الفواتير', 'الكمية', 'المبيعات', 'التكلفة', 'الربح', 'الهامش %'], rows: d.items.map((r) => [r.label, r.invoices, r.quantity, r.revenue, r.cost, r.profit, r.margin]), footer: ['الإجمالي', d.totals.invoices, '', d.totals.revenue, d.totals.cost, d.totals.profit, d.totals.margin] };
     }
     if (state.tab === 'aging') {
       return {
@@ -330,7 +371,7 @@ export async function render(view, ctx) {
   };
 
   const draw = () => {
-    const showPeriod = ['sales','vat','collections','profitability'].includes(state.tab);
+    const showPeriod = ['sales', 'vat', 'collections', 'profitability'].includes(state.tab);
     view.innerHTML = html`
       <div class="page-head">
         <div class="titles">
@@ -365,13 +406,13 @@ export async function render(view, ctx) {
             <select id="issuer_id"><option value="">كل الشركات</option>
               ${raw(store.issuers.map((i) => `<option value="${esc(i.id)}" ${i.id === state.issuer_id ? 'selected' : ''}>${esc(i.name_ar)}</option>`).join(''))}
             </select></div>
-          ${raw(['sales','collections','profitability'].includes(state.tab) ? `
+          ${raw(['sales', 'collections', 'profitability'].includes(state.tab) ? `
             <div class="field"><label>العميل</label>
               <select id="client_id"><option value="">كل العملاء</option>
                 ${store.clients.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
               </select></div>
             <div class="field" style="max-width:170px"><label>التجميع</label>
-              <select id="group_by">${(state.tab === 'collections' ? [['day','يومياً'],['client','حسب العميل'],['payment','حسب طريقة الدفع'],['issuer','حسب الشركة']] : state.tab === 'profitability' ? [['month','شهرياً'],['client','حسب العميل'],['item','حسب الصنف'],['category','حسب المجموعة'],['issuer','حسب الشركة']] : GROUPS).map(([k, l]) => `<option value="${k}" ${k === state.group_by ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>` : '')}
+              <select id="group_by">${(state.tab === 'collections' ? [['day', 'يومياً'], ['client', 'حسب العميل'], ['payment', 'حسب طريقة الدفع'], ['issuer', 'حسب الشركة']] : state.tab === 'profitability' ? [['month', 'شهرياً'], ['client', 'حسب العميل'], ['item', 'حسب الصنف'], ['category', 'حسب المجموعة'], ['issuer', 'حسب الشركة']] : GROUPS).map(([k, l]) => `<option value="${k}" ${k === state.group_by ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>` : '')}
           ${raw(showPeriod ? `
             <div class="field" style="max-width:160px"><label>من تاريخ</label><input type="date" id="from" value="${state.from}" /></div>
             <div class="field" style="max-width:160px"><label>إلى تاريخ</label><input type="date" id="to" value="${state.to}" /></div>` : '')}
@@ -391,44 +432,55 @@ export async function render(view, ctx) {
       </div>
 
       <div id="report-body">${raw(
-    state.tab === 'sales' ? salesBody()
-      : state.tab === 'vat' ? vatBody()
-        : state.tab === 'collections' ? collectionsBody()
-          : state.tab === 'profitability' ? profitabilityBody()
-        : state.tab === 'aging' ? agingBody()
-          : state.tab === 'balances' ? balancesBody()
-            : batchesBody(),
-  )}</div>`;
+      state.tab === 'sales' ? salesBody()
+        : state.tab === 'vat' ? vatBody()
+          : state.tab === 'collections' ? collectionsBody()
+            : state.tab === 'profitability' ? profitabilityBody()
+              : state.tab === 'aging' ? agingBody()
+                : state.tab === 'balances' ? balancesBody()
+                  : batchesBody(),
+    )}</div>`;
 
     const repSearch = $('#rep-search', view);
     if (repSearch) {
-      const applyReportFilter = (val) => {
-        state.search_q = val;
-        const q = (val || '').toLowerCase().trim();
-        const rows = $$('#report-body table tbody tr', view);
-        rows.forEach((tr) => {
-          if (tr.querySelector('td[colspan]')) return;
-          const text = tr.textContent.toLowerCase();
-          tr.style.display = (!q || text.includes(q)) ? '' : 'none';
-        });
-      };
-      repSearch.addEventListener('input', (e) => applyReportFilter(e.target.value));
-      if (state.search_q) applyReportFilter(state.search_q);
+      repSearch.addEventListener('input', (e) => {
+        state.search_q = e.target.value;
+        state.offset = 0;
+        draw();
+        const el = $('#rep-search', view);
+        if (el) {
+          el.focus();
+          el.setSelectionRange(state.search_q.length, state.search_q.length);
+        }
+      });
     }
 
+    bindPager(view, {
+      idPrefix: 'rep',
+      offset: state.offset,
+      limit: state.limit,
+      total: activeReportTotal,
+      onChange: (newOffset, newLimit) => {
+        state.offset = newOffset;
+        state.limit = newLimit;
+        draw();
+      },
+    });
+
     const reload = async () => { await load(); draw(); };
-    $('#issuer_id', view).addEventListener('change', async (e) => { state.issuer_id = e.target.value; await reload(); });
+    $('#issuer_id', view).addEventListener('change', async (e) => { state.issuer_id = e.target.value; state.offset = 0; await reload(); });
     ['client_id', 'group_by', 'from', 'to', 'as_of'].forEach((id) => {
       const el = $(`#${id}`, view);
-      if (el) el.addEventListener('change', async (e) => { state[id] = e.target.value; await reload(); });
+      if (el) el.addEventListener('change', async (e) => { state[id] = e.target.value; state.offset = 0; await reload(); });
     });
     const od = $('#only_debtors', view);
-    if (od) od.addEventListener('change', async (e) => { state.only_debtors = e.target.checked; await reload(); });
+    if (od) od.addEventListener('change', async (e) => { state.only_debtors = e.target.checked; state.offset = 0; await reload(); });
     delegate(view, 'click', '[data-quick]', async (e, btn) => {
       const k = btn.dataset.quick;
       if (k === 'month') { state.from = monthStart(); state.to = today(); }
       else if (k === 'year') { state.from = `${new Date().getFullYear()}-01-01`; state.to = today(); }
       else { state.from = ''; state.to = ''; }
+      state.offset = 0;
       await reload();
     });
 
@@ -474,12 +526,12 @@ export async function render(view, ctx) {
         ];
       }
       if (state.tab === 'collections' && d.totals) return [
-        {label:'عدد السندات',val:num(d.totals.count)}, {label:'إجمالي التحصيل',html:`${money(d.totals.amount)} ${sar}`},
-        {label:'المخصص للفواتير',html:`${money(d.totals.allocated)} ${sar}`}, {label:'غير المخصص',html:`${money(d.totals.unallocated)} ${sar}`},
+        { label: 'عدد السندات', val: num(d.totals.count) }, { label: 'إجمالي التحصيل', html: `${money(d.totals.amount)} ${sar}` },
+        { label: 'المخصص للفواتير', html: `${money(d.totals.allocated)} ${sar}` }, { label: 'غير المخصص', html: `${money(d.totals.unallocated)} ${sar}` },
       ];
       if (state.tab === 'profitability' && d.totals) return [
-        {label:'صافي المبيعات',html:`${money(d.totals.revenue)} ${sar}`}, {label:'التكلفة',html:`${money(d.totals.cost)} ${sar}`},
-        {label:'الربح الإجمالي',html:`${money(d.totals.profit)} ${sar}`}, {label:'هامش الربح',val:`${num(d.totals.margin)}%`},
+        { label: 'صافي المبيعات', html: `${money(d.totals.revenue)} ${sar}` }, { label: 'التكلفة', html: `${money(d.totals.cost)} ${sar}` },
+        { label: 'الربح الإجمالي', html: `${money(d.totals.profit)} ${sar}` }, { label: 'هامش الربح', val: `${num(d.totals.margin)}%` },
       ];
       if (state.tab === 'aging' && d.totals) {
         return [

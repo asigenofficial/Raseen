@@ -6,7 +6,7 @@ import { store, loadIssuers, invalidate, can, setActiveIssuer } from '../core/st
 import {
   html, raw, esc, modal, formValues, toastOk, toastErr,
   confirmDialog, $, $$, delegate, dateTimeAr, icon,
-  exportExcel, exportCsv,
+  exportExcel, exportCsv, renderPager, bindPager,
 } from '../core/util.js';
 
 const CITIES = ['الرياض', 'جدة', 'مكة المكرمة', 'المدينة المنورة', 'الدمام', 'الخبر', 'الظهران', 'بريدة', 'أبها', 'تبوك', 'حائل', 'نجران', 'جيزان', 'الطائف', 'الأحساء', 'الجبيل', 'ينبع'];
@@ -443,10 +443,22 @@ function openIssuerImportModal(onSuccess) {
 
 export async function render(view) {
   let searchQ = '';
-  const draw = async () => {
+  let pageOffset = 0;
+  let pageLimit = 12;
+  let issuers = [];
+
+  const load = async () => {
     const rawIssuers = await api.get('/api/issuers');
-    const issuers = Array.isArray(rawIssuers) ? rawIssuers : (rawIssuers?.data || []);
+    issuers = Array.isArray(rawIssuers) ? rawIssuers : (rawIssuers?.data || []);
     store.issuers = issuers;
+  };
+
+  const reload = async () => {
+    await load();
+    draw();
+  };
+
+  const draw = () => {
     const writable = can('issuers.write');
 
     const filterIssuers = (q) => {
@@ -502,14 +514,18 @@ export async function render(view) {
         </div>
       </div>`;
 
+    const filteredList = filterIssuers(searchQ);
+    if (pageOffset >= filteredList.length && pageOffset > 0) {
+      pageOffset = Math.max(0, Math.floor((filteredList.length - 1) / pageLimit) * pageLimit);
+    }
+    const pagedList = filteredList.slice(pageOffset, pageOffset + pageLimit);
+
     const renderGrid = (list) => {
       if (!list.length) {
         return `<div class="card" style="grid-column:1/-1;text-align:center;padding:2rem"><p class="muted">لا توجد شركات مطابقة للبحث «${esc(searchQ)}»</p></div>`;
       }
       return list.map(cardHtml).join('');
     };
-
-    const initialList = filterIssuers(searchQ);
 
     view.innerHTML = html`
       <div class="page-head">
@@ -531,7 +547,7 @@ export async function render(view) {
             <div class="field" style="flex:1;min-width:240px;margin:0">
               <input type="search" id="issuers-search" value="${esc(searchQ)}" placeholder="بحث في الشركات (الاسم، الكود، الرقم الضريبي، السجل، المدينة…)…" autocomplete="off" />
             </div>
-            <span class="tiny muted" id="issuers-count">${searchQ ? `${initialList.length} مطابقة من أصل ` : ''}${issuers.length} شركة</span>
+            <span class="tiny muted" id="issuers-count">${searchQ ? `${filteredList.length} مطابقة من أصل ` : ''}${issuers.length} شركة</span>
           </div>
         </div>
       ` : '')}
@@ -546,33 +562,54 @@ export async function render(view) {
       </div></div>` : '')}
 
       ${raw(issuers.length ? `<div id="issuers-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:0.65rem;">
-        ${renderGrid(initialList)}
-      </div>` : '')}`;
+        ${renderGrid(pagedList)}
+      </div>
+      ${renderPager({
+        idPrefix: 'iss',
+        offset: pageOffset,
+        limit: pageLimit,
+        total: filteredList.length,
+        sizes: [6, 12, 24, 48],
+        standalone: true,
+        label: 'شركة',
+      })}` : '')}`;
 
     const searchInput = $('#issuers-search', view);
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         searchQ = e.target.value;
-        const filtered = filterIssuers(searchQ);
-        const grid = $('#issuers-grid', view);
-        if (grid) grid.innerHTML = renderGrid(filtered);
-        const countEl = $('#issuers-count', view);
-        if (countEl) {
-          countEl.textContent = searchQ.trim() ? `${filtered.length} مطابقة من أصل ${issuers.length} شركة` : `${issuers.length} شركة`;
+        pageOffset = 0;
+        draw();
+        const el = $('#issuers-search', view);
+        if (el) {
+          el.focus();
+          el.setSelectionRange(searchQ.length, searchQ.length);
         }
       });
     }
 
+    bindPager(view, {
+      idPrefix: 'iss',
+      offset: pageOffset,
+      limit: pageLimit,
+      total: filteredList.length,
+      onChange: (newOffset, newLimit) => {
+        pageOffset = newOffset;
+        pageLimit = newLimit;
+        draw();
+      },
+    });
+
     const addBtn = $('#add-issuer', view);
-    if (addBtn) addBtn.addEventListener('click', () => openIssuerModal(null, draw));
+    if (addBtn) addBtn.addEventListener('click', () => openIssuerModal(null, reload));
     const add2 = $('#add-issuer-2', view);
-    if (add2) add2.addEventListener('click', () => openIssuerModal(null, draw));
+    if (add2) add2.addEventListener('click', () => openIssuerModal(null, reload));
 
     const triggerImport = () => {
       openIssuerImportModal(async () => {
         invalidate('issuers');
         await loadIssuers(true);
-        draw();
+        await reload();
       });
     };
     const impBtn = $('#import-issuers-btn', view);
@@ -617,45 +654,45 @@ export async function render(view) {
         exportCsv('الشركات_المصدرة', expHeaders, expRows());
       });
     }
-
-    delegate(view, 'click', '[data-act]', async (e, btn) => {
-      const issuer = issuers.find((x) => x.id === btn.dataset.id);
-      if (!issuer) return;
-      switch (btn.dataset.act) {
-        case 'activate':
-          setActiveIssuer(issuer.id);
-          toastOk(`تم تعيين «${issuer.name_ar}» كشركة نشطة`);
-          draw();
-          break;
-        case 'edit': {
-          const full = await api.get(`/api/issuers/${issuer.id}`);
-          openIssuerModal(full, draw);
-          break;
-        }
-        case 'creds': openCredentials(issuer); break;
-        case 'chain': verifyChain(issuer); break;
-        case 'del': {
-          const ok = await confirmDialog({
-            title: 'حذف شركة مصدرة',
-            message: `سيتم حذف «${issuer.name_ar}» نهائياً. لا يمكن الحذف إذا كانت لها فواتير.`,
-            danger: true,
-            okText: 'حذف',
-          });
-          if (!ok) return;
-          try {
-            await api.del(`/api/issuers/${issuer.id}`);
-            toastOk('تم حذف الشركة');
-            invalidate('issuers');
-            await loadIssuers(true);
-            draw();
-          } catch { /* رسالة الخطأ تظهر تلقائياً */ }
-          break;
-        }
-        default: break;
-      }
-    });
   };
 
-  await draw();
+  delegate(view, 'click', '[data-act]', async (e, btn) => {
+    const issuer = issuers.find((x) => x.id === btn.dataset.id);
+    if (!issuer) return;
+    switch (btn.dataset.act) {
+      case 'activate':
+        setActiveIssuer(issuer.id);
+        toastOk(`تم تعيين «${issuer.name_ar}» كشركة نشطة`);
+        draw();
+        break;
+      case 'edit': {
+        const full = await api.get(`/api/issuers/${issuer.id}`);
+        openIssuerModal(full, reload);
+        break;
+      }
+      case 'creds': openCredentials(issuer); break;
+      case 'chain': verifyChain(issuer); break;
+      case 'del': {
+        const ok = await confirmDialog({
+          title: 'حذف شركة مصدرة',
+          message: `سيتم حذف «${issuer.name_ar}» نهائياً. لا يمكن الحذف إذا كانت لها فواتير.`,
+          danger: true,
+          okText: 'حذف',
+        });
+        if (!ok) return;
+        try {
+          await api.del(`/api/issuers/${issuer.id}`);
+          toastOk('تم حذف الشركة');
+          invalidate('issuers');
+          await loadIssuers(true);
+          await reload();
+        } catch { /* رسالة الخطأ تظهر تلقائياً */ }
+        break;
+      }
+      default: break;
+    }
+  });
+
+  await reload();
   return undefined;
 }

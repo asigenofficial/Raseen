@@ -6,7 +6,7 @@ import { store, loadClients, can, currencyLabel } from '../core/store.js';
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, monthStart, today, toastOk, toastErr,
   $, delegate, exportCsv, exportExcel, printDoc, icon, downloadPdfFromHtml, clientPdfFilename,
-  amount, sarSvg, loadStoredTemplate, fillStoredTemplate,
+  amount, sarSvg, loadStoredTemplate, fillStoredTemplate, renderPager, bindPager,
 } from '../core/util.js';
 
 async function renderStatementFromStoredTemplate(statement, issuer, client) {
@@ -72,6 +72,8 @@ export async function render(view, ctx) {
     issuer_id: q0.issuer_id !== undefined ? q0.issuer_id : (store.activeIssuerId || ''),
     from: q0.from || '',
     to: q0.to || '',
+    offset: 0,
+    limit: 25,
     data: null,
   };
   const cur = currencyLabel();
@@ -116,9 +118,9 @@ export async function render(view, ctx) {
       });
     };
 
-    const rowsHtml = (entries) => {
+    const rowsHtml = (entries, startOffset = 0) => {
       const isFiltered = Boolean((state.q || '').trim());
-      const showOpening = !isFiltered || 'الرصيد قبل'.includes((state.q || '').trim().toLowerCase()) || 'رصيد افتتاحي'.includes((state.q || '').trim().toLowerCase());
+      const showOpening = startOffset === 0 && (!isFiltered || 'الرصيد قبل'.includes((state.q || '').trim().toLowerCase()) || 'رصيد افتتاحي'.includes((state.q || '').trim().toLowerCase()));
       let res = '';
       if (showOpening) {
         res += `
@@ -136,7 +138,7 @@ export async function render(view, ctx) {
       }
       if (entries.length) {
         res += entries.map((e, i) => `<tr>
-          <td class="tiny text-center muted">${i + 2}</td>
+          <td class="tiny text-center muted">${startOffset + i + 2}</td>
           <td class="mono tiny nowrap" style="white-space:nowrap;font-weight:700">
             ${e.doc_type === 'INVOICE' && e.doc_id
     ? `<a class="invoice-no-link" href="#/invoice-view/${esc(e.doc_id)}" title="عرض الفاتورة">${esc(e.doc_number || '')}</a>`
@@ -161,6 +163,10 @@ export async function render(view, ctx) {
     };
 
     const initialEntries = getFilteredEntries();
+    if (state.offset >= initialEntries.length && state.offset > 0) {
+      state.offset = Math.max(0, Math.floor((initialEntries.length - 1) / state.limit) * state.limit);
+    }
+    const pagedEntries = initialEntries.slice(state.offset, state.offset + state.limit);
 
     view.innerHTML = html`
       <div class="page-head">
@@ -267,7 +273,7 @@ export async function render(view, ctx) {
               </tr>
             </thead>
             <tbody id="statement-rows">
-              ${raw(rowsHtml(initialEntries))}
+              ${raw(rowsHtml(pagedEntries, state.offset))}
             </tbody>
             <tfoot><tr>
               <td colspan="5" class="text-center"><b>الإجمالي</b></td>
@@ -278,41 +284,59 @@ export async function render(view, ctx) {
             </tr></tfoot>
           </table>
         </div>
+        ${raw(renderPager({
+          idPrefix: 'stmt',
+          offset: state.offset,
+          limit: state.limit,
+          total: initialEntries.length,
+          sizes: [15, 25, 50, 100],
+          label: 'حركة',
+        }))}
       </div>`;
 
     const qInput = $('#statement-q', view);
     if (qInput) {
       qInput.addEventListener('input', (e) => {
         state.q = e.target.value;
-        const filtered = getFilteredEntries();
-        const tbody = $('#statement-rows', view);
-        if (tbody) tbody.innerHTML = rowsHtml(filtered);
-        const countEl = $('#statement-count', view);
-        if (countEl) {
-          if (state.q.trim()) {
-            countEl.innerHTML = `<span class="badge blue tiny" style="margin-left:6px">${num(filtered.length)} مطابقة</span> من أصل ${num(d.entries.length)} حركة — صدر ${dateTimeAr(d.generated_at)}`;
-          } else {
-            countEl.textContent = `${num(d.entries.length)} حركة — صدر ${dateTimeAr(d.generated_at)}`;
-          }
+        state.offset = 0;
+        draw();
+        const el = $('#statement-q', view);
+        if (el) {
+          el.focus();
+          el.setSelectionRange(state.q.length, state.q.length);
         }
       });
     }
 
+    bindPager(view, {
+      idPrefix: 'stmt',
+      offset: state.offset,
+      limit: state.limit,
+      total: initialEntries.length,
+      onChange: (newOffset, newLimit) => {
+        state.offset = newOffset;
+        state.limit = newLimit;
+        draw();
+      },
+    });
+
     const reload = async () => { await load(); draw(); };
     $('#client_id', view).addEventListener('change', async (e) => {
       state.client_id = e.target.value;
+      state.offset = 0;
       // تحديث العنوان بدون إعادة تحميل المسار (لتفادي رسم مزدوج)
       history.replaceState(null, '', `#/statement/${state.client_id}`);
       await reload();
     });
     ['issuer_id', 'from', 'to'].forEach((id) => {
-      $(`#${id}`, view).addEventListener('change', async (e) => { state[id] = e.target.value; await reload(); });
+      $(`#${id}`, view).addEventListener('change', async (e) => { state[id] = e.target.value; state.offset = 0; await reload(); });
     });
     delegate(view, 'click', '[data-quick]', async (e, btn) => {
       const k = btn.dataset.quick;
       if (k === 'month') { state.from = monthStart(); state.to = today(); }
       else if (k === 'year') { state.from = `${new Date().getFullYear()}-01-01`; state.to = today(); }
       else { state.from = ''; state.to = ''; }
+      state.offset = 0;
       await reload();
     });
 

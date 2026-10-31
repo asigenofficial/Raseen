@@ -1628,9 +1628,85 @@ table.tbl select {
 .pager {
   display: flex;
   align-items: center;
-  gap: .6rem;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .65rem;
   padding: .75rem 1.2rem;
   border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.pager.pager-standalone {
+  margin-top: .85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+
+.pager-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.pager-pages {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+}
+
+.pager-page-btn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 .45rem;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .15s ease;
+}
+
+.pager-page-btn:hover:not(:disabled):not(.active) {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: rgba(6, 182, 212, 0.08);
+}
+
+.pager-page-btn.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  font-weight: 700;
+}
+
+.pager-ellipsis {
+  padding: 0 .25rem;
+  color: var(--muted);
+  font-size: .8rem;
+  user-select: none;
+}
+
+.pager-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .65rem;
+}
+
+.pager-limit {
+  width: auto !important;
+  min-width: 115px;
+  height: 30px;
+  padding: 2px 8px;
+  font-size: .78rem;
+  border-radius: 6px;
 }
 
 /* ------------------------------------------------------------------- تنبيهات */

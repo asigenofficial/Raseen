@@ -5,9 +5,10 @@ import { api, qs } from '../core/api.js';
 import {
   html, raw, esc, num, dateTimeAr, monthStart, today,
   $, delegate, debounce, exportCsv, exportExcel, modal, icon, downloadPdfFromHtml, toastErr,
+  renderPager, bindPager,
 } from '../core/util.js';
 
-const PAGE = 100;
+const PAGE = 25;
 
 const ACTION_LABELS = {
   LOGIN: 'تسجيل دخول',
@@ -54,7 +55,7 @@ const describe = (d) => Object.entries(d || {})
 
 export async function render(view) {
   const state = {
-    q: '', action: '', entity_type: '', user: '', from: '', to: '', offset: 0,
+    q: '', action: '', entity_type: '', user: '', from: '', to: '', offset: 0, limit: PAGE,
     data: { items: [], total_count: 0 },
   };
 
@@ -62,7 +63,7 @@ export async function render(view) {
     try {
       const res = await api.get(qs('/api/audit', {
         q: state.q, action: state.action, entity_type: state.entity_type, user: state.user,
-        from: state.from, to: state.to, limit: PAGE, offset: state.offset,
+        from: state.from, to: state.to, limit: state.limit || PAGE, offset: state.offset,
       }));
       if (res && Array.isArray(res.items)) {
         state.data = { items: res.items, total_count: Number(res.total_count) || res.items.length };
@@ -159,11 +160,14 @@ export async function render(view) {
             </tbody>
           </table>
         </div>
-        <div class="pager">
-          <button class="btn btn-sm" id="prev" ${raw(state.offset === 0 ? 'disabled' : '')} type="button">${raw(icon.arrowRight({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}السابق</button>
-          <span class="tiny muted">${totalCount ? state.offset + 1 : 0} — ${pageTo} من ${num(totalCount)}</span>
-          <button class="btn btn-sm" id="next" ${raw(pageTo >= totalCount ? 'disabled' : '')} type="button">التالي${raw(icon.arrowLeft({ size: 14, style: 'vertical-align:text-bottom;margin-right:3px' }))}</button>
-        </div>
+        ${raw(renderPager({
+          idPrefix: 'aud',
+          offset: state.offset,
+          limit: state.limit || PAGE,
+          total: totalCount,
+          sizes: [25, 50, 100],
+          label: 'عملية',
+        }))}
       </div>`;
 
     const reload = async () => { await load(); draw(); };
@@ -179,8 +183,17 @@ export async function render(view) {
       state.offset = 0;
       await reload();
     });
-    $('#prev', view).addEventListener('click', async () => { state.offset = Math.max(0, state.offset - PAGE); await reload(); });
-    $('#next', view).addEventListener('click', async () => { state.offset += PAGE; await reload(); });
+    bindPager(view, {
+      idPrefix: 'aud',
+      offset: state.offset,
+      limit: state.limit || PAGE,
+      total: totalCount,
+      onChange: async (newOffset, newLimit) => {
+        state.offset = newOffset;
+        state.limit = newLimit;
+        await reload();
+      },
+    });
 
     delegate(view, 'click', '[data-json]', (e, btn) => {
       const row = items.find((r) => r.id === btn.dataset.json);

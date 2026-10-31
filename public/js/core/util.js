@@ -46,7 +46,7 @@ export function html(strings, ...values) {
 }
 
 // ---------------------------------------------------------------- التنسيق
-import { sarSvg } from './icons.js';
+import { sarSvg, icon } from './icons.js';
 export { sarSvg };
 
 const nf2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1964,4 +1964,122 @@ export function generateNextItemCode(existingList = [], catalogItems = []) {
     }
   }
   return `ITM-${String(maxNum + 1).padStart(4, '0')}`;
+}
+
+// ------------------------------------------------------------- شريط التصفح المجزأ الموحّد (Pagination)
+export function renderPager({
+  idPrefix = '',
+  offset = 0,
+  limit = 20,
+  total = 0,
+  sizes = [10, 20, 50, 100],
+  standalone = false,
+  label = 'عنصر',
+} = {}) {
+  const safeLimit = Math.max(1, Number(limit) || 20);
+  const safeTotal = Math.max(0, Number(total) || 0);
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  const totalPages = Math.max(1, Math.ceil(safeTotal / safeLimit));
+  const currentPage = Math.min(totalPages, Math.floor(safeOffset / safeLimit) + 1);
+  const pageFrom = safeTotal ? Math.min(safeTotal, (currentPage - 1) * safeLimit + 1) : 0;
+  const pageTo = Math.min(safeTotal, currentPage * safeLimit);
+
+  const prevId = idPrefix ? `${idPrefix}-prev` : 'prev';
+  const nextId = idPrefix ? `${idPrefix}-next` : 'next';
+  const limitId = idPrefix ? `${idPrefix}-limit` : 'pager-limit';
+  const pagerKey = idPrefix || 'main';
+
+  const pageNums = [];
+  if (totalPages <= 7) {
+    for (let p = 1; p <= totalPages; p++) pageNums.push(p);
+  } else {
+    pageNums.push(1);
+    if (currentPage > 3) pageNums.push('...');
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    for (let p = start; p <= end; p++) pageNums.push(p);
+    if (currentPage < totalPages - 2) pageNums.push('...');
+    pageNums.push(totalPages);
+  }
+
+  const pagesHtml = pageNums.map((p) => {
+    if (p === '...') return '<span class="pager-ellipsis">…</span>';
+    const active = p === currentPage;
+    return `<button type="button" class="pager-page-btn num ${active ? 'active' : ''}" data-pager-key="${esc(pagerKey)}" data-pager-page="${p}" ${active ? 'aria-current="page"' : ''}>${p}</button>`;
+  }).join('');
+
+  const sizeSet = sizes && sizes.length ? Array.from(new Set([...sizes, safeLimit])).sort((a, b) => a - b) : [];
+  const sizeOptionsHtml = sizeSet.map((sz) =>
+    `<option value="${sz}" ${sz === safeLimit ? 'selected' : ''}>${sz} / صفحة</option>`
+  ).join('');
+
+  return `
+    <div class="pager ${standalone ? 'pager-standalone' : ''}" data-pager-wrap="${esc(pagerKey)}">
+      <div class="pager-nav">
+        <button class="btn btn-sm" id="${esc(prevId)}" data-pager-prev="${esc(pagerKey)}" ${currentPage <= 1 ? 'disabled' : ''} type="button">
+          ${icon.arrowRight({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}السابق
+        </button>
+        <div class="pager-pages">${pagesHtml}</div>
+        <button class="btn btn-sm" id="${esc(nextId)}" data-pager-next="${esc(pagerKey)}" ${currentPage >= totalPages || safeTotal === 0 ? 'disabled' : ''} type="button">
+          التالي${icon.arrowLeft({ size: 14, style: 'vertical-align:text-bottom;margin-right:3px' })}
+        </button>
+      </div>
+      <div class="pager-meta">
+        <span class="badge blue tiny num">صفحة ${currentPage} من ${totalPages}</span>
+        <span class="tiny muted num">عرض ${num(pageFrom)} — ${num(pageTo)} من ${num(safeTotal)} ${esc(label)}</span>
+        ${sizeSet.length ? `<select class="pager-limit" id="${esc(limitId)}" data-pager-limit="${esc(pagerKey)}" title="عدد العناصر المعروضة في كل صفحة">${sizeOptionsHtml}</select>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+export function bindPager(root, {
+  idPrefix = '',
+  offset = 0,
+  limit = 20,
+  total = 0,
+  onChange,
+} = {}) {
+  if (!root || typeof onChange !== 'function') return;
+  const pagerKey = idPrefix || 'main';
+  const wrap = root.querySelector(`[data-pager-wrap="${pagerKey}"]`) || root;
+  const safeLimit = Math.max(1, Number(limit) || 20);
+  const safeTotal = Math.max(0, Number(total) || 0);
+  const totalPages = Math.max(1, Math.ceil(safeTotal / safeLimit));
+  const currentPage = Math.min(totalPages, Math.floor(Math.max(0, Number(offset) || 0) / safeLimit) + 1);
+
+  const prevBtn = wrap.querySelector(`[data-pager-prev="${pagerKey}"]`);
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => {
+      if (currentPage > 1) {
+        onChange(Math.max(0, (currentPage - 2) * safeLimit), safeLimit);
+      }
+    });
+  }
+
+  const nextBtn = wrap.querySelector(`[data-pager-next="${pagerKey}"]`);
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      if (currentPage < totalPages) {
+        onChange(currentPage * safeLimit, safeLimit);
+      }
+    });
+  }
+
+  wrap.querySelectorAll(`[data-pager-key="${pagerKey}"][data-pager-page]`).forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const targetPage = Number(btn.dataset.pagerPage);
+      if (targetPage >= 1 && targetPage <= totalPages && targetPage !== currentPage) {
+        onChange((targetPage - 1) * safeLimit, safeLimit);
+      }
+    });
+  });
+
+  const limitSel = wrap.querySelector(`[data-pager-limit="${pagerKey}"]`);
+  if (limitSel) {
+    limitSel.addEventListener('change', (e) => {
+      const newLimit = Math.max(1, Number(e.target.value) || safeLimit);
+      onChange(0, newLimit);
+    });
+  }
 }

@@ -9,6 +9,7 @@ import {
   html, raw, esc, money, num, timeToMinutes, toNum, today, roundDec4, roundHalfUp2,
   toastOk, toastErr, $, delegate, confirmDialog, promptDialog, exportCsv, exportExcel,
   modal, printDoc, icon, generateNextItemCode, downloadPdfFromUrl, renderStoredVoucher, loadStoredTemplate, fillStoredTemplate,
+  renderPager,
 } from '../core/util.js';
 
 const PAY_LABELS = { CASH: 'نقداً', CARD: 'شبكة', TRANSFER: 'تحويل', CREDIT: 'آجل' };
@@ -147,6 +148,12 @@ export async function render(view) {
     notes: '',
     current_draft_id: null,
     drafts: [],
+    draftsOffset: 0,
+    draftsLimit: 6,
+    citemsOffset: 0,
+    citemsLimit: 15,
+    pinvOffset: 0,
+    pinvLimit: 10,
     preview: null,
     busy: false,
     activeEditIndex: null,
@@ -287,6 +294,11 @@ export async function render(view) {
       `;
     }
 
+    if (state.citemsOffset >= state.custom_items.length && state.citemsOffset > 0) {
+      state.citemsOffset = Math.max(0, Math.floor((state.custom_items.length - 1) / state.citemsLimit) * state.citemsLimit);
+    }
+    const pagedCustomItems = state.custom_items.slice(state.citemsOffset, state.citemsOffset + state.citemsLimit);
+
     return `
       <div class="mt" style="background:rgba(16, 185, 129, 0.08);border:1px solid rgba(16, 185, 129, 0.3);padding:.4rem .8rem;border-radius:var(--radius-sm);margin-bottom:.5rem;display:flex;align-items:center;gap:.6rem">
         <span style="color:#10b981;font-weight:bold;font-size:.85rem">✓ حصر التوليد اليدوي:</span>
@@ -306,7 +318,9 @@ export async function render(view) {
             </tr>
           </thead>
           <tbody>
-            ${state.custom_items.map((it, idx) => `
+            ${pagedCustomItems.map((it, i) => {
+              const idx = state.citemsOffset + i;
+              return `
               <tr>
                 <td class="text-center" style="white-space:nowrap">
                   <span class="tiny num font-bold" style="margin-left:3px">${idx + 1}</span>
@@ -332,7 +346,8 @@ export async function render(view) {
                   <button class="btn btn-sm btn-danger pad0" style="width:24px;height:24px;line-height:1" data-remove-custom-item="${idx}" type="button" title="حذف الصنف من الدفعة">✕</button>
                 </td>
               </tr>
-            `).join('')}
+            `;
+            }).join('')}
           </tbody>
           <tfoot>
             <tr>
@@ -349,6 +364,15 @@ export async function render(view) {
           </tfoot>
         </table>
       </div>
+      ${renderPager({
+        idPrefix: 'bcitems',
+        offset: state.citemsOffset,
+        limit: state.citemsLimit,
+        total: state.custom_items.length,
+        sizes: [10, 15, 30, 50],
+        standalone: true,
+        label: 'صنف',
+      })}
     `;
   };
 
@@ -362,16 +386,20 @@ export async function render(view) {
         </div>
       </div>`;
     }
+    if (state.draftsOffset >= state.drafts.length && state.draftsOffset > 0) {
+      state.draftsOffset = Math.max(0, Math.floor((state.drafts.length - 1) / state.draftsLimit) * state.draftsLimit);
+    }
+    const pagedDrafts = state.drafts.slice(state.draftsOffset, state.draftsOffset + state.draftsLimit);
     return `
       <div class="card">
         <div class="card-head" style="padding:0 0 .5rem">
-          <h3>المسودات المحفوظة (${state.drafts.length})</h3>
+          <h3>المسودات المحفوظة (${num(state.drafts.length)})</h3>
           <div class="spacer"></div>
           <button class="btn btn-sm" id="refresh-drafts" type="button">${raw(icon.refresh({ size: 13, style: 'vertical-align:text-bottom;margin-left:3px' }))}تحديث القائمة</button>
         </div>
         <p class="muted tiny" style="margin-top:-.3rem">يمكنك فتح أي مسودة محفوظة، متابعة التعديل عليها، إصدار عينة تجريبية، أو اعتمادها.</p>
         <div class="grid grid-3 bulk-drafts-grid mt">
-          ${state.drafts.map((d) => `
+          ${pagedDrafts.map((d) => `
             <div class="card pad" style="border:1px solid ${d.id === state.current_draft_id ? 'var(--brand)' : 'var(--line)'};background:${d.id === state.current_draft_id ? 'rgba(6, 182, 212, 0.08)' : 'var(--card)'}">
               <div class="row align-center">
                 <span class="badge ${d.status === 'COMMITTED' ? 'green' : 'blue'} tiny">${d.status === 'COMMITTED' ? 'معتمدة' : 'مسودة'}</span>
@@ -391,6 +419,15 @@ export async function render(view) {
             </div>
           `).join('')}
         </div>
+        ${renderPager({
+          idPrefix: 'bdrafts',
+          offset: state.draftsOffset,
+          limit: state.draftsLimit,
+          total: state.drafts.length,
+          sizes: [6, 12, 24],
+          standalone: true,
+          label: 'مسودة',
+        })}
       </div>
     `;
   };
@@ -483,7 +520,14 @@ export async function render(view) {
           </div>
 
           <div class="invoices-list">
-            ${p.invoices.map((inv, idx) => `
+            ${(() => {
+              if (state.pinvOffset >= p.invoices.length && state.pinvOffset > 0) {
+                state.pinvOffset = Math.max(0, Math.floor((p.invoices.length - 1) / state.pinvLimit) * state.pinvLimit);
+              }
+              const pagedInvoices = p.invoices.slice(state.pinvOffset, state.pinvOffset + state.pinvLimit);
+              return pagedInvoices.map((inv, i) => {
+                const idx = state.pinvOffset + i;
+                return `
               <div class="card pad" style="border:1px solid var(--line);background:var(--card)" data-inv-card="${idx}">
                 <div class="row align-center">
                   <span class="badge blue" style="font-size:.85rem;font-weight:bold">فاتورة #${idx + 1}</span>
@@ -564,8 +608,19 @@ export async function render(view) {
                   </div>
                 ` : ''}
               </div>
-            `).join('')}
+            `;
+              }).join('');
+            })()}
           </div>
+          ${renderPager({
+            idPrefix: 'bpinv',
+            offset: state.pinvOffset,
+            limit: state.pinvLimit,
+            total: p.invoices.length,
+            sizes: [5, 10, 20, 50],
+            standalone: true,
+            label: 'فاتورة',
+          })}
         </div>
       </div>
     `;
@@ -1726,6 +1781,66 @@ export async function render(view) {
       const area = $('#preview-area', view);
       if (area) area.innerHTML = previewHtml();
     });
+
+    // تفويض أحداث أزرار التنقل (السابق / التالي / أرقام الصفحات) للأقسام الثلاثة في التوليد الدفعي
+    const bindDelegatedPager = (prefix, getOffset, getLimit, getTotal, setPage) => {
+      delegate(view, 'click', `#${prefix}-prev`, () => {
+        const nextOff = Math.max(0, getOffset() - getLimit());
+        if (nextOff !== getOffset()) setPage(nextOff, getLimit());
+      });
+      delegate(view, 'click', `#${prefix}-next`, () => {
+        const nextOff = getOffset() + getLimit();
+        if (nextOff < getTotal()) setPage(nextOff, getLimit());
+      });
+      delegate(view, 'click', `#${prefix}-pager [data-pager-page]`, (e, btn) => {
+        const p = parseInt(btn.dataset.pagerPage, 10);
+        if (!p || p < 1) return;
+        const nextOff = (p - 1) * getLimit();
+        if (nextOff !== getOffset()) setPage(nextOff, getLimit());
+      });
+      delegate(view, 'change', `#${prefix}-limit`, (e, sel) => {
+        const nextLim = parseInt(sel.value, 10) || getLimit();
+        setPage(0, nextLim);
+      });
+    };
+
+    bindDelegatedPager(
+      'bdrafts',
+      () => state.draftsOffset,
+      () => state.draftsLimit,
+      () => state.drafts.length,
+      (off, lim) => {
+        state.draftsOffset = off;
+        state.draftsLimit = lim;
+        const area = $('#drafts-area', view);
+        if (area) area.innerHTML = draftsSectionHtml();
+      },
+    );
+
+    bindDelegatedPager(
+      'bcitems',
+      () => state.citemsOffset,
+      () => state.citemsLimit,
+      () => state.custom_items.length,
+      (off, lim) => {
+        state.citemsOffset = off;
+        state.citemsLimit = lim;
+        refreshCustomItemsArea();
+      },
+    );
+
+    bindDelegatedPager(
+      'bpinv',
+      () => state.pinvOffset,
+      () => state.pinvLimit,
+      () => (state.preview && state.preview.invoices ? state.preview.invoices.length : 0),
+      (off, lim) => {
+        state.pinvOffset = off;
+        state.pinvLimit = lim;
+        const area = $('#preview-area', view);
+        if (area) area.innerHTML = previewHtml();
+      },
+    );
   }
 
   async function openBulkInvoicePreviewModal(targetIndex = 0) {

@@ -872,6 +872,56 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 500, err.Error())
 			return
 		}
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		offset, _ := strconv.Atoi(q.Get("offset"))
+		if q.Get("paged") == "1" || q.Get("paged") == "true" {
+			totalCount := len(list)
+			var totInv, totPaid, totBal float64
+			for _, c := range list {
+				totInv += c.TotalInvoicedMajor
+				totPaid += c.TotalPaidMajor
+				totBal += c.BalanceMajor
+			}
+			if limit <= 0 {
+				limit = 20
+			}
+			if offset < 0 {
+				offset = 0
+			}
+			pagedItems := []services.ClientListItem{}
+			if offset < totalCount {
+				end := offset + limit
+				if end > totalCount {
+					end = totalCount
+				}
+				pagedItems = list[offset:end]
+			}
+			s.json(w, 200, map[string]any{
+				"items":       pagedItems,
+				"total_count": totalCount,
+				"totals": map[string]any{
+					"invoiced": totInv,
+					"paid":     totPaid,
+					"balance":  totBal,
+					"count":    totalCount,
+				},
+			})
+			return
+		}
+		if limit > 0 {
+			if offset < 0 {
+				offset = 0
+			}
+			if offset >= len(list) {
+				list = []services.ClientListItem{}
+			} else {
+				end := offset + limit
+				if end > len(list) {
+					end = len(list)
+				}
+				list = list[offset:end]
+			}
+		}
 		s.json(w, 200, list)
 	})
 
@@ -1081,6 +1131,62 @@ func (s *Server) Handler() http.Handler {
 		if err != nil {
 			s.err(w, 500, err.Error())
 			return
+		}
+		statusFilter := q.Get("status")
+		if statusFilter == "active" || statusFilter == "1" {
+			filtered := make([]services.ItemListItem, 0, len(list))
+			for _, it := range list {
+				if it.IsActive != 0 {
+					filtered = append(filtered, it)
+				}
+			}
+			list = filtered
+		} else if statusFilter == "inactive" || statusFilter == "0" {
+			filtered := make([]services.ItemListItem, 0, len(list))
+			for _, it := range list {
+				if it.IsActive == 0 {
+					filtered = append(filtered, it)
+				}
+			}
+			list = filtered
+		}
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		offset, _ := strconv.Atoi(q.Get("offset"))
+		if q.Get("paged") == "1" || q.Get("paged") == "true" {
+			totalCount := len(list)
+			if limit <= 0 {
+				limit = 20
+			}
+			if offset < 0 {
+				offset = 0
+			}
+			pagedItems := []services.ItemListItem{}
+			if offset < totalCount {
+				end := offset + limit
+				if end > totalCount {
+					end = totalCount
+				}
+				pagedItems = list[offset:end]
+			}
+			s.json(w, 200, map[string]any{
+				"items":       pagedItems,
+				"total_count": totalCount,
+			})
+			return
+		}
+		if limit > 0 {
+			if offset < 0 {
+				offset = 0
+			}
+			if offset >= len(list) {
+				list = []services.ItemListItem{}
+			} else {
+				end := offset + limit
+				if end > len(list) {
+					end = len(list)
+				}
+				list = list[offset:end]
+			}
 		}
 		s.json(w, 200, list)
 	})

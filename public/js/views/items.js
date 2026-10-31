@@ -8,8 +8,10 @@ import {
 } from '../core/store.js';
 import {
   html, raw, esc, money, amount, sarSvg, num, modal, formValues, toastOk, toastErr, confirmDialog,
-  $, delegate, debounce, exportCsv, exportExcel, icon,
+  $, delegate, debounce, exportCsv, exportExcel, icon, renderPager, bindPager,
 } from '../core/util.js';
+
+const PAGE = 20;
 
 const UNITS = ['حبة', 'كرتون', 'كيس', 'علبة', 'كيلو', 'جرام', 'لتر', 'متر', 'متر مربع', 'لفة', 'ساعة', 'خدمة', 'يوم', 'شهر', 'طقم'];
 
@@ -285,13 +287,25 @@ export async function render(view, ctx) {
     q: '',
     categoryId: (ctx && ctx.query && ctx.query.cat) || '',
     status: '',
+    offset: 0,
+    limit: PAGE,
+    catOffset: 0,
+    catLimit: PAGE,
   });
   if (ctx && ctx.query && ctx.query.tab) initial.tab = ctx.query.tab;
-  if (ctx && ctx.query && ctx.query.cat) initial.categoryId = ctx.query.cat;
+  if (ctx && ctx.query && ctx.query.cat) {
+    initial.categoryId = ctx.query.cat;
+    initial.offset = 0;
+  }
 
   const state = {
     ...initial,
+    offset: initial.offset || 0,
+    limit: initial.limit || PAGE,
+    catOffset: initial.catOffset || 0,
+    catLimit: initial.catLimit || PAGE,
     items: [],
+    total_items: 0,
     categories: [],
   };
   const writable = can('items.write');
@@ -303,21 +317,37 @@ export async function render(view, ctx) {
       if (state.categoryId && !state.categories.some((c) => c.id === state.categoryId)) {
         state.categoryId = '';
       }
-      const params = { q: state.q, category_id: state.categoryId };
+      const params = {
+        paged: 1,
+        q: state.q,
+        category_id: state.categoryId,
+        limit: state.limit || PAGE,
+        offset: state.offset || 0,
+      };
       if (state.status) params.status = state.status;
       const itemsRes = await api.get(qs('/api/items', params));
-      state.items = Array.isArray(itemsRes) ? itemsRes : [];
+      if (Array.isArray(itemsRes)) {
+        state.items = itemsRes;
+        state.total_items = itemsRes.length;
+      } else {
+        state.items = Array.isArray(itemsRes?.items) ? itemsRes.items : [];
+        state.total_items = itemsRes?.total_count || 0;
+      }
     } catch {
       state.items = [];
+      state.total_items = 0;
       state.categories = [];
     }
-    store.items = state.items;
     store.categories = state.categories;
     setFilterState('items', {
       tab: state.tab,
       q: state.q,
       categoryId: state.categoryId,
       status: state.status,
+      offset: state.offset,
+      limit: state.limit,
+      catOffset: state.catOffset,
+      catLimit: state.catLimit,
     });
   };
 
@@ -357,7 +387,8 @@ export async function render(view, ctx) {
   };
 
   const catRows = () => {
-    const list = Array.isArray(state.categories) ? state.categories : [];
+    const allList = Array.isArray(state.categories) ? state.categories : [];
+    const list = allList.slice(state.catOffset, state.catOffset + (state.catLimit || PAGE));
     if (!list.length) return '<tr><td colspan="6" class="text-center muted" style="padding:1.5rem">لا توجد مجموعات</td></tr>';
     return list.map((c) => `<tr>
       <td class="mono tiny nowrap" style="white-space:nowrap;font-weight:700">
@@ -388,7 +419,6 @@ export async function render(view, ctx) {
   };
 
   const draw = () => {
-    const itemsList = Array.isArray(state.items) ? state.items : [];
     const catList = Array.isArray(state.categories) ? state.categories : [];
 
     view.innerHTML = html`
@@ -407,8 +437,8 @@ export async function render(view, ctx) {
       </div>
 
       <div class="tabs">
-        <div class="tab ${state.tab === 'items' ? 'active' : ''}" data-tab="items">الأصناف (${itemsList.length})</div>
-        <div class="tab ${state.tab === 'cats' ? 'active' : ''}" data-tab="cats">المجموعات (${catList.length})</div>
+        <div class="tab ${state.tab === 'items' ? 'active' : ''}" data-tab="items">الأصناف (${num(state.total_items)})</div>
+        <div class="tab ${state.tab === 'cats' ? 'active' : ''}" data-tab="cats">المجموعات (${num(catList.length)})</div>
       </div>
 
       ${raw(state.tab === 'items' ? `
@@ -448,6 +478,14 @@ export async function render(view, ctx) {
             </tr></thead>
             <tbody>${itemsRows()}</tbody>
           </table></div>
+          ${renderPager({
+            idPrefix: 'itm',
+            offset: state.offset,
+            limit: state.limit || PAGE,
+            total: state.total_items || 0,
+            sizes: [10, 20, 50, 100],
+            label: 'صنف',
+          })}
         </div>` : `
         <div class="card pad0">
           <div class="table-wrap"><table class="tbl categories-tbl">
@@ -461,6 +499,14 @@ export async function render(view, ctx) {
             </tr></thead>
             <tbody>${catRows()}</tbody>
           </table></div>
+          ${renderPager({
+            idPrefix: 'cat',
+            offset: state.catOffset,
+            limit: state.catLimit || PAGE,
+            total: catList.length,
+            sizes: [10, 20, 50, 100],
+            label: 'مجموعة',
+          })}
         </div>`)}`;
 
     delegate(view, 'click', '.tab', (e, tab) => {
@@ -470,6 +516,10 @@ export async function render(view, ctx) {
         q: state.q,
         categoryId: state.categoryId,
         status: state.status,
+        offset: state.offset,
+        limit: state.limit,
+        catOffset: state.catOffset,
+        catLimit: state.catLimit,
       });
       draw();
     });
@@ -477,16 +527,19 @@ export async function render(view, ctx) {
     if (state.tab === 'items') {
       $('#q', view).addEventListener('input', debounce(async (e) => {
         state.q = e.target.value;
+        state.offset = 0;
         await load();
         draw();
       }, 300));
       $('#cat-filter', view).addEventListener('change', async (e) => {
         state.categoryId = e.target.value;
+        state.offset = 0;
         await load();
         draw();
       });
       $('#status-filter', view).addEventListener('change', async (e) => {
         state.status = e.target.value;
+        state.offset = 0;
         await load();
         draw();
       });
@@ -495,8 +548,33 @@ export async function render(view, ctx) {
         state.q = '';
         state.categoryId = '';
         state.status = '';
+        state.offset = 0;
         await load();
         draw();
+      });
+      bindPager(view, {
+        idPrefix: 'itm',
+        offset: state.offset,
+        limit: state.limit || PAGE,
+        total: state.total_items || 0,
+        onChange: async (newOffset, newLimit) => {
+          state.offset = newOffset;
+          state.limit = newLimit;
+          await load();
+          draw();
+        },
+      });
+    } else {
+      bindPager(view, {
+        idPrefix: 'cat',
+        offset: state.catOffset,
+        limit: state.catLimit || PAGE,
+        total: catList.length,
+        onChange: (newOffset, newLimit) => {
+          state.catOffset = newOffset;
+          state.catLimit = newLimit;
+          draw();
+        },
       });
     }
 

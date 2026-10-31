@@ -2,7 +2,7 @@
 //  قائمة الفواتير: بحث وتصفية شاملة، إجماليات، طباعة، تصدير.
 // ==========================================================================
 import { api, qs } from '../core/api.js';
-import { store, loadClients, can, getFilterState, setFilterState, clearFilterState } from '../core/store.js';
+import { store, loadClients, loadTemplates, can, getFilterState, setFilterState, clearFilterState } from '../core/store.js';
 
 const syncNotify = (entity, action, payload) => (typeof store.syncNotify === 'function' ? store.syncNotify(entity, action, payload) : null);
 const onSync = (cb) => (typeof store.onSync === 'function' ? store.onSync(cb) : () => { });
@@ -10,19 +10,13 @@ import {
   html, raw, esc, money, num, dateAr, statusBadge, monthStart, today, toastOk,
   $, delegate, debounce, exportCsv, exportExcel, parseSpreadsheetText, printDoc, modal, toastErr, formValues,
   confirmDialog, icon, downloadPdfFromHtml, downloadPdfFromUrl, amount, sarSvg, shareDocument, renderStoredVoucher,
-  loadStoredTemplate, fillStoredTemplate,
+  loadStoredTemplate, fillStoredTemplate, renderPager, bindPager,
 } from '../core/util.js';
 
-const PAGE = 50;
+const PAGE = 20;
 
 export async function render(view, ctx) {
-  await loadClients();
-
   let availableTemplates = [];
-  try {
-    const tplRes = await api.get('/api/invoices/templates?type=invoices');
-    availableTemplates = Array.isArray(tplRes) ? tplRes : (tplRes?.data || []);
-  } catch { }
 
   const renderTemplateOptions = (selectedId) => {
     const customOpts = availableTemplates.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedId ? 'selected' : ''}>${esc(t.name_ar || t.name || t.id)}</option>`).join('');
@@ -43,6 +37,7 @@ export async function render(view, ctx) {
     min_total: '',
     max_total: '',
     payment_method: '',
+    limit: PAGE,
     offset: 0,
   };
   const cached = getFilterState('invoices', defaults);
@@ -50,6 +45,7 @@ export async function render(view, ctx) {
     ...cached,
     ...q0,
     has_remaining: q0.has_remaining !== undefined ? Boolean(q0.has_remaining === 'true' || q0.has_remaining === '1') : Boolean(cached.has_remaining),
+    limit: Number(q0.limit || cached.limit) || PAGE,
     offset: q0.offset !== undefined ? Number(q0.offset) : (cached.offset || 0),
     data: { items: [], totals: {}, total_count: 0 },
   };
@@ -69,6 +65,7 @@ export async function render(view, ctx) {
       min_total: state.min_total,
       max_total: state.max_total,
       payment_method: state.payment_method,
+      limit: state.limit,
       offset: state.offset,
     });
   };
@@ -88,7 +85,7 @@ export async function render(view, ctx) {
       min_total: state.min_total,
       max_total: state.max_total,
       payment_method: state.payment_method,
-      limit: PAGE,
+      limit: state.limit,
       offset: state.offset,
     }));
     state.data = res || { items: [], totals: {}, total_count: 0 };
@@ -300,11 +297,13 @@ export async function render(view, ctx) {
             <tbody>${raw(rowsHtml())}</tbody>
           </table>
         </div>
-        <div class="pager">
-          <button class="btn btn-sm" id="prev" ${raw(state.offset === 0 ? 'disabled' : '')} type="button">${raw(icon.arrowRight({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' }))}السابق</button>
-          <span class="tiny muted">${pageFrom} — ${pageTo} من ${num(state.data.total_count)}</span>
-          <button class="btn btn-sm" id="next" ${raw(pageTo >= state.data.total_count ? 'disabled' : '')} type="button">التالي${raw(icon.arrowLeft({ size: 14, style: 'vertical-align:text-bottom;margin-right:3px' }))}</button>
-        </div>
+        ${raw(renderPager({
+          offset: state.offset,
+          limit: state.limit,
+          total: state.data.total_count,
+          sizes: [10, 20, 50, 100],
+          label: 'فاتورة',
+        }))}
       </div>`;
 
     const reload = async () => { await load(); draw(); };
@@ -331,8 +330,16 @@ export async function render(view, ctx) {
       state.offset = 0;
       await reload();
     });
-    $('#prev', view).addEventListener('click', async () => { state.offset = Math.max(0, state.offset - PAGE); await reload(); });
-    $('#next', view).addEventListener('click', async () => { state.offset += PAGE; await reload(); });
+    bindPager(view, {
+      offset: state.offset,
+      limit: state.limit,
+      total: state.data.total_count,
+      onChange: async (newOffset, newLimit) => {
+        state.offset = newOffset;
+        state.limit = newLimit;
+        await reload();
+      },
+    });
 
     const headers = ['رقم الفاتورة', 'التاريخ', 'الوقت', 'العميل', 'كود العميل', 'الشركة المصدرة', 'طريقة الدفع',
       'قبل الضريبة', 'الضريبة', 'الإجمالي', 'المسدد', 'المتبقي', 'الحالة'];
@@ -809,7 +816,11 @@ export async function render(view, ctx) {
     }
   });
 
-  await load();
+  await Promise.all([
+    loadClients().catch(() => {}),
+    loadTemplates('invoices').then((tpls) => { availableTemplates = tpls || []; }).catch(() => {}),
+    load(),
+  ]);
   draw();
   return () => { unsubSync(); };
 }

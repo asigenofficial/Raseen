@@ -471,8 +471,11 @@ function registerRoutes() {
 
 // -------------------------------------------------------------------- البدء
 async function boot() {
-  await loadMeta();
-  if (!store.user) await loadSession();
+  if (!store.user) {
+    await Promise.all([loadMeta(), loadSession()]);
+  } else {
+    await loadMeta();
+  }
   if (!store.user) {
     renderLogin();
     return;
@@ -485,10 +488,7 @@ async function boot() {
   }
   router.start();
 
-  // التحميل الاستباقي لكل الشاشات والبيانات المرجعية في الخلفية لفتح أي صفحة فوراً
-  loadLookups().catch(() => { });
-  preloadViews();
-
+  // عدم تحميل كل بيانات النظام والشاشات دفعة واحدة عند الإقلاع لتخفيف الحمل وجعل الفتح فورياً
   startSync();
 
   const viewEl = document.getElementById('view');
