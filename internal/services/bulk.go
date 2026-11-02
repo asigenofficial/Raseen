@@ -508,10 +508,20 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 	if maxItems == 0 {
 		maxItems = minItems
 	}
-	if maxItems < minItems || minItems > len(availableItems) || maxItems > 100 || req.Count*maxItems > 100000 {
+	if len(availableItems) > 0 {
+		if minItems > len(availableItems) {
+			minItems = max(1, len(availableItems)-1)
+		}
+		if maxItems > len(availableItems) {
+			maxItems = len(availableItems)
+		}
+		if minItems > maxItems {
+			minItems = maxItems
+		}
+	}
+	if maxItems < minItems || maxItems > 100 || req.Count*maxItems > 100000 {
 		return nil, errors.New("حدود عدد البنود غير صالحة أو تتجاوز حجم الدفعة المسموح")
 	}
-	maxItems = min(maxItems, len(availableItems))
 	minRequiredItems := minItems
 	if req.MinItems == 4 && req.MaxItems == 6 && req.Count > 0 && len(availableItems) > req.Count*maxItems {
 		neededPerInv := (len(availableItems) + req.Count - 1) / req.Count
@@ -712,9 +722,11 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		} else {
 			order = rng.Perm(len(availableItems))
 		}
-		slices.SortStableFunc(order, func(a, b int) int {
-			return usageCount[a] - usageCount[b]
-		})
+		if distMode == "balanced" || distMode == "uniform" || distMode == "" {
+			slices.SortStableFunc(order, func(a, b int) int {
+				return usageCount[a] - usageCount[b]
+			})
+		}
 
 		invTargetMinor := int64(0)
 		if req.TargetTotal > 0 {
@@ -903,7 +915,11 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 				usageCount[idx]++
 			}
 			if distMode == "sequential" {
-				seqCursor = (seqCursor + len(selectedIdx)) % len(availableItems)
+				step := len(selectedIdx)
+				if step%len(availableItems) == 0 {
+					step = 1
+				}
+				seqCursor = (seqCursor + step) % len(availableItems)
 			} else {
 				rng.Shuffle(len(selected), func(a, b int) { selected[a], selected[b] = selected[b], selected[a] })
 			}
@@ -919,7 +935,13 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 				usageCount[idx]++
 			}
 			if distMode == "sequential" {
-				seqCursor = (seqCursor + len(selectedIdx)) % len(availableItems)
+				step := len(selectedIdx)
+				if step%len(availableItems) == 0 {
+					step = 1
+				}
+				seqCursor = (seqCursor + step) % len(availableItems)
+			} else {
+				rng.Shuffle(len(selected), func(a, b int) { selected[a], selected[b] = selected[b], selected[a] })
 			}
 		}
 		for l, it := range selected {

@@ -162,18 +162,43 @@ export async function render(view) {
   let manualItemBounds = false;
   const syncItemCountBounds = () => {
     if (manualItemBounds) return;
-    const poolCount = state.custom_items.length > 0
-      ? state.custom_items.length
-      : store.items.filter((it) => it.is_active !== false).length;
+    let poolCount = 0;
+    if (state.custom_items.length > 0) {
+      poolCount = state.custom_items.length;
+    } else if (state.item_ids && state.item_ids.length > 0) {
+      poolCount = state.item_ids.length;
+    } else if (state.category_ids && state.category_ids.length > 0) {
+      poolCount = store.items.filter((it) => it.is_active !== false && state.category_ids.includes(it.category_id)).length;
+    } else {
+      poolCount = store.items.filter((it) => it.is_active !== false).length;
+    }
     const invCount = Math.max(1, toNum(state.count, 25));
     if (poolCount <= 0) return;
-    const neededPerInv = Math.ceil(poolCount / invCount);
-    if (neededPerInv > 6) {
-      state.max_items = Math.min(15, Math.min(poolCount, Math.max(6, neededPerInv + 1)));
-      state.min_items = Math.min(state.max_items, Math.max(4, neededPerInv - 1));
+
+    if (poolCount === 1) {
+      state.min_items = 1;
+      state.max_items = 1;
+    } else if (poolCount === 2) {
+      state.min_items = 1;
+      state.max_items = 2;
+    } else if (poolCount === 3) {
+      state.min_items = 1;
+      state.max_items = 2;
+    } else if (poolCount <= 5) {
+      state.min_items = 2;
+      state.max_items = Math.min(3, poolCount);
+    } else if (poolCount <= 8) {
+      state.min_items = 2;
+      state.max_items = 4;
     } else {
-      state.min_items = Math.min(4, poolCount);
-      state.max_items = Math.min(6, poolCount);
+      const neededPerInv = Math.ceil(poolCount / invCount);
+      if (neededPerInv > 6) {
+        state.max_items = Math.min(15, Math.min(poolCount, Math.max(6, neededPerInv + 1)));
+        state.min_items = Math.min(state.max_items, Math.max(4, neededPerInv - 1));
+      } else {
+        state.min_items = 4;
+        state.max_items = Math.min(6, poolCount);
+      }
     }
     const minEl = $('#min_items', view);
     const maxEl = $('#max_items', view);
