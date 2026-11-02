@@ -391,7 +391,7 @@ func (s *Server) failPDF(kind, id string, revision int64, renderErr error) {
 // Invalidate cached PDFs when their rendering rules change.
 func (s *Server) documentPDFStyleKey(kind, style string) string {
 	if kind == "voucher" {
-		key := style + "|amount-grouping-v3|static-pdf-font-v1|address-v2"
+		key := style + "|amount-grouping-v3|static-pdf-font-v1|address-v2|voucher-ref-fix-v3"
 		if s.templates != nil {
 			if template, err := s.templates.RenderTemplateHTML(style); err == nil {
 				checksum := sha256.Sum256([]byte(template))
@@ -557,6 +557,40 @@ func (s *Server) renderVoucherHTML(id, style string) (string, error) {
 }
 
 func injectVoucherPrintStyle(template string) string {
+	if strings.Contains(template, "reference-voucher") {
+		style := `<style data-voucher-page>
+@page { size: A4 portrait !important; margin: 0 !important; }
+html {
+  margin: 0 !important; padding: 0 !important;
+  background: #fff !important;
+}
+body {
+  width: 210mm !important; max-width: 210mm !important; min-width: 210mm !important;
+  min-height: 297mm !important;
+  margin: 0 auto !important;
+  padding: 10mm !important;
+  box-sizing: border-box !important;
+  background: #fff !important;
+  display: block !important;
+}
+.reference-voucher, body > main.reference-voucher {
+  width: 190mm !important; max-width: 190mm !important;
+  height: auto !important; max-height: none !important; min-height: 0 !important;
+  margin: 0 auto !important;
+  display: block !important;
+  box-sizing: border-box !important;
+}
+@media print {
+  body { margin: 0 !important; background: #fff !important; }
+  .reference-voucher, body > main.reference-voucher { box-shadow: none !important; }
+}
+</style>`
+		if headEnd := strings.LastIndex(strings.ToLower(template), "</head>"); headEnd >= 0 {
+			return template[:headEnd] + style + "\n" + template[headEnd:]
+		}
+		return style + "\n" + template
+	}
+
 	style := `<style data-voucher-page>
 @page { size: A4 portrait !important; margin: 0 !important; }
 html, body {
@@ -564,7 +598,7 @@ html, body {
   margin: 0 !important; padding: 0 !important; box-sizing: border-box !important;
   overflow: hidden !important; background: #fff !important;
 }
-body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page, body > .sheet, body > main, .voucher-container {
+body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page, body > .sheet, body > main:not(.reference-voucher), .voucher-container {
   width: 210mm !important; max-width: 210mm !important;
   height: 297mm !important; max-height: 297mm !important; min-height: 0 !important;
   margin: 0 auto !important; padding: 10mm 12mm !important; box-sizing: border-box !important;

@@ -414,6 +414,36 @@ export function parseSpreadsheetText(content, filename = '') {
  * @param {string} docHtml مستند HTML كامل بأنماطه الخاصة
  */
 function applyVoucherPageStyle(html) {
+  if (/reference-voucher/i.test(html)) {
+    const style = `<style data-voucher-page>
+@page { size: A4 portrait !important; margin: 0 !important; }
+html {
+  margin: 0 !important; padding: 0 !important;
+  background: #fff !important;
+}
+body {
+  width: 210mm !important; max-width: 210mm !important; min-width: 210mm !important;
+  min-height: 297mm !important;
+  margin: 0 auto !important;
+  padding: 10mm !important;
+  box-sizing: border-box !important;
+  background: #fff !important;
+  display: block !important;
+}
+.reference-voucher, body > main.reference-voucher {
+  width: 190mm !important; max-width: 190mm !important;
+  height: auto !important; max-height: none !important; min-height: 0 !important;
+  margin: 0 auto !important;
+  display: block !important;
+  box-sizing: border-box !important;
+}
+@media print {
+  body { margin: 0 !important; background: #fff !important; }
+  .reference-voucher, body > main.reference-voucher { box-shadow: none !important; }
+}
+</style>`;
+    return /<\/head>/i.test(html) ? html.replace(/<\/head>/i, style + "\n</head>") : style + "\n" + html;
+  }
   const style = `<style data-voucher-page>
 @page { size: A4 portrait !important; margin: 0 !important; }
 html, body {
@@ -421,7 +451,7 @@ html, body {
   margin: 0 !important; padding: 0 !important; box-sizing: border-box !important;
   overflow: hidden !important; background: #fff !important;
 }
-body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page, body > .sheet, body > main, .voucher-container {
+body > .receipt-card, body > .receipt-container, body > .receipt-page, body > .receipt, body > .page, body > .sheet, body > main:not(.reference-voucher), .voucher-container {
   width: 210mm !important; max-width: 210mm !important;
   height: 297mm !important; max-height: 297mm !important; min-height: 0 !important;
   margin: 0 auto !important; padding: 10mm 12mm !important; box-sizing: border-box !important;
