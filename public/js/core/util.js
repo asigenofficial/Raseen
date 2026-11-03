@@ -996,20 +996,40 @@ function detectColumnTypeJS(th) {
 function extractTableHeadersJS(htmlSnippet) {
   const tableMatches = htmlSnippet.match(/<table\b[^>]*>([\s\S]*?)<\/table>/gi) || [];
   let targetTableHtml = '';
+
+  // 1. First priority: look for a table with items_rows or items-table
   for (const tbl of tableMatches) {
-    if (/items_rows|items_table_body|items_body|table_rows/i.test(tbl)) {
+    if (/header-table|totals-table/i.test(tbl)) continue;
+    if (/items_rows|items-table|items-main-table|items_table_body|items_body|table_rows/i.test(tbl)) {
       targetTableHtml = tbl;
       break;
     }
   }
+
+  // 2. Second priority: look for a table containing <th> with item-related words
   if (!targetTableHtml) {
     for (const tbl of tableMatches) {
-      if (/وصف|صنف|بيان|كمية|سعر|item|desc|qty|price/i.test(tbl)) {
+      if (/header-table|totals-table/i.test(tbl)) continue;
+      if (/<th\b/i.test(tbl)) {
+        if (/وصف|صنف|بيان|كمية|سعر|item|desc|qty|price/i.test(tbl)) {
+          targetTableHtml = tbl;
+          break;
+        }
+      }
+    }
+  }
+
+  // 3. Third priority: any table that has <th> and is not header/totals
+  if (!targetTableHtml) {
+    for (const tbl of tableMatches) {
+      if (/header-table|totals-table/i.test(tbl)) continue;
+      if (/<th\b/i.test(tbl)) {
         targetTableHtml = tbl;
         break;
       }
     }
   }
+
   if (!targetTableHtml) {
     targetTableHtml = htmlSnippet;
   }
@@ -1894,15 +1914,47 @@ export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 15) {
     suffix = bodyContent.slice(lastDivIdx + 6);
   }
 
-  const tableRegex = /(<table\b[\s\S]*?)(<tbody\b[^>]*>)([\s\S]*?)(<\/tbody>)([\s\S]*?<\/table>)/i;
-  const tableMatch = contInner.match(tableRegex);
-  if (!tableMatch) return htmlStr;
+  const tableFullRegex = /<table\b[^>]*>[\s\S]*?<\/table>/gi;
+  const allTables = [];
+  let tMatch;
+  while ((tMatch = tableFullRegex.exec(contInner)) !== null) {
+    allTables.push({ start: tMatch.index, end: tMatch.index + tMatch[0].length, html: tMatch[0] });
+  }
+  if (!allTables.length) return htmlStr;
 
-  const tableIdx = contInner.indexOf(tableMatch[0]);
-  const beforeTable = contInner.slice(0, tableIdx);
-  const tableOpen = tableMatch[1] + tableMatch[2];
-  const tableClose = tableMatch[4] + tableMatch[5];
-  const afterTableRaw = contInner.slice(tableIdx + tableMatch[0].length);
+  let bestTbl = null;
+  for (const tbl of allTables) {
+    if (/header-table|totals-table/i.test(tbl.html)) continue;
+    if (/items-table|items-main-table|items_rows|items-frame/i.test(tbl.html)) {
+      bestTbl = tbl;
+      break;
+    }
+    if (/صنف|وصف|كمية|price|item/i.test(tbl.html)) {
+      bestTbl = tbl;
+      break;
+    }
+  }
+  if (!bestTbl) {
+    let maxLen = 0;
+    for (const tbl of allTables) {
+      if (/header-table|totals-table/i.test(tbl.html)) continue;
+      if (tbl.html.length > maxLen) {
+        bestTbl = tbl;
+        maxLen = tbl.html.length;
+      }
+    }
+  }
+  if (!bestTbl) return htmlStr;
+
+  const targetTableHtml = bestTbl.html;
+  const tbodyMatch = targetTableHtml.match(/(<tbody\b[^>]*>)([\s\S]*?)(<\/tbody>)/i);
+  if (!tbodyMatch) return htmlStr;
+
+  const tbodyStart = targetTableHtml.indexOf(tbodyMatch[0]);
+  const tableOpen = targetTableHtml.slice(0, tbodyStart + tbodyMatch[1].length);
+  const tableClose = targetTableHtml.slice(tbodyStart + tbodyMatch[1].length + tbodyMatch[2].length);
+  const beforeTable = contInner.slice(0, bestTbl.start);
+  const afterTableRaw = contInner.slice(bestTbl.end);
 
   const bottomRegex = /<(?:div|section|table)\b[^>]*(?:class|id)=["'][^"']*(?:bottom|summary)[^"']*["']/i;
   const bottomLoc = afterTableRaw.search(bottomRegex);
@@ -1971,7 +2023,7 @@ export function paginateInvoiceHtmlJS(htmlStr, inv, chunkSize = 15) {
   if (/<\/head>/i.test(res)) {
     res = res.replace(/<\/head>/i, multiCss + '\n</head>');
   }
-  res = res.replace(/<\/head>/i, "<style data-invoice-pages-print>\n@media print {\n @page { size: A4 portrait; margin: 0 !important; }\n html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }\n [data-invoice-page] { width: 210mm !important; min-height: 297mm !important; height: 297mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }\n [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }\n [data-invoice-page] .invoice-frame:not([data-invoice-page]) { position: absolute !important; inset: 5mm !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; display: block !important; break-after: auto !important; page-break-after: auto !important; }\n}\n</style>" + '\n</head>');
+  res = res.replace(/<\/head>/i, "<style data-invoice-pages-print>\n@media print {\n @page { size: A4 portrait; margin: 0 !important; }\n html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }\n [data-invoice-page] { width: 210mm !important; min-height: 297mm !important; height: auto !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }\n [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }\n [data-invoice-page] .items-main-table, [data-invoice-page] .items-table { page-break-inside: auto !important; break-inside: auto !important; }\n [data-invoice-page] .items-main-table tr, [data-invoice-page] .items-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }\n}\n</style>" + '\n</head>');
   const allPages = prefix + pages.join('\n') + suffix;
   res = res.replace(/<body\b([^>]*)>[\s\S]*?<\/body>/i, `<body${bodyAttrs}>\n${allPages}\n</body>`);
 

@@ -193,6 +193,7 @@
       border-collapse: collapse;
       border: 1px solid #cbd5e1;
       font-size: 10.5px;
+      table-layout: fixed;
     }
 
     .items-table th {
@@ -209,6 +210,8 @@
       border: 1px solid #e2e8f0;
       padding: 5px 6px;
       vertical-align: middle;
+      overflow-wrap: break-word;
+      word-break: break-word;
     }
 
     .items-table tbody tr:nth-child(even) {
@@ -370,6 +373,17 @@
         min-height: 281mm;
         margin: 0;
         border: 1px solid #cbd5e1;
+        overflow: visible !important;
+      }
+
+      .items-table {
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+      }
+
+      .items-table tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
       }
     }
   

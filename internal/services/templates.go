@@ -1716,21 +1716,54 @@ func extractTableHeaders(htmlSnippet string) []string {
 	tableRegex := regexp.MustCompile(`(?i)<table\b[^>]*>([\s\S]*?)</table>`)
 	tableMatches := tableRegex.FindAllString(htmlSnippet, -1)
 	targetTableHtml := ""
+
+	// 1. First priority: look for a table with items_rows or items-table
 	for _, tbl := range tableMatches {
-		if strings.Contains(tbl, "items_rows") || strings.Contains(tbl, "items_table_body") || strings.Contains(tbl, "items_body") || strings.Contains(tbl, "table_rows") {
+		lower := strings.ToLower(tbl)
+		if strings.Contains(lower, "header-table") || strings.Contains(lower, "totals-table") {
+			continue
+		}
+		if strings.Contains(lower, "items_rows") || strings.Contains(lower, "items-table") ||
+			strings.Contains(lower, "items-main-table") || strings.Contains(lower, "items_table_body") ||
+			strings.Contains(lower, "items_body") || strings.Contains(lower, "table_rows") {
 			targetTableHtml = tbl
 			break
 		}
 	}
+
+	// 2. Second priority: look for a table containing <th> with item-related words
 	if targetTableHtml == "" {
 		for _, tbl := range tableMatches {
 			lower := strings.ToLower(tbl)
-			if strings.Contains(lower, "وصف") || strings.Contains(lower, "صنف") || strings.Contains(lower, "بيان") || strings.Contains(lower, "كمية") || strings.Contains(lower, "سعر") || strings.Contains(lower, "item") || strings.Contains(lower, "qty") || strings.Contains(lower, "price") {
+			if strings.Contains(lower, "header-table") || strings.Contains(lower, "totals-table") {
+				continue
+			}
+			if strings.Contains(tbl, "<th") || strings.Contains(tbl, "<TH") {
+				if strings.Contains(lower, "وصف") || strings.Contains(lower, "صنف") ||
+					strings.Contains(lower, "بيان") || strings.Contains(lower, "كمية") ||
+					strings.Contains(lower, "سعر") || strings.Contains(lower, "item") ||
+					strings.Contains(lower, "qty") || strings.Contains(lower, "price") {
+					targetTableHtml = tbl
+					break
+				}
+			}
+		}
+	}
+
+	// 3. Third priority: any table that has <th> and is not header/totals
+	if targetTableHtml == "" {
+		for _, tbl := range tableMatches {
+			lower := strings.ToLower(tbl)
+			if strings.Contains(lower, "header-table") || strings.Contains(lower, "totals-table") {
+				continue
+			}
+			if strings.Contains(tbl, "<th") || strings.Contains(tbl, "<TH") {
 				targetTableHtml = tbl
 				break
 			}
 		}
 	}
+
 	if targetTableHtml == "" {
 		targetTableHtml = htmlSnippet
 	}
@@ -1959,18 +1992,63 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 		suffix = bodyInner[lastDivIdx+6:]
 	}
 
-	// 2. Locate the items table
-	tableRegex := regexp.MustCompile(`(?is)(<table\b[\s\S]*?)(<tbody\b[^>]*>)([\s\S]*?)(</tbody>)([\s\S]*?</table>)`)
-	tableMatch := tableRegex.FindStringSubmatch(contInner)
-	if len(tableMatch) < 6 {
+	// 2. Locate specifically the items table within contInner
+	tableFullRegex := regexp.MustCompile(`(?is)<table\b[^>]*>[\s\S]*?</table>`)
+	allTables := tableFullRegex.FindAllStringIndex(contInner, -1)
+	if len(allTables) == 0 {
 		return htmlStr
 	}
 
-	tblIdx := strings.Index(contInner, tableMatch[0])
-	beforeTable := contInner[:tblIdx]
-	tableOpen := tableMatch[1] + tableMatch[2]
-	tableClose := tableMatch[4] + tableMatch[5]
-	afterTableRaw := contInner[tblIdx+len(tableMatch[0]):]
+	bestTblStart := -1
+	bestTblEnd := -1
+	for _, loc := range allTables {
+		tblHtml := contInner[loc[0]:loc[1]]
+		lower := strings.ToLower(tblHtml)
+		if strings.Contains(lower, "header-table") || strings.Contains(lower, "totals-table") {
+			continue
+		}
+		if strings.Contains(lower, "items-table") || strings.Contains(lower, "items-main-table") ||
+			strings.Contains(lower, "items_rows") || strings.Contains(lower, "items-frame") {
+			bestTblStart = loc[0]
+			bestTblEnd = loc[1]
+			break
+		}
+		if strings.Contains(lower, "صنف") || strings.Contains(lower, "وصف") || strings.Contains(lower, "كمية") || strings.Contains(lower, "price") || strings.Contains(lower, "item") {
+			bestTblStart = loc[0]
+			bestTblEnd = loc[1]
+			break
+		}
+	}
+	if bestTblStart == -1 {
+		maxLen := 0
+		for _, loc := range allTables {
+			tblHtml := contInner[loc[0]:loc[1]]
+			lower := strings.ToLower(tblHtml)
+			if strings.Contains(lower, "header-table") || strings.Contains(lower, "totals-table") {
+				continue
+			}
+			if loc[1]-loc[0] > maxLen {
+				bestTblStart = loc[0]
+				bestTblEnd = loc[1]
+				maxLen = loc[1] - loc[0]
+			}
+		}
+	}
+	if bestTblStart == -1 {
+		return htmlStr
+	}
+
+	targetTableHtml := contInner[bestTblStart:bestTblEnd]
+	tbodyRegex := regexp.MustCompile(`(?is)(<tbody\b[^>]*>)([\s\S]*?)(</tbody>)`)
+	tbodyMatches := tbodyRegex.FindStringSubmatchIndex(targetTableHtml)
+	if len(tbodyMatches) < 8 {
+		return htmlStr
+	}
+
+	beforeTable := contInner[:bestTblStart]
+	tableOpen := targetTableHtml[:tbodyMatches[3]]  // Table opening + thead + <tbody...>
+	tableClose := targetTableHtml[tbodyMatches[6]:] // </tbody> and anything after up to </table>
+	afterTableRaw := contInner[bestTblEnd:]
 
 	// 3. Locate bottom section
 	bottomRegex := regexp.MustCompile(`(?i)<(?:div|section|table)\b[^>]*(?:class|id)=["'][^"']*(?:bottom|summary)[^"']*["']`)
@@ -2020,9 +2098,10 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 @media print {
  @page { size: A4 portrait; margin: 0 !important; }
  html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }
- [data-invoice-page] { width: 210mm !important; min-height: 297mm !important; height: 297mm !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; }
+ [data-invoice-page] { width: 210mm !important; min-height: 297mm !important; height: auto !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
  [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }
- [data-invoice-page] .invoice-frame:not([data-invoice-page]) { position: absolute !important; inset: 5mm !important; width: auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; display: block !important; break-after: auto !important; page-break-after: auto !important; }
+ [data-invoice-page] .items-main-table, [data-invoice-page] .items-table { page-break-inside: auto !important; break-inside: auto !important; }
+ [data-invoice-page] .items-main-table tr, [data-invoice-page] .items-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
 }
 </style>`)
 }
