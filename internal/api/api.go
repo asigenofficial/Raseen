@@ -939,6 +939,26 @@ func (s *Server) Handler() http.Handler {
 		}
 		activeOnly := q.Get("activeOnly") == "1" || q.Get("activeOnly") == "true" || q.Get("active_only") == "1" || q.Get("active_only") == "true"
 
+		isAll := q.Get("all") == "1" || q.Get("all") == "true" || q.Get("pageSize") == "all" || q.Get("limit") == "all"
+		if isAll {
+			resp, err := s.clients.ListClients(services.ListClientsFilter{
+				Search:       search,
+				ActiveOnly:   activeOnly,
+				WithBalances: withBalances,
+				IssuerID:     q.Get("issuer_id"),
+				ClientType:   q.Get("client_type"),
+				City:         q.Get("city"),
+				OnlyDebtors:  q.Get("only_debtors") == "1" || q.Get("only_debtors") == "true",
+				All:          true,
+			})
+			if err != nil {
+				s.err(w, 500, err.Error())
+				return
+			}
+			s.json(w, 200, resp.Items)
+			return
+		}
+
 		resp, err := s.clients.ListClients(services.ListClientsFilter{
 			Search:       search,
 			ActiveOnly:   activeOnly,
@@ -1238,9 +1258,21 @@ func (s *Server) Handler() http.Handler {
 			search = q.Get("q")
 		}
 		activeOnly := q.Get("activeOnly") == "1" || q.Get("activeOnly") == "true" || q.Get("active_only") == "1" || q.Get("active_only") == "true"
+
 		statusFilter := q.Get("status")
 		if statusFilter == "active" || statusFilter == "1" {
 			activeOnly = true
+		}
+
+		isAll := q.Get("all") == "1" || q.Get("all") == "true" || q.Get("pageSize") == "all" || q.Get("limit") == "all"
+		if isAll {
+			list, err := s.items.ListAllItems(search, q.Get("category_id"), activeOnly)
+			if err != nil {
+				s.err(w, 500, err.Error())
+				return
+			}
+			s.json(w, 200, list)
+			return
 		}
 
 		resp, err := s.items.ListItems(services.ListItemsFilter{

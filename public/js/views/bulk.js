@@ -1472,7 +1472,17 @@ export async function render(view) {
     });
 
     // استيراد جميع الأصناف النشطة
-    delegate(view, 'click', '#btn-import-all-catalog', () => {
+    delegate(view, 'click', '#btn-import-all-catalog', async () => {
+      if (store.items.length < 100) {
+        try {
+          const allRes = await api.get(qs('/api/items', { active_only: true, all: true }));
+          const items = Array.isArray(allRes) ? allRes : (allRes?.items || []);
+          if (items.length) {
+            store.items = items;
+            store.loaded.items = true;
+          }
+        } catch { /* ignore */ }
+      }
       const activeItems = store.items.filter((it) => it.is_active !== false && it.sale_price > 0);
       for (const it of activeItems) {
         if (!state.custom_items.some((x) => x.id === it.id)) {
@@ -1487,14 +1497,27 @@ export async function render(view) {
         }
       }
       refreshCustomItemsArea();
+      syncItemCountBounds();
       toastOk(`تم إدراج ${activeItems.length} صنف في جدول الأصناف المخصصة`);
     });
 
     // إضافة أصناف مجموعة كاملة
-    delegate(view, 'click', '[data-add-cat-items]', (e, btn) => {
+    delegate(view, 'click', '[data-add-cat-items]', async (e, btn) => {
       const catId = btn.dataset.addCatItems;
       const cat = store.categories.find((c) => c.id === catId);
-      const catItems = store.items.filter((it) => it.category_id === catId && it.is_active !== false);
+      let catItems = store.items.filter((it) => it.category_id === catId && it.is_active !== false);
+      if (!catItems.length || (cat && cat.items_count && catItems.length < cat.items_count)) {
+        try {
+          const res = await api.get(qs('/api/items', { category_id: catId, active_only: true, all: true }));
+          const items = Array.isArray(res) ? res : (res?.items || []);
+          if (items.length) {
+            catItems = items;
+            items.forEach((it) => {
+              if (!store.items.some((x) => x.id === it.id)) store.items.push(it);
+            });
+          }
+        } catch { /* ignore */ }
+      }
       if (!catItems.length) {
         toastErr(`لا توجد أصناف في مجموعة ${cat ? cat.name : ''}`);
         return;
@@ -1514,6 +1537,7 @@ export async function render(view) {
         }
       }
       refreshCustomItemsArea();
+      syncItemCountBounds();
       toastOk(`تمت إضافة ${added} صنف من مجموعة ${cat ? cat.name : ''}`);
     });
 

@@ -29,7 +29,8 @@ type ListClientsFilter struct {
 	City         string
 	OnlyDebtors  bool
 	Page         int // الافتراضي 1
-	PageSize     int // الافتراضي 50 (الحد الأقصى 200)
+	PageSize     int // الافتراضي 50
+	All          bool
 }
 
 type ClientsResponse struct {
@@ -56,10 +57,13 @@ func (s *ClientService) ListClients(f ListClientsFilter) (*ClientsResponse, erro
 		page = 1
 	}
 	pageSize := f.PageSize
-	if pageSize <= 0 {
+	if f.All {
+		page = 1
+		pageSize = 100000
+	} else if pageSize <= 0 {
 		pageSize = 50
-	} else if pageSize > 200 {
-		pageSize = 200
+	} else if pageSize > 100000 {
+		pageSize = 100000
 	}
 	offset := (page - 1) * pageSize
 
