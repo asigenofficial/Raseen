@@ -1949,16 +1949,16 @@ func computeInvoiceItemChunks(lines []InvoiceItemView) [][]int {
 		return nil
 	}
 
-	totalH := 0.0
-	for _, l := range lines {
-		totalH += estimateInvoiceItemHeightMm(l)
-	}
-	if totalH <= 75.0 && len(lines) <= 8 {
+	// الحد الأقصى لعدد الأصناف في كل صفحة: 15 صنف
+	const maxItemsPerPage = 15
+
+	if len(lines) <= maxItemsPerPage {
 		return [][]int{{0, len(lines)}}
 	}
 
 	var chunks [][]int
 	currStart := 0
+	currCount := 0
 	currH := 0.0
 	isFirstPage := true
 
@@ -1969,26 +1969,18 @@ func computeInvoiceItemChunks(lines []InvoiceItemView) [][]int {
 			budget = 195.0
 		}
 
-		remH := 0.0
-		for j := i; j < len(lines); j++ {
-			remH += estimateInvoiceItemHeightMm(lines[j])
-		}
-
-		if currH > 0 && remH <= 95.0 {
-			chunks = append(chunks, []int{currStart, i})
-			chunks = append(chunks, []int{i, len(lines)})
-			return chunks
-		}
-
-		if currH+h > budget && i > currStart {
+		// قطع الصفحة إذا وصلنا للحد الأقصى (15 صنف) أو تجاوزنا ميزانية الارتفاع
+		if (currCount >= maxItemsPerPage || (currH+h > budget && i > currStart)) && i > currStart {
 			chunks = append(chunks, []int{currStart, i})
 			currStart = i
 			currH = 0.0
+			currCount = 0
 			isFirstPage = false
 			continue
 		}
 
 		currH += h
+		currCount++
 		i++
 	}
 

@@ -11,7 +11,7 @@ import {
   $, delegate, debounce, exportCsv, exportExcel, icon, renderPager, bindPager,
 } from '../core/util.js';
 
-const PAGE = 20;
+const PAGE = 50;
 
 const UNITS = ['حبة', 'كرتون', 'كيس', 'علبة', 'كيلو', 'جرام', 'لتر', 'متر', 'متر مربع', 'لفة', 'ساعة', 'خدمة', 'يوم', 'شهر', 'طقم'];
 
@@ -334,8 +334,12 @@ export async function render(view, ctx) {
       if (state.categoryId && !state.categories.some((c) => c.id === state.categoryId)) {
         state.categoryId = '';
       }
+      const page = Math.floor((state.offset || 0) / (state.limit || PAGE)) + 1;
       const params = {
         paged: 1,
+        page: page,
+        pageSize: state.limit || PAGE,
+        search: state.q,
         q: state.q,
         category_id: state.categoryId,
         limit: state.limit || PAGE,
@@ -346,9 +350,13 @@ export async function render(view, ctx) {
       if (Array.isArray(itemsRes)) {
         state.items = itemsRes;
         state.total_items = itemsRes.length;
+        state.page = 1;
+        state.total_pages = 1;
       } else {
         state.items = Array.isArray(itemsRes?.items) ? itemsRes.items : [];
         state.total_items = itemsRes?.total_count || 0;
+        state.page = itemsRes?.page || page;
+        state.total_pages = itemsRes?.total_pages || Math.max(1, Math.ceil(state.total_items / (state.limit || PAGE)));
         if (typeof itemsRes?.offset === 'number') state.offset = itemsRes.offset;
       }
     } catch {
@@ -502,7 +510,7 @@ export async function render(view, ctx) {
             offset: state.offset,
             limit: state.limit || PAGE,
             total: state.total_items || 0,
-            sizes: [10, 20, 50, 100],
+            sizes: [20, 50, 100, 200],
             label: 'صنف',
           })}
         </div>` : `
@@ -523,7 +531,7 @@ export async function render(view, ctx) {
             offset: state.catOffset,
             limit: state.catLimit || PAGE,
             total: state.total_categories || catList.length,
-            sizes: [10, 20, 50, 100],
+            sizes: [20, 50, 100, 200],
             label: 'مجموعة',
           })}
         </div>`)}`;

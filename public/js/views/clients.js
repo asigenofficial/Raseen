@@ -9,7 +9,7 @@ import {
   renderPager, bindPager,
 } from '../core/util.js';
 
-const PAGE = 20;
+const PAGE = 50;
 
 function clientForm(data = {}) {
   const v = (k, def = '') => (data[k] === undefined || data[k] === null ? def : data[k]);
@@ -279,9 +279,13 @@ export async function render(view) {
 
   const load = async () => {
     saveState();
+    const page = Math.floor((state.offset || 0) / (state.limit || PAGE)) + 1;
     const res = await api.get(qs('/api/clients', {
       with_balances: true,
       paged: 1,
+      page: page,
+      pageSize: state.limit || PAGE,
+      search: state.q,
       q: state.q,
       client_type: state.client_type,
       only_debtors: state.onlyDebtors ? '1' : '',
@@ -292,14 +296,18 @@ export async function render(view) {
     if (Array.isArray(res)) {
       state.rows = res;
       state.total_count = res.length;
+      state.page = 1;
+      state.total_pages = 1;
     } else {
       state.rows = res.items || [];
       state.total_count = res.total_count || 0;
+      state.page = res.page || page;
+      state.total_pages = res.total_pages || Math.max(1, Math.ceil(state.total_count / (state.limit || PAGE)));
       if (typeof res.offset === 'number') {
         state.offset = res.offset;
         saveState();
       }
-      state.totals = res.totals || { invoiced: 0, paid: 0, balance: 0, count: 0 };
+      state.totals = res.totals || { invoiced: 0, paid: 0, balance: 0, count: state.total_count };
     }
   };
 
@@ -429,7 +437,7 @@ export async function render(view) {
           offset: state.offset,
           limit: state.limit || PAGE,
           total: state.total_count || 0,
-          sizes: [10, 20, 50, 100],
+          sizes: [20, 50, 100, 200],
           label: 'عميل',
         }))}
       </div>`;

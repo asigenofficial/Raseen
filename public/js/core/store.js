@@ -77,16 +77,18 @@ export async function loadIssuers(force = false) {
 
 export async function loadClients(force = false) {
   if (store.loaded.clients && !force) return store.clients;
-  const res = await api.get(qs('/api/clients', { active_only: true }));
-  store.clients = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
+  const res = await api.get(qs('/api/clients', { active_only: true, pageSize: 50 }));
+  const items = Array.isArray(res) ? res : (res?.items || (res?.data && Array.isArray(res.data) ? res.data : []));
+  store.clients = items;
   store.loaded.clients = true;
   return store.clients;
 }
 
 export async function loadItems(force = false) {
   if (store.loaded.items && !force) return store.items;
-  const res = await api.get(qs('/api/items', { active_only: true }));
-  store.items = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
+  const res = await api.get(qs('/api/items', { active_only: true, pageSize: 50 }));
+  const items = Array.isArray(res) ? res : (res?.items || (res?.data && Array.isArray(res.data) ? res.data : []));
+  store.items = items;
   store.loaded.items = true;
   return store.items;
 }

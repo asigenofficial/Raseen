@@ -361,6 +361,11 @@ func (s *Server) renderAndSavePDF(kind, id string, revision int64, suppliedHTML 
 		s.failPDF(kind, id, revision, err)
 		return nil, err
 	}
+	// Limit concurrent PDF generation to max 2 workers
+	if s.pdfSem != nil {
+		s.pdfSem <- struct{}{}
+		defer func() { <-s.pdfSem }()
+	}
 	pdf, err := services.RenderHTMLToPDF(htmlDoc)
 	if err != nil {
 		s.failPDF(kind, id, revision, err)

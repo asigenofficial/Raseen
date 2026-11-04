@@ -1,14 +1,14 @@
 // ==========================================================================
 //  محرر الفاتورة (إصدار فاتورة جديدة)
 // ==========================================================================
-import { api } from '../core/api.js';
-import { store, loadClients, loadItems, can, invalidate } from '../core/store.js';
+import { api, qs } from '../core/api.js';
+import { store, can, invalidate } from '../core/store.js';
 import * as router from '../core/router.js';
 
 const syncNotify = (entity, action, payload) => (typeof store.syncNotify === 'function' ? store.syncNotify(entity, action, payload) : null);
 import {
   html, raw, esc, money, toNum, today, nowTime, roundDec4, roundHalfUp2, toastOk, toastErr,
-  $, $$, delegate, modal, formValues, confirmDialog, icon, generateNextItemCode,
+  $, $$, delegate, modal, formValues, confirmDialog, icon, generateNextItemCode, debounce,
 } from '../core/util.js';
 
 const emptyLine = () => ({
@@ -75,7 +75,6 @@ function clearDraft() {
 }
 
 export async function render(view, ctx) {
-  await Promise.all([loadClients(), loadItems()]);
   const query = (ctx && ctx.query) || {};
   const editId = query.edit || (ctx && ctx.params && ctx.params[0]) || null;
   let editInvoice = null;
@@ -135,36 +134,33 @@ export async function render(view, ctx) {
     lines: [emptyLine()],
     ...(draft || {}),
   };
-  let clientSearchQ = '';
 
-  const filterClients = (q) => {
-    const term = (q || '').trim().toLowerCase();
-    if (!term) return store.clients;
-    return store.clients.filter((c) => {
-      const name = (c.name || '').toLowerCase();
-      const code = (c.client_code || '').toLowerCase();
-      const mob = (c.mobile || '').toLowerCase();
-      const phone = (c.phone || '').toLowerCase();
-      const tax = (c.tax_number || '').toLowerCase();
-      const cr = (c.commercial_register || '').toLowerCase();
-      return name.includes(term) || code.includes(term) || mob.includes(term) || phone.includes(term) || tax.includes(term) || cr.includes(term);
-    });
-  };
-
-  if (!state.is_edit && draft) {
-    if (state.client_id && !store.clients.some((c) => c.id === state.client_id)) {
-      state.client_id = '';
-    }
-    if (Array.isArray(state.lines)) {
-      state.lines.forEach((l) => {
-        if (l.item_id && !store.items.some((it) => it.id === l.item_id)) {
-          l.item_id = '';
-        }
-      });
-    }
-  }
   if (query.client_id && !state.is_edit) state.client_id = query.client_id;
   if (!state.lines || !state.lines.length) state.lines = [emptyLine()];
+
+  let clientSearchQ = '';
+  let currentClient = null;
+  let clientResults = [];
+  try {
+    const [initClientsRes, clientObj] = await Promise.all([
+      api.get(qs('/api/clients', { active_only: true, pageSize: 15 })),
+      state.client_id ? api.get(`/api/clients/${state.client_id}`).catch(() => null) : Promise.resolve(null),
+    ]);
+    const arr = Array.isArray(initClientsRes) ? initClientsRes : (initClientsRes?.items || []);
+    currentClient = clientObj;
+    if (currentClient && !arr.some((c) => c.id === currentClient.id)) {
+      clientResults = [currentClient, ...arr];
+    } else {
+      clientResults = arr;
+    }
+  } catch (e) {
+    console.warn('Initial clients fetch error', e);
+  }
+
+  const getSelectedClient = () => {
+    if (currentClient && currentClient.id === state.client_id) return currentClient;
+    return clientResults.find((c) => c.id === state.client_id) || currentClient;
+  };
 
   const activeIssuers = store.issuers.filter((i) => i.is_active);
   if (!activeIssuers.length) {
@@ -256,8 +252,8 @@ export async function render(view, ctx) {
 
   const draw = () => {
     const iss = issuerOf();
-    const curClient = store.clients.find((c) => c.id === state.client_id);
-    const displayedClients = filterClients(clientSearchQ);
+    const curClient = getSelectedClient();
+    const displayedClients = clientResults;
     const displayedIssuers = filterIssuers(issuerSearchQ);
     view.innerHTML = html`
       <div class="page-head">
@@ -508,7 +504,7 @@ export async function render(view, ctx) {
   }
 
   function bind() {
-    const curClient = store.clients.find(c => c.id === state.client_id);
+    const curClient = getSelectedClient();
     $('#issuer', view).addEventListener('change', (e) => {
       state.issuer_id = e.target.value;
       const newIss = activeIssuers.find((i) => i.id === state.issuer_id);
@@ -547,29 +543,64 @@ export async function render(view, ctx) {
       });
     }
 
-    $('#client', view).addEventListener('change', (e) => { state.client_id = e.target.value; saveDraft(state); draw(); });
+    $('#client', view).addEventListener('change', async (e) => {
+      state.client_id = e.target.value;
+      if (state.client_id && (!currentClient || currentClient.id !== state.client_id)) {
+        try {
+          currentClient = await api.get(`/api/clients/${state.client_id}`);
+        } catch {}
+      } else if (!state.client_id) {
+        currentClient = null;
+      }
+      saveDraft(state);
+      draw();
+    });
 
     const clientSearchInput = $('#client-search', view);
     const clientSelect = $('#client', view);
     const clientHint = $('#client-search-hint', view);
 
+    let clientSearchSeq = 0;
+    const searchClientsAsync = debounce(async (term) => {
+      const seq = ++clientSearchSeq;
+      clientSearchQ = term;
+      if (clientHint) clientHint.textContent = 'جاري البحث…';
+      try {
+        const res = await api.get(qs('/api/clients', {
+          search: term,
+          q: term,
+          active_only: true,
+          pageSize: 15,
+          limit: 15,
+        }));
+        if (seq !== clientSearchSeq) return;
+        const matched = Array.isArray(res) ? res : (res?.items || []);
+        clientResults = matched;
+        const cur = getSelectedClient();
+        if (cur && !clientResults.some((c) => c.id === cur.id)) {
+          clientResults.unshift(cur);
+        }
+        if (clientHint) {
+          clientHint.textContent = term.trim() ? `${matched.length} مطابق` : '';
+        }
+        clientSelect.innerHTML = `<option value="">— ${term.trim() ? `اختر من النتائج (${matched.length})` : 'اختر العميل'} —</option>` +
+          clientResults.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join('');
+      } catch (err) {
+        if (clientHint) clientHint.textContent = 'خطأ في البحث';
+      }
+    }, 300);
+
     if (clientSearchInput && clientSelect) {
       clientSearchInput.addEventListener('input', (e) => {
-        clientSearchQ = e.target.value;
-        const matched = filterClients(clientSearchQ);
-        if (clientHint) {
-          clientHint.textContent = clientSearchQ.trim() ? `${matched.length} مطابق` : '';
-        }
-        clientSelect.innerHTML = `<option value="">— ${clientSearchQ.trim() ? `اختر من النتائج (${matched.length})` : 'اختر العميل'} —</option>` +
-          matched.map((c) => `<option value="${esc(c.id)}" ${c.id === state.client_id ? 'selected' : ''}>${esc(c.name)} (${esc(c.client_code)})</option>`).join('');
+        searchClientsAsync(e.target.value);
       });
 
       clientSearchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
-          const matched = filterClients(clientSearchQ);
-          if (matched.length > 0) {
-            state.client_id = matched[0].id;
+          if (clientResults.length > 0) {
+            state.client_id = clientResults[0].id;
+            currentClient = clientResults[0];
             saveDraft(state);
             draw();
           }
@@ -600,7 +631,7 @@ export async function render(view, ctx) {
     $('#add-line', view).addEventListener('click', () => {
       const l = emptyLine();
       l.tax_rate = defaultRate();
-      l.item_code = generateNextItemCode(state.lines, store.items);
+      l.item_code = generateNextItemCode(state.lines, []);
       state.lines.push(l);
       refreshLines();
       const inputs = $$('#lines tr [data-f=item_name]', view);
@@ -648,7 +679,10 @@ export async function render(view, ctx) {
           try {
             const created = await api.post('/api/clients', values);
             invalidate('clients');
-            await loadClients(true);
+            currentClient = created;
+            if (!clientResults.some(c => c.id === created.id)) {
+              clientResults.unshift(created);
+            }
             state.client_id = created.id;
             m.close();
             toastOk('تمت إضافة العميل');
@@ -691,7 +725,9 @@ export async function render(view, ctx) {
           try {
             await api.put(`/api/clients/${curClient.id}`, values);
             invalidate('clients');
-            await loadClients(true);
+            currentClient = { ...curClient, ...values };
+            const idx = clientResults.findIndex(c => c.id === curClient.id);
+            if (idx >= 0) clientResults[idx] = currentClient;
             m.close();
             toastOk('تم تحديث العنوان الوطني للعميل');
             draw();
@@ -711,11 +747,11 @@ export async function render(view, ctx) {
         line.item_name = input.value;
         line.item_id = line.item_id && input.value ? line.item_id : '';
         if (!line.item_code && line.item_name.trim()) {
-          line.item_code = generateNextItemCode(state.lines, store.items);
+          line.item_code = generateNextItemCode(state.lines, []);
           const codeInput = input.closest('tr')?.querySelector('input[data-f="item_code"]');
           if (codeInput) codeInput.value = line.item_code;
         }
-        showSuggestions(input, line);
+        searchItemsAsync(input, line, input.value);
         return;
       }
       if (field === 'item_code') {
@@ -749,7 +785,7 @@ export async function render(view, ctx) {
       } else if (btn.dataset.act === 'dup') {
         const dupLine = { ...state.lines[idx], key: Math.random().toString(36).slice(2) };
         if (!dupLine.item_id) {
-          dupLine.item_code = generateNextItemCode(state.lines, store.items);
+          dupLine.item_code = generateNextItemCode(state.lines, []);
         }
         state.lines.splice(idx + 1, 0, dupLine);
       }
@@ -782,7 +818,7 @@ export async function render(view, ctx) {
             e.preventDefault();
             const sel = items[activePopoverIdx] || items[0];
             if (sel) {
-              const item = store.items.find((x) => x.id === sel.dataset.id);
+              const item = cachedMatches.find((x) => x.id === sel.dataset.id);
               const key = input.closest('tr')?.dataset.key;
               const line = state.lines.find((l) => l.key === key);
               if (item && line) {
@@ -841,6 +877,8 @@ export async function render(view, ctx) {
   let activeFloatingInput = null;
   let activeFloatingLine = null;
   let activePopoverIdx = -1;
+  let cachedMatches = [];
+  let itemSearchSeq = 0;
 
   function getOrCreatePopover() {
     let box = document.getElementById('global-item-search-popover');
@@ -896,25 +934,52 @@ export async function render(view, ctx) {
     box.style.width = `${Math.round(width)}px`;
   }
 
-  function showSuggestions(input, line) {
+  const searchItemsAsync = debounce(async (input, line, term) => {
     activeFloatingInput = input;
     activeFloatingLine = line;
-    const box = getOrCreatePopover();
-    const q = input.value.trim().toLowerCase();
+    const q = (term || '').trim();
     if (q.length < 1) {
       closePopover();
       return;
     }
+    const box = getOrCreatePopover();
+    box.innerHTML = `
+      <div class="popover-head">
+        <span class="popover-title">جاري البحث عن "${esc(q)}"…</span>
+      </div>
+    `;
+    box.classList.remove('hidden');
+    positionPopover(input, box);
 
-    const matches = store.items.filter((it) => it.name_ar.toLowerCase().includes(q)
-      || (it.name_en || '').toLowerCase().includes(q)
-      || (it.item_code || '').toLowerCase().includes(q)
-      || (it.barcode || '').includes(q)).slice(0, 10);
+    const currentSeq = ++itemSearchSeq;
+    try {
+      const res = await api.get(qs('/api/items', {
+        search: q,
+        q: q,
+        active_only: true,
+        pageSize: 15,
+        limit: 15,
+      }));
+      if (currentSeq !== itemSearchSeq) return;
+      const matches = Array.isArray(res) ? res : (res?.items || []);
+      renderItemSuggestions(input, line, matches, box, q);
+    } catch (err) {
+      if (currentSeq === itemSearchSeq) {
+        box.innerHTML = `
+          <div class="popover-empty">
+            <span>تعذر الاتصال بالخادم للبحث عن الأصناف</span>
+          </div>
+        `;
+      }
+    }
+  }, 300);
 
+  function renderItemSuggestions(input, line, matches, box, q) {
+    cachedMatches = matches;
     if (!matches.length) {
       box.innerHTML = `
         <div class="popover-empty">
-          <span>لا يوجد صنف مطابق لـ "<b>${esc(input.value)}</b>"</span>
+          <span>لا يوجد صنف مطابق لـ "<b>${esc(q)}</b>"</span>
           <small class="muted">يمكنك المتابعة واستخدام هذا الوصف كبند حر</small>
         </div>
       `;
@@ -958,8 +1023,8 @@ export async function render(view, ctx) {
     box.querySelectorAll('.popover-item').forEach((el) => {
       el.addEventListener('mousedown', (ev) => {
         ev.preventDefault();
-        const item = store.items.find((x) => x.id === el.dataset.id);
-        if (item) {
+        const item = cachedMatches.find((x) => x.id === el.dataset.id);
+        if (item && line) {
           applyItem(line, item);
           closePopover();
           refreshLines();
@@ -986,8 +1051,8 @@ export async function render(view, ctx) {
     const lines = state.lines
       .filter((l) => l.item_name.trim() && l.quantity > 0)
       .map((l) => ({
-        item_id: (l.item_id && store.items.some((it) => it.id === l.item_id)) ? l.item_id : null,
-        item_code: (l.item_code && l.item_code.trim()) ? l.item_code.trim() : generateNextItemCode(state.lines, store.items),
+        item_id: l.item_id || null,
+        item_code: (l.item_code && l.item_code.trim()) ? l.item_code.trim() : generateNextItemCode(state.lines, []),
         item_name: l.item_name.trim(),
         unit: l.unit,
         quantity: l.quantity,

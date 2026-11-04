@@ -473,7 +473,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 			})
 		}
 	} else {
-		dbItems, err := s.items.ListItems("", "", true)
+		dbItems, err := s.items.ListAllItems("", "", true)
 		if err != nil {
 			return nil, err
 		}

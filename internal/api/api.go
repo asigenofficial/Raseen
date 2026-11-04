@@ -44,6 +44,7 @@ type Server struct {
 	masterKey []byte
 	publicFS  fs.FS
 	pdfWake   chan struct{}
+	pdfSem    chan struct{}
 }
 
 func NewServer(
@@ -79,8 +80,9 @@ func NewServer(
 		masterKey: masterKey,
 		publicFS:  publicFS,
 		pdfWake:   make(chan struct{}, 1),
+		pdfSem:    make(chan struct{}, 2), // Max 2 concurrent PDF workers
 	}
-	server.enqueueMissingPDFs()
+	// server.enqueueMissingPDFs() // Disabled: prevent 100% CPU spikes on boot; PDFs render on-demand
 	server.startPDFWorker()
 	return server
 }
@@ -909,75 +911,73 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/clients", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		withBalances := q.Get("with_balances") == "1" || q.Get("with_balances") == "true"
-		list, err := s.clients.ListClients(services.ListClientsFilter{
-			Search:       q.Get("q"),
-			ActiveOnly:   q.Get("active_only") == "1" || q.Get("active_only") == "true",
+
+		page, _ := strconv.Atoi(q.Get("page"))
+		pageSize, _ := strconv.Atoi(q.Get("pageSize"))
+		if pageSize == 0 {
+			pageSize, _ = strconv.Atoi(q.Get("page_size"))
+		}
+		if pageSize == 0 {
+			pageSize, _ = strconv.Atoi(q.Get("limit"))
+		}
+		if page == 0 {
+			offset, _ := strconv.Atoi(q.Get("offset"))
+			if offset > 0 && pageSize > 0 {
+				page = (offset / pageSize) + 1
+			}
+		}
+		if page < 1 {
+			page = 1
+		}
+		if pageSize <= 0 {
+			pageSize = 50
+		}
+
+		search := q.Get("search")
+		if search == "" {
+			search = q.Get("q")
+		}
+		activeOnly := q.Get("activeOnly") == "1" || q.Get("activeOnly") == "true" || q.Get("active_only") == "1" || q.Get("active_only") == "true"
+
+		resp, err := s.clients.ListClients(services.ListClientsFilter{
+			Search:       search,
+			ActiveOnly:   activeOnly,
 			WithBalances: withBalances,
 			IssuerID:     q.Get("issuer_id"),
 			ClientType:   q.Get("client_type"),
 			City:         q.Get("city"),
 			OnlyDebtors:  q.Get("only_debtors") == "1" || q.Get("only_debtors") == "true",
+			Page:         page,
+			PageSize:     pageSize,
 		})
 		if err != nil {
 			s.err(w, 500, err.Error())
 			return
 		}
-		limit, _ := strconv.Atoi(q.Get("limit"))
-		offset, _ := strconv.Atoi(q.Get("offset"))
-		if q.Get("paged") == "1" || q.Get("paged") == "true" {
-			totalCount := len(list)
-			var totInv, totPaid, totBal float64
-			for _, c := range list {
-				totInv += c.TotalInvoicedMajor
-				totPaid += c.TotalPaidMajor
-				totBal += c.BalanceMajor
-			}
-			if limit <= 0 {
-				limit = 20
-			}
-			if offset < 0 {
-				offset = 0
-			}
-			if offset >= totalCount && totalCount > 0 {
-				offset = ((totalCount - 1) / limit) * limit
-			}
-			pagedItems := []services.ClientListItem{}
-			if offset < totalCount {
-				end := offset + limit
-				if end > totalCount {
-					end = totalCount
-				}
-				pagedItems = list[offset:end]
-			}
-			s.json(w, 200, map[string]any{
-				"items":       pagedItems,
-				"total_count": totalCount,
-				"offset":      offset,
-				"limit":       limit,
-				"totals": map[string]any{
-					"invoiced": totInv,
-					"paid":     totPaid,
-					"balance":  totBal,
-					"count":    totalCount,
-				},
-			})
-			return
+
+		offset := (resp.Page - 1) * resp.PageSize
+		var totInv, totPaid, totBal float64
+		for _, c := range resp.Items {
+			totInv += c.TotalInvoicedMajor
+			totPaid += c.TotalPaidMajor
+			totBal += c.BalanceMajor
 		}
-		if limit > 0 {
-			if offset < 0 {
-				offset = 0
-			}
-			if offset >= len(list) {
-				list = []services.ClientListItem{}
-			} else {
-				end := offset + limit
-				if end > len(list) {
-					end = len(list)
-				}
-				list = list[offset:end]
-			}
-		}
-		s.json(w, 200, list)
+
+		s.json(w, 200, map[string]any{
+			"items":       resp.Items,
+			"total_count": resp.TotalCount,
+			"page":        resp.Page,
+			"page_size":   resp.PageSize,
+			"total_pages": resp.TotalPages,
+			"offset":      offset,
+			"limit":       resp.PageSize,
+			"totals": map[string]any{
+				"invoiced": totInv,
+				"paid":     totPaid,
+				"balance":  totBal,
+				"count":    resp.TotalCount,
+			},
+		})
 	})
 
 	mux.HandleFunc("GET /api/clients/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -1211,74 +1211,60 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/items", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		activeOnly := q.Get("active_only") == "1" || q.Get("active_only") == "true"
-		list, err := s.items.ListItems(q.Get("q"), q.Get("category_id"), activeOnly)
+
+		page, _ := strconv.Atoi(q.Get("page"))
+		pageSize, _ := strconv.Atoi(q.Get("pageSize"))
+		if pageSize == 0 {
+			pageSize, _ = strconv.Atoi(q.Get("page_size"))
+		}
+		if pageSize == 0 {
+			pageSize, _ = strconv.Atoi(q.Get("limit"))
+		}
+		if page == 0 {
+			offset, _ := strconv.Atoi(q.Get("offset"))
+			if offset > 0 && pageSize > 0 {
+				page = (offset / pageSize) + 1
+			}
+		}
+		if page < 1 {
+			page = 1
+		}
+		if pageSize <= 0 {
+			pageSize = 50
+		}
+
+		search := q.Get("search")
+		if search == "" {
+			search = q.Get("q")
+		}
+		activeOnly := q.Get("activeOnly") == "1" || q.Get("activeOnly") == "true" || q.Get("active_only") == "1" || q.Get("active_only") == "true"
+		statusFilter := q.Get("status")
+		if statusFilter == "active" || statusFilter == "1" {
+			activeOnly = true
+		}
+
+		resp, err := s.items.ListItems(services.ListItemsFilter{
+			Search:     search,
+			CategoryID: q.Get("category_id"),
+			ActiveOnly: activeOnly,
+			Page:       page,
+			PageSize:   pageSize,
+		})
 		if err != nil {
 			s.err(w, 500, err.Error())
 			return
 		}
-		statusFilter := q.Get("status")
-		if statusFilter == "active" || statusFilter == "1" {
-			filtered := make([]services.ItemListItem, 0, len(list))
-			for _, it := range list {
-				if it.IsActive != 0 {
-					filtered = append(filtered, it)
-				}
-			}
-			list = filtered
-		} else if statusFilter == "inactive" || statusFilter == "0" {
-			filtered := make([]services.ItemListItem, 0, len(list))
-			for _, it := range list {
-				if it.IsActive == 0 {
-					filtered = append(filtered, it)
-				}
-			}
-			list = filtered
-		}
-		limit, _ := strconv.Atoi(q.Get("limit"))
-		offset, _ := strconv.Atoi(q.Get("offset"))
-		if q.Get("paged") == "1" || q.Get("paged") == "true" {
-			totalCount := len(list)
-			if limit <= 0 {
-				limit = 20
-			}
-			if offset < 0 {
-				offset = 0
-			}
-			if offset >= totalCount && totalCount > 0 {
-				offset = ((totalCount - 1) / limit) * limit
-			}
-			pagedItems := []services.ItemListItem{}
-			if offset < totalCount {
-				end := offset + limit
-				if end > totalCount {
-					end = totalCount
-				}
-				pagedItems = list[offset:end]
-			}
-			s.json(w, 200, map[string]any{
-				"items":       pagedItems,
-				"total_count": totalCount,
-				"offset":      offset,
-				"limit":       limit,
-			})
-			return
-		}
-		if limit > 0 {
-			if offset < 0 {
-				offset = 0
-			}
-			if offset >= len(list) {
-				list = []services.ItemListItem{}
-			} else {
-				end := offset + limit
-				if end > len(list) {
-					end = len(list)
-				}
-				list = list[offset:end]
-			}
-		}
-		s.json(w, 200, list)
+
+		offset := (resp.Page - 1) * resp.PageSize
+		s.json(w, 200, map[string]any{
+			"items":       resp.Items,
+			"total_count": resp.TotalCount,
+			"page":        resp.Page,
+			"page_size":   resp.PageSize,
+			"total_pages": resp.TotalPages,
+			"offset":      offset,
+			"limit":       resp.PageSize,
+		})
 	})
 
 	mux.HandleFunc("GET /api/items/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -1858,7 +1844,7 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte(htmlStr))
 	})
 
-	mux.HandleFunc("GET /api/invoices/{id}/pdf", func(w http.ResponseWriter, r *http.Request) {
+	handleInvoicePDF := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		id := r.PathValue("id")
 		inv, err := s.invoices.GetInvoice(id)
@@ -1866,7 +1852,30 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 404, "الفاتورة غير موجودة")
 			return
 		}
-		pdfBytes, err := s.currentPDF("invoice", id, r.URL.Query().Get("style"))
+
+		style := r.URL.Query().Get("style")
+		expectedStyle := s.pdfStyle("invoice", id, style)
+		expectedKey := s.documentPDFStyleKey("invoice", expectedStyle)
+
+		// 1. Check if PDF already exists on disk and matches current revision & style
+		diskPath := s.pdfStoragePath("invoice", id)
+		var revision, rendered int64
+		var storedStyle string
+		err = s.db.QueryRow(`SELECT revision, rendered_revision, style FROM document_pdfs WHERE kind='invoice' AND document_id=?`, id).Scan(&revision, &rendered, &storedStyle)
+
+		if err == nil && revision == rendered && storedStyle == expectedKey {
+			if data, readErr := os.ReadFile(diskPath); readErr == nil && len(data) > 0 {
+				filename := fmt.Sprintf("invoice_%s.pdf", inv.InvoiceNumber)
+				w.Header().Set("Content-Type", "application/pdf")
+				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(data)
+				return
+			}
+		}
+
+		// 2. If not on disk, generate on-demand, save to disk, and return
+		pdfBytes, err := s.currentPDF("invoice", id, style)
 		if err != nil {
 			s.err(w, 500, err.Error())
 			return
@@ -1876,7 +1885,10 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(pdfBytes)
-	})
+	}
+
+	mux.HandleFunc("GET /api/invoices/{id}/pdf", handleInvoicePDF)
+	mux.HandleFunc("GET /api/invoices/{id}/download", handleInvoicePDF)
 	mux.HandleFunc("GET /api/invoices/{id}/pdf-status", func(w http.ResponseWriter, r *http.Request) {
 		s.pdfStatus(w, "invoice", r.PathValue("id"))
 	})

@@ -28,6 +28,16 @@ type ListClientsFilter struct {
 	ClientType   string
 	City         string
 	OnlyDebtors  bool
+	Page         int // الافتراضي 1
+	PageSize     int // الافتراضي 50 (الحد الأقصى 200)
+}
+
+type ClientsResponse struct {
+	Items      []ClientListItem `json:"items"`
+	TotalCount int              `json:"total_count"`
+	Page       int              `json:"page"`
+	PageSize   int              `json:"page_size"`
+	TotalPages int              `json:"total_pages"`
 }
 
 type ClientListItem struct {
@@ -40,130 +50,180 @@ type ClientListItem struct {
 	InvoicesCount       int     `json:"invoices_count"`
 }
 
-func (s *ClientService) ListClients(f ListClientsFilter) ([]ClientListItem, error) {
+func (s *ClientService) ListClients(f ListClientsFilter) (*ClientsResponse, error) {
+	page := f.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := f.PageSize
+	if pageSize <= 0 {
+		pageSize = 50
+	} else if pageSize > 200 {
+		pageSize = 200
+	}
+	offset := (page - 1) * pageSize
+
 	activeParam := 0
 	if f.ActiveOnly {
 		activeParam = 1
 	}
 	likeSearch := "%" + f.Search + "%"
 	cityLike := "%" + f.City + "%"
-
-	var query string
-	var args []any
-
-	if f.WithBalances {
-		// Single LEFT JOIN with aggregated invoices (much faster than 3 correlated subqueries per row)
-		query = `
-			SELECT c.id, c.client_code, c.name, c.name_en, c.phone, c.mobile, c.email,
-			       c.address, c.building_no, c.street, c.district, c.city, c.postal_code,
-			       c.country, c.tax_number, c.commercial_register, c.client_type,
-			       c.payment_terms_days, c.opening_balance, c.credit_limit, c.notes,
-			       c.is_active, c.created_at, c.updated_at,
-			       COALESCE(inv.cnt, 0) AS invoices_count,
-			       COALESCE(inv.total_inv, 0) AS total_invoiced,
-			       COALESCE(inv.total_pd, 0) AS total_paid
-			FROM clients c
-			LEFT JOIN (
-				SELECT client_id,
-				       COUNT(*) AS cnt,
-				       SUM(grand_total) AS total_inv,
-				       SUM(paid_amount) AS total_pd
-				FROM invoices
-				WHERE status <> 'CANCELLED'
-				  AND (? = '' OR issuer_id = ?)
-				GROUP BY client_id
-			) inv ON inv.client_id = c.id
-			WHERE (? = 0 OR c.is_active = 1)
-			  AND (? = '' OR c.client_type = ?)
-			  AND (? = '' OR c.city LIKE ?)
-			  AND (? = '' OR c.name LIKE ? OR c.client_code LIKE ? OR c.phone LIKE ?
-			       OR c.mobile LIKE ? OR c.tax_number LIKE ? OR c.commercial_register LIKE ?
-			       OR c.email LIKE ? OR c.address LIKE ?)
-			ORDER BY c.name ASC
-		`
-		args = []any{
-			f.IssuerID, f.IssuerID,
-			activeParam,
-			f.ClientType, f.ClientType,
-			f.City, cityLike,
-			f.Search, likeSearch, likeSearch, likeSearch,
-			likeSearch, likeSearch, likeSearch,
-			likeSearch, likeSearch,
-		}
-	} else {
-		// Zero invoice subqueries when balances are not requested (e.g. dropdown lookups)
-		query = `
-			SELECT c.id, c.client_code, c.name, c.name_en, c.phone, c.mobile, c.email,
-			       c.address, c.building_no, c.street, c.district, c.city, c.postal_code,
-			       c.country, c.tax_number, c.commercial_register, c.client_type,
-			       c.payment_terms_days, c.opening_balance, c.credit_limit, c.notes,
-			       c.is_active, c.created_at, c.updated_at,
-			       0 AS invoices_count,
-			       0 AS total_invoiced,
-			       0 AS total_paid
-			FROM clients c
-			WHERE (? = 0 OR c.is_active = 1)
-			  AND (? = '' OR c.client_type = ?)
-			  AND (? = '' OR c.city LIKE ?)
-			  AND (? = '' OR c.name LIKE ? OR c.client_code LIKE ? OR c.phone LIKE ?
-			       OR c.mobile LIKE ? OR c.tax_number LIKE ? OR c.commercial_register LIKE ?
-			       OR c.email LIKE ? OR c.address LIKE ?)
-			ORDER BY c.name ASC
-		`
-		args = []any{
-			activeParam,
-			f.ClientType, f.ClientType,
-			f.City, cityLike,
-			f.Search, likeSearch, likeSearch, likeSearch,
-			likeSearch, likeSearch, likeSearch,
-			likeSearch, likeSearch,
-		}
+	debtorParam := 0
+	if f.OnlyDebtors {
+		debtorParam = 1
 	}
 
-	rows, err := s.db.Query(query, args...)
+	countQuery := `
+		SELECT COUNT(*)
+		FROM clients c
+		WHERE (? = 0 OR c.is_active = 1)
+		  AND (? = '' OR c.client_type = ?)
+		  AND (? = '' OR c.city LIKE ?)
+		  AND (? = '' OR c.name LIKE ? OR c.client_code LIKE ? OR c.phone LIKE ?
+		       OR c.mobile LIKE ? OR c.tax_number LIKE ? OR c.commercial_register LIKE ?
+		       OR c.email LIKE ? OR c.address LIKE ?)
+		  AND (? = 0 OR (
+		      (CASE WHEN ? != '' THEN 0 ELSE c.opening_balance END) +
+		      COALESCE((SELECT SUM(grand_total) - SUM(paid_amount) FROM invoices WHERE client_id = c.id AND status <> 'CANCELLED' AND (? = '' OR issuer_id = ?)), 0) > 0
+		  ))
+	`
+	countArgs := []any{
+		activeParam,
+		f.ClientType, f.ClientType,
+		f.City, cityLike,
+		f.Search, likeSearch, likeSearch, likeSearch,
+		likeSearch, likeSearch, likeSearch,
+		likeSearch, likeSearch,
+		debtorParam,
+		f.IssuerID,
+		f.IssuerID, f.IssuerID,
+	}
+
+	var totalCount int
+	if err := s.db.QueryRow(countQuery, countArgs...).Scan(&totalCount); err != nil {
+		return nil, err
+	}
+
+	clientsQuery := `
+		SELECT c.id, c.client_code, c.name, c.name_en, c.phone, c.mobile, c.email,
+		       c.address, c.building_no, c.street, c.district, c.city, c.postal_code,
+		       c.country, c.tax_number, c.commercial_register, c.client_type,
+		       c.payment_terms_days, c.opening_balance, c.credit_limit, c.notes,
+		       c.is_active, c.created_at, c.updated_at
+		FROM clients c
+		WHERE (? = 0 OR c.is_active = 1)
+		  AND (? = '' OR c.client_type = ?)
+		  AND (? = '' OR c.city LIKE ?)
+		  AND (? = '' OR c.name LIKE ? OR c.client_code LIKE ? OR c.phone LIKE ?
+		       OR c.mobile LIKE ? OR c.tax_number LIKE ? OR c.commercial_register LIKE ?
+		       OR c.email LIKE ? OR c.address LIKE ?)
+		  AND (? = 0 OR (
+		      (CASE WHEN ? != '' THEN 0 ELSE c.opening_balance END) +
+		      COALESCE((SELECT SUM(grand_total) - SUM(paid_amount) FROM invoices WHERE client_id = c.id AND status <> 'CANCELLED' AND (? = '' OR issuer_id = ?)), 0) > 0
+		  ))
+		ORDER BY c.name ASC
+		LIMIT ? OFFSET ?
+	`
+	clientsArgs := append(countArgs, pageSize, offset)
+
+	rows, err := s.db.Query(clientsQuery, clientsArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	list := make([]ClientListItem, 0)
+	items := make([]ClientListItem, 0, pageSize)
+	clientIDs := make([]string, 0, pageSize)
 	for rows.Next() {
 		var item ClientListItem
-		var totalInvoicedMinor, totalPaidMinor int64
-
 		err := rows.Scan(
 			&item.ID, &item.ClientCode, &item.Name, &item.NameEn, &item.Phone, &item.Mobile, &item.Email,
 			&item.Address, &item.BuildingNo, &item.Street, &item.District, &item.City, &item.PostalCode,
 			&item.Country, &item.TaxNumber, &item.CommercialRegister, &item.ClientType,
 			&item.PaymentTermsDays, &item.OpeningBalance, &item.CreditLimit, &item.Notes,
 			&item.IsActive, &item.CreatedAt, &item.UpdatedAt,
-			&item.InvoicesCount, &totalInvoicedMinor, &totalPaidMinor,
 		)
 		if err != nil {
 			continue
 		}
-
 		item.OpeningBalanceMajor = models.ToMajor(item.OpeningBalance)
 		item.CreditLimitMajor = models.ToMajor(item.CreditLimit)
-		item.TotalInvoicedMajor = models.ToMajor(totalInvoicedMinor)
-		item.TotalPaidMajor = models.ToMajor(totalPaidMinor)
-
-		// If filtering by issuer, opening balance is not counted towards that specific issuer
-		openingForIssuer := item.OpeningBalance
-		if f.IssuerID != "" {
-			openingForIssuer = 0
-		}
-		balanceMinor := openingForIssuer + totalInvoicedMinor - totalPaidMinor
-		item.BalanceMajor = models.ToMajor(balanceMinor)
-
-		if f.OnlyDebtors && item.BalanceMajor <= 0.004 {
-			continue
-		}
-
-		list = append(list, item)
+		items = append(items, item)
+		clientIDs = append(clientIDs, item.ID)
 	}
 
-	return list, nil
+	if f.WithBalances && len(clientIDs) > 0 {
+		placeholders := make([]string, len(clientIDs))
+		invArgs := make([]any, 0, 2+len(clientIDs))
+		invArgs = append(invArgs, f.IssuerID, f.IssuerID)
+		for i, cid := range clientIDs {
+			placeholders[i] = "?"
+			invArgs = append(invArgs, cid)
+		}
+		invQuery := `
+			SELECT client_id,
+			       COUNT(*) AS cnt,
+			       COALESCE(SUM(grand_total), 0) AS total_inv,
+			       COALESCE(SUM(paid_amount), 0) AS total_pd
+			FROM invoices
+			WHERE status <> 'CANCELLED'
+			  AND (? = '' OR issuer_id = ?)
+			  AND client_id IN (` + strings.Join(placeholders, ",") + `)
+			GROUP BY client_id
+		`
+		invRows, err := s.db.Query(invQuery, invArgs...)
+		if err == nil {
+			defer invRows.Close()
+			type invAgg struct {
+				cnt      int
+				totalInv int64
+				totalPd  int64
+			}
+			invMap := make(map[string]invAgg, len(clientIDs))
+			for invRows.Next() {
+				var cid string
+				var agg invAgg
+				if err := invRows.Scan(&cid, &agg.cnt, &agg.totalInv, &agg.totalPd); err == nil {
+					invMap[cid] = agg
+				}
+			}
+			for i := range items {
+				agg := invMap[items[i].ID]
+				items[i].InvoicesCount = agg.cnt
+				items[i].TotalInvoicedMajor = models.ToMajor(agg.totalInv)
+				items[i].TotalPaidMajor = models.ToMajor(agg.totalPd)
+
+				openingForIssuer := items[i].OpeningBalance
+				if f.IssuerID != "" {
+					openingForIssuer = 0
+				}
+				balanceMinor := openingForIssuer + agg.totalInv - agg.totalPd
+				items[i].BalanceMajor = models.ToMajor(balanceMinor)
+			}
+		}
+	} else {
+		for i := range items {
+			openingForIssuer := items[i].OpeningBalance
+			if f.IssuerID != "" {
+				openingForIssuer = 0
+			}
+			items[i].BalanceMajor = models.ToMajor(openingForIssuer)
+		}
+	}
+
+	totalPages := 0
+	if totalCount > 0 {
+		totalPages = (totalCount + pageSize - 1) / pageSize
+	}
+
+	return &ClientsResponse{
+		Items:      items,
+		TotalCount: totalCount,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}, nil
 }
 
 func (s *ClientService) GetClient(id string) (*ClientListItem, error) {

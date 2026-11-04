@@ -129,19 +129,27 @@ type InvoiceItemView struct {
 }
 
 func (s *InvoiceService) CreateInvoice(input CreateInvoiceInput, actor, ip string) (*InvoiceView, error) {
-	tx, err := s.db.Begin()
+	var invID string
+	err := s.db.WithWriteLock(func() error {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		inv, err := s.createInvoiceTx(tx, input, actor, ip)
+		if err != nil {
+			return err
+		}
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+		invID = inv.ID
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
-	inv, err := s.createInvoiceTx(tx, input, actor, ip)
-	if err != nil {
-		return nil, err
-	}
-	if err = tx.Commit(); err != nil {
-		return nil, err
-	}
-	return s.GetInvoice(inv.ID)
+	return s.GetInvoice(invID)
 }
 
 func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, actor, ip string) (*InvoiceView, error) {

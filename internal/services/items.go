@@ -113,7 +113,110 @@ type ItemListItem struct {
 	CategoryName   string  `json:"category_name"`
 }
 
-func (s *ItemService) ListItems(search, categoryID string, activeOnly bool) ([]ItemListItem, error) {
+type ListItemsFilter struct {
+	Search     string
+	CategoryID string
+	ActiveOnly bool
+	Page       int // الافتراضي 1
+	PageSize   int // الافتراضي 50 (الحد الأقصى 200)
+}
+
+type ItemsResponse struct {
+	Items      []ItemListItem `json:"items"`
+	TotalCount int            `json:"total_count"`
+	Page       int            `json:"page"`
+	PageSize   int            `json:"page_size"`
+	TotalPages int            `json:"total_pages"`
+}
+
+func (s *ItemService) ListItems(f ListItemsFilter) (*ItemsResponse, error) {
+	page := f.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := f.PageSize
+	if pageSize <= 0 {
+		pageSize = 50
+	} else if pageSize > 200 {
+		pageSize = 200
+	}
+	offset := (page - 1) * pageSize
+
+	activeParam := 0
+	if f.ActiveOnly {
+		activeParam = 1
+	}
+	like := "%" + f.Search + "%"
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM items i
+		WHERE (? = 0 OR i.is_active = 1)
+		  AND (? = '' OR i.category_id = ?)
+		  AND (? = '' OR i.name_ar LIKE ? OR i.name_en LIKE ? OR i.item_code LIKE ? OR i.barcode LIKE ?)
+	`
+	var totalCount int
+	if err := s.db.QueryRow(countQuery, activeParam, f.CategoryID, f.CategoryID, f.Search, like, like, like, like).Scan(&totalCount); err != nil {
+		return nil, err
+	}
+
+	query := `
+		SELECT i.id, i.item_code, i.category_id, i.name_ar, i.name_en, i.barcode,
+		       i.unit, i.cost_price, i.sale_price, i.tax_rate, i.is_active,
+		       i.notes, i.created_at, i.updated_at, COALESCE(c.name, '—') AS category_name
+		FROM items i
+		LEFT JOIN item_categories c ON c.id = i.category_id
+		WHERE (? = 0 OR i.is_active = 1)
+		  AND (? = '' OR i.category_id = ?)
+		  AND (? = '' OR i.name_ar LIKE ? OR i.name_en LIKE ? OR i.item_code LIKE ? OR i.barcode LIKE ?)
+		ORDER BY i.name_ar ASC
+		LIMIT ? OFFSET ?
+	`
+	rows, err := s.db.Query(query, activeParam, f.CategoryID, f.CategoryID, f.Search, like, like, like, like, pageSize, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := make([]ItemListItem, 0, pageSize)
+	for rows.Next() {
+		var item ItemListItem
+		var catID sql.NullString
+		if err := rows.Scan(
+			&item.ID, &item.ItemCode, &catID, &item.NameAr, &item.NameEn, &item.Barcode,
+			&item.Unit, &item.CostPrice, &item.SalePrice, &item.TaxRate, &item.IsActive,
+			&item.Notes, &item.CreatedAt, &item.UpdatedAt, &item.CategoryName,
+		); err == nil {
+			if catID.Valid {
+				item.CategoryID = &catID.String
+			}
+			item.CostPriceMajor = models.ToMajor(item.CostPrice)
+			item.SalePriceMajor = models.ToMajor(item.SalePrice)
+			list = append(list, item)
+		}
+	}
+
+	totalPages := 0
+	if totalCount > 0 {
+		totalPages = (totalCount + pageSize - 1) / pageSize
+	}
+
+	return &ItemsResponse{
+		Items:      list,
+		TotalCount: totalCount,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}, nil
+}
+
+func (s *ItemService) ListAllItems(search, categoryID string, activeOnly bool) ([]ItemListItem, error) {
+	activeParam := 0
+	if activeOnly {
+		activeParam = 1
+	}
+	like := "%" + search + "%"
+
 	query := `
 		SELECT i.id, i.item_code, i.category_id, i.name_ar, i.name_en, i.barcode,
 		       i.unit, i.cost_price, i.sale_price, i.tax_rate, i.is_active,
@@ -125,12 +228,6 @@ func (s *ItemService) ListItems(search, categoryID string, activeOnly bool) ([]I
 		  AND (? = '' OR i.name_ar LIKE ? OR i.name_en LIKE ? OR i.item_code LIKE ? OR i.barcode LIKE ?)
 		ORDER BY i.name_ar ASC
 	`
-	activeParam := 0
-	if activeOnly {
-		activeParam = 1
-	}
-	like := "%" + search + "%"
-
 	rows, err := s.db.Query(query, activeParam, categoryID, categoryID, search, like, like, like, like)
 	if err != nil {
 		return nil, err
