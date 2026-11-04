@@ -946,7 +946,7 @@ func normalizeInvoiceMeasurements(html string) string {
  height: auto !important; padding: 5px 3px !important; line-height: 1.3 !important; font-size: 10px !important;
 }
 
-.invoice-container { width: 210mm !important; min-height: 297mm !important; height: 297mm !important; max-height: 297mm !important; box-sizing: border-box !important; }
+.invoice-container { width: 210mm !important; min-height: 297mm !important; height: 295mm !important; max-height: 295mm !important; box-sizing: border-box !important; }
 .invoice-container .top-content-wrap, .invoice-container .top-wrap { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; }
 .invoice-container .top-content-wrap > :not(.items-table-container):not(.items-table-wrapper):not(.items-main-table):not(.items-table) { flex-shrink: 0; }
 .invoice-container .items-table-container, .invoice-container .items-table-wrapper, .invoice-container .items-container, .invoice-container .items-section, .invoice-container .section:has(> table.items-table) { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; min-height: 0 !important; margin-top: 0 !important; }
@@ -1630,9 +1630,7 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 		totalLinesCount = len(inv.Items)
 	}
 
-	if totalLinesCount > 15 {
-		result = s.paginateInvoiceHtml(result, inv, 15)
-	}
+	result = s.paginateInvoiceHtml(result, inv)
 
 	dupNoOtherRegex := regexp.MustCompile(`(لا غير\s*)+لا غير`)
 	result = dupNoOtherRegex.ReplaceAllString(result, "لا غير")
@@ -1858,10 +1856,10 @@ func ensureItemsRowsInTbody(tpl string) string {
 }
 
 func (s *TemplateService) generateSmartRows(tpl string, inv *InvoiceView) string {
-	return s.generateSmartRowsSlice(tpl, inv.Lines, 0)
+	return s.GenerateSmartRowsSlice(tpl, inv.Lines, 0)
 }
 
-func (s *TemplateService) generateSmartRowsSlice(tpl string, lines []InvoiceItemView, offset int) string {
+func (s *TemplateService) GenerateSmartRowsSlice(tpl string, lines []InvoiceItemView, offset int) string {
 	headers := extractTableHeaders(tpl)
 	var cols []colType
 	if len(headers) > 0 {
@@ -1936,17 +1934,84 @@ func (s *TemplateService) generateSmartRowsSlice(tpl string, lines []InvoiceItem
 	return rows.String()
 }
 
-func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, chunkSize int) string {
+
+func estimateInvoiceItemHeightMm(item InvoiceItemView) float64 {
+	chars := len([]rune(item.ItemName))
+	lines := (chars + 27) / 28
+	if lines < 1 {
+		lines = 1
+	}
+	return 7.5 + float64(lines-1)*4.5
+}
+
+func computeInvoiceItemChunks(lines []InvoiceItemView) [][]int {
+	if len(lines) == 0 {
+		return nil
+	}
+
+	totalH := 0.0
+	for _, l := range lines {
+		totalH += estimateInvoiceItemHeightMm(l)
+	}
+	if totalH <= 75.0 && len(lines) <= 8 {
+		return [][]int{{0, len(lines)}}
+	}
+
+	var chunks [][]int
+	currStart := 0
+	currH := 0.0
+	isFirstPage := true
+
+	for i := 0; i < len(lines); {
+		h := estimateInvoiceItemHeightMm(lines[i])
+		budget := 145.0
+		if !isFirstPage {
+			budget = 195.0
+		}
+
+		remH := 0.0
+		for j := i; j < len(lines); j++ {
+			remH += estimateInvoiceItemHeightMm(lines[j])
+		}
+
+		if currH > 0 && remH <= 95.0 {
+			chunks = append(chunks, []int{currStart, i})
+			chunks = append(chunks, []int{i, len(lines)})
+			return chunks
+		}
+
+		if currH+h > budget && i > currStart {
+			chunks = append(chunks, []int{currStart, i})
+			currStart = i
+			currH = 0.0
+			isFirstPage = false
+			continue
+		}
+
+		currH += h
+		i++
+	}
+
+	if currStart < len(lines) {
+		chunks = append(chunks, []int{currStart, len(lines)})
+	}
+
+	return chunks
+}
+
+func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView) string {
 	if len(inv.Lines) == 0 && len(inv.Items) > 0 {
 		copy := *inv
 		copy.Lines = inv.Items
 		inv = &copy
 	}
-	if len(inv.Lines) <= chunkSize {
+
+	chunks := computeInvoiceItemChunks(inv.Lines)
+	if len(chunks) <= 1 {
 		return htmlStr
 	}
 
-	totalPages := (len(inv.Lines) + chunkSize - 1) / chunkSize
+	totalPages := len(chunks)
 
 	bodyRegex := regexp.MustCompile(`(?is)(<body\b[^>]*>)([\s\S]*?)(</body>)`)
 	bodyMatch := bodyRegex.FindStringSubmatch(htmlStr)
@@ -1957,7 +2022,6 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 	bodyInner := strings.TrimSpace(bodyMatch[2])
 	bodyClose := bodyMatch[3]
 
-	// 1. Locate outer page container: look for invoice-container or invoice-frame
 	contTargetRegex := regexp.MustCompile(`(?i)<div\b[^>]*class=["'][^"']*(?:invoice-container|invoice-frame)[^"']*["'][^>]*>`)
 	contLoc := contTargetRegex.FindStringIndex(bodyInner)
 
@@ -1975,7 +2039,6 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 		}
 		contClose = "</div>"
 	} else {
-		// Fallback to first <div and last </div>
 		firstDivIdx := strings.Index(bodyInner, "<div")
 		lastDivIdx := strings.LastIndex(bodyInner, "</div>")
 		if firstDivIdx == -1 || lastDivIdx <= firstDivIdx {
@@ -1992,7 +2055,6 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 		suffix = bodyInner[lastDivIdx+6:]
 	}
 
-	// 2. Locate specifically the items table within contInner
 	tableFullRegex := regexp.MustCompile(`(?is)<table\b[^>]*>[\s\S]*?</table>`)
 	allTables := tableFullRegex.FindAllStringIndex(contInner, -1)
 	if len(allTables) == 0 {
@@ -2046,11 +2108,10 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 	}
 
 	beforeTable := contInner[:bestTblStart]
-	tableOpen := targetTableHtml[:tbodyMatches[3]]  // Table opening + thead + <tbody...>
-	tableClose := targetTableHtml[tbodyMatches[6]:] // </tbody> and anything after up to </table>
+	tableOpen := targetTableHtml[:tbodyMatches[3]]
+	tableClose := targetTableHtml[tbodyMatches[6]:]
 	afterTableRaw := contInner[bestTblEnd:]
 
-	// 3. Locate bottom section
 	bottomRegex := regexp.MustCompile(`(?i)<(?:div|section|table)\b[^>]*(?:class|id)=["'][^"']*(?:bottom|summary)[^"']*["']`)
 	bottomLoc := bottomRegex.FindStringIndex(afterTableRaw)
 	tableWrapClose := ""
@@ -2060,24 +2121,37 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 		bottomContent = afterTableRaw[bottomLoc[0]:]
 	}
 
+	// Compact continuation header for pages > 1 to leave room for items
+	continuationBeforeTable := beforeTable
+	headerTableRegex := regexp.MustCompile(`(?is)(<table\b[^>]*class=["'][^"']*header-table[^"']*["'][\s\S]*?)((?:<div\b[^>]*class=["'][^"']*(?:items-container|items-frame)[^"']*["']|<table\b[^>]*class=["'][^"']*items))`)
+	if loc := headerTableRegex.FindStringSubmatchIndex(beforeTable); len(loc) >= 6 {
+		continuationBar := fmt.Sprintf(`<div class="continuation-header" style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;margin-bottom:12px;background:#eaf2fa;border:1px solid #cbd5e1;border-radius:4px;color:#1e3a5f;font-weight:700;font-size:11px;">
+  <span>متابعة فاتورة ضريبية رقم: <span class="num">%s</span></span>
+  <span>العميل: %s</span>
+  <span>التاريخ: <span class="num">%s</span></span>
+</div>
+        `, inv.InvoiceNumber, inv.BuyerName, inv.IssueDate)
+		continuationBeforeTable = beforeTable[:loc[2]] + continuationBar + beforeTable[loc[4]:]
+	}
+
 	divOpenRegex := regexp.MustCompile(`(?i)<div\b`)
 	divCloseRegex := regexp.MustCompile(`(?i)</div\s*>`)
 	var pages []string
 	for p := 1; p <= totalPages; p++ {
-		start := (p - 1) * chunkSize
-		end := start + chunkSize
-		if end > len(inv.Lines) {
-			end = len(inv.Lines)
-		}
-		chunk := inv.Lines[start:end]
-		rowsHtml := s.generateSmartRowsSlice(htmlStr, chunk, start)
+		chunkIndices := chunks[p-1]
+		chunk := inv.Lines[chunkIndices[0]:chunkIndices[1]]
+		rowsHtml := s.GenerateSmartRowsSlice(htmlStr, chunk, chunkIndices[0])
 
-		pageInner := beforeTable + tableOpen + rowsHtml + tableClose + tableWrapClose
+		pBefore := beforeTable
+		if p > 1 {
+			pBefore = continuationBeforeTable
+		}
+
+		pageInner := pBefore + tableOpen + rowsHtml + tableClose + tableWrapClose
 		if p == totalPages {
 			pageInner += bottomContent
 		}
-		// Some templates wrap the items table in an unnamed div. On continuation
-		// pages the bottom section is omitted, so its closing div must stay here.
+
 		openDivs := len(divOpenRegex.FindAllStringIndex(pageInner, -1))
 		closedDivs := len(divCloseRegex.FindAllStringIndex(pageInner, -1))
 		if openDivs > closedDivs {
@@ -2089,7 +2163,7 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 		if p < totalPages {
 			continuation = "متابعة الفاتورة في الصفحة التالية"
 		}
-		pageLabel := fmt.Sprintf(`<div class="invoice-page-label" style="flex-shrink:0;font-size:11px;text-align:center;margin-top:auto;padding-top:3mm">%s — صفحة %d من %d</div>`, continuation, p, totalPages)
+		pageLabel := fmt.Sprintf(`<div class="invoice-page-label" style="flex-shrink:0;font-size:11px;text-align:center;margin-top:auto;padding:1mm 0 0 0;line-height:1.2">%s — صفحة %d من %d</div>`, continuation, p, totalPages)
 		pages = append(pages, fmt.Sprintf("%s\n%s\n%s\n%s", pOpen, pageInner, pageLabel, contClose))
 	}
 
@@ -2098,9 +2172,10 @@ func (s *TemplateService) paginateInvoiceHtml(htmlStr string, inv *InvoiceView, 
 @media print {
  @page { size: A4 portrait; margin: 0 !important; }
  html, body { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }
- [data-invoice-page] { width: 210mm !important; min-height: 297mm !important; height: auto !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; overflow: visible !important; break-after: page !important; page-break-after: always !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
+ [data-invoice-page] { width: 210mm !important; min-height: 0 !important; height: 297mm !important; max-height: 297mm !important; box-sizing: border-box !important; margin: 0 auto !important; padding: 6mm 8mm 4mm !important; overflow: hidden !important; break-after: page !important; page-break-after: always !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
  [data-invoice-page]:last-child { break-after: auto !important; page-break-after: auto !important; }
- [data-invoice-page] .items-main-table, [data-invoice-page] .items-table { page-break-inside: auto !important; break-inside: auto !important; }
+ [data-invoice-page] .invoice-body-content { flex: 0 1 auto !important; }
+ [data-invoice-page] .items-main-table, [data-invoice-page] .items-table { page-break-inside: avoid !important; break-inside: avoid !important; }
  [data-invoice-page] .items-main-table tr, [data-invoice-page] .items-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
 }
 </style>`)
