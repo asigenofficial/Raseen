@@ -2153,23 +2153,579 @@ export async function render(view) {
     syncNav();
   }
 
+  const buildDetailedBulkPreviewReportHtml = () => {
+    const issuer = store.issuers.find((i) => i.id === state.issuer_id) || { name_ar: 'الشركة المصدرة', currency: 'SAR' };
+    const client = store.clients.find((c) => c.id === state.client_id) || { name: 'العميل' };
+    const cur = currencyLabel(issuer.currency || 'SAR');
+    const p = state.preview;
+    const invs = p.invoices || [];
+    let totalLines = 0;
+    invs.forEach((inv) => { totalLines += (inv.lines || []).length; });
+
+    const totalBeforeTax = p.summary ? (p.summary.grand_total - p.summary.tax_total) : 0;
+    const totalTax = p.summary ? p.summary.tax_total : 0;
+    const grandTotal = p.summary ? p.summary.grand_total : 0;
+
+    return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>تقرير مراجعة ومعاينة فواتير الدفعة التفصيلي</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 10mm 8mm;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, Tahoma, sans-serif;
+    color: #0f172a;
+    background: #ffffff;
+    margin: 0;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .report-wrap {
+    width: 100%;
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: 4px;
+  }
+  .report-header {
+    border-bottom: 2px solid #0f172a;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .report-title-area h1 {
+    font-size: 17px;
+    margin: 0 0 3px 0;
+    color: #0f172a;
+    font-weight: 800;
+  }
+  .report-title-area p {
+    font-size: 11px;
+    color: #475569;
+    margin: 0;
+  }
+  .parties-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    font-size: 11px;
+  }
+  .party-box b {
+    display: block;
+    color: #0f172a;
+    margin-bottom: 2px;
+    font-size: 11.5px;
+  }
+  .party-box div {
+    color: #475569;
+    line-height: 1.35;
+  }
+  .batch-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .stat-card {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 6px 10px;
+    text-align: center;
+  }
+  .stat-card .lbl {
+    font-size: 10px;
+    color: #64748b;
+    margin-bottom: 2px;
+  }
+  .stat-card .val {
+    font-size: 13px;
+    font-weight: 800;
+    color: #0f172a;
+    font-family: monospace;
+  }
+
+  .invoices-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .inv-review-card {
+    border: 1px solid #94a3b8;
+    border-radius: 6px;
+    background: #ffffff;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    overflow: hidden;
+  }
+  .inv-card-head {
+    background: #0f172a;
+    color: #ffffff;
+    padding: 6px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+  }
+  .inv-num-title {
+    font-weight: 800;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .inv-meta-badges {
+    display: flex;
+    gap: 10px;
+    font-size: 10.5px;
+    color: #cbd5e1;
+  }
+  .inv-meta-badges span b {
+    color: #ffffff;
+  }
+  .table-wrap {
+    width: 100%;
+    overflow: visible;
+  }
+  .items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+  }
+  .items-table th {
+    background: #f8fafc;
+    color: #1e293b;
+    font-weight: 700;
+    border-bottom: 1.5px solid #cbd5e1;
+    padding: 5px 6px;
+    text-align: right;
+  }
+  .items-table td {
+    border-bottom: 1px solid #e2e8f0;
+    padding: 4px 6px;
+    color: #1e293b;
+    vertical-align: middle;
+  }
+  .items-table tr:nth-child(even) td {
+    background: #fbfcfd;
+  }
+  .items-table .num-col {
+    text-align: center;
+    width: 25px;
+    color: #64748b;
+  }
+  .items-table .code-col {
+    font-family: monospace;
+    color: #475569;
+    width: 80px;
+  }
+  .items-table .name-col {
+    font-weight: 600;
+  }
+  .items-table .unit-col {
+    width: 55px;
+    color: #64748b;
+  }
+  .items-table .qty-col {
+    text-align: right;
+    font-family: monospace;
+    font-weight: 700;
+    width: 60px;
+  }
+  .items-table .price-col {
+    text-align: right;
+    font-family: monospace;
+    width: 75px;
+  }
+  .items-table .disc-col {
+    text-align: right;
+    font-family: monospace;
+    width: 60px;
+    color: #dc2626;
+  }
+  .items-table .tax-col {
+    text-align: center;
+    font-family: monospace;
+    width: 50px;
+    color: #64748b;
+  }
+  .items-table .total-col {
+    text-align: right;
+    font-family: monospace;
+    font-weight: 700;
+    color: #0f172a;
+    width: 90px;
+  }
+  .inv-card-foot {
+    background: #f8fafc;
+    border-top: 1.5px solid #cbd5e1;
+    padding: 6px 12px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 16px;
+    font-size: 10.5px;
+  }
+  .foot-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #475569;
+  }
+  .foot-item b {
+    color: #0f172a;
+    font-family: monospace;
+    font-size: 11.5px;
+  }
+  .foot-item.grand-total {
+    background: #059669;
+    color: #ffffff;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .foot-item.grand-total b {
+    color: #ffffff;
+    font-size: 12.5px;
+  }
+  @media print {
+    @page { margin: 8mm 6mm; size: A4 portrait; }
+    html, body { height: auto !important; max-height: none !important; overflow: visible !important; background: #fff !important; }
+    .inv-review-card { break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="report-wrap">
+  <div class="report-header">
+    <div class="report-title-area">
+      <h1>تقرير مراجعة ومعاينة فواتير الدفعة التفصيلي</h1>
+      <p>مراجعة وتدقيق الفواتير والبنود والكميات والأسعار قبل الاعتماد الرسمي • تم التوليد: ${new Date().toLocaleString('ar-SA')}</p>
+    </div>
+    <div style="text-align:left">
+      <span style="display:inline-block;background:#0284c7;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold;font-size:11px">
+        معاينة مسودة غير معتمدة
+      </span>
+    </div>
+  </div>
+
+  <div class="parties-grid">
+    <div class="party-box">
+      <b>🏢 المنشأة المصدرة: ${esc(issuer.name_ar || '—')}</b>
+      <div>الرقم الضريبي: <span style="font-family:monospace">${esc(issuer.tax_number || '—')}</span></div>
+      ${issuer.commercial_register ? `<div>السجل التجاري: <span style="font-family:monospace">${esc(issuer.commercial_register)}</span></div>` : ''}
+      ${issuer.address ? `<div>العنوان: ${esc(issuer.address)}</div>` : ''}
+    </div>
+    <div class="party-box">
+      <b>👤 العميل المستهدف: ${esc(client.name || 'عميل عام')}</b>
+      <div>كود العميل: <span style="font-family:monospace">${esc(client.client_code || '—')}</span></div>
+      ${client.tax_number ? `<div>الرقم الضريبي: <span style="font-family:monospace">${esc(client.tax_number)}</span></div>` : ''}
+      ${client.address ? `<div>العنوان: ${esc(client.address)}</div>` : ''}
+    </div>
+  </div>
+
+  <div class="batch-stats-grid">
+    <div class="stat-card">
+      <div class="lbl">عدد الفواتير</div>
+      <div class="val">${num(invs.length)} فاتورة</div>
+    </div>
+    <div class="stat-card">
+      <div class="lbl">إجمالي عدد البنود</div>
+      <div class="val">${num(totalLines)} صنف</div>
+    </div>
+    <div class="stat-card">
+      <div class="lbl">قبل الضريبة / الضريبة</div>
+      <div class="val" style="font-size:11px">${money(totalBeforeTax)} / ${money(totalTax)} ${esc(cur)}</div>
+    </div>
+    <div class="stat-card" style="background:#ecfdf5;border-color:#10b981">
+      <div class="lbl" style="color:#047857">الإجمالي الكلي النهائي</div>
+      <div class="val" style="color:#059669;font-size:14px">${money(grandTotal)} ${esc(cur)}</div>
+    </div>
+  </div>
+
+  <div class="invoices-container">
+    ${invs.map((inv, idx) => {
+      const lines = inv.lines || [];
+      const invNum = inv.invoice_number || `INV-${String(idx + 1).padStart(4, '0')}`;
+      const payLabel = PAY_LABELS[inv.payment_method] || inv.payment_method || 'آجل';
+      return `
+      <div class="inv-review-card">
+        <div class="inv-card-head">
+          <div class="inv-num-title">
+            <span>فاتورة #${idx + 1}</span>
+            <span style="background:rgba(255,255,255,0.2);padding:1px 6px;border-radius:3px;font-family:monospace">${esc(invNum)}</span>
+            <span style="font-size:10px;font-weight:normal;opacity:0.9">(${lines.length} أصناف)</span>
+          </div>
+          <div class="inv-meta-badges">
+            <span>التاريخ: <b>${esc(inv.issue_date || '')}</b></span>
+            <span>الوقت: <b>${esc(inv.issue_time || '10:00:00')}</b></span>
+            <span>الدفع: <b>${esc(payLabel)}</b></span>
+            <span>النوع: <b>${inv.invoice_type === 'SIMPLIFIED' ? 'مبسطة' : 'ضريبية'}</b></span>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th class="num-col">#</th>
+                <th class="code-col">رقم الصنف</th>
+                <th class="name-col">اسم الصنف / الخدمة</th>
+                <th class="unit-col">الوحدة</th>
+                <th class="qty-col">الكمية</th>
+                <th class="price-col">السعر</th>
+                <th class="disc-col">الخصم</th>
+                <th class="tax-col">الضريبة</th>
+                <th class="total-col">الإجمالي</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${lines.map((l, lIdx) => {
+                const lineTot = l.total_line || l.grand_total || ((Number(l.quantity) * Number(l.unit_price) - (Number(l.discount) || 0)) * 1.15);
+                return `
+                <tr>
+                  <td class="num-col">${lIdx + 1}</td>
+                  <td class="code-col">${esc(l.item_code || '—')}</td>
+                  <td class="name-col">${esc(l.item_name || 'صنف')}</td>
+                  <td class="unit-col">${esc(l.unit || 'حبة')}</td>
+                  <td class="qty-col">${num(l.quantity)}</td>
+                  <td class="price-col">${money(l.unit_price)}</td>
+                  <td class="disc-col">${l.discount > 0 ? money(l.discount) : '—'}</td>
+                  <td class="tax-col">${num(l.tax_rate ?? 15)}%</td>
+                  <td class="total-col">${money(lineTot)}</td>
+                </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="inv-card-foot">
+          <div class="foot-item">
+            <span>قبل الضريبة:</span>
+            <b>${money(inv.taxable_amount)}</b>
+          </div>
+          ${inv.discount_amount > 0 ? `
+          <div class="foot-item">
+            <span>الخصم:</span>
+            <b style="color:#dc2626">${money(inv.discount_amount)}</b>
+          </div>` : ''}
+          <div class="foot-item">
+            <span>الضريبة (15%):</span>
+            <b>${money(inv.tax_amount)}</b>
+          </div>
+          <div class="foot-item grand-total">
+            <span>الإجمالي النهائي:</span>
+            <b>${money(inv.grand_total)} ${esc(cur)}</b>
+          </div>
+        </div>
+      </div>
+      `;
+    }).join('')}
+  </div>
+</div>
+</body>
+</html>`;
+  };
+
+  const printDetailedReviewReport = () => {
+    if (!state.preview || !state.preview.invoices || !state.preview.invoices.length) {
+      toastErr('لا توجد فواتير مُولَّدة للطباعة');
+      return;
+    }
+    const html = buildDetailedBulkPreviewReportHtml();
+    printDoc(html, { flowing: true });
+  };
+
+  const printOfficialTemplatesPreview = async () => {
+    if (!state.preview || !state.preview.invoices || !state.preview.invoices.length) {
+      toastErr('لا توجد فواتير مُولَّدة للطباعة');
+      return;
+    }
+    const tplStyle = state.selected_template || '01-royal-navy';
+    try {
+      toastOk('جارٍ تجهيز وتصيير فواتير الدفعة بالقالب المعتمد...');
+      const res = await fetch('/api/bulk/preview-render-all-html', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issuer_id: state.issuer_id,
+          client_id: state.client_id,
+          style: tplStyle,
+          invoices: state.preview.invoices,
+        }),
+      });
+      if (!res.ok) throw new Error('تعذر تصيير فواتير الدفعة');
+      const combinedHtml = await res.text();
+      printDoc(combinedHtml);
+    } catch (err) {
+      toastErr(err.message || 'فشلت عملية الطباعة');
+    }
+  };
+
   const printBulkPreview = async () => {
     if (!state.preview || !state.preview.invoices || !state.preview.invoices.length) {
       toastErr('لا توجد فواتير مُولَّدة للطباعة');
       return;
     }
-    const issuer = store.issuers.find((i) => i.id === state.issuer_id) || { name_ar: 'الشركة المصدرة', currency: 'SAR' };
-    const client = store.clients.find((c) => c.id === state.client_id) || { name: 'العميل' };
-    try {
-      const template = await loadStoredTemplate('reports');
-      const rows = state.preview.invoices.map((inv) => `<tr><td>${esc(inv.invoice_number || '')}</td><td>${esc(client.name || '')}</td><td>${esc(money(inv.grand_total || 0))}</td></tr>`).join('');
-      printDoc(fillStoredTemplate(template, {
-        title: state.preview.title || 'معاينة دفعة فواتير', subtitle: issuer.name_ar || '',
-        issuer_name: issuer.name_ar || '', generated_at: new Date().toLocaleString('ar-SA'), page_size: 'A4 portrait',
-        stats_html: '', headers_html: '<th>رقم الفاتورة</th><th>العميل</th><th>الإجمالي</th>',
-        rows_html: rows, footer_html: '',
-      }, ['stats_html', 'headers_html', 'rows_html', 'footer_html']));
-    } catch (err) { toastErr(err.message || 'تعذر تحميل قالب التقرير'); }
+
+    const tplName = (store.templates?.invoices || []).find((t) => t.id === state.selected_template)?.name || state.selected_template || 'الافتراضي';
+    let activeTab = 'detailed';
+    let cachedOfficialHtml = '';
+
+    const modalInst = modal({
+      title: 'طباعة ومعاينة الدفعة للمراجعة قبل الاعتماد',
+      wide: true,
+      body: html`
+        <div class="pad" style="display:flex;flex-direction:column;gap:1rem;padding:0.5rem">
+          <div style="background:var(--bg-subtle, rgba(255,255,255,0.03));padding:1rem;border-radius:8px;border:1px solid var(--line)">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.8rem">
+              <div>
+                <h3 style="margin:0 0 .2rem;font-size:1.1rem;color:var(--text)">خيارات طباعة المعاينة</h3>
+                <p class="muted tiny" style="margin:0">اختر نمط المراجعة المطلوب للطباعة أو الحفظ كـ PDF قبل الاعتماد النهائي.</p>
+              </div>
+            </div>
+            
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:1rem">
+              <!-- Option 1: Detailed Items Review Report -->
+              <div class="card pad" style="border:2px solid #d97706;background:rgba(217,119,6,0.06);display:flex;flex-direction:column;justify-content:space-between;gap:.7rem">
+                <div>
+                  <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem">
+                    <span style="font-size:1.4rem">📋</span>
+                    <b style="font-size:1.05rem;color:#d97706">تقرير مراجعة الأصناف والبنود التفصيلي</b>
+                  </div>
+                  <p class="tiny muted" style="margin:0;line-height:1.5">
+                    <b>(الخيار الموصى به للمراجعة):</b> يطبع كل فاتورة كبطاقة مستقلة تحتوي على جدولها الكامل للأصناف، كود الصنف، الكمية، سعر الوحدة، الخصم، الضريبة، والمجموع قبل الاعتماد.
+                  </p>
+                </div>
+                <button class="btn btn-primary" id="modal-btn-print-detailed" type="button" style="background:#d97706;border-color:#d97706;color:#fff;font-weight:bold;width:100%;font-size:.9rem;padding:.5rem 1rem">
+                  ${raw(icon.printer({ size: 15, style: 'vertical-align:text-bottom;margin-left:5px' }))} طباعة تقرير الأصناف التفصيلي (PDF)
+                </button>
+              </div>
+
+              <!-- Option 2: Full Invoices in Official Template -->
+              <div class="card pad" style="border:1px solid var(--brand);background:rgba(13,148,136,0.06);display:flex;flex-direction:column;justify-content:space-between;gap:.7rem">
+                <div>
+                  <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem">
+                    <span style="font-size:1.4rem">📄</span>
+                    <b style="font-size:1.05rem;color:var(--brand)">طباعة كافة الفواتير بالقالب الرسمي</b>
+                  </div>
+                  <p class="tiny muted" style="margin:0;line-height:1.5">
+                    يطبع جميع فواتير الدفعة كفواتير ضريبية كاملة ومستقلة وفق القالب المختار (<b>${esc(tplName)}</b>) مع ترويسة الشركة وختمها ورمز QR.
+                  </p>
+                </div>
+                <button class="btn btn-primary" id="modal-btn-print-official" type="button" style="background:#0d9488;border-color:#0d9488;color:#fff;font-weight:bold;width:100%;font-size:.9rem;padding:.5rem 1rem">
+                  ${raw(icon.printer({ size: 15, style: 'vertical-align:text-bottom;margin-left:5px' }))} طباعة كافة الفواتير بالقالب الرسمي
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live interactive preview container -->
+          <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)">
+            <div style="padding:.5rem .8rem;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+              <span class="tiny font-bold" style="color:var(--text)">معاينة حية للمستند قبل إرساله للطابعة:</span>
+              <div style="display:flex;gap:.4rem">
+                <button class="btn btn-sm" id="modal-tab-detailed" type="button" style="background:#d97706;color:#fff;font-size:11px;font-weight:bold">عرض تقرير الأصناف التفصيلي</button>
+                <button class="btn btn-sm" id="modal-tab-official" type="button" style="background:var(--line);color:var(--text);font-size:11px">عرض الفواتير بالقالب الرسمي</button>
+              </div>
+            </div>
+            <div style="min-height:55vh;max-height:65vh;overflow:auto;background:rgba(0,0,0,0.3);display:flex;justify-content:center;padding:1rem">
+              <iframe id="modal-bulk-print-iframe" style="width:100%;max-width:210mm;min-height:297mm;border:none;background:#fff;border-radius:4px;box-shadow:0 4px 15px rgba(0,0,0,0.4)" title="معاينة المستند"></iframe>
+            </div>
+          </div>
+        </div>
+      `,
+      footer: null,
+    });
+
+    const modalEl = modalInst.el.querySelector('.modal');
+    if (modalEl) {
+      modalEl.style.maxWidth = '1260px';
+      modalEl.style.width = '96vw';
+    }
+
+    const iframe = modalInst.el.querySelector('#modal-bulk-print-iframe');
+    const tabDetailed = modalInst.el.querySelector('#modal-tab-detailed');
+    const tabOfficial = modalInst.el.querySelector('#modal-tab-official');
+    const btnPrintDetailed = modalInst.el.querySelector('#modal-btn-print-detailed');
+    const btnPrintOfficial = modalInst.el.querySelector('#modal-btn-print-official');
+
+    const showDetailed = () => {
+      activeTab = 'detailed';
+      if (tabDetailed) { tabDetailed.style.background = '#d97706'; tabDetailed.style.color = '#fff'; }
+      if (tabOfficial) { tabOfficial.style.background = 'var(--line)'; tabOfficial.style.color = 'var(--text)'; }
+      if (iframe) iframe.srcdoc = buildDetailedBulkPreviewReportHtml();
+    };
+
+    const showOfficial = async () => {
+      activeTab = 'official';
+      if (tabOfficial) { tabOfficial.style.background = '#0d9488'; tabOfficial.style.color = '#fff'; }
+      if (tabDetailed) { tabDetailed.style.background = 'var(--line)'; tabDetailed.style.color = 'var(--text)'; }
+
+      if (cachedOfficialHtml && iframe) {
+        iframe.srcdoc = cachedOfficialHtml;
+        return;
+      }
+      if (iframe) {
+        iframe.srcdoc = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+          <style>body{margin:0;min-height:297mm;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:sans-serif;background:#fff;color:#475569;}
+          .spin{width:40px;height:40px;border:3px solid #e2e8f0;border-top-color:#0d9488;border-radius:50%;animation:s .7s linear infinite;}@keyframes s{to{transform:rotate(360deg)}}
+          </style></head><body><div class="spin"></div><p style="margin-top:14px;font-weight:bold;font-size:14px">جارٍ تجهيز كافة فواتير الدفعة بالقالب المعتمد...</p></body></html>`;
+      }
+
+      try {
+        const res = await fetch('/api/bulk/preview-render-all-html', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            issuer_id: state.issuer_id,
+            client_id: state.client_id,
+            style: state.selected_template || '01-royal-navy',
+            invoices: state.preview.invoices,
+          }),
+        });
+        if (res.ok) {
+          cachedOfficialHtml = await res.text();
+          if (iframe && activeTab === 'official') iframe.srcdoc = cachedOfficialHtml;
+        } else {
+          toastErr('تعذر تصيير الفواتير بالقالب الرسمي');
+        }
+      } catch {
+        toastErr('فشل الاتصال بالخادم لجلب القالب الرسمي');
+      }
+    };
+
+    // Load initial detailed report
+    showDetailed();
+
+    if (tabDetailed) tabDetailed.addEventListener('click', showDetailed);
+    if (tabOfficial) tabOfficial.addEventListener('click', showOfficial);
+
+    if (btnPrintDetailed) {
+      btnPrintDetailed.addEventListener('click', () => {
+        printDetailedReviewReport();
+      });
+    }
+
+    if (btnPrintOfficial) {
+      btnPrintOfficial.addEventListener('click', () => {
+        printOfficialTemplatesPreview();
+      });
+    }
   };
 
   const saveDraft = async () => {

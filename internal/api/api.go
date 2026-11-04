@@ -150,6 +150,38 @@ func (s *Server) clientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
+type PreviewInvoicePayload struct {
+	InvoiceNumber   string  `json:"invoice_number"`
+	InvoiceType     string  `json:"invoice_type"`
+	ZatcaPhase      string  `json:"zatca_phase"`
+	QrPayload       string  `json:"qr_payload"`
+	InvoiceHash     string  `json:"invoice_hash"`
+	IssueDate       string  `json:"issue_date"`
+	IssueTime       string  `json:"issue_time"`
+	PaymentMethod   string  `json:"payment_method"`
+	Notes           string  `json:"notes"`
+	Subtotal        float64 `json:"subtotal"`
+	DiscountAmount  float64 `json:"discount_amount"`
+	TaxableAmount   float64 `json:"taxable_amount"`
+	TaxAmount       float64 `json:"tax_amount"`
+	GrandTotal      float64 `json:"grand_total"`
+	PaidAmount      float64 `json:"paid_amount"`
+	RemainingAmount float64 `json:"remaining_amount"`
+	Lines           []struct {
+		LineNo        int     `json:"line_no"`
+		ItemCode      string  `json:"item_code"`
+		ItemName      string  `json:"item_name"`
+		Unit          string  `json:"unit"`
+		Quantity      float64 `json:"quantity"`
+		UnitPrice     float64 `json:"unit_price"`
+		Discount      float64 `json:"discount"`
+		TaxRate       float64 `json:"tax_rate"`
+		TaxableAmount float64 `json:"taxable_amount"`
+		TaxAmount     float64 `json:"tax_amount"`
+		GrandTotal    float64 `json:"grand_total"`
+	} `json:"lines"`
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
@@ -1667,204 +1699,179 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte(htmlStr))
 	})
 
+	buildPreviewInvoiceView := func(issuerID, clientID string, inv PreviewInvoicePayload, defaultNum string) *services.InvoiceView {
+	invNum := inv.InvoiceNumber
+	if strings.TrimSpace(invNum) == "" {
+		invNum = defaultNum
+	}
+	issDate := inv.IssueDate
+	if strings.TrimSpace(issDate) == "" {
+		issDate = time.Now().Format("2006-01-02")
+	}
+	issTime := inv.IssueTime
+	if strings.TrimSpace(issTime) == "" {
+		issTime = "10:00:00"
+	}
+	zp := inv.ZatcaPhase
+	if zp == "" {
+		zp = "PHASE1"
+	}
+	it := inv.InvoiceType
+	if it == "" {
+		it = "STANDARD"
+	}
+
+	invView := &services.InvoiceView{
+		Invoice: models.Invoice{
+			InvoiceNumber:  invNum,
+			InvoiceType:    it,
+			ZatcaPhase:     zp,
+			QrPayload:      inv.QrPayload,
+			InvoiceHash:    inv.InvoiceHash,
+			IssueDate:      issDate,
+			IssueTime:      issTime,
+			PaymentMethod:  inv.PaymentMethod,
+			Notes:          inv.Notes,
+			Subtotal:       models.ToMinor(inv.Subtotal),
+			DiscountAmount: models.ToMinor(inv.DiscountAmount),
+			TaxableAmount:  models.ToMinor(inv.TaxableAmount),
+			TaxAmount:      models.ToMinor(inv.TaxAmount),
+			GrandTotal:     models.ToMinor(inv.GrandTotal),
+			Currency:       "SAR",
+			Status:         "ISSUED",
+		},
+		SubtotalMajor:        inv.Subtotal,
+		DiscountAmountMajor:  inv.DiscountAmount,
+		TaxableAmountMajor:   inv.TaxableAmount,
+		TaxAmountMajor:       inv.TaxAmount,
+		GrandTotalMajor:      inv.GrandTotal,
+		PaidAmountMajor:      inv.PaidAmount,
+		RemainingAmountMajor: inv.RemainingAmount,
+		Items:                make([]services.InvoiceItemView, 0, len(inv.Lines)),
+		Lines:                make([]services.InvoiceItemView, 0, len(inv.Lines)),
+	}
+
+	if issuerID != "" {
+		if iss, err := s.issuers.GetIssuer(issuerID); err == nil && iss != nil {
+			invView.IssuerSnapshot = iss
+			invView.IssuerID = iss.ID
+			invView.IssuerName = iss.NameAr
+			invView.SellerName = iss.NameAr
+			invView.SellerTaxNumber = iss.TaxNumber
+			invView.SellerCr = iss.CommercialRegister
+			addrParts := []string{iss.City, iss.District, iss.Street, iss.BuildingNo, iss.PostalCode}
+			var cleanParts []string
+			for _, p := range addrParts {
+				if strings.TrimSpace(p) != "" {
+					cleanParts = append(cleanParts, strings.TrimSpace(p))
+				}
+			}
+			invView.SellerAddress = strings.Join(cleanParts, " - ")
+			invView.SellerAddressEn = iss.AddressEn
+		}
+	}
+
+	if clientID != "" {
+		if cl, err := s.clients.GetClient(clientID); err == nil && cl != nil {
+			invView.ClientSnapshot = &cl.Client
+			invView.ClientID = cl.ID
+			invView.ClientCode = cl.ClientCode
+			invView.ClientName = cl.Name
+			invView.BuyerName = cl.Name
+			invView.BuyerTaxNumber = cl.TaxNumber
+			invView.BuyerCr = cl.CommercialRegister
+			invView.BuyerAddress = cl.Address
+		}
+	}
+
+	var calcSubtotalMinor, calcDiscountMinor, calcTaxableMinor, calcTaxDec4 int64
+	for i, l := range inv.Lines {
+		lineNo := l.LineNo
+		if lineNo <= 0 {
+			lineNo = i + 1
+		}
+		taxRate := l.TaxRate
+		if taxRate == 0 {
+			taxRate = 15
+		}
+		taxable := l.TaxableAmount
+		if taxable == 0 && l.Quantity > 0 {
+			taxable = (l.Quantity * l.UnitPrice) - l.Discount
+		}
+		taxableMinor := models.ToMinor(taxable)
+		lineTaxDec4 := models.PctDec4(taxableMinor, taxRate)
+		lineTaxMinor := models.RoundDec4ToMinor(lineTaxDec4)
+		taxAmt := l.TaxAmount
+		if taxAmt == 0 {
+			taxAmt = models.ToMajor(lineTaxMinor)
+		}
+		tot := l.GrandTotal
+		if tot == 0 {
+			tot = models.ToMajor(taxableMinor + models.ToMinor(taxAmt))
+		}
+
+		grossMinor := models.MulQty(l.Quantity, models.ToMinor(l.UnitPrice))
+		discMinor := models.ToMinor(l.Discount)
+		calcSubtotalMinor += grossMinor
+		calcDiscountMinor += discMinor
+		calcTaxableMinor += taxableMinor
+		calcTaxDec4 += lineTaxDec4
+
+		iv := services.InvoiceItemView{
+			InvoiceItem: models.InvoiceItem{
+				LineNo:    lineNo,
+				ItemCode:  l.ItemCode,
+				ItemName:  l.ItemName,
+				Unit:      l.Unit,
+				Quantity:  l.Quantity,
+				UnitPrice: models.ToMinor(l.UnitPrice),
+				Discount:  discMinor,
+				TaxRate:   taxRate,
+				Taxable:   taxableMinor,
+				TaxAmount: models.ToMinor(taxAmt),
+				TotalLine: models.ToMinor(tot),
+			},
+			UnitPriceMajor: l.UnitPrice,
+			DiscountMajor:  l.Discount,
+			TaxableMajor:   models.ToMajor(taxableMinor),
+			TaxAmountMajor: models.ToMajor(models.ToMinor(taxAmt)),
+			TotalLineMajor: models.ToMajor(models.ToMinor(tot)),
+		}
+		invView.Lines = append(invView.Lines, iv)
+	}
+	invView.Items = invView.Lines
+
+	if invView.GrandTotalMajor == 0 && len(invView.Lines) > 0 {
+		calcTaxMinor := models.RoundDec4ToMinor(calcTaxDec4)
+		calcGrandMinor := calcTaxableMinor + calcTaxMinor
+		invView.Subtotal = calcSubtotalMinor
+		invView.DiscountAmount = calcDiscountMinor
+		invView.TaxableAmount = calcTaxableMinor
+		invView.TaxAmount = calcTaxMinor
+		invView.GrandTotal = calcGrandMinor
+		invView.SubtotalMajor = models.ToMajor(calcSubtotalMinor)
+		invView.DiscountAmountMajor = models.ToMajor(calcDiscountMinor)
+		invView.TaxableAmountMajor = models.ToMajor(calcTaxableMinor)
+		invView.TaxAmountMajor = models.ToMajor(calcTaxMinor)
+		invView.GrandTotalMajor = models.ToMajor(calcGrandMinor)
+	}
+
+	return invView
+}
+
 	mux.HandleFunc("POST /api/invoices/preview-render-html", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			IssuerID string `json:"issuer_id"`
-			ClientID string `json:"client_id"`
-			Style    string `json:"style"`
-			Invoice  struct {
-				InvoiceNumber   string  `json:"invoice_number"`
-				InvoiceType     string  `json:"invoice_type"`
-				ZatcaPhase      string  `json:"zatca_phase"`
-				QrPayload       string  `json:"qr_payload"`
-				InvoiceHash     string  `json:"invoice_hash"`
-				IssueDate       string  `json:"issue_date"`
-				IssueTime       string  `json:"issue_time"`
-				PaymentMethod   string  `json:"payment_method"`
-				Notes           string  `json:"notes"`
-				Subtotal        float64 `json:"subtotal"`
-				DiscountAmount  float64 `json:"discount_amount"`
-				TaxableAmount   float64 `json:"taxable_amount"`
-				TaxAmount       float64 `json:"tax_amount"`
-				GrandTotal      float64 `json:"grand_total"`
-				PaidAmount      float64 `json:"paid_amount"`
-				RemainingAmount float64 `json:"remaining_amount"`
-				Lines           []struct {
-					LineNo        int     `json:"line_no"`
-					ItemCode      string  `json:"item_code"`
-					ItemName      string  `json:"item_name"`
-					Unit          string  `json:"unit"`
-					Quantity      float64 `json:"quantity"`
-					UnitPrice     float64 `json:"unit_price"`
-					Discount      float64 `json:"discount"`
-					TaxRate       float64 `json:"tax_rate"`
-					TaxableAmount float64 `json:"taxable_amount"`
-					TaxAmount     float64 `json:"tax_amount"`
-					GrandTotal    float64 `json:"grand_total"`
-				} `json:"lines"`
-			} `json:"invoice"`
+			IssuerID string                `json:"issuer_id"`
+			ClientID string                `json:"client_id"`
+			Style    string                `json:"style"`
+			Invoice  PreviewInvoicePayload `json:"invoice"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			s.err(w, 400, "بيانات غير صالحة")
 			return
 		}
 
-		invNum := req.Invoice.InvoiceNumber
-		if strings.TrimSpace(invNum) == "" {
-			invNum = "INV-PREVIEW-01"
-		}
-		issDate := req.Invoice.IssueDate
-		if strings.TrimSpace(issDate) == "" {
-			issDate = time.Now().Format("2006-01-02")
-		}
-		issTime := req.Invoice.IssueTime
-		if strings.TrimSpace(issTime) == "" {
-			issTime = "10:00:00"
-		}
-		zp := req.Invoice.ZatcaPhase
-		if zp == "" {
-			zp = "PHASE1"
-		}
-		it := req.Invoice.InvoiceType
-		if it == "" {
-			it = "STANDARD"
-		}
-
-		invView := &services.InvoiceView{
-			Invoice: models.Invoice{
-				InvoiceNumber:  invNum,
-				InvoiceType:    it,
-				ZatcaPhase:     zp,
-				QrPayload:      req.Invoice.QrPayload,
-				InvoiceHash:    req.Invoice.InvoiceHash,
-				IssueDate:      issDate,
-				IssueTime:      issTime,
-				PaymentMethod:  req.Invoice.PaymentMethod,
-				Notes:          req.Invoice.Notes,
-				Subtotal:       models.ToMinor(req.Invoice.Subtotal),
-				DiscountAmount: models.ToMinor(req.Invoice.DiscountAmount),
-				TaxableAmount:  models.ToMinor(req.Invoice.TaxableAmount),
-				TaxAmount:      models.ToMinor(req.Invoice.TaxAmount),
-				GrandTotal:     models.ToMinor(req.Invoice.GrandTotal),
-				Currency:       "SAR",
-				Status:         "ISSUED",
-			},
-			SubtotalMajor:        req.Invoice.Subtotal,
-			DiscountAmountMajor:  req.Invoice.DiscountAmount,
-			TaxableAmountMajor:   req.Invoice.TaxableAmount,
-			TaxAmountMajor:       req.Invoice.TaxAmount,
-			GrandTotalMajor:      req.Invoice.GrandTotal,
-			PaidAmountMajor:      req.Invoice.PaidAmount,
-			RemainingAmountMajor: req.Invoice.RemainingAmount,
-			Items:                make([]services.InvoiceItemView, 0, len(req.Invoice.Lines)),
-			Lines:                make([]services.InvoiceItemView, 0, len(req.Invoice.Lines)),
-		}
-
-		if req.IssuerID != "" {
-			if iss, err := s.issuers.GetIssuer(req.IssuerID); err == nil && iss != nil {
-				invView.IssuerSnapshot = iss
-				invView.IssuerID = iss.ID
-				invView.IssuerName = iss.NameAr
-				invView.SellerName = iss.NameAr
-				invView.SellerTaxNumber = iss.TaxNumber
-				invView.SellerCr = iss.CommercialRegister
-				addrParts := []string{iss.City, iss.District, iss.Street, iss.BuildingNo, iss.PostalCode}
-				var cleanParts []string
-				for _, p := range addrParts {
-					if strings.TrimSpace(p) != "" {
-						cleanParts = append(cleanParts, strings.TrimSpace(p))
-					}
-				}
-				invView.SellerAddress = strings.Join(cleanParts, " - ")
-				invView.SellerAddressEn = iss.AddressEn
-			}
-		}
-
-		if req.ClientID != "" {
-			if cl, err := s.clients.GetClient(req.ClientID); err == nil && cl != nil {
-				invView.ClientSnapshot = &cl.Client
-				invView.ClientID = cl.ID
-				invView.ClientCode = cl.ClientCode
-				invView.ClientName = cl.Name
-				invView.BuyerName = cl.Name
-				invView.BuyerTaxNumber = cl.TaxNumber
-				invView.BuyerCr = cl.CommercialRegister
-				invView.BuyerAddress = cl.Address
-			}
-		}
-
-		var calcSubtotalMinor, calcDiscountMinor, calcTaxableMinor, calcTaxDec4 int64
-		for i, l := range req.Invoice.Lines {
-			lineNo := l.LineNo
-			if lineNo <= 0 {
-				lineNo = i + 1
-			}
-			taxRate := l.TaxRate
-			if taxRate == 0 {
-				taxRate = 15
-			}
-			taxable := l.TaxableAmount
-			if taxable == 0 && l.Quantity > 0 {
-				taxable = (l.Quantity * l.UnitPrice) - l.Discount
-			}
-			taxableMinor := models.ToMinor(taxable)
-			lineTaxDec4 := models.PctDec4(taxableMinor, taxRate)
-			lineTaxMinor := models.RoundDec4ToMinor(lineTaxDec4)
-			taxAmt := l.TaxAmount
-			if taxAmt == 0 {
-				taxAmt = models.ToMajor(lineTaxMinor)
-			}
-			tot := l.GrandTotal
-			if tot == 0 {
-				tot = models.ToMajor(taxableMinor + models.ToMinor(taxAmt))
-			}
-
-			grossMinor := models.MulQty(l.Quantity, models.ToMinor(l.UnitPrice))
-			discMinor := models.ToMinor(l.Discount)
-			calcSubtotalMinor += grossMinor
-			calcDiscountMinor += discMinor
-			calcTaxableMinor += taxableMinor
-			calcTaxDec4 += lineTaxDec4
-
-			iv := services.InvoiceItemView{
-				InvoiceItem: models.InvoiceItem{
-					LineNo:    lineNo,
-					ItemCode:  l.ItemCode,
-					ItemName:  l.ItemName,
-					Unit:      l.Unit,
-					Quantity:  l.Quantity,
-					UnitPrice: models.ToMinor(l.UnitPrice),
-					Discount:  discMinor,
-					TaxRate:   taxRate,
-					Taxable:   taxableMinor,
-					TaxAmount: models.ToMinor(taxAmt),
-					TotalLine: models.ToMinor(tot),
-				},
-				UnitPriceMajor: l.UnitPrice,
-				DiscountMajor:  l.Discount,
-				TaxableMajor:   models.ToMajor(taxableMinor),
-				TaxAmountMajor: models.ToMajor(models.ToMinor(taxAmt)),
-				TotalLineMajor: models.ToMajor(models.ToMinor(tot)),
-			}
-			invView.Lines = append(invView.Lines, iv)
-		}
-		invView.Items = invView.Lines
-
-		if invView.GrandTotalMajor == 0 && len(invView.Lines) > 0 {
-			calcTaxMinor := models.RoundDec4ToMinor(calcTaxDec4)
-			calcGrandMinor := calcTaxableMinor + calcTaxMinor
-			invView.Subtotal = calcSubtotalMinor
-			invView.DiscountAmount = calcDiscountMinor
-			invView.TaxableAmount = calcTaxableMinor
-			invView.TaxAmount = calcTaxMinor
-			invView.GrandTotal = calcGrandMinor
-			invView.SubtotalMajor = models.ToMajor(calcSubtotalMinor)
-			invView.DiscountAmountMajor = models.ToMajor(calcDiscountMinor)
-			invView.TaxableAmountMajor = models.ToMajor(calcTaxableMinor)
-			invView.TaxAmountMajor = models.ToMajor(calcTaxMinor)
-			invView.GrandTotalMajor = models.ToMajor(calcGrandMinor)
-		}
-
+		invView := buildPreviewInvoiceView(req.IssuerID, req.ClientID, req.Invoice, "INV-PREVIEW-01")
 		style := req.Style
 		htmlStr, err := s.templates.RenderInvoiceHTML(invView, style)
 		if err != nil {
@@ -3062,6 +3069,48 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		s.json(w, 200, res)
+	})
+
+	mux.HandleFunc("POST /api/bulk/preview-render-all-html", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			IssuerID string                  `json:"issuer_id"`
+			ClientID string                  `json:"client_id"`
+			Style    string                  `json:"style"`
+			Invoices []PreviewInvoicePayload `json:"invoices"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.err(w, 400, "بيانات غير صالحة")
+			return
+		}
+		if len(req.Invoices) == 0 {
+			s.err(w, 400, "لا توجد فواتير لتصييرها")
+			return
+		}
+
+		docs := make([]string, 0, len(req.Invoices))
+		for i, inv := range req.Invoices {
+			defNum := fmt.Sprintf("INV-%04d", i+1)
+			invView := buildPreviewInvoiceView(req.IssuerID, req.ClientID, inv, defNum)
+			htmlStr, err := s.templates.RenderInvoiceHTML(invView, req.Style)
+			if err != nil {
+				continue
+			}
+			docs = append(docs, htmlStr)
+		}
+
+		if len(docs) == 0 {
+			s.err(w, 500, "تعذر تصيير فواتير المعاينة")
+			return
+		}
+
+		combined := s.templates.CombineHTMLDocuments(docs)
+		if combined == "" {
+			s.err(w, 500, "تعذر تجميع صفحات الفواتير")
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(combined))
 	})
 
 	mux.HandleFunc("POST /api/bulk/commit", func(w http.ResponseWriter, r *http.Request) {
