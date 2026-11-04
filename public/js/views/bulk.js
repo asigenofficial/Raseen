@@ -69,7 +69,7 @@ function recalcInvoice(inv) {
 }
 
 export async function render(view) {
-  await Promise.all([loadClients(), loadItems(), loadCategories()]);
+  await Promise.all([loadClients(), loadItems(true), loadCategories(true)]);
   const activeIssuers = store.issuers.filter((i) => i.is_active);
   if (!activeIssuers.length || !store.clients.length) {
     view.innerHTML = html`<div class="card"><div class="empty">
@@ -127,7 +127,7 @@ export async function render(view) {
     min_items: 4,
     max_items: 6,
     min_qty: 1,
-    max_qty: 25,
+    max_qty: '',
     min_invoice_total: '',
     max_invoice_total: '',
     discount_enabled: true,
@@ -1504,11 +1504,15 @@ export async function render(view) {
     // إضافة أصناف مجموعة كاملة
     delegate(view, 'click', '[data-add-cat-items]', async (e, btn) => {
       const catId = btn.dataset.addCatItems;
-      const cat = store.categories.find((c) => c.id === catId);
-      let catItems = store.items.filter((it) => it.category_id === catId && it.is_active !== false);
+      const cat = store.categories.find((c) => String(c.id) === String(catId) || c.code === catId || c.name === catId);
+      const targetCatId = cat ? cat.id : catId;
+      let catItems = store.items.filter((it) => {
+        if (it.is_active === false) return false;
+        return String(it.category_id) === String(targetCatId) || String(it.category_id) === String(catId) || (cat && (it.category_name === cat.name || it.category_id === cat.code));
+      });
       if (!catItems.length || (cat && cat.items_count && catItems.length < cat.items_count)) {
         try {
-          const res = await api.get(qs('/api/items', { category_id: catId, active_only: true, all: true }));
+          const res = await api.get(qs('/api/items', { category_id: targetCatId, active_only: true, all: true }));
           const items = Array.isArray(res) ? res : (res?.items || []);
           if (items.length) {
             catItems = items;
@@ -1521,6 +1525,9 @@ export async function render(view) {
       if (!catItems.length) {
         toastErr(`لا توجد أصناف في مجموعة ${cat ? cat.name : ''}`);
         return;
+      }
+      if (cat && !state.category_ids.includes(cat.id)) {
+        state.category_ids.push(cat.id);
       }
       let added = 0;
       for (const it of catItems) {

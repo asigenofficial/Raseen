@@ -316,23 +316,44 @@ func bulkTargetQuantities(items []ItemCandidate, target int64, minQty, maxQty fl
 	if fractional {
 		stepSize = 0.001
 	}
-	// ponytail: bounded rounding refinement; exact combinations depend on catalog prices.
-	for step := 0; step < len(items)*2; step++ {
+	// Bidirectional bounded rounding refinement: adjust quantities step by step until total hits target
+	maxSteps := len(items) * 30
+	for step := 0; step < maxSteps; step++ {
 		best, bestDelta, distance := -1, int64(0), math.Abs(float64(target-total))
-		for i, qty := range quantities {
-			if qty+stepSize > maxQty+1e-9 {
-				continue
-			}
-			delta := lineTotal(i, qty+stepSize) - lineTotal(i, qty)
-			if next := math.Abs(float64(target - total - delta)); delta > 0 && next < distance {
-				best, bestDelta, distance = i, delta, next
-			}
-		}
-		if best < 0 {
+		if distance < 1 {
 			break
 		}
-		quantities[best] = math.Round((quantities[best]+stepSize)*1000) / 1000
-		total += bestDelta
+		if total < target {
+			for i, qty := range quantities {
+				if qty+stepSize > maxQty+1e-9 {
+					continue
+				}
+				delta := lineTotal(i, qty+stepSize) - lineTotal(i, qty)
+				if next := math.Abs(float64(target - total - delta)); delta > 0 && next < distance {
+					best, bestDelta, distance = i, delta, next
+				}
+			}
+			if best < 0 {
+				break
+			}
+			quantities[best] = math.Round((quantities[best]+stepSize)*1000) / 1000
+			total += bestDelta
+		} else {
+			for i, qty := range quantities {
+				if qty-stepSize < minQty-1e-9 {
+					continue
+				}
+				delta := lineTotal(i, qty) - lineTotal(i, qty-stepSize)
+				if next := math.Abs(float64(target - (total - delta))); delta > 0 && next < distance {
+					best, bestDelta, distance = i, -delta, next
+				}
+			}
+			if best < 0 {
+				break
+			}
+			quantities[best] = math.Round((quantities[best]-stepSize)*1000) / 1000
+			total += bestDelta
+		}
 	}
 	return quantities
 }
@@ -523,11 +544,6 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		return nil, errors.New("حدود عدد البنود غير صالحة أو تتجاوز حجم الدفعة المسموح")
 	}
 	minRequiredItems := minItems
-	if req.MinItems == 4 && req.MaxItems == 6 && req.Count > 0 && len(availableItems) > req.Count*maxItems {
-		neededPerInv := (len(availableItems) + req.Count - 1) / req.Count
-		maxItems = min(15, min(len(availableItems), max(maxItems, neededPerInv+1)))
-		minItems = min(maxItems, max(minItems, neededPerInv-1))
-	}
 
 	minQty := req.MinQty
 	if minQty <= 0 {
@@ -597,35 +613,93 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		totalTargetMinor := models.ToMinor(req.TargetTotal)
 		base := totalTargetMinor / int64(req.Count)
 		rem := totalTargetMinor % int64(req.Count)
-		for idx := range targetPerInv {
-			targetPerInv[idx] = base
-		}
-		for idx := int64(0); idx < rem; idx++ {
-			targetPerInv[idx]++
-		}
-		// Move random amounts between random invoices, preserving the batch target.
-		// Explicit invoice bounds take precedence over the default wider spread.
-		lower, upper := max(int64(1), base*80/100), max(int64(1), base*120/100)
+
+		lower := int64(1)
+		upper := totalTargetMinor
 		if req.MinInvoiceTotal > 0 {
 			lower = models.ToMinor(req.MinInvoiceTotal)
+		} else {
+			// Natural realistic commercial spread: 25% of base
+			lower = max(int64(1), base*25/100)
 		}
 		if req.MaxInvoiceTotal > 0 {
 			upper = models.ToMinor(req.MaxInvoiceTotal)
+		} else {
+			// Natural realistic commercial spread: up to 230% of base
+			upper = max(lower, base*230/100)
 		}
-		if base < lower || base > upper || (rem > 0 && base+1 > upper) {
+
+		if base < lower || (req.MaxInvoiceTotal > 0 && base > upper) {
 			return nil, errors.New("المبلغ المستهدف لا يتوافق مع عدد الفواتير وحدود مبلغ الفاتورة")
 		}
-		if req.Count > 1 && distMode != "uniform" {
-			for step := 0; step < req.Count*8; step++ {
-				a, b := rng.Intn(req.Count), rng.Intn(req.Count)
-				if a == b {
-					continue
+
+		if req.Count == 1 {
+			targetPerInv[0] = totalTargetMinor
+		} else if distMode == "uniform" {
+			for idx := range targetPerInv {
+				targetPerInv[idx] = base
+			}
+			for idx := int64(0); idx < rem; idx++ {
+				targetPerInv[idx]++
+			}
+		} else {
+			// Natural commercial distribution with realistic variance:
+			// Generates a lifelike retail/wholesale mix (smaller, medium, and larger baskets)
+			weights := make([]float64, req.Count)
+			weightSum := 0.0
+			for idx := 0; idx < req.Count; idx++ {
+				factor := 0.40 + rng.Float64()*1.20
+				if distMode == "random" {
+					factor = 0.25 + rng.Float64()*1.85
 				}
-				room := min(targetPerInv[a]-lower, upper-targetPerInv[b])
-				if room > 0 {
-					transfer := rng.Int63n(room + 1)
-					targetPerInv[a] -= transfer
-					targetPerInv[b] += transfer
+				weights[idx] = factor
+				weightSum += factor
+			}
+
+			allocated := int64(0)
+			for idx := 0; idx < req.Count; idx++ {
+				val := int64(math.Round(float64(totalTargetMinor) * (weights[idx] / weightSum)))
+				if val < lower {
+					val = lower
+				}
+				if val > upper {
+					val = upper
+				}
+				targetPerInv[idx] = val
+				allocated += val
+			}
+
+			// Adjust difference towards exact totalTargetMinor
+			diff := totalTargetMinor - allocated
+			attempts := 0
+			for diff != 0 && attempts < req.Count*100 {
+				attempts++
+				idx := rng.Intn(req.Count)
+				if diff > 0 {
+					room := upper - targetPerInv[idx]
+					if room > 0 {
+						add := min(diff, max(int64(1), room/2))
+						targetPerInv[idx] += add
+						diff -= add
+					}
+				} else {
+					room := targetPerInv[idx] - lower
+					if room > 0 {
+						sub := min(-diff, max(int64(1), room/2))
+						targetPerInv[idx] -= sub
+						diff += sub
+					}
+				}
+			}
+
+			// Final precision pass so sum matches exactly to the last halala
+			for idx := 0; diff != 0 && idx < req.Count; idx++ {
+				if diff > 0 && targetPerInv[idx] < upper {
+					targetPerInv[idx]++
+					diff--
+				} else if diff < 0 && targetPerInv[idx] > lower {
+					targetPerInv[idx]--
+					diff++
 				}
 			}
 		}
@@ -694,21 +768,11 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		invDate := dateTimes[i].DateStr
 		invTime := dateTimes[i].TimeStr
 
-		unusedCount := 0
-		for _, u := range usageCount {
-			if u == 0 {
-				unusedCount++
-			}
+		// Randomize linesCount between minItems and maxItems for each invoice independently
+		linesCount := minItems
+		if maxItems > minItems {
+			linesCount = minItems + rng.Intn(maxItems-minItems+1)
 		}
-		remInvoices := req.Count - i
-		effectiveMin := minItems
-		if unusedCount > 0 && remInvoices > 0 {
-			needed := (unusedCount + remInvoices - 1) / remInvoices
-			if needed > effectiveMin {
-				effectiveMin = min(maxItems, needed)
-			}
-		}
-		linesCount := effectiveMin + rng.Intn(maxItems-effectiveMin+1)
 
 		lines := make([]map[string]any, 0, linesCount)
 		var invSubtotal, invDiscount, invTax, invTotal float64
@@ -738,6 +802,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 			}
 		}
 
+		effMaxQty := maxQty
 		var selected []ItemCandidate
 		var targetQuantities []float64
 		if invTargetMinor > 0 {
@@ -826,7 +891,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 				}
 			}
 
-			// Top up with additional unused/least-used items that fit in remaining budget
+			// Top up with additional unused/least-used items that fit in remaining budget up to linesCount
 			if len(selectedIdx) < linesCount && minimumTotal < invTargetMinor {
 				for _, candIdx := range order {
 					if len(selectedIdx) == linesCount {
@@ -848,65 +913,25 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 				return nil, fmt.Errorf("مبلغ الفاتورة %d لا يكفي للحد الأدنى من الأصناف والكميات؛ خفّض الحدود أو ارفع المبلغ", i+1)
 			}
 
-			var maximumTotal float64
+			// Calculate effective max quantity for this invoice to satisfy target without forcing item count expansion
+			targetMajor := models.ToMajor(invTargetMinor)
+			var sumMaxLine float64
+			var sumBasePrice float64
 			for _, idx := range selectedIdx {
-				maximumTotal += maxLineCost(availableItems[idx])
+				sumMaxLine += maxLineCost(availableItems[idx])
+				p := availableItems[idx].SalePrice
+				if p <= 0 {
+					p = 100
+				}
+				sumBasePrice += p * (1 + availableItems[idx].TaxRate/100)
 			}
-			for models.ToMajor(invTargetMinor) > maximumTotal+0.01 && len(selectedIdx) < maxItems {
-				added := false
-				for _, candIdx := range order {
-					if inSelected[candIdx] {
-						continue
-					}
-					candCost := minimumCost(availableItems[candIdx])
-					if minimumTotal+candCost <= invTargetMinor {
-						selectedIdx = append(selectedIdx, candIdx)
-						inSelected[candIdx] = true
-						minimumTotal += candCost
-						maximumTotal += maxLineCost(availableItems[candIdx])
-						added = true
-						break
-					}
+			if targetMajor > sumMaxLine+0.01 {
+				if sumBasePrice > 0 {
+					neededQty := (targetMajor / sumBasePrice) * 1.6
+					effMaxQty = math.Max(maxQty, math.Max(neededQty, math.Max(minQty*2, 50.0)))
+				} else {
+					effMaxQty = math.Max(maxQty, 1e5)
 				}
-				if !added {
-					break
-				}
-			}
-			for models.ToMajor(invTargetMinor) > maximumTotal+0.01 && len(selectedIdx) > 0 {
-				minPos := 0
-				minMaxLine := maxLineCost(availableItems[selectedIdx[0]])
-				for pos := 1; pos < len(selectedIdx); pos++ {
-					if m := maxLineCost(availableItems[selectedIdx[pos]]); m < minMaxLine {
-						minMaxLine = m
-						minPos = pos
-					}
-				}
-				oldIdx := selectedIdx[minPos]
-				oldMinCost := minimumCost(availableItems[oldIdx])
-				bestCand := -1
-				for _, candIdx := range order {
-					if inSelected[candIdx] {
-						continue
-					}
-					if maxLineCost(availableItems[candIdx]) <= minMaxLine {
-						continue
-					}
-					if minimumTotal-oldMinCost+minimumCost(availableItems[candIdx]) <= invTargetMinor {
-						bestCand = candIdx
-						break
-					}
-				}
-				if bestCand < 0 {
-					break
-				}
-				inSelected[oldIdx] = false
-				inSelected[bestCand] = true
-				selectedIdx[minPos] = bestCand
-				minimumTotal += minimumCost(availableItems[bestCand]) - oldMinCost
-				maximumTotal += maxLineCost(availableItems[bestCand]) - minMaxLine
-			}
-			if models.ToMajor(invTargetMinor) > maximumTotal+0.01 {
-				return nil, fmt.Errorf("مبلغ الفاتورة %d يتجاوز ما تسمح به أسعار الأصناف وحدود الكميات؛ ارفع الحد الأعلى للكميات أو عدد الأصناف", i+1)
 			}
 
 			selected = make([]ItemCandidate, len(selectedIdx))
@@ -924,7 +949,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 				rng.Shuffle(len(selected), func(a, b int) { selected[a], selected[b] = selected[b], selected[a] })
 			}
 			linesCount = len(selected)
-			targetQuantities = bulkTargetQuantities(selected, invTargetMinor, minQty, maxQty, req.FractionQty, rng)
+			targetQuantities = bulkTargetQuantities(selected, invTargetMinor, minQty, effMaxQty, req.FractionQty, rng)
 		} else if req.TargetTotal > 0 {
 			return nil, errors.New("المبلغ المستهدف لا يكفي لتوزيعه على الفواتير المحددة")
 		} else {
@@ -968,7 +993,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 						} else {
 							qty = math.Round(calcQty)
 						}
-						qty = math.Max(minQty, math.Min(maxQty, qty))
+						qty = math.Max(minQty, math.Min(effMaxQty, qty))
 						// Keep the existing target-price adjustment within quantity limits.
 						price = models.RoundMajor2(remTaxable / qty)
 						if math.Abs(price-it.SalePrice) > it.SalePrice*req.PriceJitter/100+0.005 {
