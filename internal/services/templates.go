@@ -78,6 +78,17 @@ svg.sar-sym-svg, svg.sar-sym, .sar-sym svg, .currency-symbol svg {
 }
 </style>`
 
+const hideSarSymbolStyleTag = `<style data-hide-sar-symbol>
+svg.sar-sym, svg.sar-sym-svg, .sar-sym, .sar-icon, .sar-icon-wrap, .currency-symbol, .cur-sym,
+[aria-label="ريال سعودي"], [title="ريال سعودي"], svg[viewBox*="1124.14"] {
+  display: none !important;
+}
+.items-table tbody td::after, .items-main-table tbody td::after {
+  display: none !important;
+  content: none !important;
+}
+</style>`
+
 const documentFontStyleTag = `<style data-document-font>
 @font-face { font-family: 'Raseen Document'; src: url('/fonts/NotoSansArabic.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
 body, body * { font-family: 'Raseen Document', Tahoma, Arial, sans-serif !important; }
@@ -95,6 +106,51 @@ func injectTemplateStyle(h, style string) string {
 		return h[:headEnd] + style + "\n" + h[headEnd:]
 	}
 	return style + "\n" + h
+}
+
+// stripHardcodedSarSVGs removes literal inline SAMA Saudi Riyal <svg> elements outside <script> blocks.
+func stripHardcodedSarSVGs(doc string) string {
+	var out strings.Builder
+	out.Grow(len(doc))
+	i := 0
+	lower := strings.ToLower(doc)
+	for i < len(doc) {
+		scriptIdx := strings.Index(lower[i:], "<script")
+		svgIdx := strings.Index(lower[i:], "<svg")
+		if svgIdx < 0 {
+			out.WriteString(doc[i:])
+			break
+		}
+		if scriptIdx >= 0 && scriptIdx < svgIdx {
+			scriptEndRel := strings.Index(lower[i+scriptIdx:], "</script>")
+			if scriptEndRel < 0 {
+				out.WriteString(doc[i:])
+				break
+			}
+			end := i + scriptIdx + scriptEndRel + len("</script>")
+			out.WriteString(doc[i:end])
+			i = end
+			continue
+		}
+		absStart := i + svgIdx
+		closeRel := strings.Index(lower[absStart:], "</svg>")
+		if closeRel < 0 {
+			out.WriteString(doc[i:])
+			break
+		}
+		absEnd := absStart + closeRel + len("</svg>")
+		svgFrag := doc[absStart:absEnd]
+		out.WriteString(doc[i:absStart])
+		isSar := strings.Contains(svgFrag, "1124.14") ||
+			strings.Contains(svgFrag, "M699.6") ||
+			strings.Contains(svgFrag, "sar-sym") ||
+			strings.Contains(svgFrag, "ريال سعودي")
+		if !isSar {
+			out.WriteString(svgFrag)
+		}
+		i = absEnd
+	}
+	return out.String()
 }
 
 type TemplateService struct {
@@ -219,6 +275,13 @@ func localizedPresetName(baseName, category string) string {
 		"24-lapis-orbit":          "فاتورة ضريبية — المدار اللازوردي",
 		"25-aubergine-prism":      "فاتورة ضريبية — المنشور الباذنجاني",
 		"26-pearl-architecture":   "فاتورة ضريبية — العمارة اللؤلؤية",
+		"w1":                      "w1 — فاتورة العمارة الملكية (الكحلي والذهب)",
+		"w2":                      "w2 — فاتورة الرواق الزمردي المعماري",
+		"w3":                      "w3 — فاتورة السجل العقيقي الكلاسيكي",
+		"w4":                      "w4 — فاتورة التصميم السويسري الجرافيتي",
+		"w5":                      "w5 — فاتورة الهوية الأرجوانية الهندسية",
+		"w6":                      "w6 — فاتورة الأفق البترولي والخطوط الملاحية",
+		"w7":                      "w7 — فاتورة الصياغة البرونزية المشطوفة",
 		"thermal":                 "فاتورة حرارية",
 		"legacy-default":          "فاتورة ضريبية افتراضية",
 		"قالب_سند_قبض_رسمي_معتمد": "سند قبض رسمي معتمد",
@@ -253,6 +316,19 @@ func localizedPresetName(baseName, category string) string {
 		return labels[baseName]
 	}
 	return "قالب فاتورة ضريبية مخصص"
+}
+
+func localizedPresetColor(baseName string) string {
+	colors := map[string]string{
+		"w1": "#1e3a5f",
+		"w2": "#065f46",
+		"w3": "#7f1d1d",
+		"w4": "#18181b",
+		"w5": "#4c1d95",
+		"w6": "#0f4c5c",
+		"w7": "#5c3d2e",
+	}
+	return colors[strings.ToLower(strings.TrimSpace(baseName))]
 }
 
 func setTemplateHTMLTitle(content, title string) string {
@@ -457,6 +533,9 @@ func (s *TemplateService) SyncDiskTemplates() error {
 					category = ex.category
 					badge = ex.badge
 					colorHex = ex.colorHex
+					if presetCol := localizedPresetColor(baseName); presetCol != "" {
+						colorHex = presetCol
+					}
 				} else if titleFromHtml != "" && !isUuidStr(titleFromHtml) {
 					h := sha256.Sum256([]byte(d.category + "/" + entry.Name()))
 					id = "tpl_" + hex.EncodeToString(h[:4])
@@ -468,6 +547,9 @@ func (s *TemplateService) SyncDiskTemplates() error {
 					}
 					badge = d.badge
 					colorHex = "#059669"
+					if presetCol := localizedPresetColor(baseName); presetCol != "" {
+						colorHex = presetCol
+					}
 					category = d.category
 				} else {
 					h := sha256.Sum256([]byte(d.category + "/" + entry.Name()))
@@ -475,6 +557,9 @@ func (s *TemplateService) SyncDiskTemplates() error {
 					nameAr = strings.ReplaceAll(baseName, "_", " ")
 					badge = d.badge
 					colorHex = "#059669"
+					if presetCol := localizedPresetColor(baseName); presetCol != "" {
+						colorHex = presetCol
+					}
 					category = d.category
 				}
 			}
@@ -1482,11 +1567,24 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 		"{{payment_label}}", paymentMethodAr,
 		"{{payment_type}}", paymentMethodAr,
 		"{{invoice_type}}", func() string {
+			if inv.DocumentType == "CREDIT_NOTE" {
+				return "إشعار دائن (مرتجع مبيعات)"
+			}
 			if inv.InvoiceType == "SIMPLIFIED" {
 				return "فاتورة ضريبية مبسطة"
 			}
 			return "فاتورة ضريبية"
 		}(),
+		"{{document_type}}", func() string {
+			if inv.DocumentType == "CREDIT_NOTE" {
+				return "إشعار دائن (مرتجع مبيعات)"
+			}
+			return "فاتورة ضريبية"
+		}(),
+		"{{credit_note_number}}", inv.InvoiceNumber,
+		"{{ref_invoice_number}}", inv.RefInvoiceNumber,
+		"{{ref_invoice_date}}", inv.RefInvoiceDate,
+		"{{return_reason}}", inv.ReturnReason,
 		"{{notes}}", inv.Notes,
 
 		// ─── المنشأة / المورد (الشعار وبيانات البائع) ───
@@ -1536,8 +1634,18 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 		}(),
 		"{{items_count}}", fmt.Sprintf("%d", len(inv.Lines)),
 		"{{currency}}", "SAR",
-		"{{sar_symbol}}", s.sarSymbolSVG,
-		"{{currency_symbol}}", s.sarSymbolSVG,
+		"{{sar_symbol}}", func() string {
+			if inv != nil && !inv.HasSarSymbol() {
+				return ""
+			}
+			return s.sarSymbolSVG
+		}(),
+		"{{currency_symbol}}", func() string {
+			if inv != nil && !inv.HasSarSymbol() {
+				return ""
+			}
+			return s.sarSymbolSVG
+		}(),
 
 		// ─── مرحلة الفوترة وبيانات الزكاة ───
 		"{{zatca_phase}}", inv.ZatcaPhase,
@@ -1638,7 +1746,249 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 	result = dupFaqatRegex.ReplaceAllString(result, "فقط")
 	result = strings.ReplaceAll(result, "فقط مبلغ وقدره فقط", "فقط مبلغ وقدره")
 
+	result = adaptCreditNoteHtml(result, inv)
+	if inv != nil && !inv.HasSarSymbol() {
+		result = stripHardcodedSarSVGs(result)
+		result = injectTemplateStyle(result, hideSarSymbolStyleTag)
+	}
 	return injectLtrIconsStyle(result)
+}
+
+func adaptCreditNoteHtml(docHTML string, inv *InvoiceView) string {
+	if inv == nil || inv.DocumentType != "CREDIT_NOTE" {
+		return docHTML
+	}
+
+	// Replace compound titles before single titles so no trailing "فاتورة بيع" remains.
+	replacements := []string{
+		"فاتورة ضريبية - فاتورة بيع", "إشعار دائن - مرتجع مبيعات",
+		"فاتورة بيع ضريبية", "إشعار دائن (مرتجع مبيعات)",
+		"فاتورة مبيعات ضريبية", "إشعار دائن (مرتجع مبيعات)",
+		"فاتورة ضريبية مبسطة", "إشعار دائن مبسط (مرتجع مبيعات)",
+		"فاتورة ضريبية / TAX INVOICE", "إشعار دائن (مرتجع مبيعات) / CREDIT NOTE",
+		"TAX INVOICE / فاتورة بيع", "CREDIT NOTE / إشعار دائن (مرتجع مبيعات)",
+		"فاتورة بيع / TAX INVOICE", "إشعار دائن (مرتجع مبيعات) / CREDIT NOTE",
+		"فاتورة ضريبية", "إشعار دائن (مرتجع مبيعات)",
+		"فاتورة مبيعات", "إشعار دائن (مرتجع مبيعات)",
+		"<title>فاتورة بيع", "<title>إشعار دائن (مرتجع مبيعات)",
+		"<title>فاتورة —", "<title>إشعار دائن (مرتجع مبيعات) —",
+		"TAX SALES INVOICE", "CREDIT NOTE (SALES RETURN)",
+		"SIMPLIFIED TAX INVOICE", "SIMPLIFIED CREDIT NOTE",
+		"TAX INVOICE", "CREDIT NOTE (SALES RETURN)",
+		"Tax Invoice", "Credit Note (Sales Return)",
+		"بيانات الفاتورة", "بيانات الإشعار الدائن",
+		"INVOICE DETAILS", "CREDIT NOTE DETAILS",
+		"Invoice Information", "Credit Note Information",
+		"Invoice Details", "Credit Note Details",
+		"ملخص الفاتورة", "ملخص الإشعار الدائن",
+		"أصناف الفاتورة", "بنود الإشعار الدائن",
+		"هذه الفاتورة صادرة إلكترونياً", "هذا الإشعار الدائن صادر إلكترونياً",
+		"رقم الفاتورة / Inv.No", "رقم الإشعار الدائن / CN.No",
+		"Inv.No / رقم الفاتورة", "CN.No / رقم الإشعار الدائن",
+		"تاريخ الفاتورة / Inv.Date", "تاريخ الإشعار / CN.Date",
+		"Inv.Date / تاريخ الفاتورة", "CN.Date / تاريخ الإشعار",
+		"نوع الفاتورة / Inv.type", "نوع المستند / Doc.type",
+		"Inv.type / نوع الفاتورة", "Doc.type / نوع المستند",
+		"INVOICE NO:", "CN NO:",
+		"Invoice No", "CN No",
+		"Invoice Date", "CN Date",
+		"INVOICE TYPE:", "DOC TYPE:",
+		"INVOICE FROM", "FROM",
+		"INVOICE TO", "TO",
+		"فاتورة من", "من (المُصدِر)",
+		"فاتورة إلى", "إلى (العميل)",
+		"رقم الفاتورة", "رقم الإشعار الدائن",
+		"تاريخ الفاتورة", "تاريخ الإشعار الدائن",
+		"نوع الفاتورة", "نوع المستند",
+	}
+	docHTML = strings.NewReplacer(replacements...).Replace(docHTML)
+
+	// Standalone banner titles containing "فاتورة بيع" (e.g. قالب_فاتورة_بيع_أخضر).
+	standaloneSalesRegex := regexp.MustCompile(`(>)\s*فاتورة بيع\s*(<)`)
+	docHTML = standaloneSalesRegex.ReplaceAllString(docHTML, `${1}إشعار دائن (مرتجع مبيعات)${2}`)
+
+	// new-design-01..20 panels label the invoice number key-value row as <b>الرقم</b>.
+	kvNumRegex := regexp.MustCompile(`(<div\b[^>]*class=["'][^"']*\bkv\b[^"']*["'][^>]*>\s*<b>)\s*الرقم\s*(</b>)`)
+	docHTML = kvNumRegex.ReplaceAllString(docHTML, `${1}رقم الإشعار${2}`)
+
+	if inv.RefInvoiceNumber == "" {
+		return docHTML
+	}
+
+	refNo := html.EscapeString(inv.RefInvoiceNumber)
+	refDate := html.EscapeString(inv.RefInvoiceDate)
+	retReason := html.EscapeString(inv.ReturnReason)
+
+	inserted := false
+	replaceFirstMatch := func(re *regexp.Regexp, extra string) {
+		if inserted || extra == "" {
+			return
+		}
+		if re.MatchString(docHTML) {
+			docHTML = re.ReplaceAllString(docHTML, "${1}"+extra)
+			inserted = true
+		}
+	}
+
+	// 1. Templates 02..26 (<div class="field"><dt>رقم الإشعار الدائن</dt>...</div>).
+	fieldExtra := fmt.Sprintf(`<div class="field ref-invoice"><dt>رقم الفاتورة الأصلية</dt><dd><bdi dir="ltr">%s</bdi></dd></div>`, refNo)
+	if refDate != "" {
+		fieldExtra += fmt.Sprintf(`<div class="field ref-invoice-date"><dt>تاريخ الفاتورة الأصلية</dt><dd><bdi dir="ltr">%s</bdi></dd></div>`, refDate)
+	}
+	if retReason != "" {
+		fieldExtra += fmt.Sprintf(`<div class="field ref-invoice-reason"><dt>سبب الإرجاع</dt><dd>%s</dd></div>`, retReason)
+	}
+	replaceFirstMatch(
+		regexp.MustCompile(`(<div\b[^>]*class=["'][^"']*field[^"']*["'][^>]*>\s*<dt>\s*رقم الإشعار الدائن\s*</dt>[\s\S]*?</div>)`),
+		"\n"+fieldExtra,
+	)
+
+	// 2. new-design-01..20 (<div class="kv"><b>رقم الإشعار</b><span>...</span></div>).
+	kvExtra := fmt.Sprintf(`<div class="kv"><b>الفاتورة الأصلية</b><span dir="ltr">%s</span></div>`, refNo)
+	if refDate != "" {
+		kvExtra += fmt.Sprintf(`<div class="kv"><b>تاريخ الأصل</b><span dir="ltr">%s</span></div>`, refDate)
+	}
+	if retReason != "" {
+		kvExtra += fmt.Sprintf(`<div class="kv"><b>سبب الإرجاع</b><span>%s</span></div>`, retReason)
+	}
+	replaceFirstMatch(
+		regexp.MustCompile(`(<div\b[^>]*class=["'][^"']*\bkv\b[^"']*["'][^>]*>\s*<b>\s*رقم الإشعار\s*</b>[\s\S]*?</div>)`),
+		kvExtra,
+	)
+
+	// 3. 14.html (<div class="box-row"><div class="i-lbl">...</div><div class="i-val">...</div></div>).
+	boxRowExtra := fmt.Sprintf(`<div class="box-row"><div class="i-lbl">الفاتورة الأصلية / Orig. Inv</div><div class="i-val num"><span>%s</span></div></div>`, refNo)
+	if refDate != "" {
+		boxRowExtra += fmt.Sprintf(`<div class="box-row"><div class="i-lbl">تاريخ الأصل / Orig. Date</div><div class="i-val num"><span>%s</span></div></div>`, refDate)
+	}
+	if retReason != "" {
+		boxRowExtra += fmt.Sprintf(`<div class="box-row"><div class="i-lbl">سبب الإرجاع / Reason</div><div class="i-val"><span>%s</span></div></div>`, retReason)
+	}
+	replaceFirstMatch(
+		regexp.MustCompile(`(<div\b[^>]*class=["'][^"']*\bbox-row\b[^"']*["'][^>]*>\s*<div\b[^>]*class=["'][^"']*\bi-lbl\b[^"']*["'][^>]*>[\s\S]*?</div>\s*<div\b[^>]*class=["'][^"']*\bi-val\b[^"']*["'][^>]*>[\s\S]*?</div>\s*</div>)`),
+		"\n"+boxRowExtra,
+	)
+
+	// 4. Single-cell meta rows (قالب_فاتورة_ضريبية_كلاسيك_شاملة / مفصلة).
+	singleCellExtra := fmt.Sprintf(`<tr><td style="border:none;border-bottom:1px solid #000;padding:3.5px 6px;text-align:right;"><span class="meta-lbl">الفاتورة الأصلية <span style="font-size:8.5px;">Orig. Inv</span>:</span><strong class="num" style="float:left;font-size:11px;">%s</strong></td></tr>`, refNo)
+	if refDate != "" {
+		singleCellExtra += fmt.Sprintf(`<tr><td style="border:none;border-bottom:1px solid #000;padding:3.5px 6px;text-align:right;"><span class="meta-lbl">تاريخ الأصل <span style="font-size:8.5px;">Orig. Date</span>:</span><strong class="num" style="float:left;font-size:10.5px;">%s</strong></td></tr>`, refDate)
+	}
+	if retReason != "" {
+		singleCellExtra += fmt.Sprintf(`<tr><td style="border:none;border-bottom:1px solid #000;padding:3.5px 6px;text-align:right;"><span class="meta-lbl">سبب الإرجاع:</span><span style="float:left;font-size:10px;">%s</span></td></tr>`, retReason)
+	}
+	replaceFirstMatch(
+		regexp.MustCompile(`(<tr>\s*<td\b[^>]*>\s*<span\b[^>]*class=["'][^"']*\bmeta-lbl\b[^"']*["'][^>]*>[^<]*رقم الإشعار الدائن[\s\S]*?</td>\s*</tr>)`),
+		"\n"+singleCellExtra,
+	)
+
+	// 5. Two-cell meta table rows (قالب_فاتورة_بيع_أزرق_صافي / رمادي_أنيق).
+	twoCellExtraBlue := fmt.Sprintf(`<tr><td class="i-lbl">Orig. Inv / الفاتورة الأصلية</td><td class="i-val">%s</td></tr>`, refNo)
+	if refDate != "" {
+		twoCellExtraBlue += fmt.Sprintf(`<tr><td class="i-lbl">Orig. Date / تاريخ الأصل</td><td class="i-val">%s</td></tr>`, refDate)
+	}
+	if retReason != "" {
+		twoCellExtraBlue += fmt.Sprintf(`<tr><td class="i-lbl">Reason / سبب الإرجاع</td><td class="i-val">%s</td></tr>`, retReason)
+	}
+	replaceFirstMatch(
+		regexp.MustCompile(`(<tr>\s*<td\b[^>]*class=["'][^"']*\bi-lbl\b[^"']*["'][^>]*>[\s\S]*?رقم الإشعار الدائن[\s\S]*?</td>\s*<td\b[^>]*class=["'][^"']*\bi-val\b[^"']*["'][^>]*>[\s\S]*?</td>\s*</tr>)`),
+		"\n"+twoCellExtraBlue,
+	)
+	twoCellExtraGray := fmt.Sprintf(`<tr><td class="meta-lbl">الفاتورة الأصلية</td><td class="meta-val num"><strong>%s</strong></td></tr>`, refNo)
+	if refDate != "" {
+		twoCellExtraGray += fmt.Sprintf(`<tr><td class="meta-lbl">تاريخ الأصل</td><td class="meta-val num">%s</td></tr>`, refDate)
+	}
+	if retReason != "" {
+		twoCellExtraGray += fmt.Sprintf(`<tr><td class="meta-lbl">سبب الإرجاع</td><td class="meta-val">%s</td></tr>`, retReason)
+	}
+	replaceFirstMatch(
+		regexp.MustCompile(`(<tr>\s*<td\b[^>]*class=["'][^"']*\bmeta-lbl\b[^"']*["'][^>]*>\s*رقم الإشعار الدائن\s*</td>\s*<td\b[^>]*class=["'][^"']*\bmeta-val\b[^"']*["'][^>]*>[\s\S]*?</td>\s*</tr>)`),
+		"\n"+twoCellExtraGray,
+	)
+
+	// 6. Card row variants (.invoice-row, .meta-row, .doc-meta-pill, .meta-box-content).
+	invRowExtra := fmt.Sprintf(`<div class="invoice-row"><span class="lbl">الفاتورة الأصلية:</span><span class="val num">%s</span></div>`, refNo)
+	if refDate != "" {
+		invRowExtra += fmt.Sprintf(`<div class="invoice-row"><span class="lbl">تاريخ الأصل:</span><span class="val num">%s</span></div>`, refDate)
+	}
+	if retReason != "" {
+		invRowExtra += fmt.Sprintf(`<div class="invoice-row"><span class="lbl">سبب الإرجاع:</span><span class="val">%s</span></div>`, retReason)
+	}
+	replaceFirstMatch(
+		regexp.MustCompile(`(<div\b[^>]*class=["'][^"']*\binvoice-row\b[^"']*["'][^>]*>\s*<span\b[^>]*class=["'][^"']*\blbl\b[^"']*["'][^>]*>\s*رقم الإشعار الدائن[\s\S]*?</div>)`),
+		"\n"+invRowExtra,
+	)
+
+	metaLabelRowExtra := fmt.Sprintf(`<div class="meta-row"><span class="meta-label">الفاتورة الأصلية</span><span class="meta-value ltr-value">%s</span></div>`, refNo)
+	if refDate != "" {
+		metaLabelRowExtra += fmt.Sprintf(`<div class="meta-row"><span class="meta-label">تاريخ الفاتورة الأصلية</span><span class="meta-value ltr-value">%s</span></div>`, refDate)
+	}
+	if retReason != "" {
+		metaLabelRowExtra += fmt.Sprintf(`<div class="meta-row"><span class="meta-label">سبب الإرجاع</span><span class="meta-value">%s</span></div>`, retReason)
+	}
+	replaceFirstMatch(
+		regexp.MustCompile(`(<div\b[^>]*class=["'][^"']*\bmeta-row\b[^"']*["'][^>]*>\s*<span\b[^>]*class=["'][^"']*\bmeta-label\b[^"']*["'][^>]*>\s*رقم الإشعار الدائن[\s\S]*?</div>)`),
+		"\n"+metaLabelRowExtra,
+	)
+
+	metaLblRowExtra := fmt.Sprintf(`<div class="meta-row"><span class="meta-lbl">الفاتورة الأصلية :</span><strong class="meta-val num">%s</strong></div>`, refNo)
+	if refDate != "" {
+		metaLblRowExtra += fmt.Sprintf(`<div class="meta-row"><span class="meta-lbl">تاريخ الأصل :</span><span class="meta-val num">%s</span></div>`, refDate)
+	}
+	if retReason != "" {
+		metaLblRowExtra += fmt.Sprintf(`<div class="meta-row"><span class="meta-lbl">سبب الإرجاع :</span><span class="meta-val">%s</span></div>`, retReason)
+	}
+	replaceFirstMatch(
+		regexp.MustCompile(`(<div\b[^>]*class=["'][^"']*\bmeta-row\b[^"']*["'][^>]*>\s*<span\b[^>]*class=["'][^"']*\bmeta-lbl\b[^"']*["'][^>]*>\s*رقم الإشعار الدائن[\s\S]*?</div>)`),
+		"\n"+metaLblRowExtra,
+	)
+
+	metaBoxPairExtra := fmt.Sprintf(`<span class="meta-label">الفاتورة الأصلية:</span><span class="meta-value">%s</span>`, refNo)
+	if refDate != "" {
+		metaBoxPairExtra += fmt.Sprintf(`<span class="meta-label">تاريخ الأصل:</span><span class="meta-value">%s</span>`, refDate)
+	}
+	if retReason != "" {
+		metaBoxPairExtra += fmt.Sprintf(`<span class="meta-label">سبب الإرجاع:</span><span class="meta-value">%s</span>`, retReason)
+	}
+	replaceFirstMatch(
+		regexp.MustCompile(`(<span\b[^>]*class=["'][^"']*\bmeta-label\b[^"']*["'][^>]*>\s*رقم الإشعار الدائن[^<]*</span>\s*<span\b[^>]*class=["'][^"']*\bmeta-value\b[^"']*["'][^>]*>[\s\S]*?</span>)`),
+		"\n"+metaBoxPairExtra,
+	)
+
+	pillExtra := fmt.Sprintf(`<div class="doc-meta-pill"><span class="pill-lbl">الفاتورة الأصلية :</span><span class="pill-val">%s</span></div>`, refNo)
+	if refDate != "" {
+		pillExtra += fmt.Sprintf(`<div class="doc-meta-pill"><span class="pill-lbl">تاريخ الأصل :</span><span class="pill-val">%s</span></div>`, refDate)
+	}
+	if retReason != "" {
+		pillExtra += fmt.Sprintf(`<div class="doc-meta-pill"><span class="pill-lbl">سبب الإرجاع :</span><span class="pill-val">%s</span></div>`, retReason)
+	}
+	replaceFirstMatch(
+		regexp.MustCompile(`(<div\b[^>]*class=["'][^"']*\bdoc-meta-pill\b[^"']*["'][^>]*>[\s\S]*?<span\b[^>]*class=["'][^"']*\bpill-lbl\b[^"']*["'][^>]*>\s*رقم الإشعار الدائن[\s\S]*?</div>)`),
+		"\n"+pillExtra,
+	)
+
+	// 7. Universal fallback strip before items table (covers 4-col shared meta tables, blue pill header, legacy-default, custom HTML).
+	if !inserted {
+		strip := fmt.Sprintf(`<div class="cn-ref-strip" style="margin:6px 0 8px;padding:6px 10px;border:1px solid #d97706;background:#fffbeb;border-radius:4px;font-size:11px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;color:#78350f;"><span><b>إشعار دائن (مرتجع مبيعات)</b></span><span><b>رقم الفاتورة الأصلية:</b> <bdi dir="ltr">%s</bdi></span>`, refNo)
+		if refDate != "" {
+			strip += fmt.Sprintf(`<span><b>تاريخ الفاتورة الأصلية:</b> <bdi dir="ltr">%s</bdi></span>`, refDate)
+		}
+		if retReason != "" {
+			strip += fmt.Sprintf(`<span><b>سبب الإرجاع:</b> %s</span>`, retReason)
+		}
+		strip += `</div>`
+		itemsMarker := regexp.MustCompile(`(<(?:div|section|table)\b[^>]*class=["'][^"']*\bitems[-_](?:table|main)[^"']*["'][^>]*>)`)
+		if itemsMarker.MatchString(docHTML) {
+			docHTML = itemsMarker.ReplaceAllString(docHTML, strip+"\n${1}")
+		} else {
+			containerEnd := regexp.MustCompile(`(<table\b)`)
+			if idx := containerEnd.FindStringIndex(docHTML); idx != nil {
+				docHTML = docHTML[:idx[0]] + strip + "\n" + docHTML[idx[0]:]
+			}
+		}
+	}
+
+	return docHTML
 }
 
 type colType int
@@ -2425,6 +2775,9 @@ func init() {
 }
 
 // CombineHTMLDocuments applies the HTML wrapper stored in data/templates/partials.
+const batchHideSarSymbolCSS = `.batch-doc-item[data-hide-sar-symbol="1"] svg.sar-sym, .batch-doc-item[data-hide-sar-symbol="1"] svg.sar-sym-svg, .batch-doc-item[data-hide-sar-symbol="1"] .sar-sym, .batch-doc-item[data-hide-sar-symbol="1"] .sar-icon, .batch-doc-item[data-hide-sar-symbol="1"] .sar-icon-wrap, .batch-doc-item[data-hide-sar-symbol="1"] .currency-symbol, .batch-doc-item[data-hide-sar-symbol="1"] .cur-sym, .batch-doc-item[data-hide-sar-symbol="1"] [aria-label="ريال سعودي"], .batch-doc-item[data-hide-sar-symbol="1"] [title="ريال سعودي"], .batch-doc-item[data-hide-sar-symbol="1"] svg[viewBox*="1124.14"] { display: none !important; }
+.batch-doc-item[data-hide-sar-symbol="1"] .items-table tbody td::after, .batch-doc-item[data-hide-sar-symbol="1"] .items-main-table tbody td::after { display: none !important; content: none !important; }`
+
 func (s *TemplateService) CombineHTMLDocuments(docs []string) string {
 	if len(docs) == 0 {
 		return ""
@@ -2450,12 +2803,20 @@ func (s *TemplateService) CombineHTMLDocuments(docs []string) string {
 	bodyRegex := regexp.MustCompile(`(?is)<body\b[^>]*>(.*?)</body>`)
 
 	seenStyles := make(map[string]bool)
+	anyHiddenSar := false
 
 	for _, doc := range docs {
-		// Extract and deduplicate styles
+		docHideSar := strings.Contains(doc, "data-hide-sar-symbol")
+		if docHideSar {
+			anyHiddenSar = true
+		}
+		// Extract and deduplicate styles (scope per-document SAR suppression to .batch-doc-item)
 		styleMatches := styleRegex.FindAllStringSubmatch(doc, -1)
 		for _, sm := range styleMatches {
 			if len(sm) > 1 {
+				if strings.Contains(sm[0], "data-hide-sar-symbol") {
+					continue
+				}
 				trimmed := strings.TrimSpace(sm[1])
 				h := fmt.Sprintf("%x", sha256.Sum256([]byte(trimmed)))
 				if !seenStyles[h] {
@@ -2475,7 +2836,20 @@ func (s *TemplateService) CombineHTMLDocuments(docs []string) string {
 			content = doc
 		}
 
-		allBodies.WriteString(strings.ReplaceAll(itemTemplate, "{{content}}", content))
+		itemHTML := strings.ReplaceAll(itemTemplate, "{{content}}", content)
+		if docHideSar {
+			if strings.Contains(itemHTML, `class="batch-doc-item"`) {
+				itemHTML = strings.Replace(itemHTML, `class="batch-doc-item"`, `class="batch-doc-item" data-hide-sar-symbol="1"`, 1)
+			} else {
+				itemHTML = `<div data-hide-sar-symbol="1">` + itemHTML + `</div>`
+			}
+		}
+		allBodies.WriteString(itemHTML)
+	}
+
+	if anyHiddenSar {
+		allStyles.WriteString(batchHideSarSymbolCSS)
+		allStyles.WriteString("\n")
 	}
 
 	wrapper = strings.ReplaceAll(wrapper, "{{styles}}", allStyles.String())

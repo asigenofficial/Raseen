@@ -115,11 +115,14 @@ func (s *ReportService) DashboardStats(issuerID string) (*DashboardData, error) 
 		argsBase = append(argsBase, issuerID)
 	}
 
-	// 1. All Non-Cancelled summary
+	// 1. All Non-Cancelled summary (net of Credit Notes)
 	var allTotal, allTax, allRem int64
 	var allCount int
 	_ = s.db.QueryRow(fmt.Sprintf(`
-		SELECT COUNT(*), COALESCE(SUM(grand_total), 0), COALESCE(SUM(tax_amount), 0), COALESCE(SUM(remaining_amount), 0)
+		SELECT COUNT(CASE WHEN COALESCE(document_type, 'INVOICE') = 'INVOICE' THEN 1 END),
+		       COALESCE(SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -grand_total ELSE grand_total END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -tax_amount ELSE tax_amount END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'INVOICE' THEN remaining_amount ELSE 0 END), 0)
 		FROM invoices %s AND status <> 'CANCELLED'
 	`, whereBase), argsBase...).Scan(&allCount, &allTotal, &allTax, &allRem)
 
@@ -143,7 +146,8 @@ func (s *ReportService) DashboardStats(issuerID string) (*DashboardData, error) 
 	}
 	mArgs := append(append([]any{}, argsBase...), startOfMonth, endOfMonth)
 	_ = s.db.QueryRow(fmt.Sprintf(`
-		SELECT COUNT(*), COALESCE(SUM(grand_total), 0)
+		SELECT COUNT(CASE WHEN COALESCE(document_type, 'INVOICE') = 'INVOICE' THEN 1 END),
+		       COALESCE(SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -grand_total ELSE grand_total END), 0)
 		FROM invoices %s AND status <> 'CANCELLED' AND issue_date >= ? AND issue_date < ?
 	`, whereBase), mArgs...).Scan(&mCount, &mTotal)
 
@@ -157,7 +161,8 @@ func (s *ReportService) DashboardStats(issuerID string) (*DashboardData, error) 
 	var tCount int
 	tArgs := append(argsBase, today)
 	_ = s.db.QueryRow(fmt.Sprintf(`
-		SELECT COUNT(*), COALESCE(SUM(grand_total), 0)
+		SELECT COUNT(CASE WHEN COALESCE(document_type, 'INVOICE') = 'INVOICE' THEN 1 END),
+		       COALESCE(SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -grand_total ELSE grand_total END), 0)
 		FROM invoices %s AND status <> 'CANCELLED' AND issue_date = ?
 	`, whereBase), tArgs...).Scan(&tCount, &tTotal)
 
@@ -166,10 +171,10 @@ func (s *ReportService) DashboardStats(issuerID string) (*DashboardData, error) 
 		Total: models.ToMajor(tTotal),
 	}
 
-	// 4. By Status (PAID, PARTIAL, UNPAID, CANCELLED)
+	// 4. By Status (PAID, PARTIAL, UNPAID, CANCELLED) - invoices only
 	statusRows, err := s.db.Query(fmt.Sprintf(`
 		SELECT status, COUNT(*), COALESCE(SUM(grand_total), 0)
-		FROM invoices %s
+		FROM invoices %s AND COALESCE(document_type, 'INVOICE') = 'INVOICE'
 		GROUP BY status
 	`, whereBase), argsBase...)
 	statusMap := map[string]DashboardStatusItem{
@@ -205,7 +210,9 @@ func (s *ReportService) DashboardStats(issuerID string) (*DashboardData, error) 
 
 	// 6. Monthly (last 12 months)
 	mRows, err := s.db.Query(fmt.Sprintf(`
-		SELECT strftime('%%Y-%%m', issue_date) AS m, COUNT(*), COALESCE(SUM(grand_total), 0)
+		SELECT strftime('%%Y-%%m', issue_date) AS m,
+		       COUNT(CASE WHEN COALESCE(document_type, 'INVOICE') = 'INVOICE' THEN 1 END),
+		       COALESCE(SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -grand_total ELSE grand_total END), 0)
 		FROM invoices %s AND status <> 'CANCELLED' AND issue_date >= date('now', '-12 month')
 		GROUP BY m ORDER BY m ASC
 	`, whereBase), argsBase...)
@@ -241,12 +248,15 @@ func (s *ReportService) DashboardStats(issuerID string) (*DashboardData, error) 
 		tcArgs = append(tcArgs, issuerID)
 	}
 	tcRows, err := s.db.Query(`
-		SELECT c.id, c.name, c.client_code, COUNT(i.id), COALESCE(SUM(i.grand_total), 0), COALESCE(SUM(i.remaining_amount), 0)
+		SELECT c.id, c.name, c.client_code,
+		       COUNT(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'INVOICE' THEN 1 END),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -i.grand_total ELSE i.grand_total END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'INVOICE' THEN i.remaining_amount ELSE 0 END), 0)
 		FROM clients c
 		JOIN invoices i ON i.client_id = c.id
 		`+tcWhere+`
 		GROUP BY c.id
-		ORDER BY SUM(i.grand_total) DESC LIMIT 5
+		ORDER BY COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -i.grand_total ELSE i.grand_total END), 0) DESC LIMIT 5
 	`, tcArgs...)
 	if err == nil {
 		defer tcRows.Close()
@@ -263,12 +273,14 @@ func (s *ReportService) DashboardStats(issuerID string) (*DashboardData, error) 
 
 	// 8. Top Items
 	tiRows, err := s.db.Query(fmt.Sprintf(`
-		SELECT ii.item_name, ii.item_code, COALESCE(SUM(ii.quantity), 0), COALESCE(SUM(ii.total_line), 0)
+		SELECT ii.item_name, ii.item_code,
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -ii.quantity ELSE ii.quantity END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -ii.total_line ELSE ii.total_line END), 0)
 		FROM invoice_items ii
 		JOIN invoices i ON i.id = ii.invoice_id
 		%s AND i.status <> 'CANCELLED'
 		GROUP BY ii.item_name
-		ORDER BY SUM(ii.total_line) DESC LIMIT 5
+		ORDER BY COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -ii.total_line ELSE ii.total_line END), 0) DESC LIMIT 5
 	`, func() string {
 		if issuerID != "" {
 			return "WHERE i.issuer_id = '" + issuerID + "'"
@@ -289,7 +301,10 @@ func (s *ReportService) DashboardStats(issuerID string) (*DashboardData, error) 
 
 	// 9. By Issuer
 	biRows, err := s.db.Query(`
-		SELECT s.name_ar, s.code, COUNT(i.id), COALESCE(SUM(i.grand_total), 0), COALESCE(SUM(i.remaining_amount), 0)
+		SELECT s.name_ar, s.code,
+		       COUNT(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'INVOICE' THEN 1 END),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -i.grand_total ELSE i.grand_total END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'INVOICE' THEN i.remaining_amount ELSE 0 END), 0)
 		FROM issuers s
 		LEFT JOIN invoices i ON i.issuer_id = s.id AND i.status <> 'CANCELLED'
 		GROUP BY s.id
@@ -372,8 +387,10 @@ func (s *ReportService) TaxReport(issuerID, fromDate, toDate string) (*TaxReport
 	}
 
 	query := fmt.Sprintf(`
-		SELECT invoice_type, COUNT(*),
-		       COALESCE(SUM(taxable_amount), 0), COALESCE(SUM(tax_amount), 0), COALESCE(SUM(grand_total), 0)
+		SELECT invoice_type, COUNT(CASE WHEN COALESCE(document_type, 'INVOICE') = 'INVOICE' THEN 1 END),
+		       COALESCE(SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -taxable_amount ELSE taxable_amount END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -tax_amount ELSE tax_amount END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -grand_total ELSE grand_total END), 0)
 		FROM invoices %s
 		GROUP BY invoice_type
 	`, where)
@@ -437,7 +454,8 @@ func (s *ReportService) AgingReport(issuerID string) (*AgingReportResult, error)
 			COUNT(*),
 			COALESCE(SUM(remaining_amount), 0)
 		FROM invoices
-		WHERE status IN ('UNPAID', 'PARTIAL')
+		WHERE COALESCE(document_type, 'INVOICE') = 'INVOICE'
+		  AND status IN ('UNPAID', 'PARTIAL')
 		  AND (? = '' OR issuer_id = ?)
 		GROUP BY bucket
 	`
@@ -530,7 +548,7 @@ func (s *ReportService) SalesReport(issuerID, fromDate, toDate, clientID, groupB
 		args = append(args, toDate)
 	}
 
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM invoices i "+where, args...).Scan(&res.Totals.Count); err != nil {
+	if err := s.db.QueryRow("SELECT COUNT(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'INVOICE' THEN 1 END) FROM invoices i "+where, args...).Scan(&res.Totals.Count); err != nil {
 		return nil, err
 	}
 	var groupExpr string
@@ -549,15 +567,19 @@ func (s *ReportService) SalesReport(issuerID, fromDate, toDate, clientID, groupB
 			groupExpr = "COALESCE(cat.name, 'بدون مجموعة')"
 		}
 		q := fmt.Sprintf(`
-			SELECT %s, COUNT(DISTINCT i.id), COALESCE(SUM(ii.quantity), 0),
-			       COALESCE(SUM(ii.taxable + ii.discount), 0), COALESCE(SUM(ii.discount), 0), COALESCE(SUM(ii.tax_amount), 0), COALESCE(SUM(ii.total_line), 0)
+			SELECT %s, COUNT(DISTINCT CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'INVOICE' THEN i.id END),
+			       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -ii.quantity ELSE ii.quantity END), 0),
+			       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -(ii.taxable + ii.discount) ELSE (ii.taxable + ii.discount) END), 0),
+			       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -ii.discount ELSE ii.discount END), 0),
+			       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -ii.tax_amount ELSE ii.tax_amount END), 0),
+			       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -ii.total_line ELSE ii.total_line END), 0)
 			FROM invoice_items ii
 			JOIN invoices i ON i.id = ii.invoice_id
 			LEFT JOIN items it ON it.id = ii.item_id
 			LEFT JOIN item_categories cat ON cat.id = it.category_id
 			%s
 			GROUP BY %s
-			ORDER BY COALESCE(SUM(ii.total_line), 0) DESC
+			ORDER BY COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -ii.total_line ELSE ii.total_line END), 0) DESC
 		`, groupExpr, where, groupExpr)
 		rows, err := s.db.Query(q, args...)
 		if err != nil {
@@ -599,8 +621,11 @@ func (s *ReportService) SalesReport(issuerID, fromDate, toDate, clientID, groupB
 	}
 
 	q := fmt.Sprintf(`
-		SELECT %s, COUNT(*),
-		       COALESCE(SUM(i.subtotal), 0), COALESCE(SUM(i.discount_amount), 0), COALESCE(SUM(i.tax_amount), 0), COALESCE(SUM(i.grand_total), 0)
+		SELECT %s, COUNT(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'INVOICE' THEN 1 END),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -i.subtotal ELSE i.subtotal END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -i.discount_amount ELSE i.discount_amount END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -i.tax_amount ELSE i.tax_amount END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -i.grand_total ELSE i.grand_total END), 0)
 		FROM invoices i
 		%s
 		GROUP BY %s
@@ -687,8 +712,10 @@ func (s *ReportService) VatReport(issuerID, fromDate, toDate string) (*VatReport
 	}
 
 	q := fmt.Sprintf(`
-		SELECT iss.name_ar, iss.tax_number, COUNT(i.id),
-		       COALESCE(SUM(i.taxable_amount), 0), COALESCE(SUM(i.tax_amount), 0), COALESCE(SUM(i.grand_total), 0)
+		SELECT iss.name_ar, iss.tax_number, COUNT(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'INVOICE' THEN 1 END),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -i.taxable_amount ELSE i.taxable_amount END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -i.tax_amount ELSE i.tax_amount END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -i.grand_total ELSE i.grand_total END), 0)
 		FROM invoices i
 		JOIN issuers iss ON iss.id = i.issuer_id
 		%s
@@ -887,7 +914,7 @@ func (s *ReportService) ProfitabilityReport(issuerID, fromDate, toDate, clientID
 		args = append(args, toDate)
 	}
 
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM invoices i "+where, args...).Scan(&res.Totals.Invoices); err != nil {
+	if err := s.db.QueryRow("SELECT COUNT(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'INVOICE' THEN 1 END) FROM invoices i "+where, args...).Scan(&res.Totals.Invoices); err != nil {
 		return nil, err
 	}
 	var groupExpr string
@@ -905,16 +932,17 @@ func (s *ReportService) ProfitabilityReport(issuerID, fromDate, toDate, clientID
 	}
 
 	q := fmt.Sprintf(`
-		SELECT %s, COUNT(DISTINCT i.id), COALESCE(SUM(ii.quantity), 0),
-		       COALESCE(SUM(ii.taxable), 0),
-		       COALESCE(SUM(ROUND(ii.quantity * COALESCE(it.cost_price, 0))), 0)
+		SELECT %s, COUNT(DISTINCT CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'INVOICE' THEN i.id END),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -ii.quantity ELSE ii.quantity END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -ii.taxable ELSE ii.taxable END), 0),
+		       COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -ROUND(ii.quantity * COALESCE(it.cost_price, 0)) ELSE ROUND(ii.quantity * COALESCE(it.cost_price, 0)) END), 0)
 		FROM invoice_items ii
 		JOIN invoices i ON i.id = ii.invoice_id
 		LEFT JOIN items it ON it.id = ii.item_id
 		LEFT JOIN item_categories cat ON cat.id = it.category_id
 		%s
 		GROUP BY %s
-		ORDER BY COALESCE(SUM(ii.taxable), 0) DESC
+		ORDER BY COALESCE(SUM(CASE WHEN COALESCE(i.document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -ii.taxable ELSE ii.taxable END), 0) DESC
 	`, groupExpr, where, groupExpr)
 
 	rows, err := s.db.Query(q, args...)
@@ -993,7 +1021,7 @@ func (s *ReportService) AgingDetailedReport(issuerID, asOf string) (*AgingDetail
 		return nil, fmt.Errorf("تاريخ أعمار الديون غير صالح")
 	}
 	where := "WHERE i.outstanding > 0"
-	args := []any{asOf, asOf, asOf, asOf, asOf, asOf, asOf, asOf}
+	args := []any{asOf, asOf, asOf, asOf, asOf, asOf, asOf, asOf, asOf, asOf}
 	if issuerID != "" {
 		where += " AND i.issuer_id = ?"
 		args = append(args, issuerID)
@@ -1008,13 +1036,29 @@ func (s *ReportService) AgingDetailedReport(issuerID, asOf string) (*AgingDetail
 				AND l.doc_type='RECEIPT_CANCEL' AND l.transaction_date <= ?
 			)
 			GROUP BY a.invoice_id
+		), credits AS (
+			SELECT cn.ref_invoice_id AS invoice_id, SUM(cn.grand_total) AS credited
+			FROM invoices cn
+			WHERE COALESCE(cn.document_type, 'INVOICE') = 'CREDIT_NOTE'
+			  AND cn.ref_invoice_id IS NOT NULL
+			  AND cn.issue_date <= ?
+			  AND cn.status <> 'CANCELLED'
+			  AND NOT EXISTS (
+				SELECT 1 FROM client_ledger l WHERE l.doc_id=cn.id
+				AND l.doc_type IN ('INVOICE_CANCEL', 'CREDIT_NOTE_CANCEL') AND l.transaction_date <= ?
+			  )
+			GROUP BY cn.ref_invoice_id
 		), balances AS (
-			SELECT inv.*, inv.grand_total-COALESCE(p.paid,0) AS outstanding
-			FROM invoices inv LEFT JOIN payments p ON p.invoice_id=inv.id
-			WHERE inv.issue_date <= ? AND NOT EXISTS (
+			SELECT inv.*, MAX(0, inv.grand_total - COALESCE(p.paid,0) - COALESCE(cr.credited,0)) AS outstanding
+			FROM invoices inv
+			LEFT JOIN payments p ON p.invoice_id=inv.id
+			LEFT JOIN credits cr ON cr.invoice_id=inv.id
+			WHERE COALESCE(inv.document_type, 'INVOICE') = 'INVOICE'
+			  AND inv.issue_date <= ?
+			  AND NOT EXISTS (
 				SELECT 1 FROM client_ledger l WHERE l.doc_id=inv.id
 				AND l.doc_type='INVOICE_CANCEL' AND l.transaction_date <= ?
-			)
+			  )
 		)
 		SELECT c.name, c.client_code,
 		       COALESCE(SUM(CASE WHEN CAST(julianday(?) - julianday(COALESCE(NULLIF(i.due_date,''), i.issue_date)) AS INT) <= 30 THEN i.outstanding ELSE 0 END), 0) AS b0_30,

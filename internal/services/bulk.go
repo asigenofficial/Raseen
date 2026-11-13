@@ -257,6 +257,7 @@ type PreviewRequest struct {
 	InvoiceType         string            `json:"invoice_type"`
 	ZatcaPhase          string            `json:"zatca_phase"`
 	Seed                int64             `json:"seed"`
+	ShowSarSymbol       *models.FlexBool  `json:"show_sar_symbol,omitempty"`
 	Notes               string            `json:"notes"`
 }
 
@@ -1107,6 +1108,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 		}
 		qrPayload := zatca.BuildQrPayload(qrParams)
 
+		showSar := req.ShowSarSymbol == nil || bool(*req.ShowSarSymbol)
 		invoices = append(invoices, map[string]any{
 			"temp_id":         fmt.Sprintf("PREV-%04d", i+1),
 			"invoice_number":  invNumber,
@@ -1125,6 +1127,7 @@ func (s *BulkService) GeneratePreview(req PreviewRequest) (map[string]any, error
 			"taxable_amount":  invTaxable,
 			"tax_amount":      invTax,
 			"grand_total":     invTotal,
+			"show_sar_symbol": showSar,
 			"items":           lines,
 			"lines":           lines,
 		})
@@ -1239,6 +1242,16 @@ func (s *BulkService) CommitBatch(req CommitBatchRequest, username string) (map[
 			if optMap, ok := req.Options.(map[string]any); ok {
 				if zp, ok := optMap["zatca_phase"].(string); ok && zp != "" {
 					row.ZatcaPhase = zp
+				}
+			}
+		}
+		if row.ShowSarSymbol == nil {
+			if optMap, ok := req.Options.(map[string]any); ok {
+				switch v := optMap["show_sar_symbol"].(type) {
+				case bool:
+					row.ShowSarSymbol = models.FlexBoolPtr(v)
+				case float64:
+					row.ShowSarSymbol = models.FlexBoolPtr(v != 0)
 				}
 			}
 		}

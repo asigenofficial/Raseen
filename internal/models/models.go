@@ -1,5 +1,33 @@
 package models
 
+import (
+	"fmt"
+	"strings"
+)
+
+// FlexBool accepts JSON booleans (true/false), numbers (1/0), or numeric/boolean strings.
+type FlexBool bool
+
+func (b *FlexBool) UnmarshalJSON(data []byte) error {
+	s := strings.TrimSpace(string(data))
+	switch strings.ToLower(s) {
+	case "true", "1", `"true"`, `"1"`:
+		*b = true
+		return nil
+	case "false", "0", `"false"`, `"0"`:
+		*b = false
+		return nil
+	default:
+		return fmt.Errorf("invalid flex bool value: %s", s)
+	}
+}
+
+// FlexBoolPtr returns a pointer to FlexBool(v).
+func FlexBoolPtr(v bool) *FlexBool {
+	fb := FlexBool(v)
+	return &fb
+}
+
 type User struct {
 	ID          string  `json:"id"`
 	Username    string  `json:"username"`
@@ -41,6 +69,8 @@ type Issuer struct {
 	InvoicePad         int     `json:"invoice_pad"`
 	VoucherPrefix      string  `json:"voucher_prefix"`
 	VoucherNextNo      int64   `json:"voucher_next_no"`
+	CreditNotePrefix   string  `json:"credit_note_prefix"`
+	CreditNoteNextNo   int64   `json:"credit_note_next_no"`
 	ZatcaPhase         string  `json:"zatca_phase"`
 	QrSettings         string  `json:"qr_settings"`
 	PrintSettings      string  `json:"print_settings"`
@@ -115,6 +145,11 @@ type Invoice struct {
 	InvoiceNumber       string        `json:"invoice_number"`
 	SequenceNo          int64         `json:"sequence_no"`
 	InvoiceType         string        `json:"invoice_type"`
+	DocumentType        string        `json:"document_type"`
+	RefInvoiceID        string        `json:"ref_invoice_id,omitempty"`
+	RefInvoiceNumber    string        `json:"ref_invoice_number,omitempty"`
+	RefInvoiceDate      string        `json:"ref_invoice_date,omitempty"`
+	ReturnReason        string        `json:"return_reason,omitempty"`
 	ZatcaPhase          string        `json:"zatca_phase"`
 	UUID                string        `json:"uuid"`
 	IssueDate           string        `json:"issue_date"`
@@ -134,6 +169,7 @@ type Invoice struct {
 	ChequeDate          *string       `json:"cheque_date"`
 	ChequeNo            string        `json:"cheque_no"`
 	PricesIncludeTax    int           `json:"prices_include_tax"`
+	ShowSarSymbol       *int          `json:"show_sar_symbol,omitempty"`
 	BatchID             *string       `json:"batch_id"`
 	QrPayload           string        `json:"qr_payload"`
 	InvoiceHash         string        `json:"invoice_hash"`
@@ -156,6 +192,16 @@ type Invoice struct {
 	ClientName          string        `json:"client_name,omitempty"`
 	IssuerName          string        `json:"issuer_name,omitempty"`
 	Items               []InvoiceItem `json:"items,omitempty"`
+}
+
+// HasSarSymbol reports whether the invoice should display the 2025 Saudi Riyal currency symbol.
+func (inv *Invoice) HasSarSymbol() bool {
+	return inv == nil || inv.ShowSarSymbol == nil || *inv.ShowSarSymbol != 0
+}
+
+// IntPtr returns a pointer to v.
+func IntPtr(v int) *int {
+	return &v
 }
 
 type InvoiceItem struct {

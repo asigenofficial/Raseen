@@ -141,6 +141,7 @@ export async function render(view) {
     work_end: '22:00',
     payment_methods: ['CREDIT'],
     invoice_type: 'STANDARD',
+    show_sar_symbol: true,
     issue_vouchers: false,
     auto_save_draft: true,
     font_family: 'Tajawal',
@@ -274,6 +275,7 @@ export async function render(view) {
     payment_methods: state.payment_methods,
     invoice_type: state.invoice_type,
     zatca_phase: state.zatca_phase || 'PHASE1',
+    show_sar_symbol: state.show_sar_symbol !== false,
     issue_vouchers: state.issue_vouchers,
     seed: state.seed === '' ? 0 : toNum(state.seed, 0),
     notes: state.notes,
@@ -770,6 +772,13 @@ export async function render(view) {
         <!-- الصف 4: شريط خيارات الإجراءات الآلية والمسودات -->
         <div class="bulk-options-bar mt">
           <label class="check-pill">
+            <input type="checkbox" id="show_sar_symbol" ${raw(state.show_sar_symbol !== false ? 'checked' : '')} />
+            <div class="check-pill-content">
+              <b>إضافة شعار الريال السعودي</b>
+              <span class="muted tiny">إظهار رمز الريال الجديد في الفواتير (يفضّل تعطيله لفواتير ما قبل 2025)</span>
+            </div>
+          </label>
+          <label class="check-pill">
             <input type="checkbox" id="issue_vouchers" ${raw(state.issue_vouchers ? 'checked' : '')} />
             <div class="check-pill-content">
               <b>إصدار سندات قبض تلقائياً مع الفواتير</b>
@@ -1057,6 +1066,18 @@ export async function render(view) {
     if (skipCheck) skipCheck.addEventListener('change', (e) => { state.skip_weekend = e.target.checked; });
     const issueVouchersCheck = $('#issue_vouchers', view);
     if (issueVouchersCheck) issueVouchersCheck.addEventListener('change', (e) => { state.issue_vouchers = e.target.checked; });
+    const showSarCheck = $('#show_sar_symbol', view);
+    if (showSarCheck) {
+      showSarCheck.addEventListener('change', (e) => {
+        state.show_sar_symbol = e.target.checked;
+        if (state.preview) {
+          state.preview.options = { ...(state.preview.options || {}), show_sar_symbol: state.show_sar_symbol };
+          if (Array.isArray(state.preview.invoices)) {
+            state.preview.invoices.forEach((inv) => { inv.show_sar_symbol = state.show_sar_symbol; });
+          }
+        }
+      });
+    }
     const autoSaveCheck = $('#auto_save_draft', view);
     if (autoSaveCheck) autoSaveCheck.addEventListener('change', (e) => { state.auto_save_draft = e.target.checked; });
 
@@ -1690,6 +1711,11 @@ export async function render(view) {
               : 'باركود مشفر بالحقول الخمسة الأساسية';
           }
         }
+        if (draft.options && draft.options.show_sar_symbol !== undefined) {
+          state.show_sar_symbol = draft.options.show_sar_symbol !== false && draft.options.show_sar_symbol !== 0;
+          const sarCheck = $('#show_sar_symbol', view);
+          if (sarCheck) sarCheck.checked = state.show_sar_symbol;
+        }
         recalcPreviewSummary();
         const area = $('#preview-area', view);
         if (area) area.innerHTML = previewHtml();
@@ -2030,6 +2056,7 @@ export async function render(view) {
                 qr_payload: inv.qr_payload || '',
                 invoice_hash: inv.invoice_hash || '',
                 payment_method: inv.payment_method || 'CREDIT',
+                show_sar_symbol: inv.show_sar_symbol !== undefined ? (inv.show_sar_symbol !== false && inv.show_sar_symbol !== 0) : (state.show_sar_symbol !== false),
                 notes: inv.notes || '',
                 subtotal: inv.subtotal,
                 discount_amount: inv.discount_amount,

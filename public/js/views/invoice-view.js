@@ -118,6 +118,222 @@ function receiptModal(invoice, onDone) {
   });
 }
 
+function creditNoteModal(invoice, onDone) {
+  api.get(`/api/invoices/${encodeURIComponent(invoice.id)}/returnable-items`).then((items) => {
+    if (!items || !items.length) {
+      toastErr('لا توجد بنود قابلة للإرجاع في هذه الفاتورة');
+      return;
+    }
+    const hasAnyAvailable = items.some((it) => (it.available_qty || 0) > 0);
+    if (!hasAnyAvailable) {
+      toastErr('تم إرجاع كافة بنود هذه الفاتورة مسبقاً بالكامل');
+      return;
+    }
+
+    const m = modal({
+      title: `إصدار إشعار دائن (مرتجع مبيعات) — للفاتورة ${invoice.invoice_number}`,
+      wide: true,
+      body: html`
+        <div class="alert alert-info" style="font-size:12px;margin-bottom:1rem">
+          فاتورة مبيعات أصلية: <b class="mono font-bold">${invoice.invoice_number}</b> —
+          العميل: <b>${esc(invoice.buyer_name || invoice.client_name)}</b> —
+          إجمالي الفاتورة: <b class="num">${money(invoice.grand_total)}</b>
+        </div>
+        <div class="row">
+          <div class="field" style="max-width:200px">
+            <label class="req">تاريخ المرتجع</label>
+            <input type="date" id="cn-return-date" value="${today()}" />
+          </div>
+          <div class="field flex-2">
+            <label>سبب الإرجاع</label>
+            <input type="text" id="cn-reason" value="مرتجع مبيعات" placeholder="مثال: استرجاع بضاعة / تالف / إلغاء طلب" />
+          </div>
+        </div>
+        <div class="field mt">
+          <label>ملاحظات إضافية على الإشعار الدائن</label>
+          <input type="text" id="cn-notes" placeholder="ملاحظات اختيارية تظهر في الإشعار الدائن..." />
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:1.2rem 0 .5rem">
+          <h4 style="margin:0;font-size:13px;font-weight:700">بنود الفاتورة المتاحة للإرجاع:</h4>
+          <div style="display:flex;gap:6px">
+            <button type="button" class="btn btn-xs" id="cn-return-all">إرجاع كامل الكميات المتبقية</button>
+            <button type="button" class="btn btn-xs" id="cn-clear-all">تفريغ</button>
+          </div>
+        </div>
+
+        <div class="table-wrap" style="max-height:300px;overflow-y:auto;border:1px solid var(--line);border-radius:6px">
+          <table class="tbl compact" style="margin:0">
+            <thead style="position:sticky;top:0;background:var(--card);z-index:2">
+              <tr>
+                <th style="min-width:140px">الصنف</th>
+                <th style="width:70px">الوحدة</th>
+                <th class="text-end" style="width:90px">السعر</th>
+                <th class="text-center" style="width:75px">الكمية بالفاتورة</th>
+                <th class="text-center" style="width:75px">المرتجع سابقاً</th>
+                <th class="text-center" style="width:80px;color:var(--brand)">المتاح للإرجاع</th>
+                <th class="text-center" style="width:110px">الكمية المرتجعة</th>
+                <th class="text-end" style="width:95px">إجمالي البند</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map((it, idx) => `
+                <tr data-idx="${idx}" class="${(it.available_qty || 0) <= 0 ? 'muted' : ''}">
+                  <td>
+                    <div class="font-bold">${esc(it.item_name)}</div>
+                    ${it.item_code ? `<div class="mono tiny muted">${esc(it.item_code)}</div>` : ''}
+                  </td>
+                  <td class="tiny">${esc(it.unit || 'قطعة')}</td>
+                  <td class="text-end num">${amount(it.unit_price)}</td>
+                  <td class="text-center num">${it.original_qty}</td>
+                  <td class="text-center num">${it.returned_qty}</td>
+                  <td class="text-center num font-bold" style="color:var(--brand)">${it.available_qty}</td>
+                  <td class="text-center">
+                    <input type="number" class="cn-item-qty input input-sm" style="width:85px;text-align:center;padding:3px"
+                           data-invoice-item-id="${esc(it.invoice_item_id || '')}"
+                           data-item-id="${esc(it.item_id || '')}"
+                           data-item-code="${esc(it.item_code || '')}"
+                           data-item-name="${esc(it.item_name || '')}"
+                           data-unit="${esc(it.unit || '')}"
+                           data-max="${it.available_qty}"
+                           data-price="${it.unit_price}"
+                           data-tax-rate="${it.tax_rate}"
+                           data-discount-unit="${(it.discount || 0) / (it.original_qty || 1)}"
+                           min="0" max="${it.available_qty}" step="any"
+                           value="0"
+                           ${(it.available_qty || 0) <= 0 ? 'disabled' : ''} />
+                  </td>
+                  <td class="text-end num cn-item-total font-bold">0.00</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="totals-box mt" style="background:var(--bg);padding:10px 14px;border-radius:6px;border:1px solid var(--line);max-width:320px;margin-inline-start:auto">
+          <div class="line"><span>المبلغ الخاضع للضريبة:</span><span class="num" id="cn-tot-taxable">0.00</span></div>
+          <div class="line"><span>ضريبة القيمة المضافة:</span><span class="num" id="cn-tot-tax">0.00</span></div>
+          <div class="line grand" style="font-weight:700;color:var(--brand);font-size:14px"><span>إجمالي الإشعار الدائن:</span><span class="num" id="cn-tot-grand">0.00</span></div>
+        </div>
+      `,
+      footer: `
+        <button class="btn" data-close type="button">إلغاء</button>
+        <button class="btn btn-primary" id="cn-submit-btn" type="button" style="background:#f59e0b;border-color:#d97706;color:#fff;font-weight:700">
+          إصدار الإشعار الدائن (مرتجع مبيعات)
+        </button>
+      `,
+    });
+
+    const updateTotals = () => {
+      let taxableSum = 0;
+      let taxSum = 0;
+      const rows = m.body.querySelectorAll('tbody tr');
+      rows.forEach((row) => {
+        const input = row.querySelector('.cn-item-qty');
+        if (!input) return;
+        const qty = parseFloat(input.value) || 0;
+        const price = parseFloat(input.dataset.price) || 0;
+        const taxRate = parseFloat(input.dataset.taxRate) || 0;
+        const discUnit = parseFloat(input.dataset.discountUnit) || 0;
+
+        const effectivePrice = Math.max(0, price - discUnit);
+        const lineTaxable = effectivePrice * qty;
+        const lineTax = lineTaxable * (taxRate / 100);
+        const lineTotal = lineTaxable + lineTax;
+
+        taxableSum += lineTaxable;
+        taxSum += lineTax;
+
+        const totalCell = row.querySelector('.cn-item-total');
+        if (totalCell) totalCell.textContent = amount(lineTotal);
+      });
+
+      const grandTotal = taxableSum + taxSum;
+      const elTaxable = m.body.querySelector('#cn-tot-taxable');
+      const elTax = m.body.querySelector('#cn-tot-tax');
+      const elGrand = m.body.querySelector('#cn-tot-grand');
+      if (elTaxable) elTaxable.textContent = amount(taxableSum);
+      if (elTax) elTax.textContent = amount(taxSum);
+      if (elGrand) elGrand.textContent = amount(grandTotal, 'SAR');
+    };
+
+    m.body.querySelectorAll('.cn-item-qty').forEach((inp) => {
+      inp.addEventListener('input', updateTotals);
+      inp.addEventListener('change', () => {
+        const max = parseFloat(inp.dataset.max) || 0;
+        let val = parseFloat(inp.value) || 0;
+        if (val < 0) val = 0;
+        if (val > max) val = max;
+        inp.value = val;
+        updateTotals();
+      });
+    });
+
+    m.body.querySelector('#cn-return-all')?.addEventListener('click', () => {
+      m.body.querySelectorAll('.cn-item-qty').forEach((inp) => {
+        if (!inp.disabled) inp.value = inp.dataset.max || 0;
+      });
+      updateTotals();
+    });
+
+    m.body.querySelector('#cn-clear-all')?.addEventListener('click', () => {
+      m.body.querySelectorAll('.cn-item-qty').forEach((inp) => {
+        inp.value = 0;
+      });
+      updateTotals();
+    });
+
+    m.el.querySelector('#cn-submit-btn')?.addEventListener('click', async (e) => {
+      const returnDate = (m.body.querySelector('#cn-return-date')?.value || '').trim();
+      const reason = (m.body.querySelector('#cn-reason')?.value || '').trim();
+      const notes = (m.body.querySelector('#cn-notes')?.value || '').trim();
+
+      const returnItems = [];
+      m.body.querySelectorAll('.cn-item-qty').forEach((inp) => {
+        const qty = parseFloat(inp.value) || 0;
+        if (qty > 0) {
+          returnItems.push({
+            invoice_item_id: inp.dataset.invoiceItemId || null,
+            item_id: inp.dataset.itemId || null,
+            item_code: inp.dataset.itemCode || '',
+            item_name: inp.dataset.itemName || '',
+            unit: inp.dataset.unit || '',
+            quantity: qty,
+          });
+        }
+      });
+
+      if (!returnItems.length) {
+        toastErr('يرجى تحديد كمية مرتجعة واحدة على الأقل');
+        return;
+      }
+
+      e.target.disabled = true;
+      e.target.textContent = 'جارٍ إصدار الإشعار الدائن...';
+
+      try {
+        const cn = await api.post(`/api/invoices/${encodeURIComponent(invoice.id)}/credit-note`, {
+          return_date: returnDate,
+          reason: reason || 'مرتجع مبيعات',
+          notes: notes,
+          items: returnItems,
+        });
+
+        toastOk(`تم إصدار الإشعار الدائن ${cn.invoice_number} بنجاح`);
+        m.close();
+        if (onDone) onDone();
+        router.go(`invoice-view/${encodeURIComponent(cn.id)}`);
+      } catch (err) {
+        toastErr('فشل إصدار الإشعار الدائن: ' + (err.message || err));
+        e.target.disabled = false;
+        e.target.textContent = 'إصدار الإشعار الدائن (مرتجع مبيعات)';
+      }
+    });
+  }).catch((err) => {
+    toastErr('تعذر جلب بنود الفاتورة: ' + (err.message || err));
+  });
+}
+
 export function formatSaudiPhone(phone) {
   if (!phone) return '';
   let clean = String(phone).replace(/[^0-9]/g, '');
@@ -158,8 +374,9 @@ const invoiceDownloadsInProgress = new Set();
 
 export async function downloadInvoicePdf({ invoice, issuer, client, printSettings = null, docHtml = null }) {
   if (invoiceDownloadsInProgress.has(invoice.id)) return null;
+  const isCN = invoice.document_type === 'CREDIT_NOTE';
   const invNum = (invoice.invoice_number || invoice.id || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
-  const filename = clientPdfFilename('فاتورة', client?.name || invoice.client_name || invoice.buyer_name, invNum);
+  const filename = clientPdfFilename(isCN ? 'إشعار دائن' : 'فاتورة', client?.name || invoice.client_name || invoice.buyer_name, invNum);
   invoiceDownloadsInProgress.add(invoice.id);
   try {
     toastOk('جارٍ تجهيز نسخة PDF المحفوظة...');
@@ -179,8 +396,9 @@ export async function downloadInvoicePdf({ invoice, issuer, client, printSetting
 }
 
 export async function shareInvoicePdfFile({ invoice, issuer, client, text, printSettings = null, docHtml = null }) {
+  const isCN = invoice.document_type === 'CREDIT_NOTE';
   const invNum = (invoice.invoice_number || invoice.id || '').replace(/[\/\\?%*:|"<>]/g, '_').trim();
-  const filename = clientPdfFilename('فاتورة', client?.name || invoice.client_name || invoice.buyer_name, invNum);
+  const filename = clientPdfFilename(isCN ? 'إشعار دائن' : 'فاتورة', client?.name || invoice.client_name || invoice.buyer_name, invNum);
   let files = null;
   let pdfBlob = null;
   try {
@@ -196,9 +414,10 @@ export async function shareInvoicePdfFile({ invoice, issuer, client, text, print
     console.warn('تعذر تجهيز ملف PDF للمشاركة:', err);
   }
 
+  const isCN = invoice.document_type === 'CREDIT_NOTE';
   return shareDocument({
-    title: `فاتورة ${invoice.invoice_number}`,
-    text: text || `فاتورة ضريبية رقم ${invoice.invoice_number} من ${issuer?.name_ar || ''}`,
+    title: `${isCN ? 'إشعار دائن' : 'فاتورة'} ${invoice.invoice_number}`,
+    text: text || `${isCN ? 'إشعار دائن (مرتجع مبيعات)' : 'فاتورة ضريبية'} رقم ${invoice.invoice_number} من ${issuer?.name_ar || ''}`,
     url: `${location.origin}${location.pathname}#/invoice-view/${encodeURIComponent(invoice.id)}`,
     files,
     onDownloadFile: pdfBlob ? () => savePdfFile(pdfBlob, filename) : null,
@@ -269,7 +488,7 @@ export function openDownloadModal({ invoice, issuer, client, printSettings = nul
     m.close();
     try {
       const doc = docHtml || await getInvoiceDocHtml({ invoice, issuer, client, printSettings });
-      download(`فاتورة_${invoice.invoice_number}.html`, doc, 'text/html;charset=utf-8');
+      download(`${invoice.document_type === 'CREDIT_NOTE' ? 'إشعار_دائن' : 'فاتورة'}_${invoice.invoice_number}.html`, doc, 'text/html;charset=utf-8');
       toastOk('تم تحميل مستند الفاتورة');
     } catch (err) { toastErr(err.message); }
   });
@@ -331,6 +550,15 @@ export async function render(view, ctx) {
       }
     }
 
+    let linkedCreditNotes = [];
+    if (invoice.document_type !== 'CREDIT_NOTE') {
+      try {
+        linkedCreditNotes = await api.get(`/api/invoices/${encodeURIComponent(invoice.id)}/credit-notes`, { silent: true }) || [];
+      } catch {
+        linkedCreditNotes = [];
+      }
+    }
+
     const getPrintSettings = () => {
       const tpl = availableTemplates.find((t) => t.id === selectedTplStyle);
       const rawHeaders = tpl?.headers || issuerPrintCfg.headers || [];
@@ -353,39 +581,63 @@ export async function render(view, ctx) {
       };
     };
 
+    const showSar = invoice.show_sar_symbol !== 0 && invoice.show_sar_symbol !== false;
+    const fmtAmt = (v, opt) => (showSar ? amount(v, 'SAR', opt) : money(v));
+
     view.innerHTML = html`
       <div class="page-head">
         <div class="titles">
-          <h1>فاتورة ${invoice.invoice_number} ${raw(statusBadge(invoice.status, invoice.status_label))}
+          <h1>${invoice.document_type === 'CREDIT_NOTE' ? 'إشعار دائن (مرتجع مبيعات)' : 'فاتورة'} ${invoice.invoice_number} ${raw(statusBadge(invoice.status, invoice.status_label))}
             <span class="badge ${invoice.zatca_phase === 'PHASE2' ? 'teal' : 'blue'}" style="font-size:.78rem;vertical-align:middle">
               ${invoice.zatca_phase === 'PHASE2' ? 'مرحلة 2' : 'مرحلة 1'}
             </span>
           </h1>
-          <p>${issuer.name_ar} — ${client.name} — ${dateAr(invoice.issue_date)} ${invoice.issue_time}</p>
+          <p>
+            ${issuer.name_ar} — ${client.name} — ${dateAr(invoice.issue_date)} ${invoice.issue_time}
+            ${invoice.document_type === 'CREDIT_NOTE' && invoice.ref_invoice_number ? `<span style="margin-right:12px;color:var(--brand);font-weight:700">مرتبط بالفاتورة الأصلية: <a href="#/invoice-view/${esc(invoice.ref_invoice_id)}" style="color:var(--brand);text-decoration:underline">${esc(invoice.ref_invoice_number)}</a></span>` : ''}
+          </p>
         </div>
         <div class="page-actions">
           <span id="invoice-pdf-status" class="badge gray" title="حالة نسخة PDF المحفوظة">PDF قيد التجهيز</span>
           <button class="btn btn-primary" id="download-invoice" type="button">
             ${raw(icon.pdf({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}
-            تحميل الفاتورة
+            تحميل ${invoice.document_type === 'CREDIT_NOTE' ? 'الإشعار' : 'الفاتورة'}
           </button>
-          <button class="btn" id="share-invoice" type="button" style="background:#10b981;border-color:#10b981;color:#fff;font-weight:600" title="مشاركة الفاتورة">
+          <button class="btn" id="share-invoice" type="button" style="background:#10b981;border-color:#10b981;color:#fff;font-weight:600" title="مشاركة">
             ${raw(icon.share({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}
             مشاركة
           </button>
-          <button class="btn" id="print-more" type="button" title="طباعة الفاتورة">
+          <button class="btn" id="print-more" type="button" title="طباعة">
             ${raw(icon.printer({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}
             طباعة
           </button>
-          ${raw(invoice.status !== 'CANCELLED' && invoice.remaining_amount > 0 && can('vouchers.create')
+          ${raw(invoice.document_type !== 'CREDIT_NOTE' && invoice.status !== 'CANCELLED' && invoice.remaining_amount > 0 && can('vouchers.create')
       ? `<button class="btn btn-primary" id="pay" type="button">${icon.receipt({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}سند قبض</button>` : '')}
-          ${raw(invoice.status !== 'CANCELLED' && can('invoices.edit') ? `<a class="btn" href="#/invoice?edit=${esc(invoice.id)}" title="تعديل الفاتورة يدوياً">${icon.edit({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}تعديل الفاتورة</a>` : '')}
-          <button class="btn btn-danger" id="btn-delete-invoice" type="button" title="حذف الفاتورة نهائياً">${icon.trash({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}حذف الفاتورة</button>
+          ${raw(invoice.document_type !== 'CREDIT_NOTE' && invoice.status !== 'CANCELLED' && can('invoices.create')
+      ? `<button class="btn" id="btn-create-credit-note" type="button" style="background:#f59e0b;border-color:#d97706;color:#fff;font-weight:600" title="إصدار إشعار دائن (مرتجع مبيعات)">${raw(icon.refresh({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' }))}مرتجع مبيعات</button>` : '')}
+          ${raw(invoice.document_type === 'CREDIT_NOTE' && invoice.ref_invoice_id
+      ? `<a class="btn" href="#/invoice-view/${esc(invoice.ref_invoice_id)}" title="الانتقال للفاتورة الأصلية">${raw(icon.arrowRight({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}الفاتورة الأصلية</a>` : '')}
+          ${raw(invoice.document_type !== 'CREDIT_NOTE' && invoice.status !== 'CANCELLED' && can('invoices.edit') ? `<a class="btn" href="#/invoice?edit=${esc(invoice.id)}" title="تعديل الفاتورة يدوياً">${icon.edit({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}تعديل الفاتورة</a>` : '')}
+          <button class="btn btn-danger" id="btn-delete-invoice" type="button" title="حذف نهائياً">${icon.trash({ size: 16, style: 'vertical-align:text-bottom;margin-left:4px' })}حذف</button>
           <a class="btn" href="#/invoices">${raw(icon.arrowRight({ size: 14, style: 'vertical-align:text-bottom;margin-left:4px' }))}القائمة</a>
         </div>
       </div>
 
-      ${raw(invoice.status === 'CANCELLED' ? '<div class="alert alert-danger">هذه الفاتورة ملغاة — تم عكس قيدها في كشف حساب العميل، ورقمها وبصمتها محفوظان في السلسلة.</div>' : '')}
+      ${raw(invoice.document_type === 'CREDIT_NOTE' ? `
+        <div class="alert alert-warning" style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;border-radius:8px;padding:12px 16px">
+          <div>
+            <div style="font-size:14px;font-weight:700;margin-bottom:2px">إشعار دائن (مرتجع مبيعات)</div>
+            <div style="font-size:12px">
+              تم إصدار هذا الإشعار الدائن بقيمة <b class="num">${money(invoice.grand_total)}</b> لصالح العميل <b>${esc(invoice.buyer_name || client.name)}</b> وخصمها من حسابه في كشف الحساب.
+              ${invoice.ref_invoice_number ? `مرتبط بالفاتورة الأصلية: <a href="#/invoice-view/${esc(invoice.ref_invoice_id)}" style="color:#b45309;font-weight:700;text-decoration:underline">${esc(invoice.ref_invoice_number)}</a> (${dateAr(invoice.ref_invoice_date)}).` : ''}
+              ${invoice.return_reason ? `<span style="margin-inline-start:8px">السبب: <i>${esc(invoice.return_reason)}</i></span>` : ''}
+            </div>
+          </div>
+          ${invoice.ref_invoice_id ? `<a class="btn btn-sm" href="#/invoice-view/${esc(invoice.ref_invoice_id)}" style="background:#f59e0b;color:#fff;border-color:#d97706;font-weight:700">عرض الفاتورة الأصلية ←</a>` : ''}
+        </div>
+      ` : '')}
+
+      ${raw(invoice.status === 'CANCELLED' ? '<div class="alert alert-danger">هذا المستند ملغى — تم عكس قيده في كشف حساب العميل، ورقمه وبصمته محفوظان في السلسلة.</div>' : '')}
 
       <div class="inv-view-grid">
         <div>
@@ -422,6 +674,11 @@ export async function render(view, ctx) {
                   </button>`;
                 })())}
               </div>
+              ${raw(can('invoices.edit') ? `
+                <label class="check" title="إظهار أو إخفاء شعار الريال السعودي الجديد في هذه الفاتورة" style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:6px;border:1px solid var(--line);background:var(--field-bg, var(--card));font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">
+                  <input type="checkbox" id="toggle-sar-symbol" ${showSar ? 'checked' : ''} />
+                  <span>شعار الريال</span>
+                </label>` : '')}
             </div>
 
             <div id="tpl-zoom-wrap" style="display:${activeViewMode === 'template' ? 'flex' : 'none'};align-items:center;gap:.5rem">
@@ -454,12 +711,12 @@ export async function render(view, ctx) {
               <div class="table-wrap">
                 <table class="tbl compact">
                   <thead><tr><th>#</th><th>رقم الصنف</th><th>الصنف</th><th>الوحدة</th><th class="text-end">الكمية</th>
-                    <th class="text-end">السعر <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
-                    <th class="text-end">الخصم <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
-                    <th class="text-end">قبل الضريبة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
+                    <th class="text-end">السعر ${raw(showSar ? `<span class="cur-sym">${sarSvg({ size: 11 })}</span>` : '')}</th>
+                    <th class="text-end">الخصم ${raw(showSar ? `<span class="cur-sym">${sarSvg({ size: 11 })}</span>` : '')}</th>
+                    <th class="text-end">قبل الضريبة ${raw(showSar ? `<span class="cur-sym">${sarSvg({ size: 11 })}</span>` : '')}</th>
                     <th class="text-center">الضريبة</th>
-                    <th class="text-end">قيمة الضريبة <span class="cur-sym">${sarSvg({ size: 11 })}</span></th>
-                    <th class="text-end">الإجمالي <span class="cur-sym">${sarSvg({ size: 11 })}</span></th></tr></thead>
+                    <th class="text-end">قيمة الضريبة ${raw(showSar ? `<span class="cur-sym">${sarSvg({ size: 11 })}</span>` : '')}</th>
+                    <th class="text-end">الإجمالي ${raw(showSar ? `<span class="cur-sym">${sarSvg({ size: 11 })}</span>` : '')}</th></tr></thead>
                   <tbody>
                     ${(invoice.lines || []).map((l, i) => raw(`<tr>
                       <td class="tiny">${i + 1}</td>
@@ -467,12 +724,12 @@ export async function render(view, ctx) {
                       <td><b>${esc(l.item_name)}</b></td>
                       <td class="tiny">${esc(l.unit)}</td>
                       <td class="text-end num">${num(l.quantity)}</td>
-                      <td class="text-end num">${amount(l.unit_price)}</td>
-                      <td class="text-end num">${l.discount > 0 ? amount(l.discount) : '—'}</td>
-                      <td class="text-end num">${amount(l.taxable)}</td>
+                      <td class="text-end num">${fmtAmt(l.unit_price)}</td>
+                      <td class="text-end num">${l.discount > 0 ? fmtAmt(l.discount) : '—'}</td>
+                      <td class="text-end num">${fmtAmt(l.taxable)}</td>
                       <td class="text-center tiny num">${num(l.tax_rate)}%</td>
-                      <td class="text-end num">${amount(l.tax_amount)}</td>
-                      <td class="text-end num"><b>${amount(l.total_line)}</b></td>
+                      <td class="text-end num">${fmtAmt(l.tax_amount)}</td>
+                      <td class="text-end num"><b>${fmtAmt(l.total_line)}</b></td>
                     </tr>`))}
                   </tbody>
                 </table>
@@ -491,6 +748,26 @@ export async function render(view, ctx) {
                   <td class="tiny">${esc(a.payment_type)}</td>
                   <td class="text-end num">${amount(a.allocated_amount)}</td>
                   <td class="actions"><a class="btn btn-sm" href="#/vouchers?q=${esc(a.voucher_number)}">${icon.eye({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}عرض</a></td>
+                </tr>`).join('')}</tbody>
+              </table></div>
+            </div>` : '')}
+
+          ${raw(linkedCreditNotes && linkedCreditNotes.length ? `
+            <div class="card pad0 mt" style="border:1px solid rgba(245, 158, 11, 0.3)">
+              <div class="card-head" style="background:rgba(245, 158, 11, 0.08);padding:10px 14px;border-bottom:1px solid rgba(245, 158, 11, 0.2)">
+                <h3 style="color:#b45309;margin:0;font-size:13px;display:flex;align-items:center;gap:6px">
+                  ${raw(icon.refresh({ size: 15, style: 'vertical-align:middle' }))}
+                  الإشعارات الدائنة المرتبطة (مرتجع مبيعات)
+                </h3>
+              </div>
+              <div class="table-wrap"><table class="tbl compact">
+                <thead><tr><th>رقم الإشعار</th><th>تاريخ المرتجع</th><th>السبب</th><th class="text-end">قيمة المرتجع <span class="cur-sym">${sarSvg({ size: 11 })}</span></th><th></th></tr></thead>
+                <tbody>${linkedCreditNotes.map((cn) => `<tr>
+                  <td class="mono font-bold" style="color:var(--brand)">${esc(cn.invoice_number)}</td>
+                  <td class="tiny">${esc(dateAr(cn.issue_date))}</td>
+                  <td class="tiny">${esc(cn.return_reason || 'مرتجع مبيعات')}</td>
+                  <td class="text-end num font-bold text-amber">${amount(cn.grand_total)}</td>
+                  <td class="actions"><a class="btn btn-sm btn-ghost" href="#/invoice-view/${esc(cn.id)}">${icon.eye({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}عرض</a></td>
                 </tr>`).join('')}</tbody>
               </table></div>
             </div>` : '')}
@@ -523,13 +800,13 @@ export async function render(view, ctx) {
           <div class="card">
             <h3>الإجماليات</h3>
             <div class="totals-box">
-              <div class="line"><span>الإجمالي قبل الخصم</span><span class="num">${amount(invoice.subtotal)}</span></div>
-              <div class="line"><span>الخصم</span><span class="num">${amount(invoice.discount_amount)}</span></div>
-              <div class="line"><span>الخاضع للضريبة</span><span class="num">${amount(invoice.taxable_amount)}</span></div>
-              <div class="line"><span>ضريبة القيمة المضافة</span><span class="num">${amount(invoice.tax_amount)}</span></div>
-              <div class="line grand"><span>الإجمالي</span><span class="num">${amount(invoice.grand_total, 'SAR', { size: 16 })}</span></div>
-              <div class="line"><span>المسدد</span><span class="num">${amount(invoice.paid_amount)}</span></div>
-              <div class="line" style="font-weight:700;color:var(--danger)"><span>المتبقي</span><span class="num">${amount(invoice.remaining_amount)}</span></div>
+              <div class="line"><span>الإجمالي قبل الخصم</span><span class="num">${fmtAmt(invoice.subtotal)}</span></div>
+              <div class="line"><span>الخصم</span><span class="num">${fmtAmt(invoice.discount_amount)}</span></div>
+              <div class="line"><span>الخاضع للضريبة</span><span class="num">${fmtAmt(invoice.taxable_amount)}</span></div>
+              <div class="line"><span>ضريبة القيمة المضافة</span><span class="num">${fmtAmt(invoice.tax_amount)}</span></div>
+              <div class="line grand"><span>الإجمالي</span><span class="num">${fmtAmt(invoice.grand_total, { size: 16 })}</span></div>
+              <div class="line"><span>المسدد</span><span class="num">${fmtAmt(invoice.paid_amount)}</span></div>
+              <div class="line" style="font-weight:700;color:var(--danger)"><span>المتبقي</span><span class="num">${fmtAmt(invoice.remaining_amount)}</span></div>
             </div>
             <div class="alert alert-info mt tiny mb0">${tafqeet(invoice.grand_total, invoice.currency === 'SAR' ? 'ر.س' : invoice.currency)}</div>
           </div>
@@ -698,6 +975,23 @@ export async function render(view, ctx) {
       updateInvoicePreview();
     });
 
+    // تبديل إظهار أو إخفاء شعار الريال السعودي لهذه الفاتورة
+    $('#toggle-sar-symbol', view)?.addEventListener('change', async (e) => {
+      const el = e.currentTarget;
+      const nextShow = el.checked;
+      el.disabled = true;
+      try {
+        await api.patch(`/api/invoices/${encodeURIComponent(invoice.id)}/sar-symbol`, {
+          show_sar_symbol: nextShow,
+        });
+        toastOk(nextShow ? 'تم إظهار شعار الريال السعودي في الفاتورة' : 'تم إخفاء شعار الريال السعودي من الفاتورة');
+        await draw();
+      } catch {
+        el.checked = !nextShow;
+        el.disabled = false;
+      }
+    });
+
     // اعتماد القالب المختار كافتراضي للمنشأة
     $('#btn-adopt-invoice-tpl', view)?.addEventListener('click', async () => {
       const btn = $('#btn-adopt-invoice-tpl', view);
@@ -845,6 +1139,9 @@ export async function render(view, ctx) {
 
     const payBtn = $('#pay', view);
     if (payBtn) payBtn.addEventListener('click', () => receiptModal(invoice, draw));
+
+    const creditNoteBtn = $('#btn-create-credit-note', view);
+    if (creditNoteBtn) creditNoteBtn.addEventListener('click', () => creditNoteModal(invoice, draw));
 
     const cancelBtn = $('#cancel', view);
     if (cancelBtn) {

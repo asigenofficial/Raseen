@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS issuers (
   invoice_pad         INTEGER NOT NULL DEFAULT 5,
   voucher_prefix      TEXT NOT NULL DEFAULT 'RV',
   voucher_next_no     INTEGER NOT NULL DEFAULT 1,
+  credit_note_prefix  TEXT NOT NULL DEFAULT 'CN',
+  credit_note_next_no INTEGER NOT NULL DEFAULT 1,
   zatca_phase         TEXT NOT NULL DEFAULT 'PHASE1',    -- PHASE1 | PHASE2
   qr_settings         TEXT NOT NULL DEFAULT '{}',        -- JSON
   print_settings      TEXT NOT NULL DEFAULT '{}',        -- JSON: الخطوط والأحجام ووضع القالب الجاهز
@@ -168,6 +170,11 @@ CREATE TABLE IF NOT EXISTS invoices (
   invoice_number        TEXT NOT NULL,
   sequence_no           INTEGER NOT NULL DEFAULT 1,       -- ICV داخل سلسلة المنشأة
   invoice_type          TEXT NOT NULL DEFAULT 'STANDARD', -- STANDARD | SIMPLIFIED
+  document_type         TEXT NOT NULL DEFAULT 'INVOICE',  -- INVOICE | CREDIT_NOTE
+  ref_invoice_id        TEXT REFERENCES invoices(id) ON DELETE SET NULL,
+  ref_invoice_number    TEXT NOT NULL DEFAULT '',
+  ref_invoice_date      TEXT NOT NULL DEFAULT '',
+  return_reason         TEXT NOT NULL DEFAULT '',
   zatca_phase           TEXT NOT NULL DEFAULT 'PHASE1',   -- PHASE1 | PHASE2
   uuid                  TEXT NOT NULL,
   issue_date            TEXT NOT NULL,
@@ -187,6 +194,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   cheque_date           TEXT,                             -- تاريخ الشيك عند السداد بشيك
   cheque_no             TEXT NOT NULL DEFAULT '',         -- رقم الشيك / المرجع
   prices_include_tax    INTEGER NOT NULL DEFAULT 0,       -- 1 = الأسعار المدخلة شاملة الضريبة
+  show_sar_symbol       INTEGER NOT NULL DEFAULT 1,       -- 1 = إظهار شعار الريال السعودي الجديد، 0 = إخفاؤه
   batch_id              TEXT REFERENCES invoice_batches(id) ON DELETE SET NULL,
   qr_payload            TEXT NOT NULL DEFAULT '',
   invoice_hash          TEXT NOT NULL DEFAULT '',
@@ -218,6 +226,8 @@ CREATE INDEX IF NOT EXISTS idx_invoices_search_compound ON invoices(issuer_id, s
 CREATE INDEX IF NOT EXISTS idx_invoices_client_date ON invoices(client_id, issue_date);
 CREATE INDEX IF NOT EXISTS idx_invoices_payment ON invoices(payment_method);
 CREATE INDEX IF NOT EXISTS idx_invoices_type ON invoices(invoice_type);
+CREATE INDEX IF NOT EXISTS idx_invoices_doc_type ON invoices(document_type, issuer_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_ref_invoice ON invoices(ref_invoice_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_client_status ON invoices(client_id, status, grand_total, paid_amount);
 CREATE INDEX IF NOT EXISTS idx_invoices_month_stats ON invoices(issuer_id, status, issue_date, grand_total);
 

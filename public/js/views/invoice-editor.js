@@ -49,6 +49,7 @@ function saveDraft(state) {
       cheque_no: state.cheque_no, cheque_date: state.cheque_date, due_date: state.due_date,
       auto_receipt: state.auto_receipt,
       print_after: state.print_after,
+      show_sar_symbol: state.show_sar_symbol !== false,
       header_discount_percent: state.header_discount_percent,
       lines: state.lines,
     };
@@ -103,6 +104,7 @@ export async function render(view, ctx) {
     cheque_no: editInvoice.cheque_no ?? '', cheque_date: editInvoice.cheque_date ?? '', due_date: editInvoice.due_date ?? '',
     auto_receipt: false,
     print_after: true,
+    show_sar_symbol: editInvoice.show_sar_symbol !== 0 && editInvoice.show_sar_symbol !== false,
     header_discount_percent: editInvoice.discount_percent || 0,
     zatca_phase: editInvoice.zatca_phase || 'PHASE1',
     lines: ((editInvoice.items || editInvoice.lines) && (editInvoice.items || editInvoice.lines).length)
@@ -130,6 +132,7 @@ export async function render(view, ctx) {
     notes: '',
     auto_receipt: false,
     print_after: true,
+    show_sar_symbol: true,
     header_discount_percent: 0,
     lines: [emptyLine()],
     ...(draft || {}),
@@ -387,6 +390,15 @@ export async function render(view, ctx) {
                 <input type="number" id="header_discount" value="${state.header_discount_percent}" min="0" max="100" step="0.01" placeholder="0.00" />
               </div>
             </div>
+            <label class="check mt" style="margin-top:.75rem">
+              <input type="checkbox" id="show_sar_symbol" ${raw(state.show_sar_symbol !== false ? 'checked' : '')} />
+              <span>إضافة شعار الريال السعودي</span>
+            </label>
+            <span class="hint" id="sar-symbol-hint">${(() => {
+              const pre2025 = state.issue_date && state.issue_date < '2025-01-01';
+              if (state.show_sar_symbol === false) return 'لن يظهر شعار الريال السعودي الجديد في هذه الفاتورة (مناسب لفواتير ما قبل 2025)';
+              return pre2025 ? 'ملاحظة: تاريخ هذه الفاتورة قبل 2025 — يمكنك إلغاء التحديد لإخفاء شعار الريال الجديد' : 'سيظهر شعار الريال السعودي الجديد بجانب المبالغ في هذه الفاتورة';
+            })()}</span>
           </div>
         </div>
 
@@ -617,7 +629,20 @@ export async function render(view, ctx) {
         hint.textContent = state.zatca_phase === 'PHASE2' ? 'يتضمن الهاش والتوقيع الرقمي وسلسلة الفواتير' : 'يتضمن الحقول الخمسة الأساسية فقط';
       }
     });
-    $('#issue_date', view).addEventListener('change', (e) => { state.issue_date = e.target.value; saveDraft(state); });
+    const updateSarSymbolHint = () => {
+      const hint = $('#sar-symbol-hint', view);
+      if (!hint) return;
+      const pre2025 = state.issue_date && state.issue_date < '2025-01-01';
+      if (state.show_sar_symbol === false) {
+        hint.textContent = 'لن يظهر شعار الريال السعودي الجديد في هذه الفاتورة (مناسب لفواتير ما قبل 2025)';
+      } else {
+        hint.textContent = pre2025
+          ? 'ملاحظة: تاريخ هذه الفاتورة قبل 2025 — يمكنك إلغاء التحديد لإخفاء شعار الريال الجديد'
+          : 'سيظهر شعار الريال السعودي الجديد بجانب المبالغ في هذه الفاتورة';
+      }
+    };
+    $('#issue_date', view).addEventListener('change', (e) => { state.issue_date = e.target.value; updateSarSymbolHint(); saveDraft(state); });
+    $('#show_sar_symbol', view)?.addEventListener('change', (e) => { state.show_sar_symbol = e.target.checked; updateSarSymbolHint(); saveDraft(state); });
     $('#issue_time', view).addEventListener('change', (e) => { state.issue_time = e.target.value; saveDraft(state); });
     $('#payment_method', view).addEventListener('change', (e) => { state.payment_method = e.target.value; view.querySelectorAll('[data-cheque]').forEach(el => el.classList.toggle('hidden', state.payment_method !== 'CHEQUE')); saveDraft(state); });
     $('#due_date', view)?.addEventListener('change', (e) => { state.due_date = e.target.value; saveDraft(state); });
@@ -1082,6 +1107,7 @@ export async function render(view, ctx) {
           payment_method: state.payment_method,
           invoice_number: state.invoice_number || undefined,
           discount_percent: state.header_discount_percent || undefined,
+          show_sar_symbol: state.show_sar_symbol !== false,
           notes: state.notes,
           lines,
         });
@@ -1106,6 +1132,7 @@ export async function render(view, ctx) {
         payment_method: state.payment_method,
         invoice_number: state.invoice_number || undefined,
         discount_percent: state.header_discount_percent || undefined,
+        show_sar_symbol: state.show_sar_symbol !== false,
         notes: state.notes,
         auto_receipt: state.auto_receipt,
         lines,

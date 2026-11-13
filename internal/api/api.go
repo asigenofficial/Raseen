@@ -151,15 +151,16 @@ func (s *Server) clientIP(r *http.Request) string {
 }
 
 type PreviewInvoicePayload struct {
-	InvoiceNumber   string  `json:"invoice_number"`
-	InvoiceType     string  `json:"invoice_type"`
-	ZatcaPhase      string  `json:"zatca_phase"`
-	QrPayload       string  `json:"qr_payload"`
-	InvoiceHash     string  `json:"invoice_hash"`
-	IssueDate       string  `json:"issue_date"`
-	IssueTime       string  `json:"issue_time"`
-	PaymentMethod   string  `json:"payment_method"`
-	Notes           string  `json:"notes"`
+	InvoiceNumber   string           `json:"invoice_number"`
+	InvoiceType     string           `json:"invoice_type"`
+	ZatcaPhase      string           `json:"zatca_phase"`
+	QrPayload       string           `json:"qr_payload"`
+	InvoiceHash     string           `json:"invoice_hash"`
+	IssueDate       string           `json:"issue_date"`
+	IssueTime       string           `json:"issue_time"`
+	PaymentMethod   string           `json:"payment_method"`
+	ShowSarSymbol   *models.FlexBool `json:"show_sar_symbol,omitempty"`
+	Notes           string           `json:"notes"`
 	Subtotal        float64 `json:"subtotal"`
 	DiscountAmount  float64 `json:"discount_amount"`
 	TaxableAmount   float64 `json:"taxable_amount"`
@@ -1488,6 +1489,7 @@ func (s *Server) Handler() http.Handler {
 			ClientID:      q.Get("client_id"),
 			Status:        q.Get("status"),
 			InvoiceType:   q.Get("invoice_type"),
+			DocumentType:  q.Get("document_type"),
 			PaymentMethod: q.Get("payment_method"),
 			BatchID:       q.Get("batch_id"),
 			HasRemaining:  hasRemaining,
@@ -1608,6 +1610,43 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, inv)
 	})
 
+	mux.HandleFunc("PATCH /api/invoices/{id}/sar-symbol", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		actor := "system"
+		actorName := actor
+		if u != nil {
+			actor = u.Username
+			actorName = u.FullName
+		}
+		id := r.PathValue("id")
+		var body struct {
+			ShowSarSymbol *models.FlexBool `json:"show_sar_symbol"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ShowSarSymbol == nil {
+			s.err(w, 400, "يرجى تحديد قيمة إظهار شعار الريال")
+			return
+		}
+		inv, err := s.invoices.SetShowSarSymbol(id, bool(*body.ShowSarSymbol), actor, s.clientIP(r))
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		_ = s.dirtyDocument("invoice", inv.ID, inv.IssuerID)
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "invoice:updated",
+			Entity:    "invoice",
+			Action:    "update",
+			Actor:     actor,
+			ActorName: actorName,
+			Data: map[string]any{
+				"id":              inv.ID,
+				"invoice_number":  inv.InvoiceNumber,
+				"show_sar_symbol": inv.HasSarSymbol(),
+			},
+		})
+		s.json(w, 200, inv)
+	})
+
 	mux.HandleFunc("POST /api/invoices/{id}/cancel", func(w http.ResponseWriter, r *http.Request) {
 		u := s.getSessionUser(r)
 		actor := "system"
@@ -1668,6 +1707,69 @@ func (s *Server) Handler() http.Handler {
 		s.json(w, 200, map[string]any{"ok": true})
 	})
 
+	mux.HandleFunc("POST /api/invoices/{id}/credit-note", func(w http.ResponseWriter, r *http.Request) {
+		u := s.getSessionUser(r)
+		actor := "system"
+		actorName := ""
+		actorRole := ""
+		if u != nil {
+			actor = u.Username
+			actorName = u.FullName
+			actorRole = u.Role
+		}
+		id := r.PathValue("id")
+		var input services.CreateCreditNoteInput
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			s.err(w, 400, "بيانات غير صالحة: "+err.Error())
+			return
+		}
+		input.OriginalInvoiceID = id
+
+		cn, err := s.invoices.CreateCreditNote(input, actor, s.clientIP(r))
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+
+		s.sync.Broadcast(services.SyncEvent{
+			Type:      "invoice:created",
+			Entity:    "invoice",
+			Action:    "create",
+			Actor:     actor,
+			ActorName: actorName,
+			ActorRole: actorRole,
+			Data: map[string]any{
+				"id":             cn.ID,
+				"invoice_number": cn.InvoiceNumber,
+				"grand_total":    cn.GrandTotalMajor,
+				"client_name":    cn.ClientName,
+				"document_type":  "CREDIT_NOTE",
+			},
+		})
+
+		s.json(w, 201, cn)
+	})
+
+	mux.HandleFunc("GET /api/invoices/{id}/credit-notes", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		notes, err := s.invoices.GetCreditNotesForInvoice(id)
+		if err != nil {
+			s.err(w, 500, err.Error())
+			return
+		}
+		s.json(w, 200, notes)
+	})
+
+	mux.HandleFunc("GET /api/invoices/{id}/returnable-items", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		items, err := s.invoices.GetReturnableItems(id)
+		if err != nil {
+			s.err(w, 400, err.Error())
+			return
+		}
+		s.json(w, 200, items)
+	})
+
 	mux.HandleFunc("GET /api/invoices/{id}/xml", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		xmlStr, err := s.invoices.GetXml(id)
@@ -1721,6 +1823,11 @@ func (s *Server) Handler() http.Handler {
 		it = "STANDARD"
 	}
 
+	showSar := 1
+	if inv.ShowSarSymbol != nil && !bool(*inv.ShowSarSymbol) {
+		showSar = 0
+	}
+
 	invView := &services.InvoiceView{
 		Invoice: models.Invoice{
 			InvoiceNumber:  invNum,
@@ -1731,6 +1838,7 @@ func (s *Server) Handler() http.Handler {
 			IssueDate:      issDate,
 			IssueTime:      issTime,
 			PaymentMethod:  inv.PaymentMethod,
+			ShowSarSymbol:  models.IntPtr(showSar),
 			Notes:          inv.Notes,
 			Subtotal:       models.ToMinor(inv.Subtotal),
 			DiscountAmount: models.ToMinor(inv.DiscountAmount),
@@ -1904,7 +2012,11 @@ func (s *Server) Handler() http.Handler {
 
 		if err == nil && revision == rendered && storedStyle == expectedKey {
 			if data, readErr := os.ReadFile(diskPath); readErr == nil && len(data) > 0 {
-				filename := fmt.Sprintf("invoice_%s.pdf", inv.InvoiceNumber)
+				prefix := "invoice"
+				if inv.DocumentType == "CREDIT_NOTE" {
+					prefix = "credit_note"
+				}
+				filename := fmt.Sprintf("%s_%s.pdf", prefix, inv.InvoiceNumber)
 				w.Header().Set("Content-Type", "application/pdf")
 				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 				w.WriteHeader(http.StatusOK)
@@ -1919,7 +2031,11 @@ func (s *Server) Handler() http.Handler {
 			s.err(w, 500, err.Error())
 			return
 		}
-		filename := fmt.Sprintf("invoice_%s.pdf", inv.InvoiceNumber)
+		prefix := "invoice"
+		if inv.DocumentType == "CREDIT_NOTE" {
+			prefix = "credit_note"
+		}
+		filename := fmt.Sprintf("%s_%s.pdf", prefix, inv.InvoiceNumber)
 		w.Header().Set("Content-Type", "application/pdf")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 		w.WriteHeader(http.StatusOK)
@@ -1941,6 +2057,8 @@ func (s *Server) Handler() http.Handler {
 
 		htmlStr := body.HTML
 		var invNum string
+		arPrefix := "فاتورة"
+		enPrefix := "invoice"
 		if strings.TrimSpace(htmlStr) == "" {
 			inv, err := s.invoices.GetInvoice(id)
 			if err != nil {
@@ -1948,21 +2066,29 @@ func (s *Server) Handler() http.Handler {
 				return
 			}
 			invNum = inv.InvoiceNumber
+			if inv.DocumentType == "CREDIT_NOTE" {
+				arPrefix = "إشعار_دائن"
+				enPrefix = "credit_note"
+			}
 			pdfBytes, pdfErr := s.currentPDF("invoice", id, r.URL.Query().Get("style"))
 			if pdfErr != nil {
 				s.err(w, 500, pdfErr.Error())
 				return
 			}
-			filename := fmt.Sprintf("فاتورة_%s.pdf", invNum)
+			filename := fmt.Sprintf("%s_%s.pdf", arPrefix, invNum)
 			encodedFilename := url.PathEscape(filename)
 			w.Header().Set("Content-Type", "application/pdf")
-			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"invoice_%s.pdf\"; filename*=UTF-8''%s", invNum, encodedFilename))
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s_%s.pdf\"; filename*=UTF-8''%s", enPrefix, invNum, encodedFilename))
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(pdfBytes)
 			return
 		} else {
 			if inv, err := s.invoices.GetInvoice(id); err == nil && inv != nil {
 				invNum = inv.InvoiceNumber
+				if inv.DocumentType == "CREDIT_NOTE" {
+					arPrefix = "إشعار_دائن"
+					enPrefix = "credit_note"
+				}
 			}
 		}
 
@@ -1974,10 +2100,10 @@ func (s *Server) Handler() http.Handler {
 		if invNum == "" {
 			invNum = id
 		}
-		filename := fmt.Sprintf("فاتورة_%s.pdf", invNum)
+		filename := fmt.Sprintf("%s_%s.pdf", arPrefix, invNum)
 		encodedFilename := url.PathEscape(filename)
 		w.Header().Set("Content-Type", "application/pdf")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"invoice_%s.pdf\"; filename*=UTF-8''%s", invNum, encodedFilename))
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s_%s.pdf\"; filename*=UTF-8''%s", enPrefix, invNum, encodedFilename))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(pdfBytes)
 	})

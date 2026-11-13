@@ -1275,6 +1275,43 @@ export function tafqeetArabicJS(value, currency = 'SAR') {
  * محرك استبدال الوسوم الديناميكي الشامل لأي قالب HTML بدون أي قيود أو ثوابت.
  * يكتشف الوسوم والجداول وهيكلتها برمجياً ويستبدلها بالقيم الحقيقية تلقائياً.
  */
+function stripHardcodedSarSVGsJS(html) {
+  let out = '';
+  let i = 0;
+  const lower = html.toLowerCase();
+  while (i < html.length) {
+    const scriptIdx = lower.indexOf('<script', i);
+    const svgIdx = lower.indexOf('<svg', i);
+    if (svgIdx < 0) {
+      out += html.slice(i);
+      break;
+    }
+    if (scriptIdx >= 0 && scriptIdx < svgIdx) {
+      const scriptEnd = lower.indexOf('</script>', scriptIdx);
+      if (scriptEnd < 0) {
+        out += html.slice(i);
+        break;
+      }
+      const end = scriptEnd + '</script>'.length;
+      out += html.slice(i, end);
+      i = end;
+      continue;
+    }
+    const closeIdx = lower.indexOf('</svg>', svgIdx);
+    if (closeIdx < 0) {
+      out += html.slice(i);
+      break;
+    }
+    const svgEnd = closeIdx + '</svg>'.length;
+    const frag = html.slice(svgIdx, svgEnd);
+    out += html.slice(i, svgIdx);
+    const isSar = frag.includes('1124.14') || frag.includes('M699.6') || frag.includes('sar-sym') || frag.includes('ريال سعودي');
+    if (!isSar) out += frag;
+    i = svgEnd;
+  }
+  return out;
+}
+
 export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, voucher = null, invoice = null, extra = {} } = {}) {
   if (!rawHtml) return '';
 
@@ -1285,6 +1322,13 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
   rawHtml = ensureItemsRowsInTbodyJS(rawHtml);
 
   const doc = voucher || invoice || {};
+  const hideSarSymbol = Boolean(
+    invoice &&
+    (invoice.show_sar_symbol === 0 ||
+      invoice.show_sar_symbol === false ||
+      invoice.show_sar_symbol === '0' ||
+      invoice.show_sar_symbol === 'false'),
+  );
   const formatAddrObj = (o = {}) => {
     if (!o) return '';
     const parts = [];
@@ -1586,6 +1630,7 @@ export function fillDynamicTemplateHtml(rawHtml, { issuer = {}, client = {}, vou
       return voucher?.reference_no || '';
     }
     if (k === 'currency_symbol' || k === 'sar_symbol') {
+      if (hideSarSymbol) return '';
       return `<svg viewBox="0 0 1124.14 1256.39" width="0.72em" height="0.82em" class="sar-sym" style="vertical-align:-0.08em;display:inline-block;fill:currentColor;margin:0 2px;" aria-label="ريال سعودي" title="ريال سعودي"><path d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/><path d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-132.25,28.11V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.88c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-49.24l68.78-101.97v-.02c7.14-10.55,11.3-23.27,11.3-36.97v-149.98l132.25-28.11v270.4l424.53-90.28Z"/></svg>`;
     }
     if (k === 'currency') {
@@ -1861,6 +1906,25 @@ body { width: 210mm !important; max-width: 210mm !important; box-sizing: border-
     result = result.replace(/<\/head>/i, rowsStyle + '\n</head>');
   }
   if (voucher) result = applyVoucherPageStyle(result);
+
+  if (hideSarSymbol) {
+    result = stripHardcodedSarSVGsJS(result);
+    const hideSarStyle = `<style data-hide-sar-symbol>
+svg.sar-sym, svg.sar-sym-svg, .sar-sym, .sar-icon, .sar-icon-wrap, .currency-symbol, .cur-sym,
+[aria-label="ريال سعودي"], [title="ريال سعودي"], svg[viewBox*="1124.14"] {
+  display: none !important;
+}
+.items-table tbody td::after, .items-main-table tbody td::after {
+  display: none !important;
+  content: none !important;
+}
+</style>`;
+    if (/<\/head>/i.test(result)) {
+      result = result.replace(/<\/head>/i, hideSarStyle + '\n</head>');
+    } else {
+      result = hideSarStyle + '\n' + result;
+    }
+  }
 
   return result;
 }

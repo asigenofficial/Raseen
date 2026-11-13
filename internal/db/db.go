@@ -97,9 +97,20 @@ func (d *DB) initSchema() error {
 	_, _ = d.Exec("ALTER TABLE sessions ADD COLUMN user_agent TEXT DEFAULT ''")
 	_, _ = d.Exec("ALTER TABLE sessions ADD COLUMN current_view TEXT DEFAULT ''")
 	_, _ = d.Exec("ALTER TABLE sessions ADD COLUMN last_active_at TEXT DEFAULT ''")
+	// Migrate credit note columns if missing
+	_, _ = d.Exec("ALTER TABLE issuers ADD COLUMN credit_note_prefix TEXT DEFAULT 'CN'")
+	_, _ = d.Exec("ALTER TABLE issuers ADD COLUMN credit_note_next_no INTEGER DEFAULT 1")
+	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN document_type TEXT DEFAULT 'INVOICE'")
+	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN ref_invoice_id TEXT DEFAULT ''")
+	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN ref_invoice_number TEXT DEFAULT ''")
+	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN ref_invoice_date TEXT DEFAULT ''")
+	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN return_reason TEXT DEFAULT ''")
+	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN show_sar_symbol INTEGER NOT NULL DEFAULT 1")
 	// Performance indexes for large datasets
 	_, _ = d.Exec("CREATE INDEX IF NOT EXISTS idx_invoices_client_status ON invoices(client_id, status, grand_total, paid_amount)")
 	_, _ = d.Exec("CREATE INDEX IF NOT EXISTS idx_invoices_month_stats ON invoices(issuer_id, status, issue_date, grand_total)")
+	_, _ = d.Exec("CREATE INDEX IF NOT EXISTS idx_invoices_doc_type ON invoices(document_type, issuer_id)")
+	_, _ = d.Exec("CREATE INDEX IF NOT EXISTS idx_invoices_ref_invoice ON invoices(ref_invoice_id)")
 	return nil
 }
 
@@ -134,6 +145,7 @@ func (d *DB) bootstrap() error {
 		"invoice_prefix_default": "INV",
 		"invoice_pad_default":    "5",
 		"voucher_prefix_default": "RV",
+		"credit_note_prefix_default": "CN",
 		"print_copies_default":   "1",
 	}
 

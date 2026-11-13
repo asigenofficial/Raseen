@@ -89,7 +89,7 @@ func (s *ClientService) ListClients(f ListClientsFilter) (*ClientsResponse, erro
 		       OR c.email LIKE ? OR c.address LIKE ?)
 		  AND (? = 0 OR (
 		      (CASE WHEN ? != '' THEN 0 ELSE c.opening_balance END) +
-		      COALESCE((SELECT SUM(grand_total) - SUM(paid_amount) FROM invoices WHERE client_id = c.id AND status <> 'CANCELLED' AND (? = '' OR issuer_id = ?)), 0) > 0
+		      COALESCE((SELECT SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -grand_total ELSE grand_total END) - SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'INVOICE' THEN paid_amount ELSE 0 END) FROM invoices WHERE client_id = c.id AND status <> 'CANCELLED' AND (? = '' OR issuer_id = ?)), 0) > 0
 		  ))
 	`
 	countArgs := []any{
@@ -124,7 +124,7 @@ func (s *ClientService) ListClients(f ListClientsFilter) (*ClientsResponse, erro
 		       OR c.email LIKE ? OR c.address LIKE ?)
 		  AND (? = 0 OR (
 		      (CASE WHEN ? != '' THEN 0 ELSE c.opening_balance END) +
-		      COALESCE((SELECT SUM(grand_total) - SUM(paid_amount) FROM invoices WHERE client_id = c.id AND status <> 'CANCELLED' AND (? = '' OR issuer_id = ?)), 0) > 0
+		      COALESCE((SELECT SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'CREDIT_NOTE' THEN -grand_total ELSE grand_total END) - SUM(CASE WHEN COALESCE(document_type, 'INVOICE') = 'INVOICE' THEN paid_amount ELSE 0 END) FROM invoices WHERE client_id = c.id AND status <> 'CANCELLED' AND (? = '' OR issuer_id = ?)), 0) > 0
 		  ))
 		ORDER BY c.name ASC
 		LIMIT ? OFFSET ?
@@ -167,9 +167,9 @@ func (s *ClientService) ListClients(f ListClientsFilter) (*ClientsResponse, erro
 		}
 		invQuery := `
 			SELECT client_id,
-			       COUNT(*) AS cnt,
-			       COALESCE(SUM(grand_total), 0) AS total_inv,
-			       COALESCE(SUM(paid_amount), 0) AS total_pd
+			       COUNT(CASE WHEN document_type = 'INVOICE' THEN 1 END) AS cnt,
+			       COALESCE(SUM(CASE WHEN document_type = 'CREDIT_NOTE' THEN -grand_total ELSE grand_total END), 0) AS total_inv,
+			       COALESCE(SUM(CASE WHEN document_type = 'INVOICE' THEN paid_amount ELSE 0 END), 0) AS total_pd
 			FROM invoices
 			WHERE status <> 'CANCELLED'
 			  AND (? = '' OR issuer_id = ?)
@@ -237,9 +237,9 @@ func (s *ClientService) GetClient(id string) (*ClientListItem, error) {
 		       c.country, c.tax_number, c.commercial_register, c.client_type,
 		       c.payment_terms_days, c.opening_balance, c.credit_limit, c.notes,
 		       c.is_active, c.created_at, c.updated_at,
-		       (SELECT COUNT(*) FROM invoices i WHERE i.client_id = c.id AND i.status <> 'CANCELLED') AS invoices_count,
-		       (SELECT COALESCE(SUM(i.grand_total), 0) FROM invoices i WHERE i.client_id = c.id AND i.status <> 'CANCELLED') AS total_invoiced,
-		       (SELECT COALESCE(SUM(i.paid_amount), 0) FROM invoices i WHERE i.client_id = c.id AND i.status <> 'CANCELLED') AS total_paid
+		       (SELECT COUNT(*) FROM invoices i WHERE i.client_id = c.id AND i.status <> 'CANCELLED' AND i.document_type = 'INVOICE') AS invoices_count,
+		       (SELECT COALESCE(SUM(CASE WHEN i.document_type = 'CREDIT_NOTE' THEN -i.grand_total ELSE i.grand_total END), 0) FROM invoices i WHERE i.client_id = c.id AND i.status <> 'CANCELLED') AS total_invoiced,
+		       (SELECT COALESCE(SUM(i.paid_amount), 0) FROM invoices i WHERE i.client_id = c.id AND i.status <> 'CANCELLED' AND i.document_type = 'INVOICE') AS total_paid
 		FROM clients c
 		WHERE c.id = ?
 		LIMIT 1
@@ -505,11 +505,13 @@ type StatementResult struct {
 }
 
 var docLabels = map[string]string{
-	"OPENING_BALANCE": "رصيد افتتاحي",
-	"INVOICE":         "فاتورة بيع",
-	"INVOICE_CANCEL":  "إلغاء فاتورة بيع",
-	"RECEIPT":         "سند قبض",
-	"RECEIPT_CANCEL":  "إلغاء سند قبض",
+	"OPENING_BALANCE":    "رصيد افتتاحي",
+	"INVOICE":            "فاتورة بيع",
+	"INVOICE_CANCEL":     "إلغاء فاتورة بيع",
+	"RECEIPT":            "سند قبض",
+	"RECEIPT_CANCEL":     "إلغاء سند قبض",
+	"CREDIT_NOTE":        "إشعار دائن (مرتجع مبيعات)",
+	"CREDIT_NOTE_CANCEL": "إلغاء إشعار دائن",
 }
 
 func (s *ClientService) Statement(p StatementParams) (*StatementResult, error) {
@@ -624,6 +626,10 @@ func (s *ClientService) Statement(p StatementParams) (*StatementResult, error) {
 				if allocatedInvoices == "" {
 					entry.Description = "سند قبض رقم " + entry.DocNumber + " (سداد دفعة على الحساب)"
 				}
+			case "CREDIT_NOTE":
+				if entry.Description == "" {
+					entry.Description = "إشعار دائن مرتجع مبيعات رقم " + entry.DocNumber
+				}
 			}
 			runningBalance += debitMinor - creditMinor
 			totalDebitMinor += debitMinor
@@ -651,7 +657,7 @@ func (s *ClientService) Statement(p StatementParams) (*StatementResult, error) {
 	_ = s.db.QueryRow(`
 		SELECT COUNT(*), COALESCE(SUM(remaining_amount), 0)
 		FROM invoices
-		WHERE client_id = ? AND status IN ('UNPAID', 'PARTIAL')
+		WHERE client_id = ? AND COALESCE(document_type, 'INVOICE') = 'INVOICE' AND status IN ('UNPAID', 'PARTIAL')
 		  AND (? = '' OR issuer_id = ?)
 	`, p.ClientID, p.IssuerID, p.IssuerID).Scan(&openCount, &openRemMinor)
 

@@ -140,14 +140,14 @@ export async function render(view, ctx) {
         res += entries.map((e, i) => `<tr>
           <td class="tiny text-center muted">${startOffset + i + 2}</td>
           <td class="mono tiny nowrap" style="white-space:nowrap;font-weight:700">
-            ${e.doc_type === 'INVOICE' && e.doc_id
-    ? `<a class="invoice-no-link" href="#/invoice-view/${esc(e.doc_id)}" title="عرض الفاتورة">${esc(e.doc_number || '')}</a>`
+            ${(e.doc_type === 'INVOICE' || e.doc_type === 'CREDIT_NOTE') && e.doc_id
+    ? `<a class="invoice-no-link" href="#/invoice-view/${esc(e.doc_id)}" title="${e.doc_type === 'CREDIT_NOTE' ? 'عرض الإشعار الدائن' : 'عرض الفاتورة'}">${esc(e.doc_number || '')}</a>`
     : e.doc_type === 'RECEIPT' && e.doc_id
       ? `<a class="invoice-no-link" href="#/vouchers?q=${encodeURIComponent(e.doc_number || '')}" title="عرض السند">${esc(e.doc_number || '')}</a>`
       : esc(e.doc_number || '—')}
           </td>
           <td class="tiny nowrap text-center" style="white-space:nowrap">${esc(dateAr(e.transaction_date))}</td>
-          <td class="text-center nowrap"><span class="badge ${e.doc_type === 'INVOICE' ? 'blue' : e.doc_type === 'RECEIPT' ? 'green' : 'gray'}">${esc(e.doc_type_label || (e.doc_type === 'INVOICE' ? 'فاتورة بيع' : e.doc_type === 'RECEIPT' ? 'سند قبض' : e.doc_type))}</span></td>
+          <td class="text-center nowrap"><span class="badge ${e.doc_type === 'INVOICE' ? 'blue' : e.doc_type === 'CREDIT_NOTE' ? 'amber' : e.doc_type === 'RECEIPT' ? 'green' : 'gray'}">${esc(e.doc_type_label || (e.doc_type === 'INVOICE' ? 'فاتورة بيع' : e.doc_type === 'CREDIT_NOTE' ? 'إشعار دائن (مرتجع مبيعات)' : e.doc_type === 'RECEIPT' ? 'سند قبض' : e.doc_type))}</span></td>
           <td class="cell-desc"><div style="line-height:1.4;word-break:normal">${esc(e.description || '—')}</div></td>
           <td class="text-end num nowrap" ${e.debit ? '' : 'style="color:var(--muted)"'}>${e.debit ? amount(e.debit) : '0.00'}</td>
           <td class="text-end num nowrap" ${e.credit ? '' : 'style="color:var(--muted)"'}>${e.credit ? amount(e.credit) : '0.00'}</td>
@@ -381,7 +381,7 @@ export async function render(view, ctx) {
           i + 2,
           e.doc_number || '',
           e.transaction_date,
-          e.doc_type_label || (e.doc_type === 'INVOICE' ? 'فاتورة بيع' : e.doc_type === 'RECEIPT' ? 'سند قبض' : e.doc_type),
+          e.doc_type_label || (e.doc_type === 'INVOICE' ? 'فاتورة بيع' : e.doc_type === 'RECEIPT' ? 'سند قبض' : e.doc_type === 'CREDIT_NOTE' ? 'إشعار دائن (مرتجع مبيعات)' : e.doc_type),
           e.description,
           e.debit ? e.debit : '0.00',
           e.credit ? e.credit : '0.00',

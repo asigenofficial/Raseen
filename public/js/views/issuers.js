@@ -105,6 +105,10 @@ function issuerForm(data = {}) {
         <div class="field" style="max-width:150px"><label>الرقم القادم</label><input type="number" name="voucher_next_no" value="${v('voucher_next_no', 1)}" min="1" /></div>
       </div>
       <div class="row mt">
+        <div class="field"><label>بادئة رقم الإشعار الدائن (مرتجع مبيعات)</label><input type="text" name="credit_note_prefix" value="${v('credit_note_prefix', 'CN')}" class="ltr" /></div>
+        <div class="field" style="max-width:150px"><label>الرقم القادم</label><input type="number" name="credit_note_next_no" value="${v('credit_note_next_no', 1)}" min="1" /></div>
+      </div>
+      <div class="row mt">
         <div class="field" style="max-width:170px"><label>نسبة الضريبة الافتراضية %</label>
           <input type="number" name="default_tax_rate" value="${v('default_tax_rate', 15)}" min="0" max="100" step="0.01" /></div>
         <div class="field" style="max-width:150px"><label>العملة</label><input type="text" name="currency" value="${v('currency', 'SAR')}" class="ltr" /></div>
@@ -196,6 +200,8 @@ function openIssuerModal(issuer, onSaved) {
     values.invoice_next_no = parseInt(values.invoice_next_no, 10) || 1;
     values.invoice_pad = parseInt(values.invoice_pad, 10) || 5;
     values.voucher_next_no = parseInt(values.voucher_next_no, 10) || 1;
+    values.credit_note_next_no = parseInt(values.credit_note_next_no, 10) || 1;
+    values.credit_note_prefix = (values.credit_note_prefix || 'CN').trim();
     e.target.disabled = true;
     try {
       if (isNew) await api.post('/api/issuers', values);

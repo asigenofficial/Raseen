@@ -29,7 +29,7 @@ func (s *IssuerService) ListIssuers(activeOnly bool) ([]models.Issuer, error) {
 		       street, street_en, building_no, district, district_en, city, city_en,
 		       address_en, postal_code, country, phone, email, website, logo_data,
 		       default_tax_rate, currency, invoice_prefix, invoice_next_no, invoice_pad,
-		       voucher_prefix, voucher_next_no, zatca_phase, qr_settings, print_settings,
+		       voucher_prefix, voucher_next_no, credit_note_prefix, credit_note_next_no, zatca_phase, qr_settings, print_settings,
 		       bank_name, bank_iban, footer_notes, legal_terms, is_active, created_at, updated_at
 		FROM issuers
 	`
@@ -53,7 +53,7 @@ func (s *IssuerService) ListIssuers(activeOnly bool) ([]models.Issuer, error) {
 			&iss.Street, &iss.StreetEn, &iss.BuildingNo, &iss.District, &iss.DistrictEn, &iss.City, &iss.CityEn,
 			&iss.AddressEn, &iss.PostalCode, &iss.Country, &iss.Phone, &iss.Email, &iss.Website, &logo,
 			&iss.DefaultTaxRate, &iss.Currency, &iss.InvoicePrefix, &iss.InvoiceNextNo, &iss.InvoicePad,
-			&iss.VoucherPrefix, &iss.VoucherNextNo, &iss.ZatcaPhase, &iss.QrSettings, &iss.PrintSettings,
+			&iss.VoucherPrefix, &iss.VoucherNextNo, &iss.CreditNotePrefix, &iss.CreditNoteNextNo, &iss.ZatcaPhase, &iss.QrSettings, &iss.PrintSettings,
 			&iss.BankName, &iss.BankIban, &iss.FooterNotes, &iss.LegalTerms, &iss.IsActive, &iss.CreatedAt, &iss.UpdatedAt,
 		); err == nil {
 			if logo.Valid {
@@ -78,7 +78,7 @@ func getIssuer(q interface{ QueryRow(string, ...any) *sql.Row }, id string) (*mo
 		       street, street_en, building_no, district, district_en, city, city_en,
 		       address_en, postal_code, country, phone, email, website, logo_data,
 		       default_tax_rate, currency, invoice_prefix, invoice_next_no, invoice_pad,
-		       voucher_prefix, voucher_next_no, zatca_phase, qr_settings, print_settings,
+		       voucher_prefix, voucher_next_no, credit_note_prefix, credit_note_next_no, zatca_phase, qr_settings, print_settings,
 		       bank_name, bank_iban, footer_notes, legal_terms, is_active, created_at, updated_at
 		FROM issuers WHERE id = ?
 	`, id).Scan(
@@ -86,7 +86,7 @@ func getIssuer(q interface{ QueryRow(string, ...any) *sql.Row }, id string) (*mo
 		&iss.Street, &iss.StreetEn, &iss.BuildingNo, &iss.District, &iss.DistrictEn, &iss.City, &iss.CityEn,
 		&iss.AddressEn, &iss.PostalCode, &iss.Country, &iss.Phone, &iss.Email, &iss.Website, &logo,
 		&iss.DefaultTaxRate, &iss.Currency, &iss.InvoicePrefix, &iss.InvoiceNextNo, &iss.InvoicePad,
-		&iss.VoucherPrefix, &iss.VoucherNextNo, &iss.ZatcaPhase, &iss.QrSettings, &iss.PrintSettings,
+		&iss.VoucherPrefix, &iss.VoucherNextNo, &iss.CreditNotePrefix, &iss.CreditNoteNextNo, &iss.ZatcaPhase, &iss.QrSettings, &iss.PrintSettings,
 		&iss.BankName, &iss.BankIban, &iss.FooterNotes, &iss.LegalTerms, &iss.IsActive, &iss.CreatedAt, &iss.UpdatedAt,
 	)
 	if err != nil {
@@ -143,6 +143,12 @@ func (s *IssuerService) CreateIssuer(iss *models.Issuer) error {
 	if iss.PrintSettings == "" {
 		iss.PrintSettings = "{}"
 	}
+	if iss.CreditNotePrefix == "" {
+		iss.CreditNotePrefix = "CN"
+	}
+	if iss.CreditNoteNextNo <= 0 {
+		iss.CreditNoteNextNo = 1
+	}
 
 	now := db.NowIso()
 	iss.CreatedAt = now
@@ -155,14 +161,14 @@ func (s *IssuerService) CreateIssuer(iss *models.Issuer) error {
 			street, street_en, building_no, district, district_en, city, city_en,
 			address_en, postal_code, country, phone, email, website, logo_data,
 			default_tax_rate, currency, invoice_prefix, invoice_next_no, invoice_pad,
-			voucher_prefix, voucher_next_no, zatca_phase, qr_settings, print_settings,
+			voucher_prefix, voucher_next_no, credit_note_prefix, credit_note_next_no, zatca_phase, qr_settings, print_settings,
 			bank_name, bank_iban, footer_notes, legal_terms, is_active, created_at, updated_at
 		) VALUES (
 			?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
-			?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?, ?
 		)
 	`,
@@ -170,7 +176,7 @@ func (s *IssuerService) CreateIssuer(iss *models.Issuer) error {
 		iss.Street, iss.StreetEn, iss.BuildingNo, iss.District, iss.DistrictEn, iss.City, iss.CityEn,
 		iss.AddressEn, iss.PostalCode, iss.Country, iss.Phone, iss.Email, iss.Website, iss.LogoData,
 		iss.DefaultTaxRate, iss.Currency, iss.InvoicePrefix, iss.InvoiceNextNo, iss.InvoicePad,
-		iss.VoucherPrefix, iss.VoucherNextNo, iss.ZatcaPhase, string(iss.QrSettings), string(iss.PrintSettings),
+		iss.VoucherPrefix, iss.VoucherNextNo, iss.CreditNotePrefix, iss.CreditNoteNextNo, iss.ZatcaPhase, string(iss.QrSettings), string(iss.PrintSettings),
 		iss.BankName, iss.BankIban, iss.FooterNotes, iss.LegalTerms, iss.IsActive, iss.CreatedAt, iss.UpdatedAt,
 	)
 	return err
@@ -200,8 +206,8 @@ func (s *IssuerService) UpdateIssuer(id string, iss *models.Issuer, refresh ...f
 			street = ?, street_en = ?, building_no = ?, district = ?, district_en = ?,
 			city = ?, city_en = ?, address_en = ?, postal_code = ?, country = ?,
 			phone = ?, email = ?, website = ?, logo_data = ?, default_tax_rate = ?,
-			currency = ?, invoice_prefix = ?, invoice_pad = ?, voucher_prefix = ?,
-			invoice_next_no = MAX(invoice_next_no, ?), voucher_next_no = MAX(voucher_next_no, ?),
+			currency = ?, invoice_prefix = ?, invoice_pad = ?, voucher_prefix = ?, credit_note_prefix = ?,
+			invoice_next_no = MAX(invoice_next_no, ?), voucher_next_no = MAX(voucher_next_no, ?), credit_note_next_no = MAX(credit_note_next_no, ?),
 			zatca_phase = ?, qr_settings = ?, print_settings = ?, bank_name = ?,
 			bank_iban = ?, footer_notes = ?, legal_terms = ?, is_active = ?, updated_at = ?
 		WHERE id = ?
@@ -210,8 +216,8 @@ func (s *IssuerService) UpdateIssuer(id string, iss *models.Issuer, refresh ...f
 		iss.Street, iss.StreetEn, iss.BuildingNo, iss.District, iss.DistrictEn,
 		iss.City, iss.CityEn, iss.AddressEn, iss.PostalCode, iss.Country,
 		iss.Phone, iss.Email, iss.Website, iss.LogoData, iss.DefaultTaxRate,
-		iss.Currency, iss.InvoicePrefix, iss.InvoicePad, iss.VoucherPrefix,
-		iss.InvoiceNextNo, iss.VoucherNextNo,
+		iss.Currency, iss.InvoicePrefix, iss.InvoicePad, iss.VoucherPrefix, iss.CreditNotePrefix,
+		iss.InvoiceNextNo, iss.VoucherNextNo, iss.CreditNoteNextNo,
 		iss.ZatcaPhase, qrJSON, printJSON, iss.BankName,
 		iss.BankIban, iss.FooterNotes, iss.LegalTerms, iss.IsActive, now, id,
 	)
@@ -253,6 +259,69 @@ func (s *IssuerService) NextInvoiceNumber(tx *sql.Tx, issuerID string) (number s
 	_, err = tx.Exec(`
 		UPDATE issuers SET invoice_next_no = invoice_next_no + 1 WHERE id = ?
 	`, issuerID)
+	if err != nil {
+		return "", 0, err
+	}
+
+	number = crypto.FormatSerial(prefix, nextNo, pad)
+	return number, nextNo, nil
+}
+
+// NextCreditNoteNumber atomically increments credit_note_next_no and formats the credit note number.
+func (s *IssuerService) NextCreditNoteNumber(tx *sql.Tx, issuerID string) (number string, nextNo int64, err error) {
+	var prefix string
+	var nextNoVal int64
+	var pad int = 5
+
+	row := tx.QueryRow(`
+		SELECT credit_note_prefix, credit_note_next_no, invoice_pad
+		FROM issuers WHERE id = ?
+	`, issuerID)
+	if err := row.Scan(&prefix, &nextNoVal, &pad); err != nil {
+		return "", 0, err
+	}
+	if prefix == "" {
+		prefix = "CN"
+	}
+	if nextNoVal <= 0 {
+		nextNoVal = 1
+	}
+	if pad <= 0 {
+		pad = 5
+	}
+	nextNo = nextNoVal
+
+	rows, err := tx.Query("SELECT invoice_number FROM invoices WHERE issuer_id = ?", issuerID)
+	if err != nil {
+		return "", 0, err
+	}
+	serialPrefix := strings.TrimRight(strings.TrimSpace(prefix), "-")
+	if serialPrefix != "" {
+		serialPrefix += "-"
+	}
+	for rows.Next() {
+		var existing string
+		if err = rows.Scan(&existing); err != nil {
+			rows.Close()
+			return "", 0, err
+		}
+		numStr := existing
+		if serialPrefix != "" && strings.HasPrefix(existing, serialPrefix) {
+			numStr = strings.TrimPrefix(existing, serialPrefix)
+		}
+		if val, parseErr := strconv.ParseInt(strings.TrimSpace(numStr), 10, 64); parseErr == nil && val >= nextNo {
+			nextNo = val + 1
+		}
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return "", 0, err
+	}
+	rows.Close()
+
+	_, err = tx.Exec(`
+		UPDATE issuers SET credit_note_next_no = ? WHERE id = ?
+	`, nextNo+1, issuerID)
 	if err != nil {
 		return "", 0, err
 	}

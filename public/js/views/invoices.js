@@ -29,6 +29,7 @@ export async function render(view, ctx) {
     client_id: '',
     status: '',
     invoice_type: '',
+    document_type: '',
     has_remaining: false,
     from: '',
     to: '',
@@ -57,6 +58,7 @@ export async function render(view, ctx) {
       client_id: state.client_id,
       status: state.status,
       invoice_type: state.invoice_type,
+      document_type: state.document_type,
       has_remaining: state.has_remaining,
       from: state.from,
       to: state.to,
@@ -77,6 +79,7 @@ export async function render(view, ctx) {
       client_id: state.client_id,
       status: state.status,
       invoice_type: state.invoice_type,
+      document_type: state.document_type,
       has_remaining: state.has_remaining ? '1' : '',
       from: state.from,
       to: state.to,
@@ -129,10 +132,12 @@ export async function render(view, ctx) {
     return items.map((i) => `<tr>
       <td class="nowrap" style="white-space:nowrap">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap">
-          <a class="mono invoice-no-link" href="#/invoice-view/${esc(i.id)}" style="font-weight:700;white-space:nowrap" title="عرض تفاصيل الفاتورة"><b>${esc(i.invoice_number)}</b></a>
+          <a class="mono invoice-no-link" href="#/invoice-view/${esc(i.id)}" style="font-weight:700;white-space:nowrap" title="عرض تفاصيل المستند"><b>${esc(i.invoice_number)}</b></a>
+          ${i.document_type === 'CREDIT_NOTE' ? `<span class="badge amber tiny" style="white-space:nowrap;font-weight:700" title="إشعار دائن (مرتجع مبيعات)">مرتجع</span>` : ''}
           ${i.batch_id ? `<a class="badge blue tiny" href="#/invoices?batch_id=${encodeURIComponent(i.batch_id)}" style="white-space:nowrap" title="عرض فواتير الدفعة وخيارات حذفها">دفعة</a>` : ''}
           <span class="badge ${i.zatca_phase === 'PHASE2' ? 'teal' : 'gray'} tiny" style="white-space:nowrap" title="${i.zatca_phase === 'PHASE2' ? 'المرحلة 2' : 'المرحلة 1'}">${i.zatca_phase === 'PHASE2' ? 'م2' : 'م1'}</span>
         </div>
+        ${i.document_type === 'CREDIT_NOTE' && i.ref_invoice_number ? `<div class="tiny muted" style="font-size:10px">فاتورة: <span class="mono">${esc(i.ref_invoice_number)}</span></div>` : ''}
       </td>
       <td class="nowrap tiny" style="white-space:nowrap">
         <div>${esc(dateAr(i.issue_date))}</div>
@@ -164,11 +169,11 @@ export async function render(view, ctx) {
           <button class="btn btn-sm btn-icon" data-act="share" data-id="${esc(i.id)}" type="button" style="background:#10b981;border-color:#10b981;color:#fff" title="مشاركة الفاتورة">
             ${icon.share({ size: 13, style: 'vertical-align:middle' })}
           </button>
-          ${i.status !== 'CANCELLED' && can('invoices.edit') ? `
+          ${i.document_type !== 'CREDIT_NOTE' && i.status !== 'CANCELLED' && can('invoices.edit') ? `
           <a class="btn btn-sm btn-icon" href="#/invoice?edit=${esc(i.id)}" title="تعديل الفاتورة يدوياً">
             ${icon.edit({ size: 13, style: 'vertical-align:middle' })}
           </a>` : ''}
-          ${i.status !== 'CANCELLED' && i.remaining_amount > 0 && can('vouchers.create') ? `
+          ${i.document_type !== 'CREDIT_NOTE' && i.status !== 'CANCELLED' && i.remaining_amount > 0 && can('vouchers.create') ? `
           <button class="btn btn-sm btn-icon" data-act="pay" data-id="${esc(i.id)}" type="button" title="إصدار سند قبض" style="color:var(--brand);border-color:var(--brand)">
             ${icon.receipt({ size: 13, style: 'vertical-align:middle' })}
           </button>` : ''}
@@ -226,6 +231,12 @@ export async function render(view, ctx) {
               <option value="">كل الأنواع</option>
               <option value="STANDARD" ${state.invoice_type === 'STANDARD' ? 'selected' : ''}>ضريبية (B2B)</option>
               <option value="SIMPLIFIED" ${state.invoice_type === 'SIMPLIFIED' ? 'selected' : ''}>مبسطة (B2C)</option>
+            </select></div>
+          <div class="field field-sm"><label for="document_type">المستند</label>
+            <select id="document_type">
+              <option value="">الكل</option>
+              <option value="INVOICE" ${state.document_type === 'INVOICE' ? 'selected' : ''}>فواتير</option>
+              <option value="CREDIT_NOTE" ${state.document_type === 'CREDIT_NOTE' ? 'selected' : ''}>إشعارات دائنة</option>
             </select></div>
         </div>
 
@@ -313,7 +324,7 @@ export async function render(view, ctx) {
     const reload = async () => { await load(); draw(); };
 
     $('#q', view).addEventListener('input', debounce(async (e) => { state.q = e.target.value; state.offset = 0; await reload(); }, 350));
-    ['issuer_id', 'client_id', 'status', 'invoice_type', 'from', 'to', 'payment_method'].forEach((id) => {
+    ['issuer_id', 'client_id', 'status', 'invoice_type', 'document_type', 'from', 'to', 'payment_method'].forEach((id) => {
       const el = $(`#${id}`, view);
       if (el) el.addEventListener('change', async (e) => { state[id] = e.target.value; state.offset = 0; await reload(); });
     });

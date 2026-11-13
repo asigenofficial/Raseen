@@ -153,7 +153,7 @@ func (s *VoucherService) CreateVoucher(input CreateVoucherInput, actor, ip strin
 		// FIFO oldest unpaid invoices first
 		rows, err := tx.Query(`
 			SELECT id, remaining_amount FROM invoices
-			WHERE client_id = ? AND issuer_id = ? AND status IN ('UNPAID', 'PARTIAL')
+			WHERE client_id = ? AND issuer_id = ? AND COALESCE(document_type, 'INVOICE') = 'INVOICE' AND status IN ('UNPAID', 'PARTIAL')
 			ORDER BY issue_date ASC, sequence_no ASC
 		`, input.ClientID, input.IssuerID)
 		if err != nil {
@@ -185,7 +185,7 @@ func (s *VoucherService) CreateVoucher(input CreateVoucherInput, actor, ip strin
 	}
 	for _, a := range finalAllocations {
 		var remaining int64
-		if err := tx.QueryRow("SELECT remaining_amount FROM invoices WHERE id=? AND issuer_id=? AND client_id=? AND status IN ('UNPAID','PARTIAL')", a.invoiceID, input.IssuerID, input.ClientID).Scan(&remaining); err != nil || a.amount > remaining {
+		if err := tx.QueryRow("SELECT remaining_amount FROM invoices WHERE id=? AND issuer_id=? AND client_id=? AND COALESCE(document_type, 'INVOICE') = 'INVOICE' AND status IN ('UNPAID','PARTIAL')", a.invoiceID, input.IssuerID, input.ClientID).Scan(&remaining); err != nil || a.amount > remaining {
 			return nil, errors.New("الفاتورة لا تخص الشركة والعميل أو أن التخصيص يتجاوز المتبقي")
 		}
 	}
@@ -220,24 +220,17 @@ func (s *VoucherService) CreateVoucher(input CreateVoucherInput, actor, ip strin
 		}
 
 		// Update invoice
-		var grandTotal, paidAmount int64
-		if err = tx.QueryRow("SELECT grand_total, paid_amount FROM invoices WHERE id = ?", a.invoiceID).Scan(&grandTotal, &paidAmount); err != nil {
+		var paidAmount int64
+		if err = tx.QueryRow("SELECT paid_amount FROM invoices WHERE id = ?", a.invoiceID).Scan(&paidAmount); err != nil {
 			return nil, err
 		}
 		newPaid := paidAmount + a.amount
-		newRem := grandTotal - newPaid
-		if newRem < 0 {
-			newRem = 0
+		if _, err = tx.Exec("UPDATE invoices SET paid_amount = ?, updated_at = ? WHERE id = ?", newPaid, now, a.invoiceID); err != nil {
+			return nil, err
 		}
-		newStatus := "PARTIAL"
-		if newRem == 0 {
-			newStatus = "PAID"
+		if err = recalcInvoiceSettlementTx(tx, a.invoiceID, now, false); err != nil {
+			return nil, err
 		}
-
-		_, err = tx.Exec(`
-			UPDATE invoices SET paid_amount = ?, remaining_amount = ?, status = ?, updated_at = ?
-			WHERE id = ?
-		`, newPaid, newRem, newStatus, now, a.invoiceID)
 		if err != nil {
 			return nil, err
 		}
@@ -570,32 +563,18 @@ func (s *VoucherService) CancelVoucher(id, actor, ip string) error {
 	// Rollback allocations from invoices
 	for _, a := range v.Allocations {
 		allocMinor := models.ToMinor(a.AllocatedAmount)
-		var grandTotal, paidAmount int64
-		var status string
-		if err := tx.QueryRow("SELECT grand_total, paid_amount, status FROM invoices WHERE id = ?", a.InvoiceID).Scan(&grandTotal, &paidAmount, &status); err != nil {
+		var paidAmount int64
+		if err := tx.QueryRow("SELECT paid_amount FROM invoices WHERE id = ?", a.InvoiceID).Scan(&paidAmount); err != nil {
 			return err
 		}
 		newPaid := paidAmount - allocMinor
 		if newPaid < 0 {
 			return errors.New("السدادات الحالية لا تطابق التخصيصات؛ يلزم مراجعة السند")
 		}
-		newRem := grandTotal - newPaid
-		newStatus := "UNPAID"
-		if newPaid > 0 && newRem > 0 {
-			newStatus = "PARTIAL"
-		} else if newPaid >= grandTotal {
-			newStatus = "PAID"
+		if _, err = tx.Exec("UPDATE invoices SET paid_amount = ?, updated_at = ? WHERE id = ?", newPaid, now, a.InvoiceID); err != nil {
+			return err
 		}
-
-		if status == "CANCELLED" {
-			newStatus = "CANCELLED"
-		}
-		_, err = tx.Exec(`
-			UPDATE invoices SET paid_amount = ?, remaining_amount = ?, status = ?, updated_at = ?,
-			payment_method = CASE WHEN payment_method = 'CASH' AND ? > 0 THEN 'CREDIT' ELSE payment_method END
-			WHERE id = ?
-		`, newPaid, newRem, newStatus, now, newRem, a.InvoiceID)
-		if err != nil {
+		if err = recalcInvoiceSettlementTx(tx, a.InvoiceID, now, true); err != nil {
 			return err
 		}
 	}
@@ -717,31 +696,18 @@ func (s *VoucherService) DeleteVoucher(id, actor, ip string) error {
 		now := db.NowIso()
 		for _, a := range v.Allocations {
 			allocMinor := models.ToMinor(a.AllocatedAmount)
-			var grandTotal, paidAmount int64
-			var status string
-			if err := tx.QueryRow("SELECT grand_total, paid_amount, status FROM invoices WHERE id = ?", a.InvoiceID).Scan(&grandTotal, &paidAmount, &status); err != nil {
+			var paidAmount int64
+			if err := tx.QueryRow("SELECT paid_amount FROM invoices WHERE id = ?", a.InvoiceID).Scan(&paidAmount); err != nil {
 				return err
 			}
 			newPaid := paidAmount - allocMinor
 			if newPaid < 0 {
 				return errors.New("السدادات الحالية لا تطابق التخصيصات؛ يلزم مراجعة السند")
 			}
-			newRem := grandTotal - newPaid
-			newStatus := "UNPAID"
-			if newPaid > 0 && newRem > 0 {
-				newStatus = "PARTIAL"
-			} else if newPaid >= grandTotal {
-				newStatus = "PAID"
+			if _, err = tx.Exec("UPDATE invoices SET paid_amount = ?, updated_at = ? WHERE id = ?", newPaid, now, a.InvoiceID); err != nil {
+				return err
 			}
-			if status == "CANCELLED" {
-				newStatus = "CANCELLED"
-			}
-			_, err = tx.Exec(`
-				UPDATE invoices SET paid_amount = ?, remaining_amount = ?, status = ?, updated_at = ?,
-				payment_method = CASE WHEN payment_method = 'CASH' AND ? > 0 THEN 'CREDIT' ELSE payment_method END
-				WHERE id = ?
-			`, newPaid, newRem, newStatus, now, newRem, a.InvoiceID)
-			if err != nil {
+			if err = recalcInvoiceSettlementTx(tx, a.InvoiceID, now, true); err != nil {
 				return err
 			}
 		}
