@@ -7,7 +7,7 @@ import * as router from '../core/router.js';
 import {
   html, raw, esc, money, num, dateAr, dateTimeAr, qrSvg, printDoc, toastOk, toastErr,
   $, modal, formValues, confirmDialog, copyText, download, statusBadge, today, icon,
-  amount, sarSvg, shareDocument, choosePdfDestination, savePdfFile, clientPdfFilename,
+  amount, sarSvg, shareDocument, choosePdfDestination, savePdfFile, clientPdfFilename, roundHalfUp2,
 } from '../core/util.js';
 import { tafqeet } from '../print/templates.js';
 
@@ -184,7 +184,7 @@ function creditNoteModal(invoice, onDone) {
                     ${it.item_code ? `<div class="mono tiny muted">${esc(it.item_code)}</div>` : ''}
                   </td>
                   <td class="tiny">${esc(it.unit || 'قطعة')}</td>
-                  <td class="text-end num">${amount(it.unit_price)}</td>
+                  <td class="text-end num">${amount(it.unit_price)}${it.prices_include_tax && it.unit_price_incl > 0 ? `<div class="tiny muted">شامل: ${amount(it.unit_price_incl)}</div>` : ''}</td>
                   <td class="text-center num">${it.original_qty}</td>
                   <td class="text-center num">${it.returned_qty}</td>
                   <td class="text-center num font-bold" style="color:var(--brand)">${it.available_qty}</td>
@@ -197,8 +197,11 @@ function creditNoteModal(invoice, onDone) {
                            data-unit="${esc(it.unit || '')}"
                            data-max="${it.available_qty}"
                            data-price="${it.unit_price}"
+                           data-price-incl="${it.unit_price_incl || 0}"
+                           data-prices-include-tax="${it.prices_include_tax ? '1' : '0'}"
                            data-tax-rate="${it.tax_rate}"
                            data-discount-unit="${(it.discount || 0) / (it.original_qty || 1)}"
+                           data-discount-incl-unit="${(it.discount_incl || 0) / (it.original_qty || 1)}"
                            min="0" max="${it.available_qty}" step="any"
                            value="0"
                            ${(it.available_qty || 0) <= 0 ? 'disabled' : ''} />
@@ -233,13 +236,37 @@ function creditNoteModal(invoice, onDone) {
         if (!input) return;
         const qty = parseFloat(input.value) || 0;
         const price = parseFloat(input.dataset.price) || 0;
+        const priceIncl = parseFloat(input.dataset.priceIncl) || 0;
+        const isIncl = input.dataset.pricesIncludeTax === '1';
         const taxRate = parseFloat(input.dataset.taxRate) || 0;
         const discUnit = parseFloat(input.dataset.discountUnit) || 0;
+        const discInclUnit = parseFloat(input.dataset.discountInclUnit) || 0;
 
-        const effectivePrice = Math.max(0, price - discUnit);
-        const lineTaxable = effectivePrice * qty;
-        const lineTax = lineTaxable * (taxRate / 100);
-        const lineTotal = lineTaxable + lineTax;
+        let lineTaxable = 0;
+        let lineTax = 0;
+        let lineTotal = 0;
+        if (isIncl && priceIncl > 0 && qty > 0) {
+          if (taxRate <= 0) {
+            const gross = roundHalfUp2(qty * priceIncl);
+            const disc = roundHalfUp2(discInclUnit * qty);
+            lineTaxable = Math.max(0, roundHalfUp2(gross - disc));
+            lineTax = 0;
+            lineTotal = lineTaxable;
+          } else {
+            const factor = 1 + (taxRate / 100);
+            const grossExact = (qty * priceIncl) / factor;
+            const discExact = (discInclUnit * qty) / factor;
+            const taxableExact = Math.max(0, grossExact - discExact);
+            lineTaxable = Math.max(0, roundHalfUp2(roundHalfUp2(grossExact) - roundHalfUp2(discExact)));
+            lineTax = roundHalfUp2(taxableExact * (taxRate / 100));
+            lineTotal = roundHalfUp2(lineTaxable + lineTax);
+          }
+        } else {
+          const effectivePrice = Math.max(0, price - discUnit);
+          lineTaxable = effectivePrice * qty;
+          lineTax = lineTaxable * (taxRate / 100);
+          lineTotal = lineTaxable + lineTax;
+        }
 
         taxableSum += lineTaxable;
         taxSum += lineTax;
@@ -248,13 +275,13 @@ function creditNoteModal(invoice, onDone) {
         if (totalCell) totalCell.textContent = amount(lineTotal);
       });
 
-      const grandTotal = taxableSum + taxSum;
+      const grandTotal = roundHalfUp2(taxableSum) + roundHalfUp2(taxSum);
       const elTaxable = m.body.querySelector('#cn-tot-taxable');
       const elTax = m.body.querySelector('#cn-tot-tax');
       const elGrand = m.body.querySelector('#cn-tot-grand');
-      if (elTaxable) elTaxable.textContent = amount(taxableSum);
-      if (elTax) elTax.textContent = amount(taxSum);
-      if (elGrand) elGrand.textContent = amount(grandTotal, 'SAR');
+      if (elTaxable) elTaxable.textContent = amount(roundHalfUp2(taxableSum));
+      if (elTax) elTax.textContent = amount(roundHalfUp2(taxSum));
+      if (elGrand) elGrand.textContent = amount(roundHalfUp2(grandTotal), 'SAR');
     };
 
     m.body.querySelectorAll('.cn-item-qty').forEach((inp) => {
@@ -591,6 +618,7 @@ export async function render(view, ctx) {
             <span class="badge ${invoice.zatca_phase === 'PHASE2' ? 'teal' : 'blue'}" style="font-size:.78rem;vertical-align:middle">
               ${invoice.zatca_phase === 'PHASE2' ? 'مرحلة 2' : 'مرحلة 1'}
             </span>
+            ${raw(invoice.prices_include_tax === 1 || invoice.prices_include_tax === true ? '<span class="badge blue" style="font-size:.78rem;vertical-align:middle">أسعار شاملة الضريبة</span>' : '')}
           </h1>
           <p>
             ${issuer.name_ar} — ${client.name} — ${dateAr(invoice.issue_date)} ${invoice.issue_time}

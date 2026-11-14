@@ -114,6 +114,77 @@ func NetFromInclusive(inclusiveMinor int64, ratePercent float64) int64 {
 	return RoundDec4ToMinor(dec4)
 }
 
+// InclusiveLineAmounts holds the 2-decimal display amounts (in halalas) derived
+// from tax-inclusive inputs using full intermediate precision for VAT extraction.
+type InclusiveLineAmounts struct {
+	UnitPriceExclMinor int64
+	GrossExclMinor     int64
+	DiscountExclMinor  int64
+	TaxableExclMinor   int64
+	TaxDec4            int64
+	TaxAmountMinor     int64
+	TotalLineMinor     int64
+}
+
+// ComputeInclusiveLine splits tax-inclusive line prices/discounts into pre-tax
+// amounts rounded to halalas, computing VAT on the unrounded pre-tax taxable value
+// so displayed net + VAT preserves the entered inclusive total without halala drift.
+func ComputeInclusiveLine(qty, unitPriceIncl, flatDiscIncl, discPercent, taxRate float64) InclusiveLineAmounts {
+	if taxRate <= 0 {
+		unitPriceMinor := roundFloatHalfUp(unitPriceIncl * float64(MinorFactor))
+		grossMinor := MulQty(qty, unitPriceMinor)
+		discMinor := roundFloatHalfUp(flatDiscIncl * float64(MinorFactor))
+		if discPercent > 0 {
+			discMinor = Pct(grossMinor, discPercent)
+		}
+		taxableMinor := grossMinor - discMinor
+		return InclusiveLineAmounts{
+			UnitPriceExclMinor: unitPriceMinor,
+			GrossExclMinor:     grossMinor,
+			DiscountExclMinor:  discMinor,
+			TaxableExclMinor:   taxableMinor,
+			TaxDec4:            0,
+			TaxAmountMinor:     0,
+			TotalLineMinor:     taxableMinor,
+		}
+	}
+
+	factor := 1.0 + taxRate/100.0
+	unitPriceExact := unitPriceIncl / factor
+	grossExact := (qty * unitPriceIncl) / factor
+
+	var discExact float64
+	if discPercent > 0 {
+		discExact = grossExact * (discPercent / 100.0)
+	} else if flatDiscIncl > 0 {
+		discExact = flatDiscIncl / factor
+	}
+
+	taxableExact := math.Max(0, grossExact-discExact)
+	taxExact := taxableExact * (taxRate / 100.0)
+
+	unitPriceMinor := roundFloatHalfUp(unitPriceExact * float64(MinorFactor))
+	grossMinor := roundFloatHalfUp(grossExact * float64(MinorFactor))
+	taxableMinor := roundFloatHalfUp(taxableExact * float64(MinorFactor))
+	discMinor := grossMinor - taxableMinor
+	if discMinor < 0 {
+		discMinor = 0
+	}
+	taxDec4 := ToDec4(taxExact)
+	taxMinor := roundFloatHalfUp(taxExact * float64(MinorFactor))
+	totalMinor := taxableMinor + taxMinor
+
+	return InclusiveLineAmounts{
+		UnitPriceExclMinor: unitPriceMinor,
+		GrossExclMinor:     grossMinor,
+		DiscountExclMinor:  discMinor,
+		TaxableExclMinor:   taxableMinor,
+		TaxDec4:            taxDec4,
+		TaxAmountMinor:     taxMinor,
+		TotalLineMinor:     totalMinor,
+	}
+}
+
 // SumMinor sums a slice of minor units.
 func SumMinor(items []int64) int64 {
 	var total int64

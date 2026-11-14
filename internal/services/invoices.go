@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -444,26 +445,8 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 
 	// Insert invoice items
 	for _, cl := range computedLines {
-		var itemID *string
-		if cl.ItemID != nil && strings.TrimSpace(*cl.ItemID) != "" {
-			trimmed := strings.TrimSpace(*cl.ItemID)
-			var exists int
-			errCheck := tx.QueryRow("SELECT 1 FROM items WHERE id = ?", trimmed).Scan(&exists)
-			if errCheck == nil && exists == 1 {
-				itemID = &trimmed
-			}
-		}
-
-		_, err = tx.Exec(`
-			INSERT INTO invoice_items (
-				id, invoice_id, item_id, line_no, item_code, item_name, unit,
-				quantity, unit_price, discount, tax_rate, taxable, tax_amount, total_line
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`,
-			cl.ID, invoiceID, itemID, cl.LineNo, cl.ItemCode, cl.ItemName, cl.Unit,
-			cl.Quantity, cl.UnitPrice, cl.Discount, cl.TaxRate, cl.Taxable, cl.TaxAmount, cl.TotalLine,
-		)
-		if err != nil {
+		cl.InvoiceID = invoiceID
+		if err = insertInvoiceItemTx(tx, cl.InvoiceItem); err != nil {
 			return nil, fmt.Errorf("failed to insert invoice item: %w", err)
 		}
 	}
@@ -650,7 +633,8 @@ func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 	// Fetch items
 	rows, err := s.db.Query(`
 		SELECT id, invoice_id, item_id, line_no, item_code, item_name, unit,
-		       quantity, unit_price, discount, tax_rate, taxable, tax_amount, total_line
+		       quantity, unit_price, COALESCE(unit_price_incl, 0), discount, COALESCE(discount_incl, 0),
+		       tax_rate, taxable, tax_amount, total_line
 		FROM invoice_items WHERE invoice_id = ? ORDER BY line_no ASC
 	`, id)
 	if err == nil {
@@ -660,7 +644,8 @@ func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 			var itemID sql.NullString
 			if err := rows.Scan(
 				&itm.ID, &itm.InvoiceID, &itemID, &itm.LineNo, &itm.ItemCode, &itm.ItemName, &itm.Unit,
-				&itm.Quantity, &itm.UnitPrice, &itm.Discount, &itm.TaxRate, &itm.Taxable, &itm.TaxAmount, &itm.TotalLine,
+				&itm.Quantity, &itm.UnitPrice, &itm.UnitPriceIncl, &itm.Discount, &itm.DiscountIncl,
+				&itm.TaxRate, &itm.Taxable, &itm.TaxAmount, &itm.TotalLine,
 			); err == nil {
 				if itemID.Valid {
 					itm.ItemID = &itemID.String
@@ -1264,9 +1249,35 @@ type computedInvoiceLine struct {
 	taxRateDisplay string
 }
 
+func insertInvoiceItemTx(tx *sql.Tx, it models.InvoiceItem) error {
+	var itemID *string
+	if it.ItemID != nil && strings.TrimSpace(*it.ItemID) != "" {
+		trimmed := strings.TrimSpace(*it.ItemID)
+		var exists int
+		if errCheck := tx.QueryRow("SELECT 1 FROM items WHERE id = ?", trimmed).Scan(&exists); errCheck == nil && exists == 1 {
+			itemID = &trimmed
+		}
+	}
+	id := it.ID
+	if id == "" {
+		id = crypto.UUID()
+	}
+	_, err := tx.Exec(`
+		INSERT INTO invoice_items (
+			id, invoice_id, item_id, line_no, item_code, item_name, unit,
+			quantity, unit_price, unit_price_incl, discount, discount_incl, tax_rate, taxable, tax_amount, total_line
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		id, it.InvoiceID, itemID, it.LineNo, it.ItemCode, it.ItemName, it.Unit,
+		it.Quantity, it.UnitPrice, it.UnitPriceIncl, it.Discount, it.DiscountIncl,
+		it.TaxRate, it.Taxable, it.TaxAmount, it.TotalLine,
+	)
+	return err
+}
+
 func computeInvoiceLines(lines []CreateInvoiceLineInput, pricesIncludeTax bool, defaultTaxRate float64) ([]computedInvoiceLine, int64, int64, int64, int64, int64, error) {
 	var computedLines []computedInvoiceLine
-	var subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalDec4 int64
+	var subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalDec4, inclusiveTaxTotalMinor int64
 
 	for idx, l := range lines {
 		qty := l.Quantity
@@ -1281,33 +1292,53 @@ func computeInvoiceLines(lines []CreateInvoiceLineInput, pricesIncludeTax bool, 
 			return nil, 0, 0, 0, 0, 0, errors.New("قيمة البند أو نسبة الضريبة غير صالحة")
 		}
 
-		unitPriceMinor := models.ToMinor(l.UnitPrice)
+		var unitPriceMinor, gross, discountMinor, taxable, lineTaxDec4, taxAmount, totalLine int64
+		var unitPriceIncl, discountIncl float64
+
 		if pricesIncludeTax {
-			unitPriceMinor = models.NetFromInclusive(unitPriceMinor, taxRate)
-		}
+			unitPriceIncl = l.UnitPrice
+			discountIncl = l.Discount
+			factor := 1.0 + taxRate/100.0
+			grossExact := (qty * l.UnitPrice) / factor
+			discExact := l.Discount / factor
+			if l.DiscountPercent > 0 {
+				discountIncl = (qty * l.UnitPrice) * (l.DiscountPercent / 100.0)
+				discExact = grossExact * (l.DiscountPercent / 100.0)
+			}
+			if discExact > grossExact+1e-6 {
+				return nil, 0, 0, 0, 0, 0, errors.New("الخصم يتجاوز قيمة البند")
+			}
+			inc := models.ComputeInclusiveLine(qty, l.UnitPrice, l.Discount, l.DiscountPercent, taxRate)
+			unitPriceMinor = inc.UnitPriceExclMinor
+			gross = inc.GrossExclMinor
+			discountMinor = inc.DiscountExclMinor
+			taxable = inc.TaxableExclMinor
+			lineTaxDec4 = inc.TaxDec4
+			taxAmount = inc.TaxAmountMinor
+			totalLine = inc.TotalLineMinor
+		} else {
+			unitPriceMinor = models.ToMinor(l.UnitPrice)
+			gross = models.MulQty(qty, unitPriceMinor)
+			discountMinor = models.ToMinor(l.Discount)
+			if l.DiscountPercent > 0 {
+				discountMinor = models.Pct(gross, l.DiscountPercent)
+			}
+			if discountMinor > gross {
+				return nil, 0, 0, 0, 0, 0, errors.New("الخصم يتجاوز قيمة البند")
+			}
 
-		gross := models.MulQty(qty, unitPriceMinor)
-		discountMinor := models.ToMinor(l.Discount)
-		if pricesIncludeTax && discountMinor > 0 {
-			discountMinor = models.NetFromInclusive(discountMinor, taxRate)
+			taxable = gross - discountMinor
+			// احتساب ضريبة الصنف بدقة Decimal(4) بدون تقريب داخلي، وتجميعها للمجموع النهائي
+			lineTaxDec4 = models.PctDec4(taxable, taxRate)
+			taxAmount = models.RoundDec4ToMinor(lineTaxDec4)
+			totalLine = taxable + taxAmount
 		}
-		if l.DiscountPercent > 0 {
-			discountMinor = models.Pct(gross, l.DiscountPercent)
-		}
-		if discountMinor > gross {
-			return nil, 0, 0, 0, 0, 0, errors.New("الخصم يتجاوز قيمة البند")
-		}
-
-		taxable := gross - discountMinor
-		// احتساب ضريبة الصنف بدقة Decimal(4) بدون تقريب داخلي، وتجميعها للمجموع النهائي
-		lineTaxDec4 := models.PctDec4(taxable, taxRate)
-		taxAmount := models.RoundDec4ToMinor(lineTaxDec4)
-		totalLine := taxable + taxAmount
 
 		subtotalMinor += gross
 		discountTotalMinor += discountMinor
 		taxableTotalMinor += taxable
 		taxTotalDec4 += lineTaxDec4
+		inclusiveTaxTotalMinor += taxAmount
 
 		unit := l.Unit
 		if unit == "" {
@@ -1325,27 +1356,34 @@ func computeInvoiceLines(lines []CreateInvoiceLineInput, pricesIncludeTax bool, 
 
 		cl := computedInvoiceLine{
 			InvoiceItem: models.InvoiceItem{
-				ID:        crypto.UUID(),
-				ItemID:    itemID,
-				LineNo:    idx + 1,
-				ItemCode:  l.ItemCode,
-				ItemName:  l.ItemName,
-				Unit:      unit,
-				Quantity:  qty,
-				UnitPrice: unitPriceMinor,
-				Discount:  discountMinor,
-				TaxRate:   taxRate,
-				Taxable:   taxable,
-				TaxAmount: taxAmount,
-				TotalLine: totalLine,
+				ID:            crypto.UUID(),
+				ItemID:        itemID,
+				LineNo:        idx + 1,
+				ItemCode:      l.ItemCode,
+				ItemName:      l.ItemName,
+				Unit:          unit,
+				Quantity:      qty,
+				UnitPrice:     unitPriceMinor,
+				UnitPriceIncl: unitPriceIncl,
+				Discount:      discountMinor,
+				DiscountIncl:  discountIncl,
+				TaxRate:       taxRate,
+				Taxable:       taxable,
+				TaxAmount:     taxAmount,
+				TotalLine:     totalLine,
 			},
 			taxRateDisplay: fmt.Sprintf("%.2f", taxRate),
 		}
 		computedLines = append(computedLines, cl)
 	}
 
-	// التقريب الرياضي الطبيعي (Round Half Up) إلى خانتين عشريتين فقط عند المجموع النهائي للضريبة
-	taxTotalMinor := models.RoundDec4ToMinor(taxTotalDec4)
+	var taxTotalMinor int64
+	if pricesIncludeTax {
+		taxTotalMinor = inclusiveTaxTotalMinor
+	} else {
+		// التقريب الرياضي الطبيعي (Round Half Up) إلى خانتين عشريتين فقط عند المجموع النهائي للضريبة
+		taxTotalMinor = models.RoundDec4ToMinor(taxTotalDec4)
+	}
 	grandTotalMinor := taxableTotalMinor + taxTotalMinor
 	return computedLines, subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor, nil
 }
@@ -1701,26 +1739,9 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	}
 
 	for _, cl := range computedLines {
-		var itemID *string
-		if cl.ItemID != nil && strings.TrimSpace(*cl.ItemID) != "" {
-			trimmed := strings.TrimSpace(*cl.ItemID)
-			var exists int
-			errCheck := tx.QueryRow("SELECT 1 FROM items WHERE id = ?", trimmed).Scan(&exists)
-			if errCheck == nil && exists == 1 {
-				itemID = &trimmed
-			}
-		}
-
-		_, err = tx.Exec(`
-			INSERT INTO invoice_items (
-				id, invoice_id, item_id, line_no, item_code, item_name, unit,
-				quantity, unit_price, discount, tax_rate, taxable, tax_amount, total_line
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`,
-			crypto.UUID(), id, itemID, cl.LineNo, cl.ItemCode, cl.ItemName, cl.Unit,
-			cl.Quantity, cl.UnitPrice, cl.Discount, cl.TaxRate, cl.Taxable, cl.TaxAmount, cl.TotalLine,
-		)
-		if err != nil {
+		cl.InvoiceID = id
+		cl.ID = crypto.UUID()
+		if err = insertInvoiceItemTx(tx, cl.InvoiceItem); err != nil {
 			return nil, fmt.Errorf("failed to insert invoice line: %w", err)
 		}
 	}
@@ -1814,17 +1835,20 @@ func (s *InvoiceService) VerifyChain(issuerID string) (map[string]any, error) {
 // ─── Credit Notes / Sales Returns (إشعار دائن / مرتجع مبيعات) ─────────────────────
 
 type ReturnableItem struct {
-	InvoiceItemID string  `json:"invoice_item_id"`
-	ItemID        *string `json:"item_id,omitempty"`
-	ItemCode      string  `json:"item_code"`
-	ItemName      string  `json:"item_name"`
-	Unit          string  `json:"unit"`
-	UnitPrice     float64 `json:"unit_price"`
-	TaxRate       float64 `json:"tax_rate"`
-	Discount      float64 `json:"discount"`
-	OriginalQty   float64 `json:"original_qty"`
-	ReturnedQty   float64 `json:"returned_qty"`
-	AvailableQty  float64 `json:"available_qty"`
+	InvoiceItemID    string  `json:"invoice_item_id"`
+	ItemID           *string `json:"item_id,omitempty"`
+	ItemCode         string  `json:"item_code"`
+	ItemName         string  `json:"item_name"`
+	Unit             string  `json:"unit"`
+	UnitPrice        float64 `json:"unit_price"`
+	UnitPriceIncl    float64 `json:"unit_price_incl"`
+	TaxRate          float64 `json:"tax_rate"`
+	Discount         float64 `json:"discount"`
+	DiscountIncl     float64 `json:"discount_incl"`
+	PricesIncludeTax bool    `json:"prices_include_tax"`
+	OriginalQty      float64 `json:"original_qty"`
+	ReturnedQty      float64 `json:"returned_qty"`
+	AvailableQty     float64 `json:"available_qty"`
 }
 
 type CreateCreditNoteInput struct {
@@ -1843,7 +1867,9 @@ type CreditNoteItemInput struct {
 	Unit          string  `json:"unit"`
 	Quantity      float64 `json:"quantity"` // الكمية المرتجعة
 	UnitPrice     float64 `json:"unit_price"`
+	UnitPriceIncl float64 `json:"unit_price_incl"`
 	Discount      float64 `json:"discount"`
+	DiscountIncl  float64 `json:"discount_incl"`
 	TaxRate       float64 `json:"tax_rate"`
 	taxRateSet    bool
 }
@@ -1864,13 +1890,16 @@ func (c *CreditNoteItemInput) UnmarshalJSON(data []byte) error {
 
 func (s *InvoiceService) GetReturnableItems(invoiceID string) ([]ReturnableItem, error) {
 	var docType string
-	_ = s.db.QueryRow("SELECT COALESCE(document_type, 'INVOICE') FROM invoices WHERE id = ?", invoiceID).Scan(&docType)
+	var pricesIncludeTaxInt int
+	_ = s.db.QueryRow("SELECT COALESCE(document_type, 'INVOICE'), COALESCE(prices_include_tax, 0) FROM invoices WHERE id = ?", invoiceID).Scan(&docType, &pricesIncludeTaxInt)
 	if docType == "CREDIT_NOTE" {
 		return []ReturnableItem{}, nil
 	}
+	pricesIncludeTax := pricesIncludeTaxInt == 1
 
 	rows, err := s.db.Query(`
-		SELECT id, item_id, item_code, item_name, unit, unit_price, tax_rate, discount, quantity
+		SELECT id, item_id, item_code, item_name, unit, unit_price, tax_rate, discount, quantity,
+		       COALESCE(unit_price_incl, 0), COALESCE(discount_incl, 0)
 		FROM invoice_items
 		WHERE invoice_id = ?
 		ORDER BY line_no ASC
@@ -1884,9 +1913,10 @@ func (s *InvoiceService) GetReturnableItems(invoiceID string) ([]ReturnableItem,
 	for rows.Next() {
 		var it ReturnableItem
 		var upMinor, discMinor int64
-		if err := rows.Scan(&it.InvoiceItemID, &it.ItemID, &it.ItemCode, &it.ItemName, &it.Unit, &upMinor, &it.TaxRate, &discMinor, &it.OriginalQty); err == nil {
+		if err := rows.Scan(&it.InvoiceItemID, &it.ItemID, &it.ItemCode, &it.ItemName, &it.Unit, &upMinor, &it.TaxRate, &discMinor, &it.OriginalQty, &it.UnitPriceIncl, &it.DiscountIncl); err == nil {
 			it.UnitPrice = models.ToMajor(upMinor)
 			it.Discount = models.ToMajor(discMinor)
+			it.PricesIncludeTax = pricesIncludeTax
 			items = append(items, it)
 		}
 	}
@@ -1981,21 +2011,24 @@ func (s *InvoiceService) CreateCreditNote(input CreateCreditNoteInput, actor, ip
 		}
 
 		type preparedLine struct {
-			itemID      *string
-			itemCode    string
-			itemName    string
-			unit        string
-			qty         float64
-			upMinor     int64
-			discMinor   int64
-			taxRate     float64
-			lineTaxable int64
-			lineTax     int64
-			lineTotal   int64
+			itemID        *string
+			itemCode      string
+			itemName      string
+			unit          string
+			qty           float64
+			upMinor       int64
+			unitPriceIncl float64
+			discMinor     int64
+			discountIncl  float64
+			taxRate       float64
+			lineTaxable   int64
+			lineTax       int64
+			lineTotal     int64
 		}
 
 		var validLines []preparedLine
-		var subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalDec4 int64
+		var subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalDec4, inclusiveTaxTotalMinor int64
+		origPricesIncludeTax := orig.PricesIncludeTax == 1
 
 		for _, item := range input.Items {
 			if item.Quantity <= 0 {
@@ -2055,16 +2088,58 @@ func (s *InvoiceService) CreateCreditNote(input CreateCreditNoteInput, actor, ip
 				discount = (r.Discount / r.OriginalQty) * item.Quantity
 			}
 
-			upMinor := models.ToMinor(unitPrice)
-			gross := models.MulQty(item.Quantity, upMinor)
-			discMinor := models.ToMinor(discount)
-			if discMinor > gross {
-				discMinor = gross
+			var upMinor, gross, discMinor, lineTaxable, lineTaxDec4, lineTax, lineTotal int64
+			var unitPriceIncl, discountIncl float64
+
+			if origPricesIncludeTax {
+				unitPriceIncl = item.UnitPriceIncl
+				if unitPriceIncl <= 0 {
+					if r.UnitPriceIncl > 0 && (item.UnitPrice <= 0 || math.Abs(item.UnitPrice-r.UnitPrice) <= 0.005 || math.Abs(item.UnitPrice-r.UnitPriceIncl) <= 0.005) {
+						unitPriceIncl = r.UnitPriceIncl
+					} else if item.UnitPrice > 0 {
+						unitPriceIncl = item.UnitPrice
+					} else {
+						unitPriceIncl = r.UnitPrice * (1.0 + taxRate/100.0)
+					}
+				}
+				discountIncl = item.DiscountIncl
+				if discountIncl <= 0 {
+					var propDiscIncl float64
+					if r.OriginalQty > 0 && r.DiscountIncl > 0 {
+						propDiscIncl = (r.DiscountIncl / r.OriginalQty) * item.Quantity
+					} else if r.OriginalQty > 0 && r.Discount > 0 {
+						propDiscIncl = ((r.Discount / r.OriginalQty) * item.Quantity) * (1.0 + taxRate/100.0)
+					}
+					if item.Discount <= 0 || (r.OriginalQty > 0 && r.Discount > 0 && math.Abs(item.Discount-(r.Discount/r.OriginalQty)*item.Quantity) <= 0.005) || (propDiscIncl > 0 && math.Abs(item.Discount-propDiscIncl) <= 0.005) {
+						discountIncl = propDiscIncl
+					} else {
+						discountIncl = item.Discount
+					}
+				}
+				inc := models.ComputeInclusiveLine(item.Quantity, unitPriceIncl, discountIncl, 0, taxRate)
+				upMinor = inc.UnitPriceExclMinor
+				gross = inc.GrossExclMinor
+				discMinor = inc.DiscountExclMinor
+				if discMinor > gross {
+					discMinor = gross
+				}
+				lineTaxable = inc.TaxableExclMinor
+				lineTaxDec4 = inc.TaxDec4
+				lineTax = inc.TaxAmountMinor
+				lineTotal = inc.TotalLineMinor
+				inclusiveTaxTotalMinor += lineTax
+			} else {
+				upMinor = models.ToMinor(unitPrice)
+				gross = models.MulQty(item.Quantity, upMinor)
+				discMinor = models.ToMinor(discount)
+				if discMinor > gross {
+					discMinor = gross
+				}
+				lineTaxable = gross - discMinor
+				lineTaxDec4 = models.PctDec4(lineTaxable, taxRate)
+				lineTax = models.RoundDec4ToMinor(lineTaxDec4)
+				lineTotal = lineTaxable + lineTax
 			}
-			lineTaxable := gross - discMinor
-			lineTaxDec4 := models.PctDec4(lineTaxable, taxRate)
-			lineTax := models.RoundDec4ToMinor(lineTaxDec4)
-			lineTotal := lineTaxable + lineTax
 
 			subtotalMinor += gross
 			discountTotalMinor += discMinor
@@ -2072,17 +2147,19 @@ func (s *InvoiceService) CreateCreditNote(input CreateCreditNoteInput, actor, ip
 			taxTotalDec4 += lineTaxDec4
 
 			validLines = append(validLines, preparedLine{
-				itemID:      r.ItemID,
-				itemCode:    itemCode,
-				itemName:    itemName,
-				unit:        unit,
-				qty:         item.Quantity,
-				upMinor:     upMinor,
-				discMinor:   discMinor,
-				taxRate:     taxRate,
-				lineTaxable: lineTaxable,
-				lineTax:     lineTax,
-				lineTotal:   lineTotal,
+				itemID:        r.ItemID,
+				itemCode:      itemCode,
+				itemName:      itemName,
+				unit:          unit,
+				qty:           item.Quantity,
+				upMinor:       upMinor,
+				unitPriceIncl: unitPriceIncl,
+				discMinor:     discMinor,
+				discountIncl:  discountIncl,
+				taxRate:       taxRate,
+				lineTaxable:   lineTaxable,
+				lineTax:       lineTax,
+				lineTotal:     lineTotal,
 			})
 		}
 
@@ -2091,6 +2168,9 @@ func (s *InvoiceService) CreateCreditNote(input CreateCreditNoteInput, actor, ip
 		}
 
 		taxTotalMinor := models.RoundDec4ToMinor(taxTotalDec4)
+		if origPricesIncludeTax {
+			taxTotalMinor = inclusiveTaxTotalMinor
+		}
 		grandTotalMinor := taxableTotalMinor + taxTotalMinor
 
 		creditNoteNumber, _, err := s.issuers.NextCreditNoteNumber(tx, orig.IssuerID)
@@ -2224,7 +2304,7 @@ func (s *InvoiceService) CreateCreditNote(input CreateCreditNoteInput, actor, ip
 				ref_invoice_id, ref_invoice_number, ref_invoice_date, return_reason, zatca_phase,
 				uuid, issue_date, issue_time, issue_datetime, currency,
 				subtotal, discount_amount, taxable_amount, tax_amount, grand_total,
-				paid_amount, remaining_amount, status, payment_method, show_sar_symbol,
+				paid_amount, remaining_amount, status, payment_method, show_sar_symbol, prices_include_tax,
 				seller_name, seller_tax_number, seller_cr, seller_address, seller_address_en,
 				buyer_name, buyer_tax_number, buyer_cr, buyer_address,
 				qr_payload, invoice_hash, previous_invoice_hash, signature, signature_mode,
@@ -2234,7 +2314,7 @@ func (s *InvoiceService) CreateCreditNote(input CreateCreditNoteInput, actor, ip
 				?, ?, ?, ?, ?,
 				?, ?, ?, ?, ?,
 				?, ?, ?, ?, ?,
-				0, 0, 'PAID', ?, ?,
+				0, 0, 'PAID', ?, ?, ?,
 				?, ?, ?, ?, ?,
 				?, ?, ?, ?,
 				?, ?, ?, ?, ?,
@@ -2245,7 +2325,7 @@ func (s *InvoiceService) CreateCreditNote(input CreateCreditNoteInput, actor, ip
 			orig.ID, orig.InvoiceNumber, orig.IssueDate, reason, orig.ZatcaPhase,
 			cnUUID, returnDate, issueTime, issueDatetime, orig.Currency,
 			subtotalMinor, discountTotalMinor, taxableTotalMinor, taxTotalMinor, grandTotalMinor,
-			orig.PaymentMethod, origSarInt,
+			orig.PaymentMethod, origSarInt, orig.PricesIncludeTax,
 			orig.SellerName, orig.SellerTaxNumber, orig.SellerCr, orig.SellerAddress, orig.SellerAddressEn,
 			orig.BuyerName, orig.BuyerTaxNumber, orig.BuyerCr, orig.BuyerAddress,
 			qrPayload, invHash, pih, signature, signatureMode,
@@ -2263,16 +2343,23 @@ func (s *InvoiceService) CreateCreditNote(input CreateCreditNoteInput, actor, ip
 		}
 
 		for idx, l := range validLines {
-			lineID := crypto.UUID()
-			_, err = tx.Exec(`
-				INSERT INTO invoice_items (
-					id, invoice_id, item_id, line_no, item_code, item_name, unit,
-					quantity, unit_price, discount, tax_rate, taxable, tax_amount, total_line
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			`,
-				lineID, cnID, l.itemID, idx+1, l.itemCode, l.itemName, l.unit,
-				l.qty, l.upMinor, l.discMinor, l.taxRate, l.lineTaxable, l.lineTax, l.lineTotal,
-			)
+			err = insertInvoiceItemTx(tx, models.InvoiceItem{
+				InvoiceID:     cnID,
+				ItemID:        l.itemID,
+				LineNo:        idx + 1,
+				ItemCode:      l.itemCode,
+				ItemName:      l.itemName,
+				Unit:          l.unit,
+				Quantity:      l.qty,
+				UnitPrice:     l.upMinor,
+				UnitPriceIncl: l.unitPriceIncl,
+				Discount:      l.discMinor,
+				DiscountIncl:  l.discountIncl,
+				TaxRate:       l.taxRate,
+				Taxable:       l.lineTaxable,
+				TaxAmount:     l.lineTax,
+				TotalLine:     l.lineTotal,
+			})
 			if err != nil {
 				return fmt.Errorf("فشل حفظ بنود إشعار الدائن: %w", err)
 			}

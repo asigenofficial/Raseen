@@ -106,6 +106,8 @@ func (d *DB) initSchema() error {
 	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN ref_invoice_date TEXT DEFAULT ''")
 	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN return_reason TEXT DEFAULT ''")
 	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN show_sar_symbol INTEGER NOT NULL DEFAULT 1")
+	_, _ = d.Exec("ALTER TABLE invoice_items ADD COLUMN unit_price_incl REAL NOT NULL DEFAULT 0")
+	_, _ = d.Exec("ALTER TABLE invoice_items ADD COLUMN discount_incl REAL NOT NULL DEFAULT 0")
 	// Performance indexes for large datasets
 	_, _ = d.Exec("CREATE INDEX IF NOT EXISTS idx_invoices_client_status ON invoices(client_id, status, grand_total, paid_amount)")
 	_, _ = d.Exec("CREATE INDEX IF NOT EXISTS idx_invoices_month_stats ON invoices(issuer_id, status, issue_date, grand_total)")

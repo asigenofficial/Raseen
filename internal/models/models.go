@@ -212,10 +212,12 @@ type InvoiceItem struct {
 	ItemCode    string  `json:"item_code"`
 	ItemName    string  `json:"item_name"`
 	Unit        string  `json:"unit"`
-	Quantity    float64 `json:"quantity"`
-	UnitPrice   int64   `json:"unit_price"`
-	Discount    int64   `json:"discount"`
-	TaxRate     float64 `json:"tax_rate"`
+	Quantity      float64 `json:"quantity"`
+	UnitPrice     int64   `json:"unit_price"`
+	UnitPriceIncl float64 `json:"unit_price_incl"`
+	Discount      int64   `json:"discount"`
+	DiscountIncl  float64 `json:"discount_incl"`
+	TaxRate       float64 `json:"tax_rate"`
 	Taxable     int64   `json:"taxable"`
 	TaxAmount   int64   `json:"tax_amount"`
 	TotalLine   int64   `json:"total_line"`

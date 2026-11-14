@@ -17,14 +17,42 @@ const emptyLine = () => ({
   quantity: 1, unit_price: 0, discount: 0, tax_rate: 15,
 });
 
-function lineTotals(line, percent = 0) {
-  const gross = roundHalfUp2(line.quantity * line.unit_price);
-  const discount = line.discount || roundHalfUp2(gross * (percent / 100));
+function lineTotals(line, percent = 0, pricesIncludeTax = false) {
+  const qty = Number(line.quantity) || 0;
+  const price = Number(line.unit_price) || 0;
+  const taxRate = line.tax_rate !== undefined && line.tax_rate !== '' ? Number(line.tax_rate) : 15;
+  const flatDisc = Number(line.discount) || 0;
+  if (pricesIncludeTax) {
+    if (taxRate <= 0) {
+      const unitExcl = roundHalfUp2(price);
+      const gross = roundHalfUp2(qty * unitExcl);
+      const discount = flatDisc > 0 ? roundHalfUp2(flatDisc) : (percent > 0 ? roundHalfUp2(gross * (percent / 100)) : 0);
+      const taxable = Math.max(0, roundHalfUp2(gross - discount));
+      return { unitExcl, gross, discount, taxable, taxDec4: 0, tax: 0, total: taxable };
+    }
+    const factor = 1 + (taxRate / 100);
+    // احتساب السعر قبل الضريبة والضريبة من القيمة الحقيقية غير المقرّبة منعاً لضياع الهللة
+    const unitExcl = roundHalfUp2(price / factor);
+    const grossExact = (qty * price) / factor;
+    const gross = roundHalfUp2(grossExact);
+    let discountExact = flatDisc / factor;
+    if (flatDisc <= 0 && percent > 0) {
+      discountExact = grossExact * (percent / 100);
+    }
+    const discount = roundHalfUp2(discountExact);
+    const taxableExact = Math.max(0, grossExact - discountExact);
+    const taxable = Math.max(0, roundHalfUp2(gross - discount));
+    const taxDec4 = roundDec4(taxableExact * (taxRate / 100));
+    const tax = roundHalfUp2(taxableExact * (taxRate / 100));
+    return { unitExcl, gross, discount, taxable, taxDec4, tax, total: roundHalfUp2(taxable + tax) };
+  }
+  const gross = roundHalfUp2(qty * price);
+  const discount = flatDisc || roundHalfUp2(gross * (percent / 100));
   const taxable = Math.max(0, roundHalfUp2(gross - discount));
   // احتساب ضريبة الصنف بدقة Decimal(4) بدون تقريب داخلي، وتجميعها للمجموع النهائي
-  const taxDec4 = roundDec4(taxable * (line.tax_rate / 100));
+  const taxDec4 = roundDec4(taxable * (taxRate / 100));
   const tax = roundHalfUp2(taxDec4);
-  return { gross, taxable, taxDec4, tax, total: roundHalfUp2(taxable + tax) };
+  return { unitExcl: price, gross, discount, taxable, taxDec4, tax, total: roundHalfUp2(taxable + tax) };
 }
 
 const DRAFT_KEY = 'zs.invoice_draft';
@@ -33,7 +61,7 @@ function saveDraft(state) {
   if (!state || state.is_edit) return;
   try {
     const hasLines = state.lines && state.lines.some((l) => (l.item_name && l.item_name.trim()) || l.unit_price > 0);
-    if (!state.client_id && !hasLines && !state.notes) {
+    if (!state.client_id && !hasLines && !state.notes && !state.prices_include_tax) {
       localStorage.removeItem(DRAFT_KEY);
       return;
     }
@@ -50,6 +78,7 @@ function saveDraft(state) {
       auto_receipt: state.auto_receipt,
       print_after: state.print_after,
       show_sar_symbol: state.show_sar_symbol !== false,
+      prices_include_tax: Boolean(state.prices_include_tax),
       header_discount_percent: state.header_discount_percent,
       lines: state.lines,
     };
@@ -90,6 +119,7 @@ export async function render(view, ctx) {
   }
 
   const draft = editInvoice ? null : loadDraft();
+  const editInclusive = Boolean(editInvoice && (editInvoice.prices_include_tax === 1 || editInvoice.prices_include_tax === true));
   const state = editInvoice ? {
     is_edit: true,
     edit_id: editInvoice.id,
@@ -105,20 +135,40 @@ export async function render(view, ctx) {
     auto_receipt: false,
     print_after: true,
     show_sar_symbol: editInvoice.show_sar_symbol !== 0 && editInvoice.show_sar_symbol !== false,
+    prices_include_tax: editInclusive,
     header_discount_percent: editInvoice.discount_percent || 0,
     zatca_phase: editInvoice.zatca_phase || 'PHASE1',
     lines: ((editInvoice.items || editInvoice.lines) && (editInvoice.items || editInvoice.lines).length)
-      ? (editInvoice.items || editInvoice.lines).map((l) => ({
-        key: Math.random().toString(36).slice(2),
-        item_id: l.item_id || '',
-        item_code: l.item_code || '',
-        item_name: l.item_name || '',
-        unit: l.unit || 'حبة',
-        quantity: Number(l.quantity) || 1,
-        unit_price: Number(l.unit_price) || 0,
-        discount: Number(l.discount) || 0,
-        tax_rate: l.tax_rate !== undefined ? Number(l.tax_rate) : 15,
-      }))
+      ? (editInvoice.items || editInvoice.lines).map((l) => {
+        const rate = l.tax_rate !== undefined ? Number(l.tax_rate) : 15;
+        let unitPrice = Number(l.unit_price) || 0;
+        let discount = Number(l.discount) || 0;
+        if (editInclusive) {
+          if (Number(l.unit_price_incl) > 0) {
+            unitPrice = Number(l.unit_price_incl);
+          } else if (discount === 0 && Number(l.quantity) > 0 && Number(l.total_line) > 0) {
+            unitPrice = roundHalfUp2(Number(l.total_line) / Number(l.quantity));
+          } else {
+            unitPrice = roundHalfUp2(unitPrice * (1 + rate / 100));
+          }
+          if (Number(l.discount_incl) > 0) {
+            discount = Number(l.discount_incl);
+          } else if (discount > 0) {
+            discount = roundHalfUp2(discount * (1 + rate / 100));
+          }
+        }
+        return {
+          key: Math.random().toString(36).slice(2),
+          item_id: l.item_id || '',
+          item_code: l.item_code || '',
+          item_name: l.item_name || '',
+          unit: l.unit || 'حبة',
+          quantity: Number(l.quantity) || 1,
+          unit_price: unitPrice,
+          discount,
+          tax_rate: rate,
+        };
+      })
       : [emptyLine()],
   } : {
     is_edit: false,
@@ -133,10 +183,12 @@ export async function render(view, ctx) {
     auto_receipt: false,
     print_after: true,
     show_sar_symbol: true,
+    prices_include_tax: false,
     header_discount_percent: 0,
     lines: [emptyLine()],
     ...(draft || {}),
   };
+  state.prices_include_tax = Boolean(state.prices_include_tax);
 
   if (query.client_id && !state.is_edit) state.client_id = query.client_id;
   if (!state.lines || !state.lines.length) state.lines = [emptyLine()];
@@ -195,17 +247,19 @@ export async function render(view, ctx) {
   if (state.lines[0].tax_rate === undefined) state.lines[0].tax_rate = defaultRate();
 
   const totals = () => {
-    let subtotal = 0; let discount = 0; let taxable = 0; let taxDec4 = 0;
+    let subtotal = 0; let discount = 0; let taxable = 0; let taxDec4 = 0; let taxInclSum = 0;
+    const inclusive = Boolean(state.prices_include_tax);
     for (const l of state.lines) {
-      const t = lineTotals(l, state.header_discount_percent);
+      const t = lineTotals(l, state.header_discount_percent, inclusive);
       subtotal += t.gross;
       discount += t.gross - t.taxable;
       taxable += t.taxable;
       taxDec4 += t.taxDec4;
+      taxInclSum += t.tax;
     }
     const taxableRounded = roundHalfUp2(taxable);
-    // التقريب الرياضي الطبيعي (Round Half Up) إلى خانتين عشريتين فقط عند عرض المجموع النهائي للضريبة
-    const taxRounded = roundHalfUp2(roundDec4(taxDec4));
+    // عند التفعيل كشامل ضريبة، مجموع ضرائب البنود يطابق مجموع القيم غير المقرّبة بلا فقدان للهللة
+    const taxRounded = inclusive ? roundHalfUp2(taxInclSum) : roundHalfUp2(roundDec4(taxDec4));
     return {
       subtotal: roundHalfUp2(subtotal),
       discount: roundHalfUp2(discount),
@@ -215,9 +269,11 @@ export async function render(view, ctx) {
     };
   };
 
-  const linesHtml = () => state.lines.map((l, i) => {
-    const t = lineTotals(l, state.header_discount_percent);
-    return `<tr data-key="${l.key}">
+  const linesHtml = () => {
+    const inclusive = Boolean(state.prices_include_tax);
+    return state.lines.map((l, i) => {
+      const t = lineTotals(l, state.header_discount_percent, inclusive);
+      return `<tr data-key="${l.key}">
       <td class="text-center tiny">${i + 1}</td>
       <td style="width:115px">
         <input type="text" data-f="item_code" value="${esc(l.item_code || '')}" placeholder="رقم الصنف" autocomplete="off" />
@@ -229,7 +285,10 @@ export async function render(view, ctx) {
       </td>
       <td style="width:80px"><input type="text" data-f="unit" value="${esc(l.unit)}" /></td>
       <td style="width:90px"><input type="number" data-f="quantity" value="${l.quantity}" step="1" min="1" /></td>
-      <td style="width:110px"><input type="number" data-f="unit_price" value="${l.unit_price}" step="0.01" min="0" /></td>
+      <td style="width:118px">
+        <input type="number" data-f="unit_price" value="${l.unit_price}" step="0.01" min="0" />
+        <div class="tiny muted col-unit-excl ${inclusive ? '' : 'hidden'}" style="font-size:10px;margin-top:2px;white-space:nowrap">قبل الضريبة: ${money(t.unitExcl)}</div>
+      </td>
       <td style="width:96px"><input type="number" data-f="discount" value="${l.discount}" step="0.01" min="0" /></td>
       <td style="width:80px"><input type="number" data-f="tax_rate" value="${l.tax_rate}" step="0.01" min="0" max="100" /></td>
       <td class="text-end num col-taxable" style="width:105px;white-space:nowrap">${money(t.taxable)}</td>
@@ -240,7 +299,8 @@ export async function render(view, ctx) {
         <button class="btn btn-sm btn-danger" data-act="rm" type="button" title="حذف البند">${icon.trash({ size: 13, style: 'vertical-align:text-bottom;margin-left:2px' })}حذف</button>
       </td>
     </tr>`;
-  }).join('');
+    }).join('');
+  };
 
   const totalsHtml = () => {
     const t = totals();
@@ -399,6 +459,13 @@ export async function render(view, ctx) {
               if (state.show_sar_symbol === false) return 'لن يظهر شعار الريال السعودي الجديد في هذه الفاتورة (مناسب لفواتير ما قبل 2025)';
               return pre2025 ? 'ملاحظة: تاريخ هذه الفاتورة قبل 2025 — يمكنك إلغاء التحديد لإخفاء شعار الريال الجديد' : 'سيظهر شعار الريال السعودي الجديد بجانب المبالغ في هذه الفاتورة';
             })()}</span>
+            <label class="check mt" style="margin-top:.65rem">
+              <input type="checkbox" id="prices_include_tax" ${raw(state.prices_include_tax ? 'checked' : '')} />
+              <span>الأسعار شاملة الضريبة</span>
+            </label>
+            <span class="hint" id="prices-incl-tax-hint">${state.prices_include_tax
+              ? 'مفعّل: يُحتسب السعر قبل الضريبة والضريبة بدقة كاملة من المبلغ الشامل المدخل'
+              : 'غير مفعّل: الأسعار المدخلة قبل الضريبة وتُضاف الضريبة فوق السعر'}</span>
           </div>
         </div>
 
@@ -440,6 +507,9 @@ export async function render(view, ctx) {
             <h3 style="margin:0">بنود الفاتورة</h3>
           </div>
           <div class="spacer"></div>
+          <button class="btn btn-sm ${state.prices_include_tax ? 'btn-primary' : ''}" id="toggle-incl-tax-pill" type="button" title="تبديل نمط إدخال الأسعار (شامل الضريبة / قبل الضريبة)">
+            ${state.prices_include_tax ? 'الأسعار: شاملة الضريبة ✓' : 'الأسعار: غير شاملة الضريبة'}
+          </button>
           <span class="tiny muted">ابحث عن الصنف بالاسم أو الكود، أو اكتب وصفاً حراً</span>
           <button class="btn btn-sm btn-primary" id="add-line" type="button">${icon.plus({ size: 14, style: 'vertical-align:text-bottom;margin-left:3px' })}إضافة بند جديد</button>
         </div>
@@ -451,8 +521,8 @@ export async function render(view, ctx) {
               <th style="min-width:220px">الصنف / الوصف</th>
               <th style="width:80px">الوحدة</th>
               <th style="width:90px">الكمية</th>
-              <th style="width:110px">السعر</th>
-              <th style="width:96px">الخصم</th>
+              <th id="th-unit-price" style="width:118px">${state.prices_include_tax ? 'السعر (شامل الضريبة)' : 'السعر (قبل الضريبة)'}</th>
+              <th id="th-discount" style="width:96px">${state.prices_include_tax ? 'الخصم (شامل)' : 'الخصم'}</th>
               <th style="width:80px">الضريبة %</th>
               <th class="text-end" style="width:105px;white-space:nowrap">قبل الضريبة</th>
               <th class="text-end" style="width:95px;white-space:nowrap">الضريبة</th>
@@ -643,6 +713,29 @@ export async function render(view, ctx) {
     };
     $('#issue_date', view).addEventListener('change', (e) => { state.issue_date = e.target.value; updateSarSymbolHint(); saveDraft(state); });
     $('#show_sar_symbol', view)?.addEventListener('change', (e) => { state.show_sar_symbol = e.target.checked; updateSarSymbolHint(); saveDraft(state); });
+    const applyPricesIncludeTax = (enabled) => {
+      state.prices_include_tax = Boolean(enabled);
+      const chk = $('#prices_include_tax', view);
+      if (chk) chk.checked = state.prices_include_tax;
+      const hint = $('#prices-incl-tax-hint', view);
+      if (hint) {
+        hint.textContent = state.prices_include_tax
+          ? 'مفعّل: يُحتسب السعر قبل الضريبة والضريبة بدقة كاملة من المبلغ الشامل المدخل'
+          : 'غير مفعّل: الأسعار المدخلة قبل الضريبة وتُضاف الضريبة فوق السعر';
+      }
+      const thPrice = $('#th-unit-price', view);
+      if (thPrice) thPrice.textContent = state.prices_include_tax ? 'السعر (شامل الضريبة)' : 'السعر (قبل الضريبة)';
+      const thDisc = $('#th-discount', view);
+      if (thDisc) thDisc.textContent = state.prices_include_tax ? 'الخصم (شامل)' : 'الخصم';
+      const pill = $('#toggle-incl-tax-pill', view);
+      if (pill) {
+        pill.className = `btn btn-sm ${state.prices_include_tax ? 'btn-primary' : ''}`;
+        pill.textContent = state.prices_include_tax ? 'الأسعار: شاملة الضريبة ✓' : 'الأسعار: غير شاملة الضريبة';
+      }
+      refreshLines();
+    };
+    $('#prices_include_tax', view)?.addEventListener('change', (e) => applyPricesIncludeTax(e.target.checked));
+    $('#toggle-incl-tax-pill', view)?.addEventListener('click', () => applyPricesIncludeTax(!state.prices_include_tax));
     $('#issue_time', view).addEventListener('change', (e) => { state.issue_time = e.target.value; saveDraft(state); });
     $('#payment_method', view).addEventListener('change', (e) => { state.payment_method = e.target.value; view.querySelectorAll('[data-cheque]').forEach(el => el.classList.toggle('hidden', state.payment_method !== 'CHEQUE')); saveDraft(state); });
     $('#due_date', view)?.addEventListener('change', (e) => { state.due_date = e.target.value; saveDraft(state); });
@@ -669,6 +762,7 @@ export async function render(view, ctx) {
       state.lines[0].tax_rate = defaultRate();
       state.notes = '';
       state.invoice_number = '';
+      state.prices_include_tax = false;
       draw();
     });
     const newClientBtn = $('#new-client', view);
@@ -787,11 +881,17 @@ export async function render(view, ctx) {
       if (field === 'unit') line.unit = input.value;
       else line[field] = toNum(input.value);
       // تحديث خلايا الإجماليات لهذا الصف فقط
-      const t = lineTotals(line, state.header_discount_percent);
+      const inclusive = Boolean(state.prices_include_tax);
+      const t = lineTotals(line, state.header_discount_percent, inclusive);
       const tr = input.closest('tr');
+      const cellExcl = tr.querySelector('.col-unit-excl');
       const cellTaxable = tr.querySelector('.col-taxable');
       const cellTax = tr.querySelector('.col-tax');
       const cellTotal = tr.querySelector('.col-total');
+      if (cellExcl) {
+        cellExcl.classList.toggle('hidden', !inclusive);
+        cellExcl.textContent = `قبل الضريبة: ${money(t.unitExcl)}`;
+      }
       if (cellTaxable) cellTaxable.textContent = money(t.taxable);
       if (cellTax) cellTax.textContent = money(t.tax);
       if (cellTotal) cellTotal.innerHTML = `<b>${money(t.total)}</b>`;
@@ -1108,6 +1208,7 @@ export async function render(view, ctx) {
           invoice_number: state.invoice_number || undefined,
           discount_percent: state.header_discount_percent || undefined,
           show_sar_symbol: state.show_sar_symbol !== false,
+          prices_include_tax: Boolean(state.prices_include_tax),
           notes: state.notes,
           lines,
         });
@@ -1133,6 +1234,7 @@ export async function render(view, ctx) {
         invoice_number: state.invoice_number || undefined,
         discount_percent: state.header_discount_percent || undefined,
         show_sar_symbol: state.show_sar_symbol !== false,
+        prices_include_tax: Boolean(state.prices_include_tax),
         notes: state.notes,
         auto_receipt: state.auto_receipt,
         lines,

@@ -151,31 +151,34 @@ func (s *Server) clientIP(r *http.Request) string {
 }
 
 type PreviewInvoicePayload struct {
-	InvoiceNumber   string           `json:"invoice_number"`
-	InvoiceType     string           `json:"invoice_type"`
-	ZatcaPhase      string           `json:"zatca_phase"`
-	QrPayload       string           `json:"qr_payload"`
-	InvoiceHash     string           `json:"invoice_hash"`
-	IssueDate       string           `json:"issue_date"`
-	IssueTime       string           `json:"issue_time"`
-	PaymentMethod   string           `json:"payment_method"`
-	ShowSarSymbol   *models.FlexBool `json:"show_sar_symbol,omitempty"`
-	Notes           string           `json:"notes"`
-	Subtotal        float64 `json:"subtotal"`
-	DiscountAmount  float64 `json:"discount_amount"`
-	TaxableAmount   float64 `json:"taxable_amount"`
-	TaxAmount       float64 `json:"tax_amount"`
-	GrandTotal      float64 `json:"grand_total"`
-	PaidAmount      float64 `json:"paid_amount"`
-	RemainingAmount float64 `json:"remaining_amount"`
-	Lines           []struct {
+	InvoiceNumber    string           `json:"invoice_number"`
+	InvoiceType      string           `json:"invoice_type"`
+	ZatcaPhase       string           `json:"zatca_phase"`
+	QrPayload        string           `json:"qr_payload"`
+	InvoiceHash      string           `json:"invoice_hash"`
+	IssueDate        string           `json:"issue_date"`
+	IssueTime        string           `json:"issue_time"`
+	PaymentMethod    string           `json:"payment_method"`
+	ShowSarSymbol    *models.FlexBool `json:"show_sar_symbol,omitempty"`
+	PricesIncludeTax models.FlexBool  `json:"prices_include_tax"`
+	Notes            string           `json:"notes"`
+	Subtotal         float64          `json:"subtotal"`
+	DiscountAmount   float64          `json:"discount_amount"`
+	TaxableAmount    float64          `json:"taxable_amount"`
+	TaxAmount        float64          `json:"tax_amount"`
+	GrandTotal       float64          `json:"grand_total"`
+	PaidAmount       float64          `json:"paid_amount"`
+	RemainingAmount  float64          `json:"remaining_amount"`
+	Lines            []struct {
 		LineNo        int     `json:"line_no"`
 		ItemCode      string  `json:"item_code"`
 		ItemName      string  `json:"item_name"`
 		Unit          string  `json:"unit"`
 		Quantity      float64 `json:"quantity"`
 		UnitPrice     float64 `json:"unit_price"`
+		UnitPriceIncl float64 `json:"unit_price_incl"`
 		Discount      float64 `json:"discount"`
+		DiscountIncl  float64 `json:"discount_incl"`
 		TaxRate       float64 `json:"tax_rate"`
 		TaxableAmount float64 `json:"taxable_amount"`
 		TaxAmount     float64 `json:"tax_amount"`
@@ -1837,9 +1840,10 @@ func (s *Server) Handler() http.Handler {
 			InvoiceHash:    inv.InvoiceHash,
 			IssueDate:      issDate,
 			IssueTime:      issTime,
-			PaymentMethod:  inv.PaymentMethod,
-			ShowSarSymbol:  models.IntPtr(showSar),
-			Notes:          inv.Notes,
+			PaymentMethod:    inv.PaymentMethod,
+			ShowSarSymbol:    models.IntPtr(showSar),
+			PricesIncludeTax: func() int { if bool(inv.PricesIncludeTax) { return 1 }; return 0 }(),
+			Notes:            inv.Notes,
 			Subtotal:       models.ToMinor(inv.Subtotal),
 			DiscountAmount: models.ToMinor(inv.DiscountAmount),
 			TaxableAmount:  models.ToMinor(inv.TaxableAmount),
@@ -1892,7 +1896,8 @@ func (s *Server) Handler() http.Handler {
 		}
 	}
 
-	var calcSubtotalMinor, calcDiscountMinor, calcTaxableMinor, calcTaxDec4 int64
+	var calcSubtotalMinor, calcDiscountMinor, calcTaxableMinor, calcTaxDec4, calcInclusiveTaxMinor int64
+	pricesIncludeTax := bool(inv.PricesIncludeTax)
 	for i, l := range inv.Lines {
 		lineNo := l.LineNo
 		if lineNo <= 0 {
@@ -1902,48 +1907,69 @@ func (s *Server) Handler() http.Handler {
 		if taxRate == 0 {
 			taxRate = 15
 		}
-		taxable := l.TaxableAmount
-		if taxable == 0 && l.Quantity > 0 {
-			taxable = (l.Quantity * l.UnitPrice) - l.Discount
-		}
-		taxableMinor := models.ToMinor(taxable)
-		lineTaxDec4 := models.PctDec4(taxableMinor, taxRate)
-		lineTaxMinor := models.RoundDec4ToMinor(lineTaxDec4)
-		taxAmt := l.TaxAmount
-		if taxAmt == 0 {
-			taxAmt = models.ToMajor(lineTaxMinor)
-		}
-		tot := l.GrandTotal
-		if tot == 0 {
-			tot = models.ToMajor(taxableMinor + models.ToMinor(taxAmt))
+
+		var unitPriceMinor, grossMinor, discMinor, taxableMinor, lineTaxDec4, lineTaxMinor, totMinor int64
+		unitPriceIncl := l.UnitPriceIncl
+		discountIncl := l.DiscountIncl
+
+		if pricesIncludeTax && l.TaxableAmount == 0 && l.TaxAmount == 0 && l.GrandTotal == 0 && l.Quantity > 0 {
+			inc := models.ComputeInclusiveLine(l.Quantity, l.UnitPrice, l.Discount, 0, taxRate)
+			unitPriceMinor = inc.UnitPriceExclMinor
+			grossMinor = inc.GrossExclMinor
+			discMinor = inc.DiscountExclMinor
+			taxableMinor = inc.TaxableExclMinor
+			lineTaxDec4 = inc.TaxDec4
+			lineTaxMinor = inc.TaxAmountMinor
+			totMinor = inc.TotalLineMinor
+			unitPriceIncl = l.UnitPrice
+			discountIncl = l.Discount
+		} else {
+			taxable := l.TaxableAmount
+			if taxable == 0 && l.Quantity > 0 {
+				taxable = (l.Quantity * l.UnitPrice) - l.Discount
+			}
+			taxableMinor = models.ToMinor(taxable)
+			lineTaxDec4 = models.PctDec4(taxableMinor, taxRate)
+			lineTaxMinor = models.RoundDec4ToMinor(lineTaxDec4)
+			if l.TaxAmount != 0 {
+				lineTaxMinor = models.ToMinor(l.TaxAmount)
+			}
+			totMinor = taxableMinor + lineTaxMinor
+			if l.GrandTotal != 0 {
+				totMinor = models.ToMinor(l.GrandTotal)
+			}
+			unitPriceMinor = models.ToMinor(l.UnitPrice)
+			grossMinor = models.MulQty(l.Quantity, unitPriceMinor)
+			discMinor = models.ToMinor(l.Discount)
 		}
 
-		grossMinor := models.MulQty(l.Quantity, models.ToMinor(l.UnitPrice))
-		discMinor := models.ToMinor(l.Discount)
 		calcSubtotalMinor += grossMinor
 		calcDiscountMinor += discMinor
 		calcTaxableMinor += taxableMinor
 		calcTaxDec4 += lineTaxDec4
+		calcInclusiveTaxMinor += lineTaxMinor
 
 		iv := services.InvoiceItemView{
 			InvoiceItem: models.InvoiceItem{
-				LineNo:    lineNo,
-				ItemCode:  l.ItemCode,
-				ItemName:  l.ItemName,
-				Unit:      l.Unit,
-				Quantity:  l.Quantity,
-				UnitPrice: models.ToMinor(l.UnitPrice),
-				Discount:  discMinor,
-				TaxRate:   taxRate,
-				Taxable:   taxableMinor,
-				TaxAmount: models.ToMinor(taxAmt),
-				TotalLine: models.ToMinor(tot),
+				LineNo:        lineNo,
+				ItemCode:      l.ItemCode,
+				ItemName:      l.ItemName,
+				Unit:          l.Unit,
+				Quantity:      l.Quantity,
+				UnitPrice:     unitPriceMinor,
+				UnitPriceIncl: unitPriceIncl,
+				Discount:      discMinor,
+				DiscountIncl:  discountIncl,
+				TaxRate:       taxRate,
+				Taxable:       taxableMinor,
+				TaxAmount:     lineTaxMinor,
+				TotalLine:     totMinor,
 			},
-			UnitPriceMajor: l.UnitPrice,
-			DiscountMajor:  l.Discount,
+			UnitPriceMajor: models.ToMajor(unitPriceMinor),
+			DiscountMajor:  models.ToMajor(discMinor),
 			TaxableMajor:   models.ToMajor(taxableMinor),
-			TaxAmountMajor: models.ToMajor(models.ToMinor(taxAmt)),
-			TotalLineMajor: models.ToMajor(models.ToMinor(tot)),
+			TaxAmountMajor: models.ToMajor(lineTaxMinor),
+			TotalLineMajor: models.ToMajor(totMinor),
 		}
 		invView.Lines = append(invView.Lines, iv)
 	}
@@ -1951,6 +1977,9 @@ func (s *Server) Handler() http.Handler {
 
 	if invView.GrandTotalMajor == 0 && len(invView.Lines) > 0 {
 		calcTaxMinor := models.RoundDec4ToMinor(calcTaxDec4)
+		if pricesIncludeTax {
+			calcTaxMinor = calcInclusiveTaxMinor
+		}
 		calcGrandMinor := calcTaxableMinor + calcTaxMinor
 		invView.Subtotal = calcSubtotalMinor
 		invView.DiscountAmount = calcDiscountMinor
