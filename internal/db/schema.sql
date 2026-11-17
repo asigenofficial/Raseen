@@ -226,8 +226,8 @@ CREATE INDEX IF NOT EXISTS idx_invoices_search_compound ON invoices(issuer_id, s
 CREATE INDEX IF NOT EXISTS idx_invoices_client_date ON invoices(client_id, issue_date);
 CREATE INDEX IF NOT EXISTS idx_invoices_payment ON invoices(payment_method);
 CREATE INDEX IF NOT EXISTS idx_invoices_type ON invoices(invoice_type);
-CREATE INDEX IF NOT EXISTS idx_invoices_doc_type ON invoices(document_type, issuer_id);
-CREATE INDEX IF NOT EXISTS idx_invoices_ref_invoice ON invoices(ref_invoice_id);
+-- Note: idx_invoices_doc_type and idx_invoices_ref_invoice are created in db.initSchema
+-- after ALTER TABLE migrations so existing pre-migration databases can upgrade safely.
 CREATE INDEX IF NOT EXISTS idx_invoices_client_status ON invoices(client_id, status, grand_total, paid_amount);
 CREATE INDEX IF NOT EXISTS idx_invoices_month_stats ON invoices(issuer_id, status, issue_date, grand_total);
 

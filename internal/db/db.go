@@ -89,30 +89,83 @@ func (d *DB) WriteUnlock() {
 }
 
 func (d *DB) initSchema() error {
-	_, err := d.Exec(SchemaSQL)
-	if err != nil {
+	if _, err := d.Exec(SchemaSQL); err != nil {
 		return err
 	}
-	// Migrate sessions columns if missing
-	_, _ = d.Exec("ALTER TABLE sessions ADD COLUMN user_agent TEXT DEFAULT ''")
-	_, _ = d.Exec("ALTER TABLE sessions ADD COLUMN current_view TEXT DEFAULT ''")
-	_, _ = d.Exec("ALTER TABLE sessions ADD COLUMN last_active_at TEXT DEFAULT ''")
-	// Migrate credit note columns if missing
-	_, _ = d.Exec("ALTER TABLE issuers ADD COLUMN credit_note_prefix TEXT DEFAULT 'CN'")
-	_, _ = d.Exec("ALTER TABLE issuers ADD COLUMN credit_note_next_no INTEGER DEFAULT 1")
-	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN document_type TEXT DEFAULT 'INVOICE'")
-	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN ref_invoice_id TEXT DEFAULT ''")
-	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN ref_invoice_number TEXT DEFAULT ''")
-	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN ref_invoice_date TEXT DEFAULT ''")
-	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN return_reason TEXT DEFAULT ''")
-	_, _ = d.Exec("ALTER TABLE invoices ADD COLUMN show_sar_symbol INTEGER NOT NULL DEFAULT 1")
-	_, _ = d.Exec("ALTER TABLE invoice_items ADD COLUMN unit_price_incl REAL NOT NULL DEFAULT 0")
-	_, _ = d.Exec("ALTER TABLE invoice_items ADD COLUMN discount_incl REAL NOT NULL DEFAULT 0")
-	// Performance indexes for large datasets
-	_, _ = d.Exec("CREATE INDEX IF NOT EXISTS idx_invoices_client_status ON invoices(client_id, status, grand_total, paid_amount)")
-	_, _ = d.Exec("CREATE INDEX IF NOT EXISTS idx_invoices_month_stats ON invoices(issuer_id, status, issue_date, grand_total)")
-	_, _ = d.Exec("CREATE INDEX IF NOT EXISTS idx_invoices_doc_type ON invoices(document_type, issuer_id)")
-	_, _ = d.Exec("CREATE INDEX IF NOT EXISTS idx_invoices_ref_invoice ON invoices(ref_invoice_id)")
+
+	migrations := []struct {
+		table  string
+		column string
+		def    string
+	}{
+		{"sessions", "user_agent", "TEXT DEFAULT ''"},
+		{"sessions", "current_view", "TEXT DEFAULT ''"},
+		{"sessions", "last_active_at", "TEXT DEFAULT ''"},
+		{"issuers", "credit_note_prefix", "TEXT DEFAULT 'CN'"},
+		{"issuers", "credit_note_next_no", "INTEGER DEFAULT 1"},
+		{"invoices", "document_type", "TEXT DEFAULT 'INVOICE'"},
+		{"invoices", "ref_invoice_id", "TEXT DEFAULT ''"},
+		{"invoices", "ref_invoice_number", "TEXT DEFAULT ''"},
+		{"invoices", "ref_invoice_date", "TEXT DEFAULT ''"},
+		{"invoices", "return_reason", "TEXT DEFAULT ''"},
+		{"invoices", "show_sar_symbol", "INTEGER NOT NULL DEFAULT 1"},
+		{"invoice_items", "unit_price_incl", "REAL NOT NULL DEFAULT 0"},
+		{"invoice_items", "discount_incl", "REAL NOT NULL DEFAULT 0"},
+	}
+	for _, m := range migrations {
+		if err := d.ensureColumn(m.table, m.column, m.def); err != nil {
+			return err
+		}
+	}
+
+	// Indexes on migrated or high-cardinality invoice columns must run after column migrations.
+	indexes := []string{
+		"CREATE INDEX IF NOT EXISTS idx_invoices_client_status ON invoices(client_id, status, grand_total, paid_amount)",
+		"CREATE INDEX IF NOT EXISTS idx_invoices_month_stats ON invoices(issuer_id, status, issue_date, grand_total)",
+		"CREATE INDEX IF NOT EXISTS idx_invoices_doc_type ON invoices(document_type, issuer_id)",
+		"CREATE INDEX IF NOT EXISTS idx_invoices_ref_invoice ON invoices(ref_invoice_id)",
+	}
+	for _, stmt := range indexes {
+		if _, err := d.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *DB) ensureColumn(table, column, def string) error {
+	rows, err := d.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return fmt.Errorf("inspect table %s: %w", table, err)
+	}
+	exists := false
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull int
+		var dfltValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan table_info(%s): %w", table, err)
+		}
+		if name == column {
+			exists = true
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("iterate table_info(%s): %w", table, err)
+	}
+	rows.Close()
+
+	if exists {
+		return nil
+	}
+	if _, err := d.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, def)); err != nil {
+		return fmt.Errorf("add column %s.%s: %w", table, column, err)
+	}
 	return nil
 }
 
