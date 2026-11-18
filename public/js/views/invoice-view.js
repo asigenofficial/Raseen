@@ -441,7 +441,6 @@ export async function shareInvoicePdfFile({ invoice, issuer, client, text, print
     console.warn('تعذر تجهيز ملف PDF للمشاركة:', err);
   }
 
-  const isCN = invoice.document_type === 'CREDIT_NOTE';
   return shareDocument({
     title: `${isCN ? 'إشعار دائن' : 'فاتورة'} ${invoice.invoice_number}`,
     text: text || `${isCN ? 'إشعار دائن (مرتجع مبيعات)' : 'فاتورة ضريبية'} رقم ${invoice.invoice_number} من ${issuer?.name_ar || ''}`,
