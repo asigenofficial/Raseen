@@ -1387,9 +1387,13 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 
 	isPhase2 := inv.ZatcaPhase == "PHASE2" || (inv.SignatureMode != "" && inv.SignatureMode != "NONE")
 	needRegen := payload == ""
-	if !needRegen && isPhase2 {
+	if !needRegen {
 		tags, err := zatca.ParseQrPayload(payload)
-		if err != nil || len(tags) < 6 {
+		if isPhase2 {
+			if err != nil || len(tags) < 6 {
+				needRegen = true
+			}
+		} else if err != nil || len(tags) != 5 {
 			needRegen = true
 		}
 	}
@@ -1423,14 +1427,14 @@ func (s *TemplateService) substituteInvoiceTags(tpl string, inv *InvoiceView) st
 			vat = "150.00"
 		}
 		sampleParams := zatca.QrParams{
-			SellerName:  sName,
-			VatNumber:   sTax,
-			Timestamp:   issDate + "T" + issTime + "Z",
-			Total:       tot,
-			VatTotal:    vat,
-			InvoiceHash: inv.InvoiceHash,
+			SellerName: sName,
+			VatNumber:  sTax,
+			Timestamp:  issDate + "T" + issTime + "Z",
+			Total:      tot,
+			VatTotal:   vat,
 		}
 		if isPhase2 {
+			sampleParams.InvoiceHash = inv.InvoiceHash
 			sampleParams = zatca.BuildPhase2Params(sampleParams, inv.InvoiceNumber)
 			if inv.InvoiceHash == "" {
 				inv.InvoiceHash = sampleParams.InvoiceHash

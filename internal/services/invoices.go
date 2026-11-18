@@ -348,17 +348,17 @@ func (s *InvoiceService) createInvoiceTx(tx *sql.Tx, input CreateInvoiceInput, a
 	invHash := zatca.InvoiceHash(xml)
 
 	qrParams := zatca.QrParams{
-		SellerName:  issuer.NameAr,
-		VatNumber:   issuer.TaxNumber,
-		Timestamp:   issueDatetime,
-		Total:       models.FmtMoney(grandTotalMinor),
-		VatTotal:    models.FmtMoney(taxTotalMinor),
-		InvoiceHash: invHash,
+		SellerName: issuer.NameAr,
+		VatNumber:  issuer.TaxNumber,
+		Timestamp:  issueDatetime,
+		Total:      models.FmtMoney(grandTotalMinor),
+		VatTotal:   models.FmtMoney(taxTotalMinor),
 	}
 
 	signature := ""
 	signatureMode := "NONE"
 	if zatcaPhase == "PHASE2" {
+		qrParams.InvoiceHash = invHash
 		signature, qrParams.PublicKey, err = s.signInvoiceHashTx(tx, issuer.ID, invHash)
 		if err != nil {
 			return nil, err
@@ -540,6 +540,32 @@ func normalizedSettlementDisplay(inv *models.Invoice) (float64, float64) {
 	return paidMajor, remMajor
 }
 
+func normalizePhase1QrPayload(inv *models.Invoice) {
+	if inv == nil || inv.ZatcaPhase == "PHASE2" || (inv.SignatureMode != "" && inv.SignatureMode != "NONE") {
+		return
+	}
+	if tags, err := zatca.ParseQrPayload(inv.QrPayload); err == nil && len(tags) == 5 {
+		return
+	}
+	ts := inv.IssueDatetime
+	if ts == "" {
+		issTime := inv.IssueTime
+		if issTime == "" {
+			issTime = "12:00:00"
+		} else if len(issTime) == 5 {
+			issTime += ":00"
+		}
+		ts = inv.IssueDate + "T" + issTime + "Z"
+	}
+	inv.QrPayload = zatca.BuildQrPayload(zatca.QrParams{
+		SellerName: inv.SellerName,
+		VatNumber:  inv.SellerTaxNumber,
+		Timestamp:  ts,
+		Total:      models.FmtMoney(inv.GrandTotal),
+		VatTotal:   models.FmtMoney(inv.TaxAmount),
+	})
+}
+
 func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 	var inv models.Invoice
 	var dueDate, chequeDate sql.NullString
@@ -577,6 +603,7 @@ func (s *InvoiceService) GetInvoice(id string) (*InvoiceView, error) {
 		return nil, errors.New("الفاتورة غير موجودة")
 	}
 	inv.ShowSarSymbol = &showSarSymbol
+	normalizePhase1QrPayload(&inv)
 
 	if dueDate.Valid {
 		inv.DueDate = &dueDate.String
@@ -895,6 +922,7 @@ func (s *InvoiceService) ListInvoices(f ListInvoicesFilter) (*ListInvoicesResult
 			&showSarSymbol,
 		); err == nil {
 			inv.ShowSarSymbol = &showSarSymbol
+			normalizePhase1QrPayload(&inv)
 			inv.IssuerName = issName
 			inv.ClientName = cName
 			pLabel := invoicePaymentLabels[inv.PaymentMethod]
@@ -1604,17 +1632,17 @@ func (s *InvoiceService) UpdateInvoice(id string, input CreateInvoiceInput, acto
 	invHash := zatca.InvoiceHash(xml)
 
 	qrParams := zatca.QrParams{
-		SellerName:  issuer.NameAr,
-		VatNumber:   issuer.TaxNumber,
-		Timestamp:   issueDatetime,
-		Total:       models.FmtMoney(grandTotalMinor),
-		VatTotal:    models.FmtMoney(taxTotalMinor),
-		InvoiceHash: invHash,
+		SellerName: issuer.NameAr,
+		VatNumber:  issuer.TaxNumber,
+		Timestamp:  issueDatetime,
+		Total:      models.FmtMoney(grandTotalMinor),
+		VatTotal:   models.FmtMoney(taxTotalMinor),
 	}
 
 	signature := ""
 	signatureMode := "NONE"
 	if zatcaPhase == "PHASE2" {
+		qrParams.InvoiceHash = invHash
 		signature, qrParams.PublicKey, err = s.signInvoiceHashTx(tx, issuer.ID, invHash)
 		if err != nil {
 			return nil, err
@@ -2269,16 +2297,16 @@ func (s *InvoiceService) CreateCreditNote(input CreateCreditNoteInput, actor, ip
 		invHash := zatca.InvoiceHash(xmlDoc)
 
 		qrParams := zatca.QrParams{
-			SellerName:  orig.SellerName,
-			VatNumber:   orig.SellerTaxNumber,
-			Timestamp:   issueDatetime,
-			Total:       models.FmtMoney(grandTotalMinor),
-			VatTotal:    models.FmtMoney(taxTotalMinor),
-			InvoiceHash: invHash,
+			SellerName: orig.SellerName,
+			VatNumber:  orig.SellerTaxNumber,
+			Timestamp:  issueDatetime,
+			Total:      models.FmtMoney(grandTotalMinor),
+			VatTotal:   models.FmtMoney(taxTotalMinor),
 		}
 		signature := ""
 		signatureMode := "NONE"
 		if orig.ZatcaPhase == "PHASE2" {
+			qrParams.InvoiceHash = invHash
 			signature, qrParams.PublicKey, err = s.signInvoiceHashTx(tx, orig.IssuerID, invHash)
 			if err != nil {
 				return err

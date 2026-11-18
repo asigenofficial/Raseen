@@ -63,9 +63,10 @@ func (s *InvoiceService) rebuildInvoiceChainTx(tx *sql.Tx, issuerID string) erro
 			d.xml = d.xml[:start] + strings.Replace(ref, old, ">"+previous+"</cbc:EmbeddedDocumentBinaryObject>", 1) + d.xml[end:]
 			d.hash = zatca.InvoiceHash(d.xml)
 			params := zatca.QrParams{SellerName: d.seller, VatNumber: d.taxNumber,
-				Timestamp: d.timestamp, Total: models.FmtMoney(d.total), VatTotal: models.FmtMoney(d.tax), InvoiceHash: d.hash}
+				Timestamp: d.timestamp, Total: models.FmtMoney(d.total), VatTotal: models.FmtMoney(d.tax)}
 			params.Signature = ""
 			if d.phase == "PHASE2" {
+				params.InvoiceHash = d.hash
 				params.Signature, params.PublicKey, err = s.signInvoiceHashTx(tx, issuerID, d.hash)
 				if err != nil {
 					return err

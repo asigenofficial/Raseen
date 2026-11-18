@@ -1658,6 +1658,10 @@ export async function render(view) {
         if (state.preview && state.preview.invoices) {
           state.preview.invoices.forEach((inv) => {
             inv.zatca_phase = state.zatca_phase;
+            inv.qr_payload = '';
+            if (state.zatca_phase !== 'PHASE2') {
+              inv.invoice_hash = '';
+            }
           });
           const area = $('#preview-area', view);
           if (area) area.innerHTML = previewHtml();

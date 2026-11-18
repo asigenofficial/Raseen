@@ -88,8 +88,9 @@ func (s *InvoiceService) RefreshPartyInvoicesTx(tx *sql.Tx, id string, issuer *m
 			return err
 		}
 		hash := zatca.InvoiceHash(d.xml)
-		params := zatca.QrParams{SellerName: d.seller, VatNumber: d.taxNumber, Timestamp: d.timestamp, Total: models.FmtMoney(d.total), VatTotal: models.FmtMoney(d.tax), InvoiceHash: hash}
+		params := zatca.QrParams{SellerName: d.seller, VatNumber: d.taxNumber, Timestamp: d.timestamp, Total: models.FmtMoney(d.total), VatTotal: models.FmtMoney(d.tax)}
 		if d.phase == "PHASE2" {
+			params.InvoiceHash = hash
 			params.Signature, params.PublicKey, err = s.signInvoiceHashTx(tx, d.issuer, hash)
 			if err != nil {
 				return err
